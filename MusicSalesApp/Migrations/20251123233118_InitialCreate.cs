@@ -165,8 +165,8 @@ namespace MusicSalesApp.Migrations
                 columns: new[] { "Id", "ConcurrencyStamp", "Name", "NormalizedName" },
                 values: new object[,]
                 {
-                    { 1, "e026dfff-9738-44c9-91f7-7d756548c020", "Admin", "ADMIN" },
-                    { 2, "9f9fd39e-86bd-4f62-b180-d1111cbdfba8", "User", "USER" }
+                    { 1, "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d", "Admin", "ADMIN" },
+                    { 2, "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e", "User", "USER" }
                 });
 
             migrationBuilder.InsertData(
@@ -174,8 +174,8 @@ namespace MusicSalesApp.Migrations
                 columns: new[] { "Id", "AccessFailedCount", "ConcurrencyStamp", "Email", "EmailConfirmed", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TwoFactorEnabled", "UserName" },
                 values: new object[,]
                 {
-                    { 1, 0, "e0e76199-dff7-4bb2-9360-107ba3822107", "admin@app.com", true, false, null, "ADMIN@APP.COM", "ADMIN@APP.COM", "AQAAAAIAAYagAAAAEDwFnfbUS7b0ekMDyZoDvilRn6Lirub3wLmFiuXMV0d0N0dwRyIDebxKitGejL1t/A==", null, false, "7d17baa2-7fb2-44d1-b149-e668d66a352c", false, "admin@app.com" },
-                    { 2, 0, "d559da60-c089-4480-84f3-809b9c661f85", "user@app.com", true, false, null, "USER@APP.COM", "USER@APP.COM", "AQAAAAIAAYagAAAAEGZgPWxaZ8kdum/ncI/6mON/KqA+rnS4AaG6YJo9bltlm0GJJDBW8jl2YYZx9HIuQg==", null, false, "b9c086bf-c596-4c14-9ba9-61524aa4cae4", false, "user@app.com" }
+                    { 1, 0, "d031c2fd-7806-4114-afd2-7bcdd1876e93", "admin@app.com", true, false, null, "ADMIN@APP.COM", "ADMIN@APP.COM", "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw==", null, false, "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f", false, "admin@app.com" },
+                    { 2, 0, "3efe9391-8654-428c-8527-219069c42f36", "user@app.com", true, false, null, "USER@APP.COM", "USER@APP.COM", "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g==", null, false, "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a", false, "user@app.com" }
                 });
 
             migrationBuilder.InsertData(

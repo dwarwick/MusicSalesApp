@@ -26,14 +26,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 Id = adminRoleId,
                 Name = "Admin",
                 NormalizedName = "ADMIN",
-                ConcurrencyStamp = Guid.NewGuid().ToString()
+                ConcurrencyStamp = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
             },
             new IdentityRole<int>
             {
                 Id = userRoleId,
                 Name = "User",
                 NormalizedName = "USER",
-                ConcurrencyStamp = Guid.NewGuid().ToString()
+                ConcurrencyStamp = "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e"
             }
         );
 
@@ -49,7 +49,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             Email = "admin@app.com",
             NormalizedEmail = "ADMIN@APP.COM",
             EmailConfirmed = true,
-            SecurityStamp = Guid.NewGuid().ToString()
+            SecurityStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f"
         };
         adminUser.PasswordHash = hasher.HashPassword(adminUser, "Password_123");
 
@@ -62,7 +62,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             Email = "user@app.com",
             NormalizedEmail = "USER@APP.COM",
             EmailConfirmed = true,
-            SecurityStamp = Guid.NewGuid().ToString()
+            SecurityStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a"
         };
         regularUser.PasswordHash = hasher.HashPassword(regularUser, "Password_123");
 

@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251123232916_InitialCreate")]
+    [Migration("20251123233118_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -58,14 +58,14 @@ namespace MusicSalesApp.Migrations
                         new
                         {
                             Id = 1,
-                            ConcurrencyStamp = "e026dfff-9738-44c9-91f7-7d756548c020",
+                            ConcurrencyStamp = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
                             Id = 2,
-                            ConcurrencyStamp = "9f9fd39e-86bd-4f62-b180-d1111cbdfba8",
+                            ConcurrencyStamp = "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e",
                             Name = "User",
                             NormalizedName = "USER"
                         });
@@ -258,15 +258,15 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 1,
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "e0e76199-dff7-4bb2-9360-107ba3822107",
+                            ConcurrencyStamp = "d031c2fd-7806-4114-afd2-7bcdd1876e93",
                             Email = "admin@app.com",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "ADMIN@APP.COM",
                             NormalizedUserName = "ADMIN@APP.COM",
-                            PasswordHash = "AQAAAAIAAYagAAAAEDwFnfbUS7b0ekMDyZoDvilRn6Lirub3wLmFiuXMV0d0N0dwRyIDebxKitGejL1t/A==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "7d17baa2-7fb2-44d1-b149-e668d66a352c",
+                            SecurityStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f",
                             TwoFactorEnabled = false,
                             UserName = "admin@app.com"
                         },
@@ -274,15 +274,15 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 2,
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "d559da60-c089-4480-84f3-809b9c661f85",
+                            ConcurrencyStamp = "3efe9391-8654-428c-8527-219069c42f36",
                             Email = "user@app.com",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
                             NormalizedEmail = "USER@APP.COM",
                             NormalizedUserName = "USER@APP.COM",
-                            PasswordHash = "AQAAAAIAAYagAAAAEGZgPWxaZ8kdum/ncI/6mON/KqA+rnS4AaG6YJo9bltlm0GJJDBW8jl2YYZx9HIuQg==",
+                            PasswordHash = "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "b9c086bf-c596-4c14-9ba9-61524aa4cae4",
+                            SecurityStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             TwoFactorEnabled = false,
                             UserName = "user@app.com"
                         });
