@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Data;
+using MusicSalesApp.Models;
 using System.Security.Claims;
 
 namespace MusicSalesApp.Controllers;
@@ -11,10 +15,20 @@ namespace MusicSalesApp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
+    private readonly AppDbContext _dbContext;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
 
-    public AuthController(IConfiguration configuration)
+    public AuthController(
+        IConfiguration configuration,
+        AppDbContext dbContext,
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager)
     {
         _configuration = configuration;
+        _dbContext = dbContext;
+        _userManager = userManager;
+        _signInManager = signInManager;
     }
 
     [HttpPost("login")]
@@ -25,26 +39,51 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Invalid username or password" });
         }
 
-        // Validate credentials
-        // This is a simplified authentication for demonstration purposes
-        // In production, validate against a database with hashed passwords
-        if (!ValidateCredentials(request.Username, request.Password))
+        // Find user by email/username
+        var user = await _userManager.FindByEmailAsync(request.Username);
+        if (user == null)
+        {
+            // Try finding by username if email lookup fails
+            user = await _userManager.FindByNameAsync(request.Username);
+        }
+
+        if (user == null)
         {
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
+        // Validate password using UserManager
+        var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValid)
+        {
+            return Unauthorized(new { message = "Invalid username or password" });
+        }
+
+        // Get user roles
+        var roles = await _userManager.GetRolesAsync(user);
+
         // Create claims for the user
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Name, request.Username),
-            new Claim(ClaimTypes.Role, GetUserRole(request.Username))
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.Email, user.Email)
         };
 
-        // Add permissions based on role
-        var permissions = GetUserPermissions(request.Username);
-        foreach (var permission in permissions)
+        // Add role claims
+        foreach (var role in roles)
         {
-            claims.Add(new Claim(CustomClaimTypes.Permission, permission));
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        // Add permissions based on roles
+        foreach (var role in roles)
+        {
+            var permissions = GetPermissionsForRole(role);
+            foreach (var permission in permissions)
+            {
+                claims.Add(new Claim(CustomClaimTypes.Permission, permission));
+            }
         }
 
         var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -73,33 +112,18 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Logout successful" });
     }
 
-    private bool ValidateCredentials(string username, string password)
-    {
-        // For demonstration purposes, accept any non-empty password
-        // In production, validate against a database with hashed passwords
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-        {
-            return false;
-        }
-
-        // Accept admin user or any other username for demo purposes
-        return true;
-    }
-
-    private string GetUserRole(string username)
-    {
-        // Assign Admin role to admin user, User role to others
-        return username.Equals("admin", StringComparison.OrdinalIgnoreCase) ? "Admin" : "User";
-    }
-
-    private List<string> GetUserPermissions(string username)
+    private List<string> GetPermissionsForRole(string role)
     {
         var permissions = new List<string>();
 
-        // Admin users get all permissions
-        if (username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+        if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
         {
             permissions.Add(Permissions.ManageUsers);
+            permissions.Add(Permissions.ValidatedUser);
+        }
+        else if (role.Equals("User", StringComparison.OrdinalIgnoreCase))
+        {
+            permissions.Add(Permissions.ValidatedUser);
         }
 
         return permissions;
