@@ -5,7 +5,8 @@ window.loginUser = async function(username, password) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password }),
+            credentials: 'same-origin' // Ensure cookies are sent and received
         });
 
         return response.ok;
@@ -17,12 +18,20 @@ window.loginUser = async function(username, password) {
 
 window.logoutUser = async function() {
     try {
-        await fetch('/api/auth/logout', {
+        const response = await fetch('/api/auth/logout', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            credentials: 'same-origin' // Ensure cookies are sent and received
         });
+        
+        // Wait for the response to ensure logout completed
+        if (response.ok) {
+            console.log('Logout successful');
+        } else {
+            console.warn('Logout response not OK:', response.status);
+        }
     } catch (error) {
         console.error('Logout error:', error);
     }

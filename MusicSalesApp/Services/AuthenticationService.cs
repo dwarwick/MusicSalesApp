@@ -56,7 +56,7 @@ public class AuthenticationService : IAuthenticationService
     {
         try
         {
-            // Call the API endpoint via JavaScript fetch
+            // Call the API endpoint via JavaScript fetch and wait for completion
             await _jsRuntime.InvokeVoidAsync("logoutUser");
 
             // Notify the authentication state provider
@@ -68,7 +68,11 @@ public class AuthenticationService : IAuthenticationService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error during logout, user may already be logged out");
-            // Continue - the user experience should not be impacted if logout fails
+            // Even if logout API fails, still notify to clear local state
+            if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
+            {
+                serverAuthStateProvider.NotifyAuthenticationStateChanged();
+            }
         }
     }
 
