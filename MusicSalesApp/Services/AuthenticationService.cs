@@ -37,10 +37,7 @@ public class AuthenticationService : IAuthenticationService
             if (result)
             {
                 // Notify the authentication state provider
-                if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-                {
-                    serverAuthStateProvider.NotifyAuthenticationStateChanged();
-                }
+                NotifyAuthenticationStateChange();
             }
 
             return result;
@@ -58,21 +55,23 @@ public class AuthenticationService : IAuthenticationService
         {
             // Call the API endpoint via JavaScript fetch and wait for completion
             await _jsRuntime.InvokeVoidAsync("logoutUser");
-
-            // Notify the authentication state provider
-            if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-            {
-                serverAuthStateProvider.NotifyAuthenticationStateChanged();
-            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error during logout, user may already be logged out");
-            // Even if logout API fails, still notify to clear local state
-            if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-            {
-                serverAuthStateProvider.NotifyAuthenticationStateChanged();
-            }
+        }
+        finally
+        {
+            // Always notify authentication state change, even if logout API fails
+            NotifyAuthenticationStateChange();
+        }
+    }
+
+    private void NotifyAuthenticationStateChange()
+    {
+        if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
+        {
+            serverAuthStateProvider.NotifyAuthenticationStateChanged();
         }
     }
 

@@ -30,7 +30,7 @@ window.logoutUser = async function() {
         if (response.ok) {
             console.log('Logout successful');
         } else {
-            console.warn('Logout response not OK:', response.status);
+            console.warn('Logout failed with status:', response.status);
         }
     } catch (error) {
         console.error('Logout error:', error);
