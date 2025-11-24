@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -86,7 +85,7 @@ public class AuthController : ControllerBase
             }
         }
 
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var claimsIdentity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
         var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
 
         // Get expiration time from configuration
@@ -98,7 +97,7 @@ public class AuthController : ControllerBase
         };
 
         await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            IdentityConstants.ApplicationScheme,
             claimsPrincipal,
             authProperties);
 
@@ -108,7 +107,7 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
         return Ok(new { message = "Logout successful" });
     }
 
