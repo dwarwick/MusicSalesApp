@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="MusicSalesApp.Common/MusicSalesApp.Common.csproj" />
   <Project Path="MusicSalesApp/MusicSalesApp.csproj" />
+  <Project Path="MusicSalesApp.Tests/MusicSalesApp.Tests.csproj" />
+  <Project Path="MusicSalesApp.ComponentTests/MusicSalesApp.ComponentTests.csproj" />
 </Solution>

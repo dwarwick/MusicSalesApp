@@ -1,7 +1,5 @@
 @page "/logout"
-@using MusicSalesApp.Services
-@inject IAuthenticationService AuthenticationService
-@inject NavigationManager NavigationManager
+@inherits LogoutModel
 @rendermode InteractiveServer
 
 <PageTitle>Logging out...</PageTitle>
@@ -20,11 +18,3 @@
         </div>
     </div>
 </div>
-
-@code {
-    protected override async Task OnInitializedAsync()
-    {
-        await AuthenticationService.LogoutAsync();
-        NavigationManager.NavigateTo("/login", forceLoad: true);
-    }
-}

@@ -12,11 +12,33 @@ Active Git repository:
 
 ## Razor Component Conventions
 - Always create code-behind files for Razor components and pages.
-- Code-behind file naming: `[ComponentName]Model.razor.cs` (e.g., `MyComponent.razor` and `MyComponentModel.razor.cs`).
-- The Razor component must inherit from its code-behind class.
+- Code-behind file naming: `[ComponentName].razor.cs` (e.g., `Home.razor` and `Home.razor.cs`).
+- Code-behind class naming: `[ComponentName]Model` (e.g., class `HomeModel` for `Home.razor`).
+- The Razor component must inherit from its code-behind class using `@inherits [ComponentName]Model`.
 - Code-behind classes must inherit from `BlazorBase`.
 - Never inject services in the component or code-behind; use services from `BlazorBase`.
 - For dialogs, use examples from `Pages/Admin/Dialogs` and `Pages/Common`.
+
+### Example
+```razor
+@* Home.razor *@
+@page "/"
+@inherits HomeModel
+
+<h1>Hello, world!</h1>
+```
+
+```csharp
+// Home.razor.cs
+using MusicSalesApp.Components.Base;
+
+namespace MusicSalesApp.Components.Pages;
+
+public partial class HomeModel : BlazorBase
+{
+    // Component logic here
+}
+```
 
 ## Guidance
 Follow the above conventions strictly when adding or modifying Razor components. Ensure new components include their corresponding code-behind class with the proper inheritance chain and avoid direct service injection.
