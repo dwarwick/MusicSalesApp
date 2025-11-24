@@ -1,0 +1,110 @@
+@page "/login"
+@using MusicSalesApp.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IAuthenticationService AuthenticationService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Login</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Login</h3>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @errorMessage
+                        </div>
+                    }
+
+                    <EditForm Model="loginModel" OnValidSubmit="HandleLogin">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <InputText id="username" class="form-control" @bind-Value="loginModel.Username" />
+                            <ValidationMessage For="@(() => loginModel.Username)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <InputText id="password" type="password" class="form-control" @bind-Value="loginModel.Password" />
+                            <ValidationMessage For="@(() => loginModel.Password)" />
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary" disabled="@isLoggingIn">
+                                @if (isLoggingIn)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                }
+                                Login
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+            <div class="mt-3 text-center text-muted">
+                <small>Hint: Use username "admin" with any password to login as administrator</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginModel loginModel = new();
+    private string errorMessage = string.Empty;
+    private bool isLoggingIn = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if already logged in
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User?.Identity?.IsAuthenticated == true)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        errorMessage = string.Empty;
+        isLoggingIn = true;
+
+        try
+        {
+            var success = await AuthenticationService.LoginAsync(loginModel.Username, loginModel.Password);
+            
+            if (success)
+            {
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                errorMessage = "Invalid username or password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
+    }
+
+    private class LoginModel
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Username { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; set; } = string.Empty;
+    }
+}
