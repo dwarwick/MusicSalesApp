@@ -1,9 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
-using MusicSalesApp.Data;
+using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
 using System.Security.Claims;
 
@@ -35,9 +34,8 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Invalid username or password" });
         }
 
-        // Find user by email/username (consolidated query)
-        var user = await _userManager.FindByEmailAsync(request.Username) 
-            ?? await _userManager.FindByNameAsync(request.Username);
+        // Find user by email or username
+        var user = await _userManager.FindByEmailOrUsernameAsync(request.Username);
 
         if (user == null)
         {
@@ -71,20 +69,11 @@ public class AuthController : ControllerBase
         };
 
         // Add role claims
-        foreach (var role in roles)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, role));
-        }
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         // Add permissions based on roles
-        foreach (var role in roles)
-        {
-            var permissions = GetPermissionsForRole(role);
-            foreach (var permission in permissions)
-            {
-                claims.Add(new Claim(CustomClaimTypes.Permission, permission));
-            }
-        }
+        var permissions = roles.SelectMany(GetPermissionsForRole);
+        claims.AddRange(permissions.Select(permission => new Claim(CustomClaimTypes.Permission, permission)));
 
         var claimsIdentity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
         var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);

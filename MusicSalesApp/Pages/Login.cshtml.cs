@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Pages;
@@ -25,12 +26,11 @@ public class LoginPageModel : PageModel
     {
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return Redirect($"/login?error=Invalid credentials");
+            return Redirect($"/login?error=Invalid username or password");
         }
 
-        // Try to find user by email first, then by username
-        var user = await _userManager.FindByEmailAsync(username)
-                   ?? await _userManager.FindByNameAsync(username);
+        // Find user by email or username
+        var user = await _userManager.FindByEmailOrUsernameAsync(username);
 
         if (user == null)
         {

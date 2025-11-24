@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -35,9 +36,8 @@ public class AuthenticationService : IAuthenticationService
 
         try
         {
-            // Try to find user by email first, then by username
-            var user = await _userManager.FindByEmailAsync(username) 
-                       ?? await _userManager.FindByNameAsync(username);
+            // Find user by email or username
+            var user = await _userManager.FindByEmailOrUsernameAsync(username);
 
             if (user == null)
             {
