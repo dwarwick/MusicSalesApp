@@ -44,6 +44,11 @@ public class LoginPageModel : PageModel
         if (result.Succeeded)
         {
             _logger.LogInformation("User {Username} logged in successfully", username);
+            // Validate returnUrl to prevent open redirect vulnerability
+            if (!Url.IsLocalUrl(returnUrl))
+            {
+                returnUrl = "/";
+            }
             return Redirect(returnUrl);
         }
 
