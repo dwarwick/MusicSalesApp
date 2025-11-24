@@ -55,6 +55,11 @@ public class AuthenticationService : IAuthenticationService
                 return true;
             }
 
+            if (result.IsLockedOut)
+            {
+                _logger.LogWarning("Login failed for user {Username}: Account is locked out", username);
+                return false;
+            }
             _logger.LogWarning("Login failed for user {Username}: Invalid password", username);
             return false;
         }
