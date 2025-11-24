@@ -38,13 +38,9 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Invalid username or password" });
         }
 
-        // Find user by email/username
-        var user = await _userManager.FindByEmailAsync(request.Username);
-        if (user == null)
-        {
-            // Try finding by username if email lookup fails
-            user = await _userManager.FindByNameAsync(request.Username);
-        }
+        // Find user by email/username (consolidated query)
+        var user = await _userManager.FindByEmailAsync(request.Username) 
+            ?? await _userManager.FindByNameAsync(request.Username);
 
         if (user == null)
         {
