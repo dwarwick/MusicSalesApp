@@ -116,12 +116,12 @@ public class AuthController : ControllerBase
     {
         var permissions = new List<string>();
 
-        if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+        if (role.Equals(Roles.Admin, StringComparison.OrdinalIgnoreCase))
         {
             permissions.Add(Permissions.ManageUsers);
             permissions.Add(Permissions.ValidatedUser);
         }
-        else if (role.Equals("User", StringComparison.OrdinalIgnoreCase))
+        else if (role.Equals(Roles.User, StringComparison.OrdinalIgnoreCase))
         {
             permissions.Add(Permissions.ValidatedUser);
         }

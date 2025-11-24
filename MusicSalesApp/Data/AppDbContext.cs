@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Data;
@@ -24,15 +25,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             new IdentityRole<int>
             {
                 Id = adminRoleId,
-                Name = "Admin",
-                NormalizedName = "ADMIN",
+                Name = Common.Helpers.Roles.Admin,
+                NormalizedName = Common.Helpers.Roles.Admin.ToUpper(),
                 ConcurrencyStamp = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
             },
             new IdentityRole<int>
             {
                 Id = userRoleId,
-                Name = "User",
-                NormalizedName = "USER",
+                Name = Common.Helpers.Roles.User,
+                NormalizedName = Common.Helpers.Roles.User.ToUpper(),
                 ConcurrencyStamp = "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e"
             }
         );
