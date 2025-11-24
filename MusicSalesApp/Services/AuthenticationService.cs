@@ -35,12 +35,9 @@ public class AuthenticationService : IAuthenticationService
 
         try
         {
-            // Find user by email or username
-            var user = await _userManager.FindByEmailAsync(username);
-            if (user == null)
-            {
-                user = await _userManager.FindByNameAsync(username);
-            }
+            // Try to find user by email first, then by username
+            var user = await _userManager.FindByEmailAsync(username) 
+                       ?? await _userManager.FindByNameAsync(username);
 
             if (user == null)
             {
@@ -48,8 +45,8 @@ public class AuthenticationService : IAuthenticationService
                 return false;
             }
 
-            // Validate password and sign in
-            var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: false);
+            // Validate password and sign in with lockout protection
+            var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: true);
 
             if (result.Succeeded)
             {

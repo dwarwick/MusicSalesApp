@@ -75,7 +75,7 @@ public class AuthenticationServiceTests
         var user = new ApplicationUser { Id = 1, UserName = "admin", Email = "admin@app.com" };
         _mockUserManager.Setup(um => um.FindByEmailAsync("admin@app.com")).ReturnsAsync(user);
         _mockSignInManager
-            .Setup(sm => sm.PasswordSignInAsync(user, "password", true, false))
+            .Setup(sm => sm.PasswordSignInAsync(user, "password", true, true))
             .ReturnsAsync(SignInResult.Success);
 
         // Act
@@ -92,7 +92,7 @@ public class AuthenticationServiceTests
         var user = new ApplicationUser { Id = 1, UserName = "admin", Email = "admin@app.com" };
         _mockUserManager.Setup(um => um.FindByEmailAsync("admin@app.com")).ReturnsAsync(user);
         _mockSignInManager
-            .Setup(sm => sm.PasswordSignInAsync(user, "wrongpassword", true, false))
+            .Setup(sm => sm.PasswordSignInAsync(user, "wrongpassword", true, true))
             .ReturnsAsync(SignInResult.Failed);
 
         // Act
