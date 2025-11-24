@@ -60,20 +60,25 @@
 ## Cookie Details
 The authentication cookie should be named `.AspNetCore.Identity.Application` (not `.AspNetCore.Cookies` or any other name).
 
+## Authentication Flow
+
+Authentication now uses ASP.NET Core Identity's SignInManager directly on the server side:
+- No JavaScript interop required
+- All authentication happens server-side
+- Proper session management via Identity cookies
+- Works correctly during server-side prerendering
+
 ## Troubleshooting
 
 ### If login doesn't work:
-1. Check browser console for JavaScript errors
-2. Check network tab for API call to `/api/auth/login`
-3. Verify response is 200 OK
-4. Check that cookie is set in response headers
-5. Verify database connection in appsettings.Development.json
-6. Ensure migrations have been applied (automatic on startup)
+1. Verify database connection in appsettings.Development.json
+2. Ensure migrations have been applied (automatic on startup)
+3. Check application logs for authentication errors
+4. Verify user exists in database with correct credentials
+5. Try logging in with default users (admin@app.com or user@app.com / Password_123)
 
 ### If logout doesn't work:
-1. Check browser console for "Logout successful" message
-2. Check network tab for API call to `/api/auth/logout`
-3. Verify response is 200 OK
-4. Check that Set-Cookie header removes the authentication cookie
-5. After clicking logout, the page should reload and the cookie should be gone
-6. If cookie persists, clear browser cache/cookies and try again
+1. Check application logs for any errors during logout
+2. Verify the page reloads to /login after clicking Logout
+3. Check that the `.AspNetCore.Identity.Application` cookie is removed from browser
+4. If issues persist, try clearing all browser cookies and cache
