@@ -14,18 +14,15 @@ namespace MusicSalesApp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
-    private readonly AppDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
 
     public AuthController(
         IConfiguration configuration,
-        AppDbContext dbContext,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager)
     {
         _configuration = configuration;
-        _dbContext = dbContext;
         _userManager = userManager;
         _signInManager = signInManager;
     }
