@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Extensions;
+using MusicSalesApp.Models;
 using System.Security.Claims;
 
 namespace MusicSalesApp.Controllers;
@@ -11,10 +13,17 @@ namespace MusicSalesApp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
 
-    public AuthController(IConfiguration configuration)
+    public AuthController(
+        IConfiguration configuration,
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager)
     {
         _configuration = configuration;
+        _userManager = userManager;
+        _signInManager = signInManager;
     }
 
     [HttpPost("login")]
@@ -25,29 +34,48 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "Invalid username or password" });
         }
 
-        // Validate credentials
-        // This is a simplified authentication for demonstration purposes
-        // In production, validate against a database with hashed passwords
-        if (!ValidateCredentials(request.Username, request.Password))
+        // Find user by email or username
+        var user = await _userManager.FindByEmailOrUsernameAsync(request.Username);
+
+        if (user == null)
         {
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
+        // Validate password and trigger lockout protection
+        var signInResult = await _signInManager.PasswordSignInAsync(
+            user.UserName,
+            request.Password,
+            isPersistent: false,
+            lockoutOnFailure: true);
+        if (!signInResult.Succeeded)
+        {
+            if (signInResult.IsLockedOut)
+            {
+                return Unauthorized(new { message = "Account locked due to multiple failed login attempts. Please try again later." });
+            }
+            return Unauthorized(new { message = "Invalid username or password" });
+        }
+
+        // Get user roles
+        var roles = await _userManager.GetRolesAsync(user);
+
         // Create claims for the user
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Name, request.Username),
-            new Claim(ClaimTypes.Role, GetUserRole(request.Username))
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.Email, user.Email)
         };
 
-        // Add permissions based on role
-        var permissions = GetUserPermissions(request.Username);
-        foreach (var permission in permissions)
-        {
-            claims.Add(new Claim(CustomClaimTypes.Permission, permission));
-        }
+        // Add role claims
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        // Add permissions based on roles
+        var permissions = roles.SelectMany(GetPermissionsForRole);
+        claims.AddRange(permissions.Select(permission => new Claim(CustomClaimTypes.Permission, permission)));
+
+        var claimsIdentity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
         var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
 
         // Get expiration time from configuration
@@ -59,7 +87,7 @@ public class AuthController : ControllerBase
         };
 
         await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            IdentityConstants.ApplicationScheme,
             claimsPrincipal,
             authProperties);
 
@@ -69,37 +97,22 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
         return Ok(new { message = "Logout successful" });
     }
 
-    private bool ValidateCredentials(string username, string password)
-    {
-        // For demonstration purposes, accept any non-empty password
-        // In production, validate against a database with hashed passwords
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-        {
-            return false;
-        }
-
-        // Accept admin user or any other username for demo purposes
-        return true;
-    }
-
-    private string GetUserRole(string username)
-    {
-        // Assign Admin role to admin user, User role to others
-        return username.Equals("admin", StringComparison.OrdinalIgnoreCase) ? "Admin" : "User";
-    }
-
-    private List<string> GetUserPermissions(string username)
+    private List<string> GetPermissionsForRole(string role)
     {
         var permissions = new List<string>();
 
-        // Admin users get all permissions
-        if (username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+        if (role.Equals(Roles.Admin, StringComparison.OrdinalIgnoreCase))
         {
             permissions.Add(Permissions.ManageUsers);
+            permissions.Add(Permissions.ValidatedUser);
+        }
+        else if (role.Equals(Roles.User, StringComparison.OrdinalIgnoreCase))
+        {
+            permissions.Add(Permissions.ValidatedUser);
         }
 
         return permissions;

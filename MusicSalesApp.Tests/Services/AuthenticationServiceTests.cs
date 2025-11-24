@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
-using Microsoft.JSInterop;
 using Moq;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Security.Claims;
 
@@ -11,7 +12,8 @@ namespace MusicSalesApp.Tests.Services;
 [TestFixture]
 public class AuthenticationServiceTests
 {
-    private Mock<IJSRuntime> _mockJSRuntime;
+    private Mock<UserManager<ApplicationUser>> _mockUserManager;
+    private Mock<SignInManager<ApplicationUser>> _mockSignInManager;
     private Mock<ILogger<AuthenticationService>> _mockLogger;
     private Mock<IHttpContextAccessor> _mockHttpContextAccessor;
     private ServerAuthenticationStateProvider _serverAuthStateProvider;
@@ -20,15 +22,29 @@ public class AuthenticationServiceTests
     [SetUp]
     public void SetUp()
     {
-        _mockJSRuntime = new Mock<IJSRuntime>();
         _mockLogger = new Mock<ILogger<AuthenticationService>>();
         _mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
+        
+        // Mock UserManager
+        var userStore = new Mock<IUserStore<ApplicationUser>>();
+        _mockUserManager = new Mock<UserManager<ApplicationUser>>(
+            userStore.Object, null, null, null, null, null, null, null, null);
+        
+        // Mock SignInManager
+        var contextAccessor = new Mock<IHttpContextAccessor>();
+        var claimsFactory = new Mock<IUserClaimsPrincipalFactory<ApplicationUser>>();
+        _mockSignInManager = new Mock<SignInManager<ApplicationUser>>(
+            _mockUserManager.Object,
+            contextAccessor.Object,
+            claimsFactory.Object,
+            null, null, null, null);
         
         _serverAuthStateProvider = new ServerAuthenticationStateProvider(_mockHttpContextAccessor.Object);
         
         _service = new AuthenticationService(
             _serverAuthStateProvider,
-            _mockJSRuntime.Object,
+            _mockUserManager.Object,
+            _mockSignInManager.Object,
             _mockLogger.Object);
     }
 
@@ -53,30 +69,48 @@ public class AuthenticationServiceTests
     }
 
     [Test]
-    public async Task LoginAsync_WhenJSReturnsTrue_ReturnsTrue()
+    public async Task LoginAsync_WithValidCredentials_ReturnsTrue()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<bool>("loginUser", It.IsAny<object[]>()))
-            .ReturnsAsync(true);
+        var user = new ApplicationUser { Id = 1, UserName = "admin", Email = "admin@app.com" };
+        _mockUserManager.Setup(um => um.FindByEmailAsync("admin@app.com")).ReturnsAsync(user);
+        _mockSignInManager
+            .Setup(sm => sm.PasswordSignInAsync(user, "password", true, true))
+            .ReturnsAsync(SignInResult.Success);
 
         // Act
-        var result = await _service.LoginAsync("admin", "password");
+        var result = await _service.LoginAsync("admin@app.com", "password");
 
         // Assert
         Assert.That(result, Is.True);
     }
 
     [Test]
-    public async Task LoginAsync_WhenJSReturnsFalse_ReturnsFalse()
+    public async Task LoginAsync_WithInvalidCredentials_ReturnsFalse()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<bool>("loginUser", It.IsAny<object[]>()))
-            .ReturnsAsync(false);
+        var user = new ApplicationUser { Id = 1, UserName = "admin", Email = "admin@app.com" };
+        _mockUserManager.Setup(um => um.FindByEmailAsync("admin@app.com")).ReturnsAsync(user);
+        _mockSignInManager
+            .Setup(sm => sm.PasswordSignInAsync(user, "wrongpassword", true, true))
+            .ReturnsAsync(SignInResult.Failed);
 
         // Act
-        var result = await _service.LoginAsync("admin", "password");
+        var result = await _service.LoginAsync("admin@app.com", "wrongpassword");
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task LoginAsync_WithNonExistentUser_ReturnsFalse()
+    {
+        // Arrange
+        _mockUserManager.Setup(um => um.FindByEmailAsync("nonexistent@app.com")).ReturnsAsync((ApplicationUser)null);
+        _mockUserManager.Setup(um => um.FindByNameAsync("nonexistent@app.com")).ReturnsAsync((ApplicationUser)null);
+
+        // Act
+        var result = await _service.LoginAsync("nonexistent@app.com", "password");
 
         // Assert
         Assert.That(result, Is.False);
@@ -86,9 +120,9 @@ public class AuthenticationServiceTests
     public async Task LoginAsync_WhenExceptionThrown_ReturnsFalse()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<bool>("loginUser", It.IsAny<object[]>()))
-            .ThrowsAsync(new Exception("JS Error"));
+        _mockUserManager
+            .Setup(um => um.FindByEmailAsync(It.IsAny<string>()))
+            .ThrowsAsync(new Exception("Database Error"));
 
         // Act
         var result = await _service.LoginAsync("admin", "password");
@@ -98,29 +132,23 @@ public class AuthenticationServiceTests
     }
 
     [Test]
-    public async Task LogoutAsync_CallsJSRuntime()
+    public async Task LogoutAsync_CallsSignInManager()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<object>("logoutUser", It.IsAny<object[]>()))
-            .ReturnsAsync((object)null);
+        _mockSignInManager.Setup(sm => sm.SignOutAsync()).Returns(Task.CompletedTask);
 
         // Act
         await _service.LogoutAsync();
 
         // Assert
-        _mockJSRuntime.Verify(
-            js => js.InvokeAsync<object>("logoutUser", It.IsAny<object[]>()),
-            Times.Once);
+        _mockSignInManager.Verify(sm => sm.SignOutAsync(), Times.Once);
     }
 
     [Test]
     public async Task LogoutAsync_CompletesSuccessfully()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<object>("logoutUser", It.IsAny<object[]>()))
-            .ReturnsAsync((object)null);
+        _mockSignInManager.Setup(sm => sm.SignOutAsync()).Returns(Task.CompletedTask);
 
         // Act & Assert
         Assert.DoesNotThrowAsync(async () => await _service.LogoutAsync());
@@ -130,9 +158,9 @@ public class AuthenticationServiceTests
     public async Task LogoutAsync_WhenExceptionThrown_DoesNotThrow()
     {
         // Arrange
-        _mockJSRuntime
-            .Setup(js => js.InvokeAsync<object>("logoutUser", It.IsAny<object[]>()))
-            .ThrowsAsync(new Exception("JS Error"));
+        _mockSignInManager
+            .Setup(sm => sm.SignOutAsync())
+            .ThrowsAsync(new Exception("SignOut Error"));
 
         // Act & Assert
         Assert.DoesNotThrowAsync(async () => await _service.LogoutAsync());

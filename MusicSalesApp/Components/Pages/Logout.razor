@@ -1,6 +1,5 @@
 @page "/logout"
 @inherits LogoutModel
-@rendermode InteractiveServer
 
 <PageTitle>Logging out...</PageTitle>
 
@@ -18,3 +17,11 @@
         </div>
     </div>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Redirect to Razor Page endpoint for logout
+        NavigationManager.NavigateTo("/account/logout", forceLoad: true);
+    }
+}

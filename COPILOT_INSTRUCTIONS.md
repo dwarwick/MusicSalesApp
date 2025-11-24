@@ -88,5 +88,6 @@ dotnet run --project JwtIdentity
 
 
 ### Database
-- SQL Server database managed by EF Core migrations
+- SQL Server LocalDB database managed by EF Core migrations
+- Connection string is in appsettings.Development.json: `Server=(localdb)\\mssqllocaldb;Database=MusicAppDb;Trusted_Connection=True;MultipleActiveResultSets=true`
 - Database created automatically on first run with seed data

@@ -1,6 +1,5 @@
 @page "/login"
 @inherits LoginModel
-@rendermode InteractiveServer
 
 <PageTitle>Login</PageTitle>
 
@@ -19,37 +18,36 @@
                         </div>
                     }
 
-                    <EditForm Model="loginModel" OnValidSubmit="HandleLogin" FormName="LoginForm">
-                        <DataAnnotationsValidator />
-                        <AntiforgeryToken />
+                    <form method="post" action="/account/login">
+                        @* AntiForgery token *@
+                        <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
                         
                         <div class="mb-3">
-                            <label for="username" class="form-label">Username</label>
-                            <InputText id="username" class="form-control" @bind-Value="loginModel.Username" />
-                            <ValidationMessage For="@(() => loginModel.Username)" />
+                            <label for="username" class="form-label">Username or Email</label>
+                            <input type="text" id="username" name="username" class="form-control" required />
                         </div>
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <InputText id="password" type="password" class="form-control" @bind-Value="loginModel.Password" />
-                            <ValidationMessage For="@(() => loginModel.Password)" />
+                            <input type="password" id="password" name="password" class="form-control" required />
                         </div>
 
+                        <input type="hidden" name="returnUrl" value="/" />
+
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary" disabled="@isLoggingIn">
-                                @if (isLoggingIn)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                }
+                            <button type="submit" class="btn btn-primary">
                                 Login
                             </button>
                         </div>
-                    </EditForm>
+                    </form>
                 </div>
             </div>
-            <div class="mt-3 text-center text-muted">
-                <small>Hint: Use username "admin" with any password to login as administrator</small>
-            </div>
+            @if (isDevelopment)
+            {
+                <div class="mt-3 text-center text-muted">
+                    <small>Hint: Use email "admin@app.com" or "user@app.com" with password "Password_123"</small>
+                </div>
+            }
         </div>
     </div>
 </div>

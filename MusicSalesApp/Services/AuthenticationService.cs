@@ -1,24 +1,29 @@
 using System.Security.Claims;
-using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.JSInterop;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Extensions;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
 
 public class AuthenticationService : IAuthenticationService
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
-    private readonly IJSRuntime _jsRuntime;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ILogger<AuthenticationService> _logger;
 
     public AuthenticationService(
         AuthenticationStateProvider authenticationStateProvider,
-        IJSRuntime jsRuntime,
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager,
         ILogger<AuthenticationService> logger)
     {
         _authenticationStateProvider = authenticationStateProvider;
-        _jsRuntime = jsRuntime;
+        _userManager = userManager;
+        _signInManager = signInManager;
         _logger = logger;
     }
 
@@ -31,19 +36,32 @@ public class AuthenticationService : IAuthenticationService
 
         try
         {
-            // Call the API endpoint via JavaScript fetch to ensure cookies are set properly
-            var result = await _jsRuntime.InvokeAsync<bool>("loginUser", username, password);
-            
-            if (result)
+            // Find user by email or username
+            var user = await _userManager.FindByEmailOrUsernameAsync(username);
+
+            if (user == null)
             {
-                // Notify the authentication state provider
-                if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-                {
-                    serverAuthStateProvider.NotifyAuthenticationStateChanged();
-                }
+                _logger.LogWarning("Login failed: User not found for username: {Username}", username);
+                return false;
             }
 
-            return result;
+            // Validate password and sign in with lockout protection
+            var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: true);
+
+            if (result.Succeeded)
+            {
+                _logger.LogInformation("User {Username} logged in successfully", username);
+                NotifyAuthenticationStateChange();
+                return true;
+            }
+
+            if (result.IsLockedOut)
+            {
+                _logger.LogWarning("Login failed for user {Username}: Account is locked out", username);
+                return false;
+            }
+            _logger.LogWarning("Login failed for user {Username}: Invalid password", username);
+            return false;
         }
         catch (Exception ex)
         {
@@ -56,19 +74,23 @@ public class AuthenticationService : IAuthenticationService
     {
         try
         {
-            // Call the API endpoint via JavaScript fetch
-            await _jsRuntime.InvokeVoidAsync("logoutUser");
-
-            // Notify the authentication state provider
-            if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-            {
-                serverAuthStateProvider.NotifyAuthenticationStateChanged();
-            }
+            await _signInManager.SignOutAsync();
+            _logger.LogInformation("User logged out successfully");
+            NotifyAuthenticationStateChange();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error during logout, user may already be logged out");
-            // Continue - the user experience should not be impacted if logout fails
+            _logger.LogWarning(ex, "Error during logout");
+            // Still notify to clear local state
+            NotifyAuthenticationStateChange();
+        }
+    }
+
+    private void NotifyAuthenticationStateChange()
+    {
+        if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
+        {
+            serverAuthStateProvider.NotifyAuthenticationStateChanged();
         }
     }
 
