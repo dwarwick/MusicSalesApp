@@ -12,11 +12,15 @@ public partial class LoginModel : BlazorBase
     [Inject]
     private IHttpContextAccessor HttpContextAccessor { get; set; }
 
+    [Inject]
+    private IWebHostEnvironment Environment { get; set; }
+
     [SupplyParameterFromQuery(Name = "error")]
     public string Error { get; set; }
 
     protected string errorMessage = string.Empty;
     protected string antiForgeryToken = string.Empty;
+    protected bool isDevelopment = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -35,6 +39,9 @@ public partial class LoginModel : BlazorBase
             var tokens = Antiforgery.GetAndStoreTokens(httpContext);
             antiForgeryToken = tokens.RequestToken;
         }
+
+        // Check if in development environment
+        isDevelopment = Environment.IsDevelopment();
 
         // Display error message if present
         if (!string.IsNullOrEmpty(Error))
