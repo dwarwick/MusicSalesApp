@@ -61,10 +61,19 @@
 The authentication cookie should be named `.AspNetCore.Identity.Application` (not `.AspNetCore.Cookies` or any other name).
 
 ## Troubleshooting
-If login doesn't work:
+
+### If login doesn't work:
 1. Check browser console for JavaScript errors
 2. Check network tab for API call to `/api/auth/login`
 3. Verify response is 200 OK
 4. Check that cookie is set in response headers
 5. Verify database connection in appsettings.Development.json
 6. Ensure migrations have been applied (automatic on startup)
+
+### If logout doesn't work:
+1. Check browser console for "Logout successful" message
+2. Check network tab for API call to `/api/auth/logout`
+3. Verify response is 200 OK
+4. Check that Set-Cookie header removes the authentication cookie
+5. After clicking logout, the page should reload and the cookie should be gone
+6. If cookie persists, clear browser cache/cookies and try again
