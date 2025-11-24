@@ -1,93 +1,68 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.Authorization;
-using MusicSalesApp.Common.Helpers;
+using Microsoft.JSInterop;
 
 namespace MusicSalesApp.Services;
 
 public class AuthenticationService : IAuthenticationService
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly AuthenticationStateProvider _authenticationStateProvider;
-    private readonly IConfiguration _configuration;
+    private readonly IJSRuntime _jsRuntime;
 
     public AuthenticationService(
-        IHttpContextAccessor httpContextAccessor,
         AuthenticationStateProvider authenticationStateProvider,
-        IConfiguration configuration)
+        IJSRuntime jsRuntime)
     {
-        _httpContextAccessor = httpContextAccessor;
         _authenticationStateProvider = authenticationStateProvider;
-        _configuration = configuration;
+        _jsRuntime = jsRuntime;
     }
 
     public async Task<bool> LoginAsync(string username, string password)
     {
-        // TODO: In a real application, validate credentials against a database
-        // For now, we'll use a simple check for demonstration
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
             return false;
         }
 
-        var httpContext = _httpContextAccessor.HttpContext;
-        if (httpContext == null)
+        try
+        {
+            // Call the API endpoint via JavaScript fetch to ensure cookies are set properly
+            var result = await _jsRuntime.InvokeAsync<bool>("loginUser", username, password);
+            
+            if (result)
+            {
+                // Notify the authentication state provider
+                if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
+                {
+                    serverAuthStateProvider.NotifyAuthenticationStateChanged();
+                }
+            }
+
+            return result;
+        }
+        catch
         {
             return false;
         }
-
-        // Create claims for the user
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.Name, username),
-            new Claim(ClaimTypes.Role, "Admin")
-        };
-
-        // Add permissions based on role
-        // Admin role gets ManageUsers permission
-        if (username.Equals("admin", StringComparison.OrdinalIgnoreCase))
-        {
-            claims.Add(new Claim(CustomClaimTypes.Permission, Permissions.ManageUsers));
-        }
-
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-        // Get expiration time from configuration
-        var expireMinutes = _configuration.GetValue<int>("Auth:ExpireMinutes", 300);
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(expireMinutes)
-        };
-
-        await httpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            claimsPrincipal,
-            authProperties);
-
-        // Notify the authentication state provider
-        if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
-        {
-            serverAuthStateProvider.NotifyAuthenticationStateChanged();
-        }
-
-        return true;
     }
 
     public async Task LogoutAsync()
     {
-        var httpContext = _httpContextAccessor.HttpContext;
-        if (httpContext != null)
+        try
         {
-            await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            // Call the API endpoint via JavaScript fetch
+            await _jsRuntime.InvokeVoidAsync("logoutUser");
 
             // Notify the authentication state provider
             if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
             {
                 serverAuthStateProvider.NotifyAuthenticationStateChanged();
             }
+        }
+        catch
+        {
+            // Ignore errors
         }
     }
 

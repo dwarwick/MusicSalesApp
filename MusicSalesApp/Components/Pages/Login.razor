@@ -4,6 +4,7 @@
 @inject IAuthenticationService AuthenticationService
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
 
 <PageTitle>Login</PageTitle>
 
@@ -22,8 +23,9 @@
                         </div>
                     }
 
-                    <EditForm Model="loginModel" OnValidSubmit="HandleLogin">
+                    <EditForm Model="loginModel" OnValidSubmit="HandleLogin" FormName="LoginForm">
                         <DataAnnotationsValidator />
+                        <AntiforgeryToken />
                         
                         <div class="mb-3">
                             <label for="username" class="form-label">Username</label>
