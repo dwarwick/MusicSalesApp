@@ -1,16 +1,41 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Services;
 
 namespace MusicSalesApp.ComponentTests.Components;
 
 [TestFixture]
-public class CounterTests : Bunit.TestContext
+public class CounterTests
 {
+    private Bunit.TestContext _testContext;
+
+    [SetUp]
+    public void Setup()
+    {
+        _testContext = new Bunit.TestContext();
+
+        // Register mock services
+        var mockAuthService = new Mock<IAuthenticationService>();
+        var mockAuthStateProvider = new Mock<AuthenticationStateProvider>();
+
+        _testContext.Services.AddSingleton(mockAuthService.Object);
+        _testContext.Services.AddSingleton<AuthenticationStateProvider>(mockAuthStateProvider.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _testContext?.Dispose();
+    }
+
     [Test]
     public void Counter_RendersCorrectly()
     {
         // Act
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
 
         // Assert
         Assert.That(cut.Find("h1").TextContent, Is.EqualTo("Counter"));
@@ -20,7 +45,7 @@ public class CounterTests : Bunit.TestContext
     public void Counter_InitialCount_IsZero()
     {
         // Act
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
 
         // Assert
         Assert.That(cut.Find("p[role='status']").TextContent, Is.EqualTo("Current count: 0"));
@@ -30,7 +55,7 @@ public class CounterTests : Bunit.TestContext
     public void Counter_ClickButton_IncrementsCount()
     {
         // Arrange
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
         var button = cut.Find("button");
 
         // Act
@@ -44,7 +69,7 @@ public class CounterTests : Bunit.TestContext
     public void Counter_MultipleClicks_IncrementsCountMultipleTimes()
     {
         // Arrange
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
         var button = cut.Find("button");
 
         // Act
@@ -60,7 +85,7 @@ public class CounterTests : Bunit.TestContext
     public void Counter_Button_HasCorrectText()
     {
         // Act
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
 
         // Assert
         Assert.That(cut.Find("button").TextContent, Is.EqualTo("Click me"));
@@ -70,7 +95,7 @@ public class CounterTests : Bunit.TestContext
     public void Counter_Button_HasCorrectClass()
     {
         // Act
-        var cut = RenderComponent<Counter>();
+        var cut = _testContext.RenderComponent<Counter>();
 
         // Assert
         Assert.That(cut.Find("button").ClassList, Does.Contain("btn-primary"));

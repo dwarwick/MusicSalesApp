@@ -1,9 +1,5 @@
 @page "/login"
-@using MusicSalesApp.Services
-@using Microsoft.AspNetCore.Components.Authorization
-@inject IAuthenticationService AuthenticationService
-@inject NavigationManager NavigationManager
-@inject AuthenticationStateProvider AuthenticationStateProvider
+@inherits LoginModel
 @rendermode InteractiveServer
 
 <PageTitle>Login</PageTitle>
@@ -57,56 +53,3 @@
         </div>
     </div>
 </div>
-
-@code {
-    private LoginModel loginModel = new();
-    private string errorMessage = string.Empty;
-    private bool isLoggingIn = false;
-
-    protected override async Task OnInitializedAsync()
-    {
-        // Check if already logged in
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (authState.User?.Identity?.IsAuthenticated == true)
-        {
-            NavigationManager.NavigateTo("/");
-        }
-    }
-
-    private async Task HandleLogin()
-    {
-        errorMessage = string.Empty;
-        isLoggingIn = true;
-
-        try
-        {
-            var success = await AuthenticationService.LoginAsync(loginModel.Username, loginModel.Password);
-            
-            if (success)
-            {
-                NavigationManager.NavigateTo("/", forceLoad: true);
-            }
-            else
-            {
-                errorMessage = "Invalid username or password.";
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"An error occurred: {ex.Message}";
-        }
-        finally
-        {
-            isLoggingIn = false;
-        }
-    }
-
-    private class LoginModel
-    {
-        [System.ComponentModel.DataAnnotations.Required]
-        public string Username { get; set; } = string.Empty;
-
-        [System.ComponentModel.DataAnnotations.Required]
-        public string Password { get; set; } = string.Empty;
-    }
-}

@@ -20,26 +20,31 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        // TODO: SECURITY WARNING - This is a demo implementation
-        // In a real application, validate credentials against a secure database
-        // with proper password hashing (e.g., BCrypt, Argon2)
         if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
         {
             return BadRequest(new { message = "Invalid username or password" });
+        }
+
+        // Validate credentials
+        // This is a simplified authentication for demonstration purposes
+        // In production, validate against a database with hashed passwords
+        if (!ValidateCredentials(request.Username, request.Password))
+        {
+            return Unauthorized(new { message = "Invalid username or password" });
         }
 
         // Create claims for the user
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.Name, request.Username),
-            new Claim(ClaimTypes.Role, "Admin")
+            new Claim(ClaimTypes.Role, GetUserRole(request.Username))
         };
 
         // Add permissions based on role
-        // Admin role gets ManageUsers permission
-        if (request.Username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+        var permissions = GetUserPermissions(request.Username);
+        foreach (var permission in permissions)
         {
-            claims.Add(new Claim(CustomClaimTypes.Permission, Permissions.ManageUsers));
+            claims.Add(new Claim(CustomClaimTypes.Permission, permission));
         }
 
         var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -66,6 +71,38 @@ public class AuthController : ControllerBase
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return Ok(new { message = "Logout successful" });
+    }
+
+    private bool ValidateCredentials(string username, string password)
+    {
+        // For demonstration purposes, accept any non-empty password
+        // In production, validate against a database with hashed passwords
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            return false;
+        }
+
+        // Accept admin user or any other username for demo purposes
+        return true;
+    }
+
+    private string GetUserRole(string username)
+    {
+        // Assign Admin role to admin user, User role to others
+        return username.Equals("admin", StringComparison.OrdinalIgnoreCase) ? "Admin" : "User";
+    }
+
+    private List<string> GetUserPermissions(string username)
+    {
+        var permissions = new List<string>();
+
+        // Admin users get all permissions
+        if (username.Equals("admin", StringComparison.OrdinalIgnoreCase))
+        {
+            permissions.Add(Permissions.ManageUsers);
+        }
+
+        return permissions;
     }
 }
 

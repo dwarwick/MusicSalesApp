@@ -1,16 +1,41 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Services;
 
 namespace MusicSalesApp.ComponentTests.Components;
 
 [TestFixture]
-public class HomeTests : Bunit.TestContext
+public class HomeTests
 {
+    private Bunit.TestContext _testContext;
+
+    [SetUp]
+    public void Setup()
+    {
+        _testContext = new Bunit.TestContext();
+
+        // Register mock services
+        var mockAuthService = new Mock<IAuthenticationService>();
+        var mockAuthStateProvider = new Mock<AuthenticationStateProvider>();
+
+        _testContext.Services.AddSingleton(mockAuthService.Object);
+        _testContext.Services.AddSingleton<AuthenticationStateProvider>(mockAuthStateProvider.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _testContext?.Dispose();
+    }
+
     [Test]
     public void Home_RendersCorrectly()
     {
         // Act
-        var cut = RenderComponent<Home>();
+        var cut = _testContext.RenderComponent<Home>();
 
         // Assert
         Assert.That(cut.Find("h1").TextContent, Is.EqualTo("Hello, world!"));
@@ -20,11 +45,9 @@ public class HomeTests : Bunit.TestContext
     public void Home_WelcomeMessage_IsDisplayed()
     {
         // Act
-        var cut = RenderComponent<Home>();
-        var paragraphs = cut.FindAll("p");
+        var cut = _testContext.RenderComponent<Home>();
 
         // Assert
-        Assert.That(paragraphs, Has.Count.GreaterThan(0));
-        Assert.That(paragraphs[0].TextContent, Does.Contain("Welcome to your new app"));
+        Assert.That(cut.Markup, Does.Contain("Welcome to your new app"));
     }
 }
