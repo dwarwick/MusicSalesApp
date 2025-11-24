@@ -14,6 +14,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Add Razor Pages support for authentication endpoints
+builder.Services.AddRazorPages();
+
 // Add DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -105,6 +108,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapControllers();
+app.MapRazorPages(); // Add Razor Pages routing
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

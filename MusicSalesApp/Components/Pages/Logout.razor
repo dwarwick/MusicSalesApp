@@ -1,6 +1,5 @@
 @page "/logout"
 @inherits LogoutModel
-@rendermode InteractiveServer
 
 <PageTitle>Logging out...</PageTitle>
 
@@ -13,8 +12,22 @@
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p>Logging out...</p>
+                    <form id="logoutForm" method="post" action="/account/logout">
+                        <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(antiForgeryToken))
+        {
+            // Auto-submit the form via JavaScript
+            NavigationManager.NavigateTo("/account/logout", forceLoad: true);
+        }
+    }
+}

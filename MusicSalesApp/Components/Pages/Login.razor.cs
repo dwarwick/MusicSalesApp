@@ -1,13 +1,22 @@
-using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages;
 
 public partial class LoginModel : BlazorBase
 {
-    protected LoginFormModel loginModel = new();
+    [Inject]
+    private IAntiforgery Antiforgery { get; set; }
+
+    [Inject]
+    private IHttpContextAccessor HttpContextAccessor { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string Error { get; set; }
+
     protected string errorMessage = string.Empty;
-    protected bool isLoggingIn = false;
+    protected string antiForgeryToken = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -15,44 +24,22 @@ public partial class LoginModel : BlazorBase
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User?.Identity?.IsAuthenticated == true)
         {
-            NavigationManager.NavigateTo("/");
+            NavigationManager.NavigateTo("/", forceLoad: true);
+            return;
         }
-    }
 
-    protected async Task HandleLogin()
-    {
-        errorMessage = string.Empty;
-        isLoggingIn = true;
-
-        try
+        // Get antiforgery token
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
         {
-            var success = await AuthenticationService.LoginAsync(loginModel.Username, loginModel.Password);
-            
-            if (success)
-            {
-                NavigationManager.NavigateTo("/", forceLoad: true);
-            }
-            else
-            {
-                errorMessage = "Invalid username or password.";
-            }
+            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+            antiForgeryToken = tokens.RequestToken;
         }
-        catch (Exception ex)
-        {
-            errorMessage = $"An error occurred: {ex.Message}";
-        }
-        finally
-        {
-            isLoggingIn = false;
-        }
-    }
 
-    protected class LoginFormModel
-    {
-        [Required]
-        public string Username { get; set; } = string.Empty;
-
-        [Required]
-        public string Password { get; set; } = string.Empty;
+        // Display error message if present
+        if (!string.IsNullOrEmpty(Error))
+        {
+            errorMessage = Error;
+        }
     }
 }

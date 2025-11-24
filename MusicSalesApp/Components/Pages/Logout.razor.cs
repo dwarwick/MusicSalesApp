@@ -1,12 +1,27 @@
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages;
 
 public partial class LogoutModel : BlazorBase
 {
-    protected override async Task OnInitializedAsync()
+    [Inject]
+    private IAntiforgery Antiforgery { get; set; }
+
+    [Inject]
+    private IHttpContextAccessor HttpContextAccessor { get; set; }
+
+    protected string antiForgeryToken = string.Empty;
+
+    protected override void OnInitialized()
     {
-        await AuthenticationService.LogoutAsync();
-        NavigationManager.NavigateTo("/login", forceLoad: true);
+        // Get antiforgery token
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+            antiForgeryToken = tokens.RequestToken;
+        }
     }
 }
