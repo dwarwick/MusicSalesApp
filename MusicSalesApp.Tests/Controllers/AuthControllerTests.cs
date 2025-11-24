@@ -14,7 +14,6 @@ namespace MusicSalesApp.Tests.Controllers;
 public class AuthControllerTests
 {
     private Mock<IConfiguration> _mockConfiguration;
-    private AppDbContext _dbContext;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<SignInManager<ApplicationUser>> _mockSignInManager;
     private AuthController _controller;
@@ -24,12 +23,6 @@ public class AuthControllerTests
     {
         _mockConfiguration = new Mock<IConfiguration>();
         _mockConfiguration.Setup(c => c.GetSection("Auth:ExpireMinutes").Value).Returns("300");
-        
-        // Create in-memory database context
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-        _dbContext = new AppDbContext(options);
         
         // Mock UserManager
         var userStore = new Mock<IUserStore<ApplicationUser>>();
@@ -50,7 +43,6 @@ public class AuthControllerTests
         
         _controller = new AuthController(
             _mockConfiguration.Object,
-            _dbContext,
             _mockUserManager.Object,
             _mockSignInManager.Object);
         
@@ -64,7 +56,7 @@ public class AuthControllerTests
     [TearDown]
     public void TearDown()
     {
-        _dbContext?.Dispose();
+        // No cleanup needed
     }
 
     [Test]
