@@ -1,10 +1,51 @@
 using MusicSalesApp.Components;
+using MusicSalesApp.Services;
+using MusicSalesApp.Common.Helpers;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Add controllers
+builder.Services.AddControllers();
+
+// Add HTTP context accessor
+builder.Services.AddHttpContextAccessor();
+
+// Add authentication
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/logout";
+    });
+
+// Add authorization with policies
+builder.Services.AddAuthorizationCore(options =>
+{
+    var type = typeof(Permissions);
+
+    var permissionNames = type.GetFields().Select(permission => permission.Name);
+    foreach (var name in permissionNames)
+    {
+        options.AddPolicy(
+            name,
+            policyBuilder => policyBuilder.RequireAssertion(
+                context => context.User.HasClaim(claim => claim.Type == CustomClaimTypes.Permission && claim.Value == name)));
+    }
+});
+
+// Add authentication state provider
+builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+builder.Services.AddScoped<ServerAuthenticationStateProvider>();
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+// Add cascading authentication state
+builder.Services.AddCascadingAuthenticationState();
 
 var app = builder.Build();
 
@@ -18,9 +59,13 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapControllers();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

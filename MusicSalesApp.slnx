@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="MusicSalesApp.Common/MusicSalesApp.Common.csproj" />
   <Project Path="MusicSalesApp/MusicSalesApp.csproj" />
 </Solution>
