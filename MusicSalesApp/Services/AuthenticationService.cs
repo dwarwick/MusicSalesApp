@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
+using Microsoft.Extensions.Logging;
 
 namespace MusicSalesApp.Services;
 
@@ -9,13 +10,16 @@ public class AuthenticationService : IAuthenticationService
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly IJSRuntime _jsRuntime;
+    private readonly ILogger<AuthenticationService> _logger;
 
     public AuthenticationService(
         AuthenticationStateProvider authenticationStateProvider,
-        IJSRuntime jsRuntime)
+        IJSRuntime jsRuntime,
+        ILogger<AuthenticationService> logger)
     {
         _authenticationStateProvider = authenticationStateProvider;
         _jsRuntime = jsRuntime;
+        _logger = logger;
     }
 
     public async Task<bool> LoginAsync(string username, string password)
@@ -41,8 +45,9 @@ public class AuthenticationService : IAuthenticationService
 
             return result;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Error during login for user: {Username}", username);
             return false;
         }
     }
@@ -60,9 +65,10 @@ public class AuthenticationService : IAuthenticationService
                 serverAuthStateProvider.NotifyAuthenticationStateChanged();
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore errors
+            _logger.LogWarning(ex, "Error during logout, user may already be logged out");
+            // Continue - the user experience should not be impacted if logout fails
         }
     }
 

@@ -20,7 +20,9 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        // TODO: In a real application, validate credentials against a database
+        // TODO: SECURITY WARNING - This is a demo implementation
+        // In a real application, validate credentials against a secure database
+        // with proper password hashing (e.g., BCrypt, Argon2)
         if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
         {
             return BadRequest(new { message = "Invalid username or password" });
