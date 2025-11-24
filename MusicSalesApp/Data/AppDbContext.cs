@@ -49,9 +49,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             Email = "admin@app.com",
             NormalizedEmail = "ADMIN@APP.COM",
             EmailConfirmed = true,
-            SecurityStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f"
+            SecurityStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f",
+            ConcurrencyStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a"
         };
-        adminUser.PasswordHash = hasher.HashPassword(adminUser, "Password_123");
+        adminUser.PasswordHash = "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw=="; //hasher.HashPassword(adminUser, "Password_123");
 
         // Seed regular user
         var regularUser = new ApplicationUser
@@ -62,9 +63,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             Email = "user@app.com",
             NormalizedEmail = "USER@APP.COM",
             EmailConfirmed = true,
-            SecurityStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a"
+            SecurityStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
+            ConcurrencyStamp = "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b"
         };
-        regularUser.PasswordHash = hasher.HashPassword(regularUser, "Password_123");
+        regularUser.PasswordHash = "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g=="; //hasher.HashPassword(regularUser, "Password_123");
 
         builder.Entity<ApplicationUser>().HasData(adminUser, regularUser);
 

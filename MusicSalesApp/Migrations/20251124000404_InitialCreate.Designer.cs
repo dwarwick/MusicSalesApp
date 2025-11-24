@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251123233118_InitialCreate")]
+    [Migration("20251124000404_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -258,7 +258,7 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 1,
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "d031c2fd-7806-4114-afd2-7bcdd1876e93",
+                            ConcurrencyStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             Email = "admin@app.com",
                             EmailConfirmed = true,
                             LockoutEnabled = false,
@@ -274,7 +274,7 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 2,
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "3efe9391-8654-428c-8527-219069c42f36",
+                            ConcurrencyStamp = "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b",
                             Email = "user@app.com",
                             EmailConfirmed = true,
                             LockoutEnabled = false,

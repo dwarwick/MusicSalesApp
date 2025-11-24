@@ -174,8 +174,8 @@ namespace MusicSalesApp.Migrations
                 columns: new[] { "Id", "AccessFailedCount", "ConcurrencyStamp", "Email", "EmailConfirmed", "LockoutEnabled", "LockoutEnd", "NormalizedEmail", "NormalizedUserName", "PasswordHash", "PhoneNumber", "PhoneNumberConfirmed", "SecurityStamp", "TwoFactorEnabled", "UserName" },
                 values: new object[,]
                 {
-                    { 1, 0, "d031c2fd-7806-4114-afd2-7bcdd1876e93", "admin@app.com", true, false, null, "ADMIN@APP.COM", "ADMIN@APP.COM", "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw==", null, false, "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f", false, "admin@app.com" },
-                    { 2, 0, "3efe9391-8654-428c-8527-219069c42f36", "user@app.com", true, false, null, "USER@APP.COM", "USER@APP.COM", "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g==", null, false, "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a", false, "user@app.com" }
+                    { 1, 0, "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a", "admin@app.com", true, false, null, "ADMIN@APP.COM", "ADMIN@APP.COM", "AQAAAAIAAYagAAAAEIJK1BY5bzMovp+I46WIyfIQZfjRi3dpeb5PN5FeKO9NskZ9RDffZtfBMzhiR/uWsw==", null, false, "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f", false, "admin@app.com" },
+                    { 2, 0, "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b", "user@app.com", true, false, null, "USER@APP.COM", "USER@APP.COM", "AQAAAAIAAYagAAAAELfX5sMWJgJQ48czQFh5cJAw8+ZZxj6EMiY1gN/ib1tlG8zPGBefyjVfv+0r/5ER/g==", null, false, "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a", false, "user@app.com" }
                 });
 
             migrationBuilder.InsertData(
