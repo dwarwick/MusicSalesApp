@@ -29,6 +29,23 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 
 var app = builder.Build();
 
+// Apply pending migrations automatically at startup
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var db = services.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while applying database migrations.");
+        throw; // rethrow to fail fast if migrations cannot be applied
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
