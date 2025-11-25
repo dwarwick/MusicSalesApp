@@ -19,6 +19,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Azure Blob Storage SDK -->
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.22.0" />
   </ItemGroup>
 
 </Project>

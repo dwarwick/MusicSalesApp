@@ -69,6 +69,10 @@ builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStat
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 
+// Azure storage options + service
+builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
+builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
+
 // Add cascading authentication state
 builder.Services.AddCascadingAuthenticationState();
 
