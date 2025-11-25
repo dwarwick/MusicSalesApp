@@ -1,12 +1,14 @@
+using FFMpegCore;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
-using MusicSalesApp.Common.Helpers;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,14 +16,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Add Razor Pages support for authentication endpoints
 builder.Services.AddRazorPages();
 
-// Add DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Add Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
@@ -34,7 +33,6 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// Configure Identity cookie options
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/login";
@@ -43,17 +41,21 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;
 });
 
-// Add controllers
 builder.Services.AddControllers();
 
-// Add HTTP context accessor
+// Provide HttpClient with base address configured once here.
+// Using scoped factory so each circuit gets proper NavigationManager base URI.
+builder.Services.AddScoped(sp =>
+{
+    var nav = sp.GetRequiredService<NavigationManager>();
+    return new HttpClient { BaseAddress = new Uri(nav.BaseUri) };
+});
+
 builder.Services.AddHttpContextAccessor();
 
-// Add authorization with policies
 builder.Services.AddAuthorizationCore(options =>
 {
     var type = typeof(Permissions);
-
     var permissionNames = type.GetFields().Select(permission => permission.Name);
     foreach (var name in permissionNames)
     {
@@ -64,17 +66,19 @@ builder.Services.AddAuthorizationCore(options =>
     }
 });
 
-// Add authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 
-// Azure storage options + service
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
 
-// Add cascading authentication state
 builder.Services.AddCascadingAuthenticationState();
+
+GlobalFFOptions.Configure(options =>
+{
+    options.BinaryFolder = Path.Combine(AppContext.BaseDirectory);
+});
 
 var app = builder.Build();
 

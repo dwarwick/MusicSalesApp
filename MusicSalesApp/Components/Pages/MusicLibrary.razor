@@ -1,0 +1,47 @@
+@page "/music-library"
+@inherits MusicSalesApp.Components.Pages.MusicLibraryModel
+@rendermode InteractiveServer
+@using MusicSalesApp.Services
+
+<h3>Music Library</h3>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_error != null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else
+{
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Size (KB)</th>
+                <th>Last Modified</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var f in _files)
+        {
+            <tr>
+                <td>@f.Name</td>
+                <td>@Math.Round(f.Length / 1024.0,2)</td>
+                <td>@f.LastModified?.LocalDateTime.ToString("g")</td>
+                <td>
+                    <button class="btn btn-primary btn-sm" @onclick="() => PlayAsync(f.Name)">Play</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(_currentFile))
+{
+    <h5>Now Playing: @_currentFile</h5>
+    <audio @ref="_audio" controls autoplay style="width:100%;" src="@_streamUrl" key="@_streamUrl"></audio>
+}
