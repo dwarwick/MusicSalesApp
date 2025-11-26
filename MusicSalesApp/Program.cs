@@ -47,6 +47,12 @@ builder.Services.AddControllers(options =>
     options.Filters.Add(new IgnoreAntiforgeryTokenAttribute()); // controllers only
 });
 
+// Configure antiforgery to work properly with API endpoints
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-XSRF-TOKEN";
+});
+
 // Provide HttpClient with base address configured once here.
 // Using scoped factory so each circuit gets proper NavigationManager base URI.
 builder.Services.AddScoped(sp =>
@@ -114,14 +120,13 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseRouting();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Scope antiforgery validation away from API routes to prevent token checks on uploads
-app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase), subApp =>
-{
-    subApp.UseAntiforgery();
-});
+// Add antiforgery middleware after routing so it can see endpoint metadata
+app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapControllers();
