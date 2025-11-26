@@ -72,18 +72,22 @@ public class UploadFilesModel : BlazorBase
             content.Add(streamContent, "file", file.Name);
             content.Add(new StringContent(_destinationFolder ?? string.Empty), "destinationFolder");
 
-            // Add antiforgery token to the request
-            var httpContext = HttpContextAccessor.HttpContext;
-            if (httpContext != null)
-            {
-                var tokens = Antiforgery.GetAndStoreTokens(httpContext);
-                content.Add(new StringContent(tokens.RequestToken ?? string.Empty), "__RequestVerificationToken");
-            }
-
             uploadItem.Progress = 30;
             uploadItem.StatusMessage = "Converting...";
             uploadItem.Status = UploadStatus.Converting;
             await InvokeAsync(StateHasChanged);
+
+            // Add antiforgery token as a header
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext != null)
+            {
+                var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+                if (!string.IsNullOrEmpty(tokens.RequestToken))
+                {
+                    Http.DefaultRequestHeaders.Remove("RequestVerificationToken");
+                    Http.DefaultRequestHeaders.Add("RequestVerificationToken", tokens.RequestToken);
+                }
+            }
 
             var response = await Http.PostAsync("api/music/upload", content);
 
