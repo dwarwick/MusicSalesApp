@@ -47,8 +47,7 @@ public class MusicController : ControllerBase
     }
 
     [HttpPost("upload")]
-    [Authorize(Policy = Permissions.UploadFiles)]
-    [IgnoreAntiforgeryToken] // Blazor Server apps calling their own APIs don't need CSRF protection
+    [Authorize(Policy = Permissions.UploadFiles)]    
     [RequestSizeLimit(200_000_000)] // 200 MB total request size
     [RequestFormLimits(MultipartBodyLengthLimit = 200_000_000, ValueLengthLimit = 200_000_000)]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string destinationFolder)

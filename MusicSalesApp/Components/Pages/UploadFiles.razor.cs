@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
@@ -11,9 +12,22 @@ namespace MusicSalesApp.Components.Pages;
 
 public class UploadFilesModel : BlazorBase
 {
+    private string _antiForgeryToken;
+
     protected string _destinationFolder = string.Empty;
     protected List<UploadItem> _uploadItems = new List<UploadItem>();
 
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+            _antiForgeryToken = tokens.RequestToken;
+        }
+    }
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
         await ProcessFiles(e.GetMultipleFiles(20)); // Limit to 20 files at once
@@ -69,6 +83,12 @@ public class UploadFilesModel : BlazorBase
             uploadItem.StatusMessage = "Converting...";
             uploadItem.Status = UploadStatus.Converting;
             await InvokeAsync(StateHasChanged);
+
+            // NEW: antiforgery token as a normal form field
+            if (!string.IsNullOrEmpty(_antiForgeryToken))
+            {
+                content.Add(new StringContent(_antiForgeryToken), "__RequestVerificationToken");
+            }
 
             var response = await Http.PostAsync("api/music/upload", content);
 
