@@ -84,5 +84,38 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 UserId = 2
             }
         );
+
+        // Dynamically seed role permission claims
+        var adminPermissions = typeof(Permissions)
+            .GetFields()
+            .Select(f => f.GetValue(null)?.ToString())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Where(v => !string.Equals(v, Permissions.NonValidatedUser, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(v => v)
+            .ToList();
+
+        var roleClaims = new List<IdentityRoleClaim<int>>();
+        var nextId = 1;
+        foreach (var perm in adminPermissions)
+        {
+            roleClaims.Add(new IdentityRoleClaim<int>
+            {
+                Id = nextId++,
+                RoleId = adminRoleId,
+                ClaimType = CustomClaimTypes.Permission,
+                ClaimValue = perm
+            });
+        }
+
+        // User role gets ValidatedUser only
+        roleClaims.Add(new IdentityRoleClaim<int>
+        {
+            Id = nextId++,
+            RoleId = userRoleId,
+            ClaimType = CustomClaimTypes.Permission,
+            ClaimValue = Permissions.ValidatedUser
+        });
+
+        builder.Entity<IdentityRoleClaim<int>>().HasData(roleClaims);
     }
 }

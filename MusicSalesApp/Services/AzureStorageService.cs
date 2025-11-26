@@ -29,6 +29,20 @@ namespace MusicSalesApp.Services
             _containerClient = new BlobContainerClient(opts.StorageAccountConnectionString, opts.ContainerName);
         }
 
+        public async Task EnsureContainerExistsAsync()
+        {
+            try
+            {
+                await _containerClient.CreateIfNotExistsAsync();
+                _logger.LogInformation("Container {ContainerName} exists or was created", _containerClient.Name);
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed ensuring container exists");
+                throw;
+            }
+        }
+
         public async Task UploadAsync(string fileName, Stream data, string contentType)
         {
             if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));

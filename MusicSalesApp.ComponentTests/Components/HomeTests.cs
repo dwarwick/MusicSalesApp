@@ -10,12 +10,12 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class HomeTests
 {
-    private Bunit.TestContext _testContext;
+    private BunitContext _testContext;
 
     [SetUp]
     public void Setup()
     {
-        _testContext = new Bunit.TestContext();
+        _testContext = new BunitContext();
 
         // Register mock services
         var mockAuthService = new Mock<IAuthenticationService>();
@@ -35,7 +35,7 @@ public class HomeTests
     public void Home_RendersCorrectly()
     {
         // Act
-        var cut = _testContext.RenderComponent<Home>();
+        var cut = _testContext.Render<Home>();
 
         // Assert
         Assert.That(cut.Find("h1").TextContent, Is.EqualTo("Hello, world!"));
@@ -45,7 +45,7 @@ public class HomeTests
     public void Home_WelcomeMessage_IsDisplayed()
     {
         // Act
-        var cut = _testContext.RenderComponent<Home>();
+        var cut = _testContext.Render<Home>();
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Welcome to your new app"));

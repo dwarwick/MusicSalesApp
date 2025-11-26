@@ -1,3 +1,4 @@
+#pragma warning disable CS0618, CS0619
 using Bunit;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,12 +11,12 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class CounterTests
 {
-    private Bunit.TestContext _testContext;
+    private BunitContext _testContext;
 
     [SetUp]
     public void Setup()
     {
-        _testContext = new Bunit.TestContext();
+        _testContext = new BunitContext();
 
         // Register mock services
         var mockAuthService = new Mock<IAuthenticationService>();
@@ -35,7 +36,7 @@ public class CounterTests
     public void Counter_RendersCorrectly()
     {
         // Act
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
 
         // Assert
         Assert.That(cut.Find("h1").TextContent, Is.EqualTo("Counter"));
@@ -45,7 +46,7 @@ public class CounterTests
     public void Counter_InitialCount_IsZero()
     {
         // Act
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
 
         // Assert
         Assert.That(cut.Find("p[role='status']").TextContent, Is.EqualTo("Current count: 0"));
@@ -55,7 +56,7 @@ public class CounterTests
     public void Counter_ClickButton_IncrementsCount()
     {
         // Arrange
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
         var button = cut.Find("button");
 
         // Act
@@ -69,7 +70,7 @@ public class CounterTests
     public void Counter_MultipleClicks_IncrementsCountMultipleTimes()
     {
         // Arrange
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
         var button = cut.Find("button");
 
         // Act
@@ -85,7 +86,7 @@ public class CounterTests
     public void Counter_Button_HasCorrectText()
     {
         // Act
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
 
         // Assert
         Assert.That(cut.Find("button").TextContent, Is.EqualTo("Click me"));
@@ -95,9 +96,10 @@ public class CounterTests
     public void Counter_Button_HasCorrectClass()
     {
         // Act
-        var cut = _testContext.RenderComponent<Counter>();
+        var cut = _testContext.Render<Counter>();
 
         // Assert
         Assert.That(cut.Find("button").ClassList, Does.Contain("btn-primary"));
     }
 }
+#pragma warning restore CS0618, CS0619

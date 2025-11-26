@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
@@ -41,7 +42,10 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add(new IgnoreAntiforgeryTokenAttribute()); // controllers only
+});
 
 // Provide HttpClient with base address configured once here.
 // Using scoped factory so each circuit gets proper NavigationManager base URI.
@@ -69,6 +73,7 @@ builder.Services.AddAuthorizationCore(options =>
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IMusicService, MusicService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
@@ -112,7 +117,11 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseAntiforgery();
+// Scope antiforgery validation away from API routes to prevent token checks on uploads
+app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase), subApp =>
+{
+    subApp.UseAntiforgery();
+});
 
 app.MapStaticAssets();
 app.MapControllers();

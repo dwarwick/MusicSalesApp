@@ -1,4 +1,6 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@using MusicSalesApp.Common.Helpers
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">MusicSalesApp</a>
     </div>
@@ -25,6 +27,22 @@
                 <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
             </NavLink>
         </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="music-library">
+                <span class="bi bi-music-note-list-nav-menu" aria-hidden="true"></span> Music Library
+            </NavLink>
+        </div>
+
+        <AuthorizeView Policy="@Permissions.UploadFiles">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="upload-files">
+                        <span class="bi bi-cloud-upload-nav-menu" aria-hidden="true"></span> Upload Files
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
         <AuthorizeView>
             <Authorized>

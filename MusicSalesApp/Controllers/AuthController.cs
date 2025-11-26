@@ -107,15 +107,16 @@ public class AuthController : ControllerBase
 
         if (role.Equals(Roles.Admin, StringComparison.OrdinalIgnoreCase))
         {
-            permissions.Add(Permissions.ManageUsers);
-            permissions.Add(Permissions.ValidatedUser);
+            // Admin gets all permissions except NonValidatedUser
+            var all = typeof(Permissions).GetFields().Select(f => f.GetValue(null)?.ToString()).Where(v => !string.IsNullOrEmpty(v));
+            permissions.AddRange(all.Where(p => !string.Equals(p, Permissions.NonValidatedUser, StringComparison.OrdinalIgnoreCase)));
         }
         else if (role.Equals(Roles.User, StringComparison.OrdinalIgnoreCase))
         {
             permissions.Add(Permissions.ValidatedUser);
         }
 
-        return permissions;
+        return permissions.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }
 
