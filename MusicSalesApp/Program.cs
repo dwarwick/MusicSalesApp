@@ -55,6 +55,9 @@ builder.Services.AddScoped(sp =>
 
 builder.Services.AddHttpContextAccessor();
 
+// Register Antiforgery services for DI
+builder.Services.AddAntiforgery();
+
 builder.Services.AddAuthorizationCore(options =>
 {
     var type = typeof(Permissions);
