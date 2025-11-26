@@ -44,7 +44,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddControllers();
 
-// Configure antiforgery to accept tokens from both form fields and headers
+// Configure antiforgery to accept tokens from custom header for API requests
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "RequestVerificationToken";
