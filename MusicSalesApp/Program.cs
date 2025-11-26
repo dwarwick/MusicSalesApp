@@ -42,16 +42,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;
 });
 
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add(new IgnoreAntiforgeryTokenAttribute()); // controllers only
-});
-
-// Configure antiforgery to work properly with API endpoints
-builder.Services.AddAntiforgery(options =>
-{
-    options.HeaderName = "X-XSRF-TOKEN";
-});
+builder.Services.AddControllers();
 
 // Provide HttpClient with base address configured once here.
 // Using scoped factory so each circuit gets proper NavigationManager base URI.
@@ -120,12 +111,9 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
-app.UseRouting();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Add antiforgery middleware after routing so it can see endpoint metadata
 app.UseAntiforgery();
 
 app.MapStaticAssets();

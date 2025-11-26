@@ -9,7 +9,6 @@ namespace MusicSalesApp.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[IgnoreAntiforgeryToken] // Exempt all actions in this controller
 public class MusicController : ControllerBase
 {
     private readonly IAzureStorageService _storageService;
@@ -49,6 +48,7 @@ public class MusicController : ControllerBase
 
     [HttpPost("upload")]
     [Authorize(Policy = Permissions.UploadFiles)]
+    [ValidateAntiForgeryToken]
     [RequestSizeLimit(200_000_000)] // 200 MB total request size
     [RequestFormLimits(MultipartBodyLengthLimit = 200_000_000, ValueLengthLimit = 200_000_000)]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string destinationFolder)

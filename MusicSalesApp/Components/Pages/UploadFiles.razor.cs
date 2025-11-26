@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
@@ -11,6 +12,12 @@ namespace MusicSalesApp.Components.Pages;
 
 public class UploadFilesModel : BlazorBase
 {
+    [Inject]
+    protected IAntiforgery Antiforgery { get; set; }
+
+    [Inject]
+    protected IHttpContextAccessor HttpContextAccessor { get; set; }
+
     protected string _destinationFolder = string.Empty;
     protected List<UploadItem> _uploadItems = new List<UploadItem>();
 
@@ -64,6 +71,14 @@ public class UploadFilesModel : BlazorBase
             
             content.Add(streamContent, "file", file.Name);
             content.Add(new StringContent(_destinationFolder ?? string.Empty), "destinationFolder");
+
+            // Add antiforgery token to the request
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext != null)
+            {
+                var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+                content.Add(new StringContent(tokens.RequestToken ?? string.Empty), "__RequestVerificationToken");
+            }
 
             uploadItem.Progress = 30;
             uploadItem.StatusMessage = "Converting...";
