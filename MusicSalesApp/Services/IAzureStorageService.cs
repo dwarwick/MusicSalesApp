@@ -16,6 +16,7 @@ namespace MusicSalesApp.Services
         Task<Stream> OpenReadAsync(string fileName); // optimized streaming seekable stream (empty if not found)
         Task<Stream> DownloadSegmentAsync(string fileName, long start, long end); // slice via seek
         Task<Stream> DownloadRangeDirectAsync(string fileName, long start, long end); // direct range fetch via SDK
+        Task EnsureContainerExistsAsync(); // ensure container exists
     }
 
     public class StorageFileInfo

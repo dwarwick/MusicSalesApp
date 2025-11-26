@@ -1,8 +1,10 @@
 using FFMpegCore;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
@@ -53,6 +55,9 @@ builder.Services.AddScoped(sp =>
 
 builder.Services.AddHttpContextAccessor();
 
+// Register Antiforgery services for DI
+builder.Services.AddAntiforgery();
+
 builder.Services.AddAuthorizationCore(options =>
 {
     var type = typeof(Permissions);
@@ -69,6 +74,8 @@ builder.Services.AddAuthorizationCore(options =>
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IMusicService, MusicService>();
+builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
@@ -119,5 +126,18 @@ app.MapControllers();
 app.MapRazorPages(); // Add Razor Pages routing
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
+{
+    var tokens = antiforgery.GetAndStoreTokens(context);
+
+    // Use the framework’s own field name instead of hard-coding
+    return Results.Json(new
+    {
+        token = tokens.RequestToken,
+        fieldName = tokens.FormFieldName
+    });
+});
+
 
 app.Run();

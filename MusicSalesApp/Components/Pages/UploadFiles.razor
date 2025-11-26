@@ -1,0 +1,133 @@
+@page "/upload-files"
+@inherits MusicSalesApp.Components.Pages.UploadFilesModel
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Services
+@attribute [Authorize(Policy = Permissions.UploadFiles)]
+
+<PageTitle>Upload Music Files</PageTitle>
+
+<h3>Upload Music Files</h3>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label for="destinationFolder" class="form-label">Destination Folder</label>
+            <input type="text" class="form-control" id="destinationFolder" @bind="_destinationFolder" placeholder="Leave empty for root" />
+            <small class="form-text text-muted">Specify a folder path (e.g., "music/rock"). Folder will be created if it doesn't exist.</small>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="upload-zone">
+                <div class="upload-zone-content">
+                    <i class="bi bi-cloud-upload" style="font-size: 3rem;"></i>
+                    <p class="mt-3">Select audio files to upload</p>
+                    <InputFile OnChange="HandleFileSelected" multiple class="dropzone" />
+                    <p class="text-muted mt-2">Supported formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</p>
+                    <p class="text-muted">Non-MP3 files will be automatically converted to MP3</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_uploadItems.Any())
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <h5>Upload Progress</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>File Name</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _uploadItems)
+                            {
+                                <tr>
+                                    <td>@item.FileName</td>
+                                    <td>@FormatFileSize(item.FileSize)</td>
+                                    <td>
+                                        @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Converting)
+                                        {
+                                            <span class="badge bg-info">@item.StatusMessage</span>
+                                        }
+                                        else if (item.Status == UploadStatus.Completed)
+                                        {
+                                            <span class="badge bg-success">@item.StatusMessage</span>
+                                        }
+                                        else if (item.Status == UploadStatus.Failed)
+                                        {
+                                            <span class="badge bg-danger">@item.StatusMessage</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@item.StatusMessage</span>
+                                        }
+                                    </td>
+                                    <td style="width: 40%;">
+                                        <div class="progress">
+                                            <div class="progress-bar @GetProgressBarClass(item.Status)" 
+                                                 role="progressbar" 
+                                                 style="width: @(item.Progress)%"
+                                                 aria-valuenow="@item.Progress" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                @item.Progress%
+                                            </div>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(item.ErrorMessage))
+                                        {
+                                            <small class="text-danger">@item.ErrorMessage</small>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .upload-zone {
+        border: 3px dashed #ccc;
+        border-radius: 8px;
+        padding: 60px 20px;
+        text-align: center;
+        background-color: #f9f9f9;
+        transition: all 0.3s ease;
+    }
+
+    .upload-zone:hover {
+        border-color: #0d6efd;
+        background-color: #f0f8ff;
+    }
+
+    .upload-zone i {
+        color: #0d6efd;
+    }
+
+    .dropzone {
+        display: block;
+        width: 100%;
+        height: 220px;
+        border: 2px dashed #bbb;
+        border-radius: 8px;
+        text-align: center;
+        padding: 40px;
+    }
+
+    .dropzone:hover {
+        border-color: #888;
+    }
+</style>
