@@ -24,4 +24,7 @@ public abstract class BlazorBase : ComponentBase
     protected IAntiforgery Antiforgery { get; set; } = default!;
     [Inject] 
     protected IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
+
+    [Inject]
+    protected IMusicUploadService MusicUploadService { get; set; } = default!;
 }
