@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MusicSalesApp.Components.Pages;
-using MusicSalesApp.Services;
+using MusicSalesApp.ComponentTests.Testing;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -11,48 +11,13 @@ using System.Text.Json;
 namespace MusicSalesApp.ComponentTests.Components;
 
 [TestFixture]
-public class MusicLibraryTests
+public class MusicLibraryTests : BUnitTestBase
 {
-    private BunitContext _testContext;
-    private Mock<IAuthenticationService> _mockAuthService;
-    private Mock<AuthenticationStateProvider> _mockAuthStateProvider;
-
-    [SetUp]
-    public void Setup()
-    {
-        _testContext = new BunitContext();
-
-        // Register mock services
-        _mockAuthService = new Mock<IAuthenticationService>();
-        _mockAuthStateProvider = new Mock<AuthenticationStateProvider>();
-
-        _testContext.Services.AddSingleton(_mockAuthService.Object);
-        _testContext.Services.AddSingleton<AuthenticationStateProvider>(_mockAuthStateProvider.Object);
-
-        // Register a mocked HttpClient
-        var handler = new StubHttpMessageHandler();
-        var files = new List<StorageFileInfo>
-        {
-            new StorageFileInfo { Name = "file1.mp3", Length = 1024, LastModified = DateTimeOffset.Now },
-            new StorageFileInfo { Name = "file2.mp3", Length = 2048, LastModified = DateTimeOffset.Now }
-        };
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        _testContext.Services.AddSingleton<HttpClient>(httpClient);
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        _testContext?.Dispose();
-    }
-
     [Test]
     public void MusicLibrary_HasCorrectTitle()
     {
         // Act
-        var cut = _testContext.Render<MusicLibrary>();
+        var cut = TestContext.Render<MusicLibrary>();
 
         // Assert
         Assert.That(cut.Find("h3").TextContent, Is.EqualTo("Music Library"));
@@ -62,7 +27,7 @@ public class MusicLibraryTests
     public void MusicLibrary_HasTableHeaders()
     {
         // Act
-        var cut = _testContext.Render<MusicLibrary>();
+        var cut = TestContext.Render<MusicLibrary>();
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("File Name"));

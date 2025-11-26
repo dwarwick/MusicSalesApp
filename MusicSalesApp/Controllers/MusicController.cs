@@ -12,21 +12,11 @@ namespace MusicSalesApp.Controllers
     [ApiController]
     public class MusicController : ControllerBase
     {
-        private readonly IAzureStorageService _storageService;
-        private readonly IMusicService _musicService;
-        private readonly IMusicUploadService _uploadService;
-        private readonly ILogger<MusicController> _logger;
+        private readonly IAzureStorageService _storageService;        
 
-        public MusicController(
-            IAzureStorageService storageService,
-            IMusicService musicService,
-            IMusicUploadService uploadService,
-            ILogger<MusicController> logger)
+        public MusicController(IAzureStorageService storageService)
         {
-            _storageService = storageService;
-            _musicService = musicService;
-            _uploadService = uploadService;
-            _logger = logger;
+            _storageService = storageService;            
         }
 
         [HttpGet]
@@ -52,48 +42,7 @@ namespace MusicSalesApp.Controllers
                 return NotFound();
 
             return File(stream, contentType, enableRangeProcessing: true);
-        }
-
-        [HttpPost("upload")]
-        // You can re-enable this later if you want API-level auth:
-        // [Authorize(Policy = Permissions.UploadFiles)]
-        [RequestSizeLimit(200_000_000)]
-        [RequestFormLimits(MultipartBodyLengthLimit = 200_000_000, ValueLengthLimit = 200_000_000)]
-        public async Task<IActionResult> Upload(
-            [FromForm] IFormFile file,
-            [FromForm] string destinationFolder)
-        {
-            try
-            {
-                var fullPath = await _uploadService.UploadAudioAsync(
-                    file,
-                    destinationFolder,
-                    HttpContext.RequestAborted);
-
-                var fileNameOnly = Path.GetFileName(fullPath);
-
-                return Ok(new
-                {
-                    message = $"File {fileNameOnly} uploaded successfully",
-                    fileName = fullPath
-                });
-            }
-            catch (InvalidDataException ex)
-            {
-                _logger.LogWarning(ex, "Invalid audio file {FileName}", file?.FileName);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (ArgumentException ex)
-            {
-                _logger.LogWarning(ex, "Bad upload request for file {FileName}", file?.FileName);
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error uploading file {FileName}", file?.FileName);
-                return StatusCode(500, new { message = $"Error uploading file: {ex.Message}" });
-            }
-        }
+        }        
 
         private static string NormalizeContentType(string original, string fileName)
         {
