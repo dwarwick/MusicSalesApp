@@ -44,12 +44,6 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddControllers();
 
-// Configure antiforgery to accept tokens from custom header for API requests
-builder.Services.AddAntiforgery(options =>
-{
-    options.HeaderName = "RequestVerificationToken";
-});
-
 // Provide HttpClient with base address configured once here.
 // Using scoped factory so each circuit gets proper NavigationManager base URI.
 builder.Services.AddScoped(sp =>

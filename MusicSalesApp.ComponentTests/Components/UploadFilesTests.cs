@@ -1,8 +1,6 @@
 #pragma warning disable CS0618, CS0619
 using Bunit;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MusicSalesApp.Components.Pages;
@@ -15,8 +13,6 @@ public class UploadFilesTests
 {
     private BunitContext _testContext;
     private Mock<IAuthenticationService> _mockAuthService;
-    private Mock<IAntiforgery> _mockAntiforgery;
-    private Mock<IHttpContextAccessor> _mockHttpContextAccessor;
 
     [SetUp]
     public void Setup()
@@ -25,16 +21,8 @@ public class UploadFilesTests
 
         // Register mock services
         _mockAuthService = new Mock<IAuthenticationService>();
-        _mockAntiforgery = new Mock<IAntiforgery>();
-        _mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
-
-        // Setup antiforgery mock
-        var mockTokenSet = new AntiforgeryTokenSet("test-request-token", "test-cookie-token", "form-field", "header");
-        _mockAntiforgery.Setup(x => x.GetAndStoreTokens(It.IsAny<HttpContext>())).Returns(mockTokenSet);
 
         _testContext.Services.AddSingleton(_mockAuthService.Object);
-        _testContext.Services.AddSingleton(_mockAntiforgery.Object);
-        _testContext.Services.AddSingleton(_mockHttpContextAccessor.Object);
         _testContext.Services.AddAuthorizationCore();
 
         var mockAuthStateProvider = new Mock<AuthenticationStateProvider>();

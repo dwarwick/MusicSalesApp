@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
@@ -12,12 +11,6 @@ namespace MusicSalesApp.Components.Pages;
 
 public class UploadFilesModel : BlazorBase
 {
-    [Inject]
-    protected IAntiforgery Antiforgery { get; set; } = default!;
-
-    [Inject]
-    protected IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
-
     protected string _destinationFolder = string.Empty;
     protected List<UploadItem> _uploadItems = new List<UploadItem>();
 
@@ -77,21 +70,7 @@ public class UploadFilesModel : BlazorBase
             uploadItem.Status = UploadStatus.Converting;
             await InvokeAsync(StateHasChanged);
 
-            // Create request with antiforgery token header
-            using var request = new HttpRequestMessage(HttpMethod.Post, "api/music/upload");
-            request.Content = content;
-            
-            var httpContext = HttpContextAccessor.HttpContext;
-            if (httpContext != null)
-            {
-                var tokens = Antiforgery.GetAndStoreTokens(httpContext);
-                if (!string.IsNullOrEmpty(tokens.RequestToken))
-                {
-                    request.Headers.Add("RequestVerificationToken", tokens.RequestToken);
-                }
-            }
-
-            var response = await Http.SendAsync(request);
+            var response = await Http.PostAsync("api/music/upload", content);
 
             uploadItem.Progress = 90;
             await InvokeAsync(StateHasChanged);
