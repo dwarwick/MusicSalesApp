@@ -13,10 +13,10 @@ namespace MusicSalesApp.Components.Pages;
 public class UploadFilesModel : BlazorBase
 {
     [Inject]
-    protected IAntiforgery Antiforgery { get; set; }
+    protected IAntiforgery Antiforgery { get; set; } = default!;
 
     [Inject]
-    protected IHttpContextAccessor HttpContextAccessor { get; set; }
+    protected IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
 
     protected string _destinationFolder = string.Empty;
     protected List<UploadItem> _uploadItems = new List<UploadItem>();
