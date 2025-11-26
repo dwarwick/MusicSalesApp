@@ -40,7 +40,10 @@ namespace MusicSalesApp.Services
             return Task.FromResult(true);
         }
 
-        public async Task<Stream> ConvertToMp3Async(Stream inputStream, string originalFileName, IProgress<double> progress = null)
+        public async Task<Stream> ConvertToMp3Async(
+    Stream inputStream,
+    string originalFileName,
+    IProgress<double> progress = null)
         {
             if (inputStream == null)
                 throw new ArgumentNullException(nameof(inputStream));
@@ -51,7 +54,12 @@ namespace MusicSalesApp.Services
             try
             {
                 var outputStream = new MemoryStream();
-                inputStream.Position = 0;
+
+                // Only attempt to reposition if the stream supports seeking
+                if (inputStream.CanSeek)
+                {
+                    inputStream.Position = 0;
+                }
 
                 var streamPipeSource = new StreamPipeSource(inputStream);
                 var streamPipeSink = new StreamPipeSink(outputStream);
@@ -66,7 +74,6 @@ namespace MusicSalesApp.Services
                         .ForceFormat("mp3"))
                     .NotifyOnProgress(timeSpan =>
                     {
-                        // Convert TimeSpan to percentage if needed
                         if (progress != null)
                         {
                             var percent = Math.Min(100, timeSpan.TotalSeconds * 10);
@@ -82,7 +89,11 @@ namespace MusicSalesApp.Services
                 }
 
                 outputStream.Position = 0;
-                _logger.LogInformation("Successfully converted {FileName} to MP3 ({Length} bytes)", originalFileName, outputStream.Length);
+                _logger.LogInformation(
+                    "Successfully converted {FileName} to MP3 ({Length} bytes)",
+                    originalFileName,
+                    outputStream.Length);
+
                 return outputStream;
             }
             catch (Exception ex)

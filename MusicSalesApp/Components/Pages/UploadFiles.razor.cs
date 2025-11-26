@@ -1,107 +1,100 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace MusicSalesApp.Components.Pages;
 
+
+
 public class UploadFilesModel : BlazorBase
 {
+    private sealed class AntiforgeryTokenResponse
+    {
+        public string Token { get; set; }
+        public string FieldName { get; set; }
+    }
+
+    private readonly CancellationToken _cancellationToken = CancellationToken.None;
+
     protected string _destinationFolder = string.Empty;
-    protected List<UploadItem> _uploadItems = new List<UploadItem>();
+    protected List<UploadItem> _uploadItems = new List<UploadItem>();    
 
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
-        await ProcessFiles(e.GetMultipleFiles(20)); // Limit to 20 files at once
-    }
+        var files = e.GetMultipleFiles(20);
 
-    protected async Task ProcessFiles(IReadOnlyList<IBrowserFile> files)
-    {
         foreach (var file in files)
         {
             var uploadItem = new UploadItem
             {
                 FileName = file.Name,
-                FileSize = file.Size,
                 Status = UploadStatus.Pending,
-                StatusMessage = "Pending",
-                Progress = 0
+                Progress = 0,
+                StatusMessage = "Pending"
             };
 
             _uploadItems.Add(uploadItem);
+
+            // Fire-and-forget each upload
+            _ = UploadFileAsync(file, uploadItem);
         }
 
         await InvokeAsync(StateHasChanged);
-
-        // Process uploads sequentially to avoid overwhelming the server
-        foreach (var file in files)
-        {
-            var uploadItem = _uploadItems.First(x => x.FileName == file.Name && x.Status == UploadStatus.Pending);
-            await UploadFile(file, uploadItem);
-        }
     }
 
-    protected async Task UploadFile(IBrowserFile file, UploadItem uploadItem)
+    private async Task UploadFileAsync(IBrowserFile file, UploadItem uploadItem)
     {
+        const long maxFileSize = 100 * 1024 * 1024; // 100 MB
+
         try
         {
             uploadItem.Status = UploadStatus.Uploading;
-            uploadItem.StatusMessage = "Uploading...";
-            uploadItem.Progress = 10;
+            uploadItem.StatusMessage = "Validating...";
+            uploadItem.Progress = 5;
             await InvokeAsync(StateHasChanged);
 
-            // Create multipart form content
-            using var content = new MultipartFormDataContent();
-            
-            var maxFileSize = 100 * 1024 * 1024; // 100 MB
-            var fileStream = file.OpenReadStream(maxFileSize);
-            var streamContent = new StreamContent(fileStream);
-            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
-            
-            content.Add(streamContent, "file", file.Name);
-            content.Add(new StringContent(_destinationFolder ?? string.Empty), "destinationFolder");
+            await using var stream = file.OpenReadStream(maxFileSize);
 
-            uploadItem.Progress = 30;
-            uploadItem.StatusMessage = "Converting...";
-            uploadItem.Status = UploadStatus.Converting;
-            await InvokeAsync(StateHasChanged);
+            // Delegate to the service (no HttpClient, no antiforgery)
+            var fullPath = await MusicUploadService.UploadAudioAsync(
+                stream,
+                file.Name,
+                _destinationFolder,
+                _cancellationToken);
 
-            var response = await Http.PostAsync("api/music/upload", content);
-
-            uploadItem.Progress = 90;
-            await InvokeAsync(StateHasChanged);
-
-            if (response.IsSuccessStatusCode)
-            {
-                uploadItem.Status = UploadStatus.Completed;
-                uploadItem.StatusMessage = "Completed";
-                uploadItem.Progress = 100;
-            }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                uploadItem.Status = UploadStatus.Failed;
-                uploadItem.StatusMessage = "Failed";
-                uploadItem.ErrorMessage = $"Upload failed: {errorContent}";
-                uploadItem.Progress = 0;
-            }
+            uploadItem.Progress = 100;
+            uploadItem.Status = UploadStatus.Completed;
+            uploadItem.StatusMessage = $"Uploaded as {Path.GetFileName(fullPath)}";
+            uploadItem.UploadedFileName = fullPath;
+            uploadItem.ErrorMessage = null;
+        }
+        catch (InvalidDataException ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Invalid audio file";
+            uploadItem.ErrorMessage = ex.Message;
         }
         catch (Exception ex)
         {
             uploadItem.Status = UploadStatus.Failed;
-            uploadItem.StatusMessage = "Failed";
-            uploadItem.ErrorMessage = ex.Message;
             uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Upload failed";
+            uploadItem.ErrorMessage = ex.Message;
         }
         finally
         {
             await InvokeAsync(StateHasChanged);
         }
-    }
+    }    
 
     protected string FormatFileSize(long bytes)
     {
@@ -131,6 +124,7 @@ public class UploadFilesModel : BlazorBase
     protected class UploadItem
     {
         public string FileName { get; set; } = string.Empty;
+        public string UploadedFileName { get; set; } = string.Empty;
         public long FileSize { get; set; }
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;

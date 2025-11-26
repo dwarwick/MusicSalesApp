@@ -43,5 +43,5 @@ else
 @if (!string.IsNullOrEmpty(_currentFile))
 {
     <h5>Now Playing: @_currentFile</h5>
-    <audio @ref="_audio" controls autoplay style="width:100%;" src="@_streamUrl" key="@_streamUrl"></audio>
+    <audio @ref="_audio" controls autoplay controlsList="nodownload" style="width:100%;" src="@_streamUrl" key="@_streamUrl"></audio>
 }

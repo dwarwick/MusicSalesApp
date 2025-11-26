@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using MusicSalesApp.Services;
@@ -18,4 +19,12 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+
+    [Inject] 
+    protected IAntiforgery Antiforgery { get; set; } = default!;
+    [Inject] 
+    protected IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
+
+    [Inject]
+    protected IMusicUploadService MusicUploadService { get; set; } = default!;
 }

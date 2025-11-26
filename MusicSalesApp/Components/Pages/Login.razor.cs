@@ -5,13 +5,7 @@ using MusicSalesApp.Components.Base;
 namespace MusicSalesApp.Components.Pages;
 
 public partial class LoginModel : BlazorBase
-{
-    [Inject]
-    private IAntiforgery Antiforgery { get; set; }
-
-    [Inject]
-    private IHttpContextAccessor HttpContextAccessor { get; set; }
-
+{   
     [Inject]
     private IWebHostEnvironment Environment { get; set; }
 

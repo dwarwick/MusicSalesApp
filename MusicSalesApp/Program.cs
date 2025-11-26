@@ -1,4 +1,5 @@
 using FFMpegCore;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
@@ -42,10 +43,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.SlidingExpiration = true;
 });
 
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add(new IgnoreAntiforgeryTokenAttribute()); // controllers only
-});
+builder.Services.AddControllers();
 
 // Provide HttpClient with base address configured once here.
 // Using scoped factory so each circuit gets proper NavigationManager base URI.
@@ -74,6 +72,7 @@ builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStat
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IMusicService, MusicService>();
+builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
@@ -117,16 +116,25 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Scope antiforgery validation away from API routes to prevent token checks on uploads
-app.UseWhen(ctx => !ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase), subApp =>
-{
-    subApp.UseAntiforgery();
-});
+app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapControllers();
 app.MapRazorPages(); // Add Razor Pages routing
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
+{
+    var tokens = antiforgery.GetAndStoreTokens(context);
+
+    // Use the framework’s own field name instead of hard-coding
+    return Results.Json(new
+    {
+        token = tokens.RequestToken,
+        fieldName = tokens.FormFieldName
+    });
+});
+
 
 app.Run();
