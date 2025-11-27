@@ -73,7 +73,7 @@ builder.Services.AddAuthorizationCore(options =>
 
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<ServerAuthenticationStateProvider>();
-builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 
