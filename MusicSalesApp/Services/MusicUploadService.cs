@@ -16,6 +16,7 @@ namespace MusicSalesApp.Services
         private readonly ILogger<MusicUploadService> _logger;
 
         private const string MasteredSuffix = "_mastered";
+        private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
         private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg" };
 
         public MusicUploadService(
@@ -259,38 +260,38 @@ namespace MusicSalesApp.Services
 
             var fileList = fileNames.ToList();
 
-            // Separate MP3 files from album art files
-            var mp3Files = fileList.Where(f => IsMp3File(f)).ToList();
+            // Separate audio files from album art files
+            var audioFiles = fileList.Where(f => IsAudioFile(f)).ToList();
             var albumArtFiles = fileList.Where(f => IsAlbumArtFile(f)).ToList();
 
             // Check if there are no files of either type
-            if (!mp3Files.Any() || !albumArtFiles.Any())
+            if (!audioFiles.Any() || !albumArtFiles.Any())
             {
                 result.IsValid = false;
-                result.UnmatchedMp3Files.AddRange(mp3Files);
+                result.UnmatchedMp3Files.AddRange(audioFiles);
                 result.UnmatchedAlbumArtFiles.AddRange(albumArtFiles);
                 return result;
             }
 
             // Get normalized base names for each type
-            var mp3BaseNames = mp3Files
+            var audioBaseNames = audioFiles
                 .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
             var albumArtBaseNames = albumArtFiles
                 .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
 
-            // Find unmatched MP3 files
-            foreach (var mp3 in mp3BaseNames)
+            // Find unmatched audio files
+            foreach (var audio in audioBaseNames)
             {
-                if (!albumArtBaseNames.ContainsKey(mp3.Key))
+                if (!albumArtBaseNames.ContainsKey(audio.Key))
                 {
-                    result.UnmatchedMp3Files.Add(mp3.Value);
+                    result.UnmatchedMp3Files.Add(audio.Value);
                 }
             }
 
             // Find unmatched album art files
             foreach (var art in albumArtBaseNames)
             {
-                if (!mp3BaseNames.ContainsKey(art.Key))
+                if (!audioBaseNames.ContainsKey(art.Key))
                 {
                     result.UnmatchedAlbumArtFiles.Add(art.Value);
                 }
@@ -301,13 +302,13 @@ namespace MusicSalesApp.Services
             return result;
         }
 
-        private bool IsMp3File(string fileName)
+        private bool IsAudioFile(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))
                 return false;
 
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            return extension == ".mp3";
+            return ValidAudioExtensions.Contains(extension);
         }
 
         private bool IsAlbumArtFile(string fileName)

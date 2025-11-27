@@ -65,7 +65,7 @@ public class UploadFilesModel : BlazorBase
 
         if (!validationResult.IsValid)
         {
-            _validationErrorMessage = "Some files do not have matching pairs. Each MP3 file must have a corresponding album art file with the same base name.";
+            _validationErrorMessage = "Some files do not have matching pairs. Each audio file must have a corresponding album art file with the same base name.";
             _unmatchedMp3Files = validationResult.UnmatchedMp3Files;
             _unmatchedAlbumArtFiles = validationResult.UnmatchedAlbumArtFiles;
             await InvokeAsync(StateHasChanged);
@@ -83,8 +83,8 @@ public class UploadFilesModel : BlazorBase
                 var uploadItem = new UploadPairItem
                 {
                     BaseName = baseName,
-                    Mp3FileName = audioFile.Name,
-                    Mp3FileSize = audioFile.Size,
+                    AudioFileName = audioFile.Name,
+                    AudioFileSize = audioFile.Size,
                     AlbumArtFileName = albumArtFile.Name,
                     AlbumArtFileSize = albumArtFile.Size,
                     Status = UploadStatus.Pending,
@@ -221,8 +221,8 @@ public class UploadFilesModel : BlazorBase
     protected class UploadPairItem
     {
         public string BaseName { get; set; } = string.Empty;
-        public string Mp3FileName { get; set; } = string.Empty;
-        public long Mp3FileSize { get; set; }
+        public string AudioFileName { get; set; } = string.Empty;
+        public long AudioFileSize { get; set; }
         public string AlbumArtFileName { get; set; } = string.Empty;
         public long AlbumArtFileSize { get; set; }
         public UploadStatus Status { get; set; }

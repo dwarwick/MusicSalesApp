@@ -47,7 +47,7 @@
                 </div>
                 @if (_unmatchedMp3Files.Any())
                 {
-                    <p class="text-danger"><strong>Unmatched MP3 files (missing album art):</strong></p>
+                    <p class="text-danger"><strong>Unmatched audio files (missing album art):</strong></p>
                     <ul class="text-danger">
                         @foreach (var file in _unmatchedMp3Files)
                         {
@@ -57,7 +57,7 @@
                 }
                 @if (_unmatchedAlbumArtFiles.Any())
                 {
-                    <p class="text-danger"><strong>Unmatched album art files (missing MP3):</strong></p>
+                    <p class="text-danger"><strong>Unmatched album art files (missing audio):</strong></p>
                     <ul class="text-danger">
                         @foreach (var file in _unmatchedAlbumArtFiles)
                         {
@@ -79,7 +79,7 @@
                         <thead>
                             <tr>
                                 <th>File Pair</th>
-                                <th>MP3 File</th>
+                                <th>Audio File</th>
                                 <th>Album Art</th>
                                 <th>Status</th>
                                 <th>Progress</th>
@@ -90,7 +90,7 @@
                             {
                                 <tr>
                                     <td>@item.BaseName</td>
-                                    <td>@item.Mp3FileName<br /><small class="text-muted">@FormatFileSize(item.Mp3FileSize)</small></td>
+                                    <td>@item.AudioFileName<br /><small class="text-muted">@FormatFileSize(item.AudioFileSize)</small></td>
                                     <td>@item.AlbumArtFileName<br /><small class="text-muted">@FormatFileSize(item.AlbumArtFileSize)</small></td>
                                     <td>
                                         @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Converting)

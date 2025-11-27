@@ -219,6 +219,50 @@ public class MusicUploadServiceTests
     }
 
     [Test]
+    public void ValidateAllFilePairings_WavFilesMatched_ReturnsValid()
+    {
+        // Arrange
+        var fileNames = new List<string>
+        {
+            "Song One_mastered.wav",
+            "Song One.jpeg",
+            "Song Two.wav",
+            "Song Two.jpg"
+        };
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames);
+
+        // Assert
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.UnmatchedMp3Files, Is.Empty);
+        Assert.That(result.UnmatchedAlbumArtFiles, Is.Empty);
+    }
+
+    [Test]
+    public void ValidateAllFilePairings_MixedAudioFormats_ReturnsValid()
+    {
+        // Arrange
+        var fileNames = new List<string>
+        {
+            "Song One_mastered.mp3",
+            "Song One.jpeg",
+            "Song Two.wav",
+            "Song Two.jpg",
+            "Song Three.flac",
+            "Song Three.jpeg"
+        };
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames);
+
+        // Assert
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.UnmatchedMp3Files, Is.Empty);
+        Assert.That(result.UnmatchedAlbumArtFiles, Is.Empty);
+    }
+
+    [Test]
     public void ValidateAllFilePairings_UnmatchedMp3_ReturnsInvalid()
     {
         // Arrange
