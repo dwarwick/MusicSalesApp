@@ -105,26 +105,49 @@ public class UploadFilesModel : BlazorBase
     private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile albumArtFile, UploadPairItem uploadItem)
     {
         const long maxFileSize = 100 * 1024 * 1024; // 100 MB
+        const int bufferSize = 81920; // 80 KB buffer for better performance with large files
+
+        MemoryStream audioMemoryStream = null;
+        MemoryStream albumArtMemoryStream = null;
 
         try
         {
             uploadItem.Status = UploadStatus.Uploading;
-            uploadItem.StatusMessage = "Validating...";
+            uploadItem.StatusMessage = "Reading audio file...";
             uploadItem.Progress = 5;
             await InvokeAsync(StateHasChanged);
 
-            await using var audioStream = audioFile.OpenReadStream(maxFileSize);
-            await using var albumArtStream = albumArtFile.OpenReadStream(maxFileSize);
+            // Buffer the audio file first to avoid timeout issues with multiple open streams
+            // In Blazor Server, BrowserFileStream has a timeout and only one stream can be
+            // actively read at a time, so we buffer sequentially into memory.
+            audioMemoryStream = new MemoryStream();
+            await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
+            {
+                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _cancellationToken);
+            }
+            audioMemoryStream.Position = 0;
 
-            uploadItem.StatusMessage = "Uploading...";
-            uploadItem.Progress = 20;
+            uploadItem.StatusMessage = "Reading album art...";
+            uploadItem.Progress = 15;
             await InvokeAsync(StateHasChanged);
 
-            // Delegate to the service
+            // Now buffer the album art file
+            albumArtMemoryStream = new MemoryStream();
+            await using (var albumArtStream = albumArtFile.OpenReadStream(maxFileSize))
+            {
+                await albumArtStream.CopyToAsync(albumArtMemoryStream, bufferSize, _cancellationToken);
+            }
+            albumArtMemoryStream.Position = 0;
+
+            uploadItem.StatusMessage = "Uploading...";
+            uploadItem.Progress = 25;
+            await InvokeAsync(StateHasChanged);
+
+            // Delegate to the service with buffered streams
             var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
-                audioStream,
+                audioMemoryStream,
                 audioFile.Name,
-                albumArtStream,
+                albumArtMemoryStream,
                 albumArtFile.Name,
                 _cancellationToken);
 
@@ -156,6 +179,9 @@ public class UploadFilesModel : BlazorBase
         }
         finally
         {
+            // Dispose memory streams
+            audioMemoryStream?.Dispose();
+            albumArtMemoryStream?.Dispose();
             await InvokeAsync(StateHasChanged);
         }
     }
