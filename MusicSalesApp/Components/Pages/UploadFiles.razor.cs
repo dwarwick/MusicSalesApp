@@ -24,33 +24,85 @@ public class UploadFilesModel : BlazorBase
 
     private readonly CancellationToken _cancellationToken = CancellationToken.None;
 
-    protected string _destinationFolder = string.Empty;
-    protected List<UploadItem> _uploadItems = new List<UploadItem>();    
+    protected List<UploadPairItem> _uploadItems = new List<UploadPairItem>();
+    protected string _validationErrorMessage = string.Empty;
+    protected List<string> _unmatchedMp3Files = new List<string>();
+    protected List<string> _unmatchedAlbumArtFiles = new List<string>();
+
+    private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
+    private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg" };
 
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
-        var files = e.GetMultipleFiles(20);
+        // Clear previous validation errors
+        ClearValidationError();
+        _uploadItems.Clear();
+
+        var files = e.GetMultipleFiles(40); // Allow up to 40 files (20 pairs)
+
+        // Separate files into audio and album art
+        var audioFiles = new Dictionary<string, IBrowserFile>();
+        var albumArtFiles = new Dictionary<string, IBrowserFile>();
 
         foreach (var file in files)
         {
-            var uploadItem = new UploadItem
+            var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+            var baseName = MusicUploadService.GetNormalizedBaseName(file.Name).ToLowerInvariant();
+
+            if (ValidAudioExtensions.Contains(extension))
             {
-                FileName = file.Name,
-                Status = UploadStatus.Pending,
-                Progress = 0,
-                StatusMessage = "Pending"
-            };
+                audioFiles[baseName] = file;
+            }
+            else if (ValidAlbumArtExtensions.Contains(extension))
+            {
+                albumArtFiles[baseName] = file;
+            }
+        }
 
-            _uploadItems.Add(uploadItem);
+        // Validate all file pairings
+        var fileNames = files.Select(f => f.Name).ToList();
+        var validationResult = MusicUploadService.ValidateAllFilePairings(fileNames);
 
-            // Fire-and-forget each upload
-            _ = UploadFileAsync(file, uploadItem);
+        if (!validationResult.IsValid)
+        {
+            _validationErrorMessage = "Some files do not have matching pairs. Each MP3 file must have a corresponding album art file with the same base name.";
+            _unmatchedMp3Files = validationResult.UnmatchedMp3Files;
+            _unmatchedAlbumArtFiles = validationResult.UnmatchedAlbumArtFiles;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // Create upload pairs for matched files
+        foreach (var audioEntry in audioFiles)
+        {
+            if (albumArtFiles.TryGetValue(audioEntry.Key, out var albumArtFile))
+            {
+                var audioFile = audioEntry.Value;
+                var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
+
+                var uploadItem = new UploadPairItem
+                {
+                    BaseName = baseName,
+                    Mp3FileName = audioFile.Name,
+                    Mp3FileSize = audioFile.Size,
+                    AlbumArtFileName = albumArtFile.Name,
+                    AlbumArtFileSize = albumArtFile.Size,
+                    Status = UploadStatus.Pending,
+                    Progress = 0,
+                    StatusMessage = "Pending"
+                };
+
+                _uploadItems.Add(uploadItem);
+
+                // Fire-and-forget each upload pair
+                _ = UploadFilePairAsync(audioFile, albumArtFile, uploadItem);
+            }
         }
 
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task UploadFileAsync(IBrowserFile file, UploadItem uploadItem)
+    private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile albumArtFile, UploadPairItem uploadItem)
     {
         const long maxFileSize = 100 * 1024 * 1024; // 100 MB
 
@@ -61,26 +113,38 @@ public class UploadFilesModel : BlazorBase
             uploadItem.Progress = 5;
             await InvokeAsync(StateHasChanged);
 
-            await using var stream = file.OpenReadStream(maxFileSize);
+            await using var audioStream = audioFile.OpenReadStream(maxFileSize);
+            await using var albumArtStream = albumArtFile.OpenReadStream(maxFileSize);
 
-            // Delegate to the service (no HttpClient, no antiforgery)
-            var fullPath = await MusicUploadService.UploadAudioAsync(
-                stream,
-                file.Name,
-                _destinationFolder,
+            uploadItem.StatusMessage = "Uploading...";
+            uploadItem.Progress = 20;
+            await InvokeAsync(StateHasChanged);
+
+            // Delegate to the service
+            var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
+                audioStream,
+                audioFile.Name,
+                albumArtStream,
+                albumArtFile.Name,
                 _cancellationToken);
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded as {Path.GetFileName(fullPath)}";
-            uploadItem.UploadedFileName = fullPath;
+            uploadItem.StatusMessage = $"Uploaded to {folderPath}";
             uploadItem.ErrorMessage = null;
         }
         catch (InvalidDataException ex)
         {
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
-            uploadItem.StatusMessage = "Invalid audio file";
+            uploadItem.StatusMessage = "Invalid file";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Validation failed";
             uploadItem.ErrorMessage = ex.Message;
         }
         catch (Exception ex)
@@ -94,7 +158,14 @@ public class UploadFilesModel : BlazorBase
         {
             await InvokeAsync(StateHasChanged);
         }
-    }    
+    }
+
+    protected void ClearValidationError()
+    {
+        _validationErrorMessage = string.Empty;
+        _unmatchedMp3Files.Clear();
+        _unmatchedAlbumArtFiles.Clear();
+    }
 
     protected string FormatFileSize(long bytes)
     {
@@ -121,11 +192,13 @@ public class UploadFilesModel : BlazorBase
         };
     }
 
-    protected class UploadItem
+    protected class UploadPairItem
     {
-        public string FileName { get; set; } = string.Empty;
-        public string UploadedFileName { get; set; } = string.Empty;
-        public long FileSize { get; set; }
+        public string BaseName { get; set; } = string.Empty;
+        public string Mp3FileName { get; set; } = string.Empty;
+        public long Mp3FileSize { get; set; }
+        public string AlbumArtFileName { get; set; } = string.Empty;
+        public long AlbumArtFileSize { get; set; }
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
         public int Progress { get; set; }

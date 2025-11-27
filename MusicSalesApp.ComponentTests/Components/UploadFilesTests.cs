@@ -8,14 +8,13 @@ namespace MusicSalesApp.ComponentTests.Components;
 public class UploadFilesTests : BUnitTestBase
 {
     [Test]
-    public void UploadFiles_HasDestinationFolderInput()
+    public void UploadFiles_HasInstructions()
     {
         // Act
         var cut = TestContext.Render<UploadFiles>();
 
-        // Assert
-        var input = cut.Find("#destinationFolder");
-        Assert.That(input, Is.Not.Null);
+        // Assert - Check for new instructions about pairing files
+        Assert.That(cut.Markup, Does.Contain("Upload MP3 files paired with their album art"));
     }
 
     [Test]
@@ -40,6 +39,16 @@ public class UploadFilesTests : BUnitTestBase
     }
 
     [Test]
+    public void UploadFiles_DisplaysAlbumArtFormat()
+    {
+        // Act
+        var cut = TestContext.Render<UploadFiles>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("JPEG"));
+    }
+
+    [Test]
     public void UploadFiles_InitiallyNoProgressTable()
     {
         // Act
@@ -47,5 +56,15 @@ public class UploadFilesTests : BUnitTestBase
 
         // Assert
         Assert.That(cut.Markup, Does.Not.Contain("Upload Progress"));
+    }
+
+    [Test]
+    public void UploadFiles_InitiallyNoValidationError()
+    {
+        // Act
+        var cut = TestContext.Render<UploadFiles>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Not.Contain("Validation Error"));
     }
 }
