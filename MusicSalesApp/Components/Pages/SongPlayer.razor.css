@@ -131,9 +131,9 @@
 .player-controls-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     width: 100%;
-    max-width: 800px;
+    max-width: 600px;
     margin-bottom: 8px;
 }
 
@@ -147,8 +147,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-left: auto;
-    padding-left: 24px;
 }
 
 .control-button {
