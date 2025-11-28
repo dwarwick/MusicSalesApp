@@ -1,0 +1,390 @@
+/* Music Library Card Styles */
+
+.music-library-container {
+    padding: 24px;
+    background: #121212;
+    min-height: calc(100vh - 80px);
+}
+
+.music-library-container h3 {
+    color: #fff;
+    margin-bottom: 24px;
+}
+
+.loading-state,
+.error-state {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    color: #fff;
+}
+
+/* Card Grid Layout */
+.music-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 24px;
+    width: 100%;
+}
+
+/* Individual Music Card */
+.music-card {
+    background: #181818;
+    border-radius: 8px;
+    padding: 16px;
+    transition: background-color 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.music-card:hover {
+    background: #282828;
+}
+
+/* Album Art */
+.card-album-art {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.card-album-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.card-album-art-placeholder {
+    width: 100%;
+    height: 100%;
+    background: #282828;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.card-placeholder-icon {
+    width: 48px;
+    height: 48px;
+    color: #b3b3b3;
+}
+
+/* Song Title */
+.card-song-title {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Card Actions (Play and View buttons) */
+.card-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+}
+
+.card-play-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #1db954;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.1s ease, background-color 0.2s ease;
+    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.3);
+}
+
+.card-play-button:hover {
+    transform: scale(1.05);
+    background-color: #1ed760;
+}
+
+.card-play-button:active {
+    transform: scale(0.95);
+}
+
+.card-play-icon {
+    width: 20px;
+    height: 20px;
+    color: #000;
+    margin-left: 2px;
+}
+
+.card-view-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #b3b3b3;
+    transition: color 0.2s ease, transform 0.1s ease;
+}
+
+.card-view-button:hover {
+    color: #fff;
+    transform: scale(1.05);
+}
+
+.card-view-icon {
+    width: 24px;
+    height: 24px;
+}
+
+/* Mini Player Controls */
+.card-mini-player {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.card-mini-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.card-mini-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.card-mini-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: transform 0.1s ease;
+}
+
+.card-mini-play-button {
+    background-color: #fff;
+}
+
+.card-mini-play-button:hover {
+    transform: scale(1.05);
+}
+
+.card-mini-play-icon {
+    width: 14px;
+    height: 14px;
+    color: #000;
+}
+
+.card-mini-stop-button {
+    background-color: #fff;
+}
+
+.card-mini-stop-button:hover {
+    transform: scale(1.05);
+}
+
+.card-mini-stop-icon {
+    width: 14px;
+    height: 14px;
+    color: #000;
+}
+
+/* Volume Controls in mini player */
+.card-volume-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.card-volume-button {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #b3b3b3;
+    transition: color 0.2s ease;
+}
+
+.card-volume-button:hover {
+    color: #fff;
+}
+
+.card-volume-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.card-volume-bar-container {
+    width: 60px;
+    height: 4px;
+    background-color: #4d4d4d;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+}
+
+.card-volume-bar-container:hover {
+    height: 6px;
+}
+
+.card-volume-bar {
+    height: 100%;
+    background-color: #b3b3b3;
+    border-radius: 2px;
+    position: relative;
+    pointer-events: none;
+}
+
+.card-volume-bar-container:hover .card-volume-bar {
+    background-color: #1db954;
+}
+
+.card-volume-thumb {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background-color: #fff;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.card-volume-bar-container:hover .card-volume-thumb {
+    opacity: 1;
+}
+
+/* Progress Bar for mini player */
+.card-progress-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-time-display {
+    font-size: 10px;
+    color: #a7a7a7;
+    min-width: 32px;
+    text-align: center;
+}
+
+.card-progress-bar-container {
+    flex: 1;
+    height: 4px;
+    background-color: #4d4d4d;
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+}
+
+.card-progress-bar-container:hover {
+    height: 6px;
+}
+
+.card-progress-bar {
+    height: 100%;
+    background-color: #b3b3b3;
+    border-radius: 2px;
+    position: relative;
+    pointer-events: none;
+}
+
+.card-progress-bar-container:hover .card-progress-bar {
+    background-color: #1db954;
+}
+
+.card-progress-thumb {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background-color: #fff;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.card-progress-bar-container:hover .card-progress-thumb {
+    opacity: 1;
+}
+
+/* Hidden audio element */
+.card-audio-hidden {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .music-cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 16px;
+    }
+
+    .music-card {
+        padding: 12px;
+    }
+
+    .card-song-title {
+        font-size: 13px;
+    }
+
+    .card-play-button,
+    .card-view-button {
+        width: 36px;
+        height: 36px;
+    }
+
+    .card-play-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .card-view-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .card-volume-bar-container {
+        width: 40px;
+    }
+}
+
+@media (max-width: 480px) {
+    .music-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .music-library-container {
+        padding: 16px;
+    }
+}
