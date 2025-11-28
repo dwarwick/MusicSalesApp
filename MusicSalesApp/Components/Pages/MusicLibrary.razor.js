@@ -85,34 +85,32 @@ export function seekCardToPosition(audioElement, offsetX, progressBarWidth) {
     }
 }
 
-// Setup progress bar drag functionality for card player
-export function setupCardProgressBarDrag(progressBarContainer, audioElement, cardId, dotNetRef) {
-    if (!progressBarContainer || !audioElement) return;
+// Shared helper function to calculate clamped percentage from offset position
+function calculatePercentage(clientX, element) {
+    const rect = element.getBoundingClientRect();
+    const offsetX = clientX - rect.left;
+    const width = rect.width;
+    if (width > 0) {
+        return Math.max(0, Math.min(1, offsetX / width));
+    }
+    return null;
+}
+
+// Shared helper function to setup drag functionality on a bar element
+function setupBarDrag(barContainer, onDrag) {
+    if (!barContainer) return;
 
     let isDragging = false;
 
-    const updateSeekPosition = (clientX) => {
-        const rect = progressBarContainer.getBoundingClientRect();
-        const offsetX = clientX - rect.left;
-        const width = rect.width;
-        if (width > 0) {
-            const percentage = Math.max(0, Math.min(1, offsetX / width));
-            const newTime = audioElement.duration * percentage;
-            if (!isNaN(newTime) && isFinite(newTime)) {
-                audioElement.currentTime = newTime;
-            }
-        }
-    };
-
-    progressBarContainer.addEventListener('mousedown', (e) => {
+    barContainer.addEventListener('mousedown', (e) => {
         isDragging = true;
-        updateSeekPosition(e.clientX);
+        onDrag(e.clientX);
         e.preventDefault();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (isDragging) {
-            updateSeekPosition(e.clientX);
+            onDrag(e.clientX);
         }
     });
 
@@ -121,17 +119,17 @@ export function setupCardProgressBarDrag(progressBarContainer, audioElement, car
     });
 
     // Touch support for mobile
-    progressBarContainer.addEventListener('touchstart', (e) => {
+    barContainer.addEventListener('touchstart', (e) => {
         isDragging = true;
         if (e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
+            onDrag(e.touches[0].clientX);
         }
         e.preventDefault();
     });
 
     document.addEventListener('touchmove', (e) => {
         if (isDragging && e.touches.length > 0) {
-            updateSeekPosition(e.touches[0].clientX);
+            onDrag(e.touches[0].clientX);
         }
     });
 
@@ -140,57 +138,32 @@ export function setupCardProgressBarDrag(progressBarContainer, audioElement, car
     });
 }
 
+// Setup progress bar drag functionality for card player
+export function setupCardProgressBarDrag(progressBarContainer, audioElement, cardId, dotNetRef) {
+    if (!progressBarContainer || !audioElement) return;
+
+    setupBarDrag(progressBarContainer, (clientX) => {
+        const percentage = calculatePercentage(clientX, progressBarContainer);
+        if (percentage !== null) {
+            const newTime = audioElement.duration * percentage;
+            if (!isNaN(newTime) && isFinite(newTime)) {
+                audioElement.currentTime = newTime;
+            }
+        }
+    });
+}
+
 // Setup volume bar drag functionality for card player
 export function setupCardVolumeBarDrag(volumeBarContainer, audioElement, cardId, dotNetRef) {
     if (!volumeBarContainer || !audioElement) return;
 
-    let isDragging = false;
-
-    const updateVolume = (clientX) => {
-        const rect = volumeBarContainer.getBoundingClientRect();
-        const offsetX = clientX - rect.left;
-        const width = rect.width;
-        if (width > 0) {
-            const volume = Math.max(0, Math.min(1, offsetX / width));
-            audioElement.volume = volume;
+    setupBarDrag(volumeBarContainer, (clientX) => {
+        const percentage = calculatePercentage(clientX, volumeBarContainer);
+        if (percentage !== null) {
+            audioElement.volume = percentage;
             audioElement.muted = false;
-            dotNetRef.invokeMethodAsync('UpdateCardVolume', cardId, volume, false);
+            dotNetRef.invokeMethodAsync('UpdateCardVolume', cardId, percentage, false);
         }
-    };
-
-    volumeBarContainer.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        updateVolume(e.clientX);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            updateVolume(e.clientX);
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-    });
-
-    // Touch support for mobile
-    volumeBarContainer.addEventListener('touchstart', (e) => {
-        isDragging = true;
-        if (e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-        e.preventDefault();
-    });
-
-    document.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            updateVolume(e.touches[0].clientX);
-        }
-    });
-
-    document.addEventListener('touchend', () => {
-        isDragging = false;
     });
 }
 

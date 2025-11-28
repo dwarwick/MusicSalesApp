@@ -74,6 +74,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             if (_jsModule != null)
             {
                 await _jsModule.DisposeAsync();
+                _jsModule = null;
             }
         }
         catch (JSDisconnectedException)
@@ -81,6 +82,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Circuit is already disconnected, safe to ignore
         }
         _dotNetRef?.Dispose();
+        _dotNetRef = null;
     }
 
     private async Task LoadFiles()
@@ -94,17 +96,24 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Filter audio files
             _files = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
 
-            // Build album art URL map
+            // Pre-compute image file lookup for faster album art matching
+            var imageFilesLookup = allFiles
+                .Where(f => IsImageFile(f.Name))
+                .Select(f => new
+                {
+                    File = f,
+                    BaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).ToLowerInvariant(),
+                    Folder = (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").ToLowerInvariant()
+                })
+                .ToLookup(x => (x.BaseName, x.Folder));
+
+            // Build album art URL map using pre-computed lookup
             foreach (var audioFile in _files)
             {
-                var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name));
-                var folder = Path.GetDirectoryName(audioFile.Name)?.Replace("\\", "/") ?? "";
+                var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
+                var folder = (Path.GetDirectoryName(audioFile.Name)?.Replace("\\", "/") ?? "").ToLowerInvariant();
                 
-                var artFile = allFiles.FirstOrDefault(f =>
-                    IsImageFile(f.Name) &&
-                    Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
-                    (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").Equals(folder, StringComparison.OrdinalIgnoreCase));
-
+                var artFile = imageFilesLookup[(baseName, folder)].FirstOrDefault()?.File;
                 if (artFile != null)
                 {
                     _albumArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
