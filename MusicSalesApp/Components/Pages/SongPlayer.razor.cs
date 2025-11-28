@@ -26,6 +26,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _shuffleEnabled;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
+    private bool invokedJs = false;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -34,8 +35,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_loading && _songInfo != null)
+        if (!invokedJs && !_loading && _songInfo != null)
         {
+            invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
             await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef);
