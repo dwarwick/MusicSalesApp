@@ -8,14 +8,17 @@
 
 <PageTitle>Upload Music Files</PageTitle>
 
-<h3>Upload Music Files</h3>
+<h3>Upload Music Files with Album Art</h3>
 
 <div class="container-fluid">
     <div class="row mb-3">
-        <div class="col-md-6">
-            <label for="destinationFolder" class="form-label">Destination Folder</label>
-            <input type="text" class="form-control" id="destinationFolder" @bind="_destinationFolder" placeholder="Leave empty for root" />
-            <small class="form-text text-muted">Specify a folder path (e.g., "music/rock"). Folder will be created if it doesn't exist.</small>
+        <div class="col-12">
+            <div class="alert alert-info">
+                <strong>Instructions:</strong> Upload MP3 files paired with their album art (JPEG). 
+                Each MP3 file must have a matching album art file with the same base name.
+                For example: <code>Lipstick and Leather_mastered.mp3</code> pairs with <code>Lipstick and Leather.jpeg</code>.
+                The "_mastered" suffix will be removed automatically.
+            </div>
         </div>
     </div>
 
@@ -24,14 +27,47 @@
             <div class="upload-zone">
                 <div class="upload-zone-content">
                     <i class="bi bi-cloud-upload" style="font-size: 3rem;"></i>
-                    <p class="mt-3">Select audio files to upload</p>
-                    <InputFile OnChange="HandleFileSelected" multiple class="dropzone" />
-                    <p class="text-muted mt-2">Supported formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</p>
-                    <p class="text-muted">Non-MP3 files will be automatically converted to MP3</p>
+                    <p class="mt-3">Select audio files and album art to upload</p>
+                    <InputFile OnChange="HandleFileSelected" multiple class="dropzone" accept=".mp3,.wav,.flac,.ogg,.m4a,.aac,.wma,.jpeg,.jpg" />
+                    <p class="text-muted mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</p>
+                    <p class="text-muted">Album art formats: JPEG</p>
+                    <p class="text-muted">Each audio file must have a matching album art file with the same base name</p>
                 </div>
             </div>
         </div>
     </div>
+
+    @if (!string.IsNullOrEmpty(_validationErrorMessage))
+    {
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>Validation Error:</strong> @_validationErrorMessage
+                    <button type="button" class="btn-close" @onclick="ClearValidationError" aria-label="Close"></button>
+                </div>
+                @if (_unmatchedMp3Files.Any())
+                {
+                    <p class="text-danger"><strong>Unmatched audio files (missing album art):</strong></p>
+                    <ul class="text-danger">
+                        @foreach (var file in _unmatchedMp3Files)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                }
+                @if (_unmatchedAlbumArtFiles.Any())
+                {
+                    <p class="text-danger"><strong>Unmatched album art files (missing audio):</strong></p>
+                    <ul class="text-danger">
+                        @foreach (var file in _unmatchedAlbumArtFiles)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    }
 
     @if (_uploadItems.Any())
     {
@@ -42,8 +78,9 @@
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>File Name</th>
-                                <th>Size</th>
+                                <th>File Pair</th>
+                                <th>Audio File</th>
+                                <th>Album Art</th>
                                 <th>Status</th>
                                 <th>Progress</th>
                             </tr>
@@ -52,8 +89,9 @@
                             @foreach (var item in _uploadItems)
                             {
                                 <tr>
-                                    <td>@item.FileName</td>
-                                    <td>@FormatFileSize(item.FileSize)</td>
+                                    <td>@item.BaseName</td>
+                                    <td>@item.AudioFileName<br /><small class="text-muted">@FormatFileSize(item.AudioFileSize)</small></td>
+                                    <td>@item.AlbumArtFileName<br /><small class="text-muted">@FormatFileSize(item.AlbumArtFileSize)</small></td>
                                     <td>
                                         @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Converting)
                                         {
@@ -72,7 +110,7 @@
                                             <span class="badge bg-secondary">@item.StatusMessage</span>
                                         }
                                     </td>
-                                    <td style="width: 40%;">
+                                    <td style="width: 30%;">
                                         <div class="progress">
                                             <div class="progress-bar @GetProgressBarClass(item.Status)" 
                                                  role="progressbar" 

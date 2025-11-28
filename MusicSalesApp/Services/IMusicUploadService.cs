@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -25,5 +26,57 @@ namespace MusicSalesApp.Services
             string originalFileName,
             string destinationFolder,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Uploads a paired MP3 and album art file to storage.
+        /// Files are stored in a folder named after the base filename.
+        /// If the MP3 filename contains "_mastered", it is removed before storage.
+        /// </summary>
+        /// <param name="audioStream">The MP3 audio file stream.</param>
+        /// <param name="audioFileName">Original filename of the MP3 file.</param>
+        /// <param name="albumArtStream">The JPEG album art file stream.</param>
+        /// <param name="albumArtFileName">Original filename of the album art file.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The folder path where files were stored.</returns>
+        Task<string> UploadMusicWithAlbumArtAsync(
+            Stream audioStream,
+            string audioFileName,
+            Stream albumArtStream,
+            string albumArtFileName,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Validates that the given MP3 and album art filenames match.
+        /// Filenames match if they have the same base name (ignoring "_mastered" suffix in MP3).
+        /// </summary>
+        /// <param name="audioFileName">The MP3 filename.</param>
+        /// <param name="albumArtFileName">The album art filename.</param>
+        /// <returns>True if filenames match, false otherwise.</returns>
+        bool ValidateFilePairing(string audioFileName, string albumArtFileName);
+
+        /// <summary>
+        /// Gets the normalized base name from a filename.
+        /// Removes "_mastered" suffix and file extension.
+        /// </summary>
+        /// <param name="fileName">The filename to normalize.</param>
+        /// <returns>The normalized base name.</returns>
+        string GetNormalizedBaseName(string fileName);
+
+        /// <summary>
+        /// Validates that all provided files have matching pairs (MP3 with JPEG).
+        /// </summary>
+        /// <param name="fileNames">List of filenames to validate.</param>
+        /// <returns>A result containing unmatched files if validation fails.</returns>
+        FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames);
+    }
+
+    /// <summary>
+    /// Result of file pairing validation.
+    /// </summary>
+    public class FilePairingValidationResult
+    {
+        public bool IsValid { get; set; }
+        public List<string> UnmatchedMp3Files { get; set; } = new List<string>();
+        public List<string> UnmatchedAlbumArtFiles { get; set; } = new List<string>();
     }
 }
