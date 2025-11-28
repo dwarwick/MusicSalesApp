@@ -46,9 +46,16 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_jsModule != null)
+        try
         {
-            await _jsModule.DisposeAsync();
+            if (_jsModule != null)
+            {
+                await _jsModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit is already disconnected, safe to ignore
         }
         _dotNetRef?.Dispose();
     }
