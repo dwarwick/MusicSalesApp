@@ -23,6 +23,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected double _currentTime;
     protected double _duration;
     protected ElementReference _audioElement;
+    protected ElementReference _progressBarContainer;
     protected bool _shuffleEnabled;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
@@ -224,5 +225,18 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected void ToggleShuffle()
     {
         _shuffleEnabled = !_shuffleEnabled;
+    }
+
+    protected async Task OnProgressBarClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (_jsModule != null && _duration > 0)
+        {
+            // Get the width of the progress bar container
+            var width = await _jsModule.InvokeAsync<double>("getElementWidth", _progressBarContainer);
+            if (width > 0)
+            {
+                await _jsModule.InvokeVoidAsync("seekToPosition", _audioElement, e.OffsetX, width);
+            }
+        }
     }
 }
