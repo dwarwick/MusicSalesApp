@@ -47,4 +47,11 @@ public class MusicLibraryModel : BlazorBase
         _streamUrl = $"api/music/{Uri.EscapeDataString(fileName)}";
         await InvokeAsync(StateHasChanged);
     }
+
+    protected string GetSongPlayerUrl(string fileName)
+    {
+        // Use the file name without extension as the song title
+        var songTitle = Path.GetFileNameWithoutExtension(fileName);
+        return $"/song/{Uri.EscapeDataString(songTitle)}";
+    }
 }

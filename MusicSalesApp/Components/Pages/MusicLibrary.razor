@@ -33,6 +33,7 @@ else
                 <td>@f.LastModified?.LocalDateTime.ToString("g")</td>
                 <td>
                     <button class="btn btn-primary btn-sm" @onclick="() => PlayAsync(f.Name)">Play</button>
+                    <a class="btn btn-success btn-sm ms-1" href="@GetSongPlayerUrl(f.Name)">View</a>
                 </td>
             </tr>
         }

@@ -1,0 +1,116 @@
+@page "/song/{SongTitle}"
+@inherits SongPlayerModel
+@rendermode InteractiveServer
+@using MusicSalesApp.Services
+
+<PageTitle>@GetDisplayTitle()</PageTitle>
+
+<div class="spotify-container">
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <p>Loading...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="error-state">
+            <div class="alert alert-danger">@_error</div>
+        </div>
+    }
+    else
+    {
+        <!-- Song Header Section -->
+        <div class="song-header">
+            <div class="album-art-container">
+                @if (!string.IsNullOrEmpty(_albumArtUrl))
+                {
+                    <img src="@_albumArtUrl" alt="Album Art" class="album-art" />
+                }
+                else
+                {
+                    <div class="album-art-placeholder">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="placeholder-icon">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                        </svg>
+                    </div>
+                }
+            </div>
+            <div class="song-info">
+                <span class="song-label">Song</span>
+                <h1 class="song-title">@GetDisplayTitle()</h1>
+            </div>
+        </div>
+
+        <!-- Play Button Section -->
+        <div class="action-controls">
+            <button class="play-button-large" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                @if (_isPlaying)
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                }
+            </button>
+        </div>
+
+        <!-- Hidden Audio Element -->
+        <audio @ref="_audioElement"
+               src="@_streamUrl"
+               preload="metadata"
+               style="display:none;"></audio>
+
+        <!-- Bottom Player Bar -->
+        <div class="player-bar">
+            <div class="player-controls">
+                <button class="control-button @(_shuffleEnabled ? "active" : "")" @onclick="ToggleShuffle" title="Shuffle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                        <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                    </svg>
+                </button>
+                <button class="control-button" title="Previous">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                </button>
+                <button class="play-button-small" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                    @if (_isPlaying)
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    }
+                </button>
+                <button class="control-button" title="Next">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                </button>
+                <button class="control-button" title="Queue">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                        <path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="progress-container">
+                <span class="time-display">@FormatTime(_currentTime)</span>
+                <div class="progress-bar-container" @onclick="OnProgressBarClick">
+                    <div class="progress-bar" style="width: @((_duration > 0 ? (_currentTime / _duration * 100) : 0))%;"></div>
+                </div>
+                <span class="time-display">@FormatTime(_duration)</span>
+            </div>
+        </div>
+    }
+</div>
