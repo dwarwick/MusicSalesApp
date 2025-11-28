@@ -24,7 +24,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected double _duration;
     protected ElementReference _audioElement;
     protected ElementReference _progressBarContainer;
+    protected ElementReference _volumeBarContainer;
     protected bool _shuffleEnabled;
+    protected double _volume = 1.0;
+    protected double _previousVolume = 1.0;
+    protected bool _isMuted;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -42,6 +46,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
             await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef);
+            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
+            await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
         }
     }
 
@@ -238,5 +244,67 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 await _jsModule.InvokeVoidAsync("seekToPosition", _audioElement, e.OffsetX, width);
             }
         }
+    }
+
+    [JSInvokable]
+    public void UpdateVolume(double volume, bool isMuted)
+    {
+        _volume = volume;
+        _isMuted = isMuted;
+        if (!isMuted && volume > 0)
+        {
+            _previousVolume = volume;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task ToggleMute()
+    {
+        if (_jsModule != null)
+        {
+            if (_isMuted)
+            {
+                // Unmute - restore previous volume
+                _isMuted = false;
+                _volume = _previousVolume;
+                await _jsModule.InvokeVoidAsync("setMuted", _audioElement, false);
+                await _jsModule.InvokeVoidAsync("setVolume", _audioElement, _previousVolume);
+            }
+            else
+            {
+                // Mute - save current volume
+                _previousVolume = _volume > 0 ? _volume : _previousVolume;
+                _isMuted = true;
+                await _jsModule.InvokeVoidAsync("setMuted", _audioElement, true);
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected async Task OnVolumeBarClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (_jsModule != null)
+        {
+            var width = await _jsModule.InvokeAsync<double>("getElementWidth", _volumeBarContainer);
+            if (width > 0)
+            {
+                var newVolume = e.OffsetX / width;
+                newVolume = Math.Max(0, Math.Min(1, newVolume));
+                _volume = newVolume;
+                _isMuted = false;
+                if (newVolume > 0)
+                {
+                    _previousVolume = newVolume;
+                }
+                await _jsModule.InvokeVoidAsync("setVolume", _audioElement, newVolume);
+                await _jsModule.InvokeVoidAsync("setMuted", _audioElement, false);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    protected double GetDisplayVolume()
+    {
+        return _isMuted ? 0 : _volume;
     }
 }

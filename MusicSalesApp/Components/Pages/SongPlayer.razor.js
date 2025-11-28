@@ -71,3 +71,139 @@ export function getDuration(audioElement) {
     }
     return 0;
 }
+
+// Setup progress bar drag functionality
+export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef) {
+    if (!progressBarContainer || !audioElement) return;
+
+    let isDragging = false;
+
+    const updateSeekPosition = (clientX) => {
+        const rect = progressBarContainer.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const width = rect.width;
+        if (width > 0) {
+            const percentage = Math.max(0, Math.min(1, offsetX / width));
+            const newTime = audioElement.duration * percentage;
+            if (!isNaN(newTime) && isFinite(newTime)) {
+                audioElement.currentTime = newTime;
+            }
+        }
+    };
+
+    progressBarContainer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        updateSeekPosition(e.clientX);
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            updateSeekPosition(e.clientX);
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    // Touch support for mobile
+    progressBarContainer.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        if (e.touches.length > 0) {
+            updateSeekPosition(e.touches[0].clientX);
+        }
+        e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches.length > 0) {
+            updateSeekPosition(e.touches[0].clientX);
+        }
+    });
+
+    document.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+}
+
+// Volume control functions
+export function setVolume(audioElement, volume) {
+    if (audioElement) {
+        audioElement.volume = Math.max(0, Math.min(1, volume));
+    }
+}
+
+export function getVolume(audioElement) {
+    if (audioElement) {
+        return audioElement.volume;
+    }
+    return 1;
+}
+
+export function setMuted(audioElement, muted) {
+    if (audioElement) {
+        audioElement.muted = muted;
+    }
+}
+
+export function isMuted(audioElement) {
+    if (audioElement) {
+        return audioElement.muted;
+    }
+    return false;
+}
+
+// Setup volume bar drag functionality
+export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) {
+    if (!volumeBarContainer || !audioElement) return;
+
+    let isDragging = false;
+
+    const updateVolume = (clientX) => {
+        const rect = volumeBarContainer.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const width = rect.width;
+        if (width > 0) {
+            const volume = Math.max(0, Math.min(1, offsetX / width));
+            audioElement.volume = volume;
+            audioElement.muted = false;
+            dotNetRef.invokeMethodAsync('UpdateVolume', volume, false);
+        }
+    };
+
+    volumeBarContainer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        updateVolume(e.clientX);
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            updateVolume(e.clientX);
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    // Touch support for mobile
+    volumeBarContainer.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        if (e.touches.length > 0) {
+            updateVolume(e.touches[0].clientX);
+        }
+        e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches.length > 0) {
+            updateVolume(e.touches[0].clientX);
+        }
+    });
+
+    document.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+}
