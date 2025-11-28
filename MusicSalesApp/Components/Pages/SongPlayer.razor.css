@@ -128,13 +128,24 @@
     z-index: 100;
 }
 
+.controls-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 8px;
+}
+
+.time-spacer {
+    min-width: 40px;
+}
+
 .player-controls-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
-    max-width: 600px;
-    margin-bottom: 8px;
+    flex: 1;
 }
 
 .player-controls {
