@@ -26,7 +26,7 @@ namespace MusicSalesApp.Controllers
             return Ok(files);
         }
 
-        [HttpGet("{fileName}")]
+        [HttpGet("{*fileName}")]
         public async Task<IActionResult> Stream(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))

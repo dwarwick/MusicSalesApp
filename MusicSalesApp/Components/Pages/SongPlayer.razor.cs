@@ -79,10 +79,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
             // Get list of files from blob storage and find the matching song (audio files only)
             var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
+            
+            // Match by file name (not folder path) - extract just the filename from the full path
             _songInfo = files?.FirstOrDefault(f =>
                 IsAudioFile(f.Name) &&
-                (Path.GetFileNameWithoutExtension(f.Name).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
-                f.Name.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
+                (Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(f.Name).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
 
             if (_songInfo == null)
             {
@@ -91,18 +93,21 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Set the streaming URL for the audio
-            _streamUrl = $"api/music/{Uri.EscapeDataString(_songInfo.Name)}";
+            // Set the streaming URL for the audio - safely encode path segments while preserving slashes
+            _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
 
-            // Try to find album art (look for image files with matching name)
-            var songBaseName = Path.GetFileNameWithoutExtension(_songInfo.Name);
+            // Try to find album art (look for image files with matching name in the same folder)
+            var songBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
+            var songFolder = Path.GetDirectoryName(_songInfo.Name)?.Replace("\\", "/") ?? "";
+            
             var artFile = files?.FirstOrDefault(f =>
                 IsImageFile(f.Name) &&
-                Path.GetFileNameWithoutExtension(f.Name).Equals(songBaseName, StringComparison.OrdinalIgnoreCase));
+                Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).Equals(songBaseName, StringComparison.OrdinalIgnoreCase) &&
+                (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").Equals(songFolder, StringComparison.OrdinalIgnoreCase));
 
             if (artFile != null)
             {
-                _albumArtUrl = $"api/music/{Uri.EscapeDataString(artFile.Name)}";
+                _albumArtUrl = $"api/music/{SafeEncodePath(artFile.Name)}";
             }
             else
             {
@@ -132,10 +137,30 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         return ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".wma";
     }
 
+    /// <summary>
+    /// Safely encodes a file path for use in URLs, preserving forward slashes but encoding other special characters.
+    /// Also validates against path traversal attacks.
+    /// </summary>
+    private string SafeEncodePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+
+        // Check for path traversal attempts
+        if (filePath.Contains("..") || filePath.Contains("~"))
+            return string.Empty;
+
+        // Split by forward slash, encode each segment, then rejoin
+        var segments = filePath.Split('/');
+        var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
+        return string.Join("/", encodedSegments);
+    }
+
     protected string GetDisplayTitle()
     {
         if (_songInfo == null) return SongTitle ?? "Unknown Song";
-        return Path.GetFileNameWithoutExtension(_songInfo.Name);
+        // Get just the file name without folder path, then remove extension
+        return Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
     }
 
     protected string FormatTime(double seconds)
