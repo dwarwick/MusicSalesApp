@@ -68,11 +68,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // URL decode the song title
             var decodedTitle = Uri.UnescapeDataString(SongTitle);
 
-            // Get list of files from blob storage and find the matching song
+            // Get list of files from blob storage and find the matching song (audio files only)
             var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
             _songInfo = files?.FirstOrDefault(f =>
-                Path.GetFileNameWithoutExtension(f.Name).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
-                f.Name.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase));
+                IsAudioFile(f.Name) &&
+                (Path.GetFileNameWithoutExtension(f.Name).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                f.Name.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
 
             if (_songInfo == null)
             {
@@ -114,6 +115,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
+    }
+
+    private bool IsAudioFile(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".wma";
     }
 
     protected string GetDisplayTitle()
