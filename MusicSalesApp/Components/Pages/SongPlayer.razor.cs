@@ -180,29 +180,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected void OnTimeUpdate(double currentTime)
-    {
-        _currentTime = currentTime;
-    }
-
-    protected void OnDurationChange(double duration)
-    {
-        _duration = duration;
-    }
-
-    protected void OnEnded()
-    {
-        _isPlaying = false;
-    }
-
     protected void ToggleShuffle()
     {
         _shuffleEnabled = !_shuffleEnabled;
-    }
-
-    protected async Task OnProgressBarClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
-    {
-        // This won't have the exact percentage without JS, so we'll use JS for this
-        // For now, we won't handle click seeking - the user can use the controls
     }
 }

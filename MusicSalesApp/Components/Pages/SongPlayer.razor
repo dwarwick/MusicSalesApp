@@ -106,7 +106,7 @@
             </div>
             <div class="progress-container">
                 <span class="time-display">@FormatTime(_currentTime)</span>
-                <div class="progress-bar-container" @onclick="OnProgressBarClick">
+                <div class="progress-bar-container">
                     <div class="progress-bar" style="width: @((_duration > 0 ? (_currentTime / _duration * 100) : 0))%;"></div>
                 </div>
                 <span class="time-display">@FormatTime(_duration)</span>
