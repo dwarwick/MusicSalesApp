@@ -577,7 +577,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var width = await _jsModule.InvokeAsync<double>("getElementWidth", _activeProgressBarElement);
             if (width > 0)
             {
-                await _jsModule.InvokeVoidAsync("seekCardToPosition", _activeAudioElement, e.OffsetX, width);
+                await _jsModule.InvokeVoidAsync("seekCardToPosition", _activeAudioElement, e.OffsetX, width, _isCurrentCardRestricted, PREVIEW_DURATION_SECONDS);
             }
         }
     }
@@ -638,6 +638,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             if (_playingAlbum != null && _currentTrackIndex < _albumTrackUrls.Count - 1)
             {
                 _currentTrackIndex++;
+                _isActuallyPlaying = true;
                 // Will need to trigger next track play via JS
                 InvokeAsync(async () =>
                 {
@@ -727,6 +728,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _currentTime = 0;
             _duration = 0;
+            _isActuallyPlaying = true;
             await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex]);
             await InvokeAsync(StateHasChanged);
         }
