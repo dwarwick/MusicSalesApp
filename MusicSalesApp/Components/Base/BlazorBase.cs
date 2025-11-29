@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 using MusicSalesApp.Services;
 using System.Net.Http; // HttpClient
 
@@ -27,4 +28,7 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IMusicUploadService MusicUploadService { get; set; } = default!;
+
+    [Inject]
+    protected IServiceScopeFactory ScopeFactory { get; set; } = default!;
 }

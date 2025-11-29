@@ -1,19 +1,14 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Components.Layout;
 
-public partial class NavMenuModel : ComponentBase, IDisposable
+public partial class NavMenuModel : BlazorBase, IDisposable
 {
-    [Inject]
-    protected AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
-
-    [Inject]
-    protected IServiceScopeFactory ScopeFactory { get; set; } = default!;
-
     protected int _cartCount = 0;
 
     private static event Action OnCartUpdated;
