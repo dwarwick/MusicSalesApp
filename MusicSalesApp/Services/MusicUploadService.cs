@@ -127,6 +127,7 @@ namespace MusicSalesApp.Services
             string audioFileName,
             Stream albumArtStream,
             string albumArtFileName,
+            string albumName = null,
             CancellationToken cancellationToken = default)
         {
             if (audioStream == null)
@@ -192,16 +193,37 @@ namespace MusicSalesApp.Services
             string mp3Path = $"{folderPath}/{mp3FileName}";
             string albumArtPath = $"{folderPath}/{baseName}.jpeg";
 
+            // Build metadata for audio file
+            Dictionary<string, string> audioMetadata = null;
+            if (!string.IsNullOrWhiteSpace(albumName))
+            {
+                audioMetadata = new Dictionary<string, string>
+                {
+                    { "AlbumName", albumName }
+                };
+            }
+
+            // Build metadata for album art file
+            Dictionary<string, string> albumArtMetadata = null;
+            if (!string.IsNullOrWhiteSpace(albumName))
+            {
+                albumArtMetadata = new Dictionary<string, string>
+                {
+                    { "AlbumName", albumName },
+                    { "IsAlbumCover", "false" }
+                };
+            }
+
             try
             {
                 // Upload MP3 file
                 _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg");
+                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioMetadata);
 
                 // Upload album art
                 _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
                 albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg");
+                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg", albumArtMetadata);
 
                 _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
             }
@@ -215,6 +237,73 @@ namespace MusicSalesApp.Services
             }
 
             return folderPath;
+        }
+
+        /// <inheritdoc />
+        public async Task<string> UploadAlbumCoverAsync(
+            Stream albumArtStream,
+            string albumArtFileName,
+            string albumName,
+            CancellationToken cancellationToken = default)
+        {
+            if (albumArtStream == null)
+                throw new ArgumentNullException(nameof(albumArtStream));
+            if (string.IsNullOrWhiteSpace(albumArtFileName))
+                throw new ArgumentException("Album art file name is required.", nameof(albumArtFileName));
+            if (string.IsNullOrWhiteSpace(albumName))
+                throw new ArgumentException("Album name is required.", nameof(albumName));
+
+            // Validate file extension
+            if (!IsAlbumArtFile(albumArtFileName))
+            {
+                throw new InvalidDataException($"File {albumArtFileName} is not a valid album art file. Accepted formats: JPEG, JPG.");
+            }
+
+            // Buffer stream if needed
+            if (!albumArtStream.CanSeek)
+            {
+                var buffered = new MemoryStream();
+                await albumArtStream.CopyToAsync(buffered, cancellationToken);
+                buffered.Position = 0;
+                albumArtStream = buffered;
+            }
+
+            // Ensure container exists
+            await _storageService.EnsureContainerExistsAsync();
+
+            // Create a sanitized album name for the folder/file path
+            var sanitizedAlbumName = SanitizeForPath(albumName);
+            var baseName = GetNormalizedBaseName(albumArtFileName);
+            string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover.jpeg";
+
+            // Build metadata for album cover
+            var metadata = new Dictionary<string, string>
+            {
+                { "AlbumName", albumName },
+                { "IsAlbumCover", "true" }
+            };
+
+            // Upload album cover
+            _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
+            albumArtStream.Position = 0;
+            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg", metadata);
+
+            _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
+
+            return albumCoverPath;
+        }
+
+        /// <summary>
+        /// Sanitizes a string to be used in a file path by removing invalid characters.
+        /// </summary>
+        private static string SanitizeForPath(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+
+            var invalidChars = Path.GetInvalidFileNameChars();
+            var sanitized = new string(input.Where(c => !invalidChars.Contains(c)).ToArray());
+            return sanitized.Trim();
         }
 
         /// <inheritdoc />
@@ -250,6 +339,12 @@ namespace MusicSalesApp.Services
         /// <inheritdoc />
         public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames)
         {
+            return ValidateAllFilePairings(fileNames, requireAudioFile: true);
+        }
+
+        /// <inheritdoc />
+        public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile = true)
+        {
             var result = new FilePairingValidationResult { IsValid = true };
 
             if (fileNames == null || !fileNames.Any())
@@ -263,6 +358,21 @@ namespace MusicSalesApp.Services
             // Separate audio files from album art files
             var audioFiles = fileList.Where(f => IsAudioFile(f)).ToList();
             var albumArtFiles = fileList.Where(f => IsAlbumArtFile(f)).ToList();
+
+            // For album cover upload, we only need album art files (no audio required)
+            if (!requireAudioFile)
+            {
+                // Valid if we have at least one album art file
+                if (!albumArtFiles.Any())
+                {
+                    result.IsValid = false;
+                    result.UnmatchedAlbumArtFiles.AddRange(albumArtFiles);
+                    return result;
+                }
+
+                // All album art files are valid for album cover upload
+                return result;
+            }
 
             // Check if there are no files of either type
             if (!audioFiles.Any() || !albumArtFiles.Any())
