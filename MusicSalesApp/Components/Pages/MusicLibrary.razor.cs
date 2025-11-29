@@ -22,11 +22,13 @@ public enum FilterMode
 /// </summary>
 public class AlbumInfo
 {
+    public const decimal DEFAULT_ALBUM_PRICE = 9.99m;
+    
     public string AlbumName { get; set; }
     public string CoverArtUrl { get; set; }
     public string CoverArtFileName { get; set; }
     public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
-    public decimal Price { get; set; } = 9.99m;
+    public decimal Price { get; set; } = DEFAULT_ALBUM_PRICE;
 }
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
@@ -169,7 +171,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                             CoverArtUrl = $"api/music/{SafeEncodePath(cover.Name)}",
                             CoverArtFileName = cover.Name,
                             Tracks = albumTracks,
-                            Price = 9.99m
+                            Price = AlbumInfo.DEFAULT_ALBUM_PRICE
                         };
                         _albums.Add(album);
 

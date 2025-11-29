@@ -11,7 +11,6 @@ namespace MusicSalesApp.Components.Pages;
 public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
-    private const decimal ALBUM_PRICE = 9.99m;
 
     [Parameter]
     public string AlbumName { get; set; }
@@ -136,7 +135,7 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
                 CoverArtUrl = $"api/music/{SafeEncodePath(albumCover.Name)}",
                 CoverArtFileName = albumCover.Name,
                 Tracks = tracks,
-                Price = ALBUM_PRICE
+                Price = AlbumInfo.DEFAULT_ALBUM_PRICE
             };
 
             // Set up the first track

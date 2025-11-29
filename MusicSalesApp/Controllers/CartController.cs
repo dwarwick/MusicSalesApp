@@ -165,7 +165,8 @@ public class CartController : ControllerBase
         else
         {
             // Add all album tracks to cart (skip tracks that are already owned)
-            var pricePerTrack = request.Price / request.TrackFileNames.Count();
+            var trackCount = request.TrackFileNames.Count();
+            var pricePerTrack = trackCount > 0 ? request.Price / trackCount : 0m;
             foreach (var trackFileName in request.TrackFileNames)
             {
                 if (!ownedSet.Contains(trackFileName) && !cartItemSet.Contains(trackFileName))
