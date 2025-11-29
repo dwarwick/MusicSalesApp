@@ -35,10 +35,22 @@
                         </svg>
                     </div>
                 }
+                @if (_ownsSong)
+                {
+                    <div class="owned-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                    </div>
+                }
             </div>
             <div class="song-info">
                 <span class="song-label">Song</span>
                 <h1 class="song-title">@GetDisplayTitle()</h1>
+                @if (!_ownsSong && _isAuthenticated)
+                {
+                    <span class="preview-label">Preview Only (60 seconds)</span>
+                }
             </div>
         </div>
 
@@ -58,6 +70,37 @@
                     </svg>
                 }
             </button>
+            
+            <!-- Add to Cart Button -->
+            <AuthorizeView>
+                <Authorized>
+                    @if (!_ownsSong)
+                    {
+                        <button class="@($"cart-button-large {(_inCart ? "in-cart" : "")} {(_cartAnimating ? "animating" : "")}")"
+                                @onclick="ToggleCart"
+                                title="@(_inCart ? "Remove from Cart" : "Add to Cart")">
+                            @if (_inCart)
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-icon-large">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                                <span>Added to Cart</span>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-icon-large">
+                                    <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z"/>
+                                </svg>
+                                <span>$0.99 - Add to Cart</span>
+                            }
+                        </button>
+                        @if (_cartAnimating)
+                        {
+                            <span class="music-note-float-player">♪</span>
+                        }
+                    }
+                </Authorized>
+            </AuthorizeView>
         </div>
 
         <!-- Hidden Audio Element -->
@@ -142,12 +185,16 @@
         </div>
             <div class="progress-container">
                 <span class="time-display">@FormatTime(_currentTime)</span>
-                <div @ref="_progressBarContainer" class="progress-bar-container" @onclick="OnProgressBarClick">
-                    <div class="progress-bar" style="width: @((_duration > 0 ? (_currentTime / _duration * 100) : 0))%;">
+                <div @ref="_progressBarContainer" class="progress-bar-container @(IsProgressBarRestricted() ? "restricted" : "")" @onclick="OnProgressBarClick">
+                    <div class="progress-bar" style="width: @(GetProgressBarWidth())%;">
                         <div class="progress-thumb"></div>
                     </div>
+                    @if (IsProgressBarRestricted())
+                    {
+                        <div class="progress-limit-marker" style="left: @(GetPreviewLimitPercentage())%;"></div>
+                    }
                 </div>
-                <span class="time-display">@FormatTime(_duration)</span>
+                <span class="time-display">@FormatTime(GetDisplayDuration())</span>
             </div>
         </div>
     }

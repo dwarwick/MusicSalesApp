@@ -1,11 +1,20 @@
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using MusicSalesApp.Services;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Components.Layout;
 
 namespace MusicSalesApp.Components.Pages;
+
+public enum FilterMode
+{
+    All,
+    Owned,
+    NotOwned
+}
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
@@ -15,6 +24,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
+    protected FilterMode _filterMode = FilterMode.All;
+    protected HashSet<string> _ownedSongs = new HashSet<string>();
+    protected HashSet<string> _cartSongs = new HashSet<string>();
+    protected HashSet<string> _animatingCartButtons = new HashSet<string>();
 
     // Track which card is currently playing
     private string _playingCardId;
@@ -38,10 +51,19 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
+    private bool _isAuthenticated;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+        
         await LoadFiles();
+        
+        if (_isAuthenticated)
+        {
+            await LoadCartAndOwnedSongs();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -128,6 +150,112 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadCartAndOwnedSongs()
+    {
+        try
+        {
+            // Load owned songs
+            var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
+            _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
+
+            // Load cart items
+            var cartResponse = await Http.GetFromJsonAsync<CartResponseDto>("api/cart");
+            if (cartResponse?.Items != null)
+            {
+                _cartSongs = new HashSet<string>(cartResponse.Items.Select(i => i.SongFileName));
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // User not authenticated or other error, ignore
+        }
+    }
+
+    protected IEnumerable<StorageFileInfo> GetFilteredFiles()
+    {
+        return _filterMode switch
+        {
+            FilterMode.Owned => _files.Where(f => _ownedSongs.Contains(f.Name)),
+            FilterMode.NotOwned => _files.Where(f => !_ownedSongs.Contains(f.Name)),
+            _ => _files
+        };
+    }
+
+    protected void SetFilter(FilterMode mode)
+    {
+        _filterMode = mode;
+    }
+
+    protected bool IsSongOwned(string fileName)
+    {
+        return _ownedSongs.Contains(fileName);
+    }
+
+    protected bool IsSongInCart(string fileName)
+    {
+        return _cartSongs.Contains(fileName);
+    }
+
+    protected async Task ToggleCartItem(string fileName)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = 0.99m });
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
+                if (result != null)
+                {
+                    if (result.InCart)
+                    {
+                        _cartSongs.Add(fileName);
+                        // Trigger animation
+                        _animatingCartButtons.Add(fileName);
+                        await InvokeAsync(StateHasChanged);
+                        
+                        // Remove animation class after animation completes
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(800);
+                            _animatingCartButtons.Remove(fileName);
+                            await InvokeAsync(StateHasChanged);
+                        });
+                    }
+                    else
+                    {
+                        _cartSongs.Remove(fileName);
+                    }
+                    
+                    // Notify the NavMenu to update the cart count
+                    NavMenuModel.NotifyCartUpdated();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error toggling cart: {ex.Message}");
+        }
+    }
+
+    private class CartResponseDto
+    {
+        public IEnumerable<CartItemDto> Items { get; set; }
+        public decimal Total { get; set; }
+    }
+
+    private class CartItemDto
+    {
+        public string SongFileName { get; set; }
+        public string SongTitle { get; set; }
+        public decimal Price { get; set; }
+    }
+
+    private class CartToggleResponse
+    {
+        public bool InCart { get; set; }
+        public int Count { get; set; }
     }
 
     private bool IsAudioFile(string fileName)

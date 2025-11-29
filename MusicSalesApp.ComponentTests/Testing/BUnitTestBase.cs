@@ -1,4 +1,5 @@
 using Bunit;
+using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -24,6 +25,7 @@ public abstract class BUnitTestBase
     protected Mock<IMusicUploadService> MockMusicUploadService { get; private set; } = default!;
     protected Mock<IMusicService> MockMusicService { get; private set; } = default!;
     protected Mock<IAzureStorageService> MockAzureStorageService { get; private set; } = default!;
+    protected Mock<ICartService> MockCartService { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -37,6 +39,7 @@ public abstract class BUnitTestBase
         MockMusicUploadService = new Mock<IMusicUploadService>();
         MockMusicService = new Mock<IMusicService>();
         MockAzureStorageService = new Mock<IAzureStorageService>();
+        MockCartService = new Mock<ICartService>();
 
         // Configure AuthenticationStateProvider mock to return unauthenticated user
         var anonymousUser = new ClaimsPrincipal(new ClaimsIdentity());
@@ -53,6 +56,14 @@ public abstract class BUnitTestBase
         MockAuthService.Setup(x => x.IsEmailVerifiedAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
 
+        // Setup default returns for ICartService methods
+        MockCartService.Setup(x => x.GetCartItemsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MusicSalesApp.Models.CartItem>());
+        MockCartService.Setup(x => x.GetCartItemCountAsync(It.IsAny<int>()))
+            .ReturnsAsync(0);
+        MockCartService.Setup(x => x.GetOwnedSongsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<string>());
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -61,9 +72,11 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IMusicUploadService>(MockMusicUploadService.Object);
         TestContext.Services.AddSingleton<IMusicService>(MockMusicService.Object);
         TestContext.Services.AddSingleton<IAzureStorageService>(MockAzureStorageService.Object);
+        TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
 
-        // Authorization for components using [Authorize]
-        TestContext.Services.AddAuthorizationCore();
+        // Authorization for components using [Authorize] and AuthorizeView
+        // Using bUnit's TestAuthorizationContext for proper auth testing
+        TestContext.AddAuthorization();
 
         // Provide a default HttpClient that returns empty list for api/music to prevent errors in components
         var handler = new StubHttpMessageHandler();
