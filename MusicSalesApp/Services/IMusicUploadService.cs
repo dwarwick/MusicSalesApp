@@ -36,6 +36,7 @@ namespace MusicSalesApp.Services
         /// <param name="audioFileName">Original filename of the MP3 file.</param>
         /// <param name="albumArtStream">The JPEG album art file stream.</param>
         /// <param name="albumArtFileName">Original filename of the album art file.</param>
+        /// <param name="albumName">Optional album name to store as metadata.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The folder path where files were stored.</returns>
         Task<string> UploadMusicWithAlbumArtAsync(
@@ -43,6 +44,21 @@ namespace MusicSalesApp.Services
             string audioFileName,
             Stream albumArtStream,
             string albumArtFileName,
+            string albumName = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Uploads an album cover image file to storage with metadata indicating it is the album cover.
+        /// </summary>
+        /// <param name="albumArtStream">The JPEG album art file stream.</param>
+        /// <param name="albumArtFileName">Original filename of the album art file.</param>
+        /// <param name="albumName">The album name to store as metadata.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The path where the album cover was stored.</returns>
+        Task<string> UploadAlbumCoverAsync(
+            Stream albumArtStream,
+            string albumArtFileName,
+            string albumName,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -66,8 +82,9 @@ namespace MusicSalesApp.Services
         /// Validates that all provided files have matching pairs (MP3 with JPEG).
         /// </summary>
         /// <param name="fileNames">List of filenames to validate.</param>
+        /// <param name="requireAudioFile">If true, requires at least one audio file. Defaults to true.</param>
         /// <returns>A result containing unmatched files if validation fails.</returns>
-        FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames);
+        FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile = true);
     }
 
     /// <summary>

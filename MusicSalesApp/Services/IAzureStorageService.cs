@@ -7,6 +7,7 @@ namespace MusicSalesApp.Services
     public interface IAzureStorageService
     {
         Task UploadAsync(string fileName, Stream data, string contentType);
+        Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> metadata);
         Task<Stream> DownloadAsync(string fileName); // full download (legacy)
         Task<bool> DeleteAsync(string fileName);
         Task<bool> ExistsAsync(string fileName);

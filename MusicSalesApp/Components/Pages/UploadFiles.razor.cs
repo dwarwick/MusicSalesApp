@@ -28,6 +28,10 @@ public class UploadFilesModel : BlazorBase
     protected string _validationErrorMessage = string.Empty;
     protected List<string> _unmatchedMp3Files = new List<string>();
     protected List<string> _unmatchedAlbumArtFiles = new List<string>();
+    protected string _albumName = string.Empty;
+    protected bool _isAlbumCoverUploadMode = false;
+    protected bool _showAlbumCoverPrompt = false;
+    protected string _pendingAlbumName = string.Empty;
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg" };
@@ -149,6 +153,7 @@ public class UploadFilesModel : BlazorBase
                 audioFile.Name,
                 albumArtMemoryStream,
                 albumArtFile.Name,
+                _albumName,
                 _cancellationToken);
 
             uploadItem.Progress = 100;
@@ -183,6 +188,29 @@ public class UploadFilesModel : BlazorBase
             audioMemoryStream?.Dispose();
             albumArtMemoryStream?.Dispose();
             await InvokeAsync(StateHasChanged);
+
+            // Check if all uploads are complete and show album cover prompt if album name was provided
+            await CheckAndShowAlbumCoverPromptAsync();
+        }
+    }
+
+    private async Task CheckAndShowAlbumCoverPromptAsync()
+    {
+        // Only show prompt if an album name was provided and all uploads are done
+        if (string.IsNullOrWhiteSpace(_albumName))
+            return;
+
+        // Check if all uploads are complete (either succeeded or failed)
+        var allComplete = _uploadItems.All(item => 
+            item.Status == UploadStatus.Completed || item.Status == UploadStatus.Failed);
+
+        // Check if at least one upload succeeded
+        var anySucceeded = _uploadItems.Any(item => item.Status == UploadStatus.Completed);
+
+        if (allComplete && anySucceeded && !_showAlbumCoverPrompt)
+        {
+            _showAlbumCoverPrompt = true;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -191,6 +219,128 @@ public class UploadFilesModel : BlazorBase
         _validationErrorMessage = string.Empty;
         _unmatchedMp3Files.Clear();
         _unmatchedAlbumArtFiles.Clear();
+    }
+
+    protected void StartAlbumCoverUpload()
+    {
+        _isAlbumCoverUploadMode = true;
+        _showAlbumCoverPrompt = false;
+        _pendingAlbumName = _albumName;
+        _uploadItems.Clear();
+        StateHasChanged();
+    }
+
+    protected void SkipAlbumCoverUpload()
+    {
+        _showAlbumCoverPrompt = false;
+        _albumName = string.Empty;
+        StateHasChanged();
+    }
+
+    protected async Task HandleAlbumCoverFileSelected(InputFileChangeEventArgs e)
+    {
+        ClearValidationError();
+        _uploadItems.Clear();
+
+        var files = e.GetMultipleFiles(10); // Allow up to 10 files for album cover
+
+        foreach (var file in files)
+        {
+            var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (!ValidAlbumArtExtensions.Contains(extension))
+            {
+                continue; // Skip non-album art files
+            }
+
+            var baseName = MusicUploadService.GetNormalizedBaseName(file.Name);
+
+            var uploadItem = new UploadPairItem
+            {
+                BaseName = baseName,
+                AudioFileName = string.Empty,
+                AudioFileSize = 0,
+                AlbumArtFileName = file.Name,
+                AlbumArtFileSize = file.Size,
+                Status = UploadStatus.Pending,
+                Progress = 0,
+                StatusMessage = "Pending"
+            };
+
+            _uploadItems.Add(uploadItem);
+
+            // Fire-and-forget the album cover upload
+            _ = UploadAlbumCoverAsync(file, uploadItem);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UploadAlbumCoverAsync(IBrowserFile albumArtFile, UploadPairItem uploadItem)
+    {
+        const long maxFileSize = 100 * 1024 * 1024; // 100 MB
+        const int bufferSize = 81920; // 80 KB buffer
+
+        MemoryStream albumArtMemoryStream = null;
+
+        try
+        {
+            uploadItem.Status = UploadStatus.Uploading;
+            uploadItem.StatusMessage = "Reading album cover...";
+            uploadItem.Progress = 20;
+            await InvokeAsync(StateHasChanged);
+
+            // Buffer the album art file
+            albumArtMemoryStream = new MemoryStream();
+            await using (var albumArtStream = albumArtFile.OpenReadStream(maxFileSize))
+            {
+                await albumArtStream.CopyToAsync(albumArtMemoryStream, bufferSize, _cancellationToken);
+            }
+            albumArtMemoryStream.Position = 0;
+
+            uploadItem.StatusMessage = "Uploading album cover...";
+            uploadItem.Progress = 50;
+            await InvokeAsync(StateHasChanged);
+
+            // Upload using the album cover service
+            var coverPath = await MusicUploadService.UploadAlbumCoverAsync(
+                albumArtMemoryStream,
+                albumArtFile.Name,
+                _pendingAlbumName,
+                _cancellationToken);
+
+            uploadItem.Progress = 100;
+            uploadItem.Status = UploadStatus.Completed;
+            uploadItem.StatusMessage = $"Uploaded to {coverPath}";
+            uploadItem.ErrorMessage = null;
+        }
+        catch (InvalidDataException ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Invalid file";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Upload failed";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            albumArtMemoryStream?.Dispose();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected void FinishAlbumCoverUpload()
+    {
+        _isAlbumCoverUploadMode = false;
+        _pendingAlbumName = string.Empty;
+        _albumName = string.Empty;
+        _uploadItems.Clear();
+        StateHasChanged();
     }
 
     protected string FormatFileSize(long bytes)
