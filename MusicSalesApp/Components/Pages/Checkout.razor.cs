@@ -9,9 +9,6 @@ namespace MusicSalesApp.Components.Pages;
 
 public class CheckoutModel : BlazorBase, IAsyncDisposable
 {
-    [Inject]
-    protected IJSRuntime JS { get; set; } = default!;
-
     protected bool _loading = true;
     protected bool _isAuthenticated;
     protected List<CartItemDto> _cartItems = new List<CartItemDto>();
