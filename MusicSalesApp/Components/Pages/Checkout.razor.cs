@@ -19,6 +19,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<CheckoutModel> _dotNetRef;
+    private bool startedPaypalInitialization;
 
     protected override async Task OnInitializedAsync()
     {
@@ -35,8 +36,9 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _isAuthenticated && _cartItems.Count > 0)
+        if (!startedPaypalInitialization && _isAuthenticated && _cartItems.Count > 0)
         {
+            startedPaypalInitialization = true;
             await InitializePayPal();
         }
     }
