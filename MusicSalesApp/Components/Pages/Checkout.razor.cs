@@ -111,8 +111,8 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task<string> CreateOrder()
     {
-        _checkoutInProgress = true;
-        await InvokeAsync(StateHasChanged);
+        // Don't set _checkoutInProgress here - the PayPal popup needs to open first
+        // We'll set it when the user approves the payment
 
         try
         {
@@ -128,9 +128,14 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             Console.WriteLine($"Error creating order: {ex.Message}");
         }
 
-        _checkoutInProgress = false;
-        await InvokeAsync(StateHasChanged);
         return "";
+    }
+
+    [JSInvokable]
+    public async Task SetProcessing(bool processing)
+    {
+        _checkoutInProgress = processing;
+        await InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]

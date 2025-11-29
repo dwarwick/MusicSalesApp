@@ -34,12 +34,13 @@ export async function initPayPal(clientId, amount, dotNetRef) {
 
         createOrder: async function (data, actions) {
             try {
+                // First, create our internal order record
                 const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
                 if (!orderId) {
                     throw new Error('Failed to create order');
                 }
 
-                // Create PayPal order
+                // Create PayPal order using client-side SDK
                 return actions.order.create({
                     purchase_units: [{
                         reference_id: orderId,
@@ -57,6 +58,9 @@ export async function initPayPal(clientId, amount, dotNetRef) {
 
         onApprove: async function (data, actions) {
             try {
+                // Show processing state
+                await dotNetRef.invokeMethodAsync('SetProcessing', true);
+                
                 // Capture the order on PayPal side
                 const details = await actions.order.capture();
 
@@ -64,7 +68,7 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 await dotNetRef.invokeMethodAsync('OnApprove', details.purchase_units[0].reference_id);
             } catch (error) {
                 console.error('Error capturing order:', error);
-                dotNetRef.invokeMethodAsync('OnError', error.message);
+                await dotNetRef.invokeMethodAsync('OnError', error.message);
             }
         },
 
