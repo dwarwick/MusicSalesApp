@@ -7,6 +7,9 @@ using System.Web;
 
 namespace MusicSalesApp.Services;
 
+/// <summary>
+/// Service for handling user authentication and email verification operations.
+/// </summary>
 public class AuthenticationService : IAuthenticationService
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
@@ -32,7 +35,8 @@ public class AuthenticationService : IAuthenticationService
         _emailService = emailService;
         _logger = logger;
     }
-    
+
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> RegisterAsync(string email, string password)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -103,6 +107,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> SendVerificationEmailAsync(string email, string baseUrl)
     {
         try
@@ -121,15 +126,10 @@ public class AuthenticationService : IAuthenticationService
             // Check cooldown period
             if (user.LastVerificationEmailSent.HasValue)
             {
-                var timeSinceLastEmail = DateTime.UtcNow - user.LastVerificationEmailSent.Value;
-                if (timeSinceLastEmail.TotalMinutes < VerificationEmailCooldownMinutes)
+                var remainingSeconds = CalculateRemainingCooldownSeconds(user.LastVerificationEmailSent.Value);
+                if (remainingSeconds > 0)
                 {
-                    var remainingSeconds = (int)(VerificationEmailCooldownMinutes * 60 - timeSinceLastEmail.TotalSeconds);
-                    var minutes = remainingSeconds / 60;
-                    var seconds = remainingSeconds % 60;
-                    var timeMessage = minutes > 0 
-                        ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
-                        : $"{seconds} second{(seconds != 1 ? "s" : "")}";
+                    var timeMessage = FormatRemainingTime(remainingSeconds);
                     return (false, $"Please wait {timeMessage} before requesting another verification email");
                 }
             }
@@ -162,6 +162,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> VerifyEmailAsync(string userId, string token)
     {
         try
@@ -220,6 +221,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> UpdateEmailAsync(string currentEmail, string newEmail, string baseUrl)
     {
         try
@@ -273,6 +275,7 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
     public async Task<(bool CanResend, int SecondsRemaining)> CanResendVerificationEmailAsync(string email)
     {
         var user = await _userManager.FindByEmailAsync(email);
@@ -286,22 +289,18 @@ public class AuthenticationService : IAuthenticationService
             return (true, 0);
         }
 
-        var timeSinceLastEmail = DateTime.UtcNow - user.LastVerificationEmailSent.Value;
-        if (timeSinceLastEmail.TotalMinutes >= VerificationEmailCooldownMinutes)
-        {
-            return (true, 0);
-        }
-
-        var remainingSeconds = (int)(VerificationEmailCooldownMinutes * 60 - timeSinceLastEmail.TotalSeconds);
-        return (false, remainingSeconds);
+        var remainingSeconds = CalculateRemainingCooldownSeconds(user.LastVerificationEmailSent.Value);
+        return remainingSeconds > 0 ? (false, remainingSeconds) : (true, 0);
     }
 
+    /// <inheritdoc />
     public async Task<bool> IsEmailVerifiedAsync(string email)
     {
         var user = await _userManager.FindByEmailAsync(email);
         return user?.EmailConfirmed ?? false;
     }
 
+    /// <inheritdoc />
     public async Task LogoutAsync()
     {
         try
@@ -317,6 +316,20 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ClaimsPrincipal> GetCurrentUserAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsAuthenticatedAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        return user?.Identity?.IsAuthenticated ?? false;
+    }
+
     private void NotifyAuthenticationStateChange()
     {
         if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
@@ -325,15 +338,29 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<ClaimsPrincipal> GetCurrentUserAsync()
+    /// <summary>
+    /// Calculates the remaining seconds until the cooldown period expires.
+    /// </summary>
+    /// <param name="lastSent">The timestamp when the last verification email was sent.</param>
+    /// <returns>The number of seconds remaining, or 0 if the cooldown has expired.</returns>
+    private int CalculateRemainingCooldownSeconds(DateTime lastSent)
     {
-        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
-        return authState.User;
+        var timeSinceLastEmail = DateTime.UtcNow - lastSent;
+        var remainingSeconds = (int)(VerificationEmailCooldownMinutes * 60 - timeSinceLastEmail.TotalSeconds);
+        return remainingSeconds > 0 ? remainingSeconds : 0;
     }
 
-    public async Task<bool> IsAuthenticatedAsync()
+    /// <summary>
+    /// Formats the remaining seconds into a human-readable time string.
+    /// </summary>
+    /// <param name="remainingSeconds">The number of seconds remaining.</param>
+    /// <returns>A formatted time string like "5 minutes and 30 seconds" or "45 seconds".</returns>
+    private static string FormatRemainingTime(int remainingSeconds)
     {
-        var user = await GetCurrentUserAsync();
-        return user?.Identity?.IsAuthenticated ?? false;
+        var minutes = remainingSeconds / 60;
+        var seconds = remainingSeconds % 60;
+        return minutes > 0 
+            ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
+            : $"{seconds} second{(seconds != 1 ? "s" : "")}";
     }
 }

@@ -3,43 +3,47 @@ using System.Net.Mail;
 
 namespace MusicSalesApp.Services
 {
+    /// <summary>
+    /// Service for sending emails including verification and password reset emails.
+    /// </summary>
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<EmailService> _logger;
 
-        private readonly string domain;
-        private readonly string fromEmail;
+        private readonly string _domain;
+        private readonly string _fromEmail;
+        private readonly string _password;
+        private readonly string _server;
 
-        private readonly string header;
-        private readonly string footer;
+        private readonly string _header;
+        private readonly string _footer;
 
         public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
             _configuration = configuration;
             _logger = logger;
 
-            domain = configuration["EmailSettings:Domain"] ?? string.Empty;
-            fromEmail = configuration["EmailSettings:CustomerServiceEmail"] ?? string.Empty;
-            header = $"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\"<head></head><body><div align=\"center\"></div><h3 style=\"text-align: center;\">{domain}</h3>";
-            footer = $"<div style=\"text-align:center;margin-top:20px;\">&#169; {DateTime.Now.Year} {domain}</div></body></html>";
+            var emailSettings = configuration.GetSection("EmailSettings");
+            _domain = emailSettings["Domain"] ?? string.Empty;
+            _fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
+            _password = emailSettings["Password"] ?? string.Empty;
+            _server = emailSettings["Server"] ?? string.Empty;
+            
+            _header = $"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\"><head></head><body><div align=\"center\"></div><h3 style=\"text-align: center;\">{_domain}</h3>";
+            _footer = $"<div style=\"text-align:center;margin-top:20px;\">&#169; {DateTime.Now.Year} {_domain}</div></body></html>";
 
-            _logger.LogInformation("EmailService initialized with domain: {Domain}", domain);
+            _logger.LogInformation("EmailService initialized with domain: {Domain}", _domain);
         }
 
+        /// <inheritdoc />
         public bool SendEmailVerificationMessage(string email, string tokenUrl)
         {
             _logger.LogInformation("Sending email verification to: {Email}", email);
 
             try
             {
-                var emailSettings = _configuration.GetSection("EmailSettings");
-                var fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
-                var password = emailSettings["Password"] ?? string.Empty;
-                var server = emailSettings["Server"] ?? string.Empty;
-                var domain = emailSettings["Domain"] ?? string.Empty;
-
-                if (string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for verification email to {Email}", email);
                     return false;
@@ -53,7 +57,7 @@ namespace MusicSalesApp.Services
                 <p>If you didn't request this verification, please ignore this email.</p>
                 ";
 
-                return SendEmail(fromEmail, password, server, email, subject, body);
+                return SendEmail(email, subject, body);
             }
             catch (SmtpException ex)
             {
@@ -67,19 +71,14 @@ namespace MusicSalesApp.Services
             }
         }
 
+        /// <inheritdoc />
         public bool SendPasswordResetEmail(string email, string tokenUrl)
         {
             _logger.LogInformation("Sending password reset email to: {Email}", email);
 
             try
             {
-                var emailSettings = _configuration.GetSection("EmailSettings");
-                var fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
-                var password = emailSettings["Password"] ?? string.Empty;
-                var server = emailSettings["Server"] ?? string.Empty;
-                var domain = emailSettings["Domain"] ?? string.Empty;
-
-                if (string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for password reset email to {Email}", email);
                     return false;
@@ -93,7 +92,7 @@ namespace MusicSalesApp.Services
                 <p>If you didn't request a password reset, please ignore this email.</p>
                 ";
 
-                return SendEmail(fromEmail, password, server, email, subject, body);
+                return SendEmail(email, subject, body);
             }
             catch (SmtpException ex)
             {
@@ -107,10 +106,13 @@ namespace MusicSalesApp.Services
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> SendEmailAsync(string toEmail, string subject, string body)
         {
+            // Bypass email sending for demo/anonymous users
             if (toEmail.StartsWith("DemoUser_", StringComparison.OrdinalIgnoreCase) || toEmail.StartsWith("anonymous_", StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogInformation("Bypassing email send for demo/anonymous user: {Email}", toEmail);
                 return true;
             }
 
@@ -118,19 +120,13 @@ namespace MusicSalesApp.Services
 
             try
             {
-                var emailSettings = _configuration.GetSection("EmailSettings");
-                var fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
-                var password = emailSettings["Password"] ?? string.Empty;
-                var server = emailSettings["Server"] ?? string.Empty;
-                var domain = emailSettings["Domain"] ?? string.Empty;
-
-                if (string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for async email to {Email}", toEmail);
                     return false;
                 }
 
-                return await Task.Run(() => SendEmail(fromEmail, password, server, toEmail, subject, body));
+                return await Task.Run(() => SendEmail(toEmail, subject, body));
             }
             catch (SmtpException ex)
             {
@@ -149,32 +145,28 @@ namespace MusicSalesApp.Services
             }
         }
 
-        private bool SendEmail(string fromEmail, string password, string server, string toEmail, string subject, string body)
+        private bool SendEmail(string toEmail, string subject, string body)
         {
-            _logger.LogDebug("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", fromEmail, toEmail, server);
+            _logger.LogDebug("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", _fromEmail, toEmail, _server);
 
             try
             {
-                using (var message = new MailMessage())
-                {
-                    message.From = new MailAddress(fromEmail);
-                    message.Subject = subject;
-                    message.Body = header + body + footer;
-                    message.IsBodyHtml = true;
-                    message.To.Add(new MailAddress(toEmail));
+                using var message = new MailMessage();
+                message.From = new MailAddress(_fromEmail);
+                message.Subject = subject;
+                message.Body = _header + body + _footer;
+                message.IsBodyHtml = true;
+                message.To.Add(new MailAddress(toEmail));
 
-                    using (var client = new SmtpClient(server))
-                    {
-                        client.Port = 587;
-                        client.Credentials = new NetworkCredential(fromEmail, password);
-                        client.EnableSsl = true;
-                        client.Timeout = 30000; // 30 seconds timeout
+                using var client = new SmtpClient(_server);
+                client.Port = 587;
+                client.Credentials = new NetworkCredential(_fromEmail, _password);
+                client.EnableSsl = true;
+                client.Timeout = 30000; // 30 seconds timeout
 
-                        client.Send(message);
-                        _logger.LogInformation("Email successfully sent to {ToEmail}", toEmail);
-                        return true;
-                    }
-                }
+                client.Send(message);
+                _logger.LogInformation("Email successfully sent to {ToEmail}", toEmail);
+                return true;
             }
             catch (SmtpException ex)
             {

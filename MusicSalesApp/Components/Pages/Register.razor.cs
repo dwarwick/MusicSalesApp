@@ -1,12 +1,11 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages;
 
-public partial class RegisterModel : BlazorBase
+public partial class RegisterModel : BlazorBase, IDisposable
 {
     [SupplyParameterFromQuery(Name = "needsVerification")]
     public bool NeedsVerification { get; set; }
@@ -32,6 +31,7 @@ public partial class RegisterModel : BlazorBase
     protected bool canResendEmail = false;
     protected int secondsRemaining = 0;
     private System.Timers.Timer countdownTimer;
+    private bool disposed = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -83,7 +83,7 @@ public partial class RegisterModel : BlazorBase
                 errorMessage = "All fields are required";
                 return;
             }
-            if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            if (!new EmailAddressAttribute().IsValid(Email))
             {
                 errorMessage = "Invalid email format";
                 return;
@@ -171,7 +171,7 @@ public partial class RegisterModel : BlazorBase
             return;
         }
 
-        if (!Regex.IsMatch(NewEmail, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        if (!new EmailAddressAttribute().IsValid(NewEmail))
         {
             errorMessage = "Invalid email format";
             return;
@@ -219,6 +219,7 @@ public partial class RegisterModel : BlazorBase
     {
         countdownTimer?.Stop();
         countdownTimer?.Dispose();
+        countdownTimer = null;
         
         if (secondsRemaining > 0)
         {
@@ -237,6 +238,9 @@ public partial class RegisterModel : BlazorBase
         }
     }
 
+    /// <summary>
+    /// Formats remaining time for display (compact format).
+    /// </summary>
     protected string FormatRemainingTime(int seconds)
     {
         var minutes = seconds / 60;
@@ -244,9 +248,35 @@ public partial class RegisterModel : BlazorBase
         return minutes > 0 ? $"{minutes}m {secs}s" : $"{secs}s";
     }
 
+    /// <summary>
+    /// Formats remaining time for accessibility/screen readers (full descriptive format).
+    /// </summary>
+    protected string FormatRemainingTimeForAccessibility(int seconds)
+    {
+        var minutes = seconds / 60;
+        var secs = seconds % 60;
+        return minutes > 0 
+            ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {secs} second{(secs != 1 ? "s" : "")}"
+            : $"{secs} second{(secs != 1 ? "s" : "")}";
+    }
+
     public void Dispose()
     {
-        countdownTimer?.Stop();
-        countdownTimer?.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposed)
+        {
+            if (disposing)
+            {
+                countdownTimer?.Stop();
+                countdownTimer?.Dispose();
+                countdownTimer = null;
+            }
+            disposed = true;
+        }
     }
 }

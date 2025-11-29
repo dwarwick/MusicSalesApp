@@ -36,7 +36,10 @@
                         </div>
 
                         <div class="d-grid gap-2">
-                            <button class="btn btn-primary" @onclick="ResendVerificationEmail" disabled="@(!canResendEmail || isSubmitting)">
+                            <button class="btn btn-primary"
+                                    @onclick="ResendVerificationEmail"
+                                    disabled="@(!canResendEmail || isSubmitting)"
+                                    aria-label="@(canResendEmail ? "Resend verification email" : $"Resend verification email available in {FormatRemainingTimeForAccessibility(secondsRemaining)}")">
                                 @(isSubmitting ? "Sending..." : "Resend Verification Email")
                             </button>
                         </div>
