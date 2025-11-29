@@ -18,9 +18,6 @@ public enum FilterMode
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
-    [Inject]
-    protected IJSRuntime JS { get; set; } = default!;
-
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();

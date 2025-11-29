@@ -10,9 +10,6 @@ namespace MusicSalesApp.Components.Pages;
 public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
-    
-    [Inject]
-    protected IJSRuntime JS { get; set; } = default!;
 
     [Parameter]
     public string SongTitle { get; set; }
