@@ -366,7 +366,7 @@ namespace MusicSalesApp.Services
                 if (!albumArtFiles.Any())
                 {
                     result.IsValid = false;
-                    result.UnmatchedAlbumArtFiles.AddRange(albumArtFiles);
+                    // No album art files found - nothing to add to unmatched since list is empty
                     return result;
                 }
 
