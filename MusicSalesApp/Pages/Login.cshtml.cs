@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
+using System.Web;
 
 namespace MusicSalesApp.Pages;
 
@@ -44,6 +45,15 @@ public class LoginPageModel : PageModel
         if (result.Succeeded)
         {
             _logger.LogInformation("User {Username} logged in successfully", username);
+            
+            // Check if email is verified - if not, redirect to register page with verification info
+            if (!user.EmailConfirmed)
+            {
+                _logger.LogInformation("User {Username} logged in but email not verified, redirecting to verification page", username);
+                var encodedEmail = HttpUtility.UrlEncode(user.Email);
+                return Redirect($"/register?needsVerification=true&email={encodedEmail}");
+            }
+            
             // Validate returnUrl to prevent open redirect vulnerability
             if (!Url.IsLocalUrl(returnUrl))
             {
