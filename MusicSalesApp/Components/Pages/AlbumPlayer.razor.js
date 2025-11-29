@@ -84,12 +84,41 @@ export function getDuration(audioElement) {
     return 0;
 }
 
+// Set the track source without auto-playing (for initial load)
+export function setTrackSource(audioElement, src) {
+    if (audioElement && src) {
+        audioElement.src = src;
+        audioElement.load();
+    }
+}
+
 // Change the track source for album playback (used when transitioning to next/previous track)
 export function changeTrack(audioElement, newSrc) {
     if (audioElement) {
+        // Pause and reset first
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        
+        // Set new source
         audioElement.src = newSrc;
+        
+        // Load and play
         audioElement.load();
-        audioElement.play().catch(err => console.warn('Play after track change failed:', err));
+        
+        // Wait for the audio to be ready before playing
+        const playWhenReady = () => {
+            audioElement.play().catch(err => {
+                console.warn('Play after track change failed:', err);
+            });
+        };
+        
+        // If ready state is sufficient, play immediately
+        if (audioElement.readyState >= 2) {
+            playWhenReady();
+        } else {
+            // Otherwise wait for canplay event
+            audioElement.addEventListener('canplay', playWhenReady, { once: true });
+        }
     }
 }
 

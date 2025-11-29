@@ -96,7 +96,7 @@
                                     <span class="track-name @(isCurrentTrack ? "playing" : "")">@GetTrackTitle(index)</span>
                                 </div>
                             </td>
-                            <td class="track-duration">--:--</td>
+                            <td class="track-duration">@GetTrackDuration(index)</td>
                             <td class="track-actions">
                                 <!-- Could add more actions here like individual track cart -->
                             </td>
@@ -157,7 +157,6 @@
 
         <!-- Hidden Audio Element -->
         <audio @ref="_audioElement"
-               src="@_streamUrl"
                preload="metadata"
                style="display:none;"></audio>
 

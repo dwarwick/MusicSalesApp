@@ -11,6 +11,7 @@ namespace MusicSalesApp.Components.Pages;
 public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
+    private const string UNKNOWN_DURATION_PLACEHOLDER = "--:--";
 
     [Parameter]
     public string AlbumName { get; set; }
@@ -34,6 +35,7 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _inCart;
     protected bool _cartAnimating;
     protected int _currentTrackIndex;
+    protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -53,6 +55,9 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, !_ownsAlbum, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, !_ownsAlbum, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
+            
+            // Set the initial track source
+            await _jsModule.InvokeVoidAsync("setTrackSource", _audioElement, _streamUrl);
         }
     }
 
@@ -406,7 +411,21 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
     public void UpdateDuration(double duration)
     {
         _duration = duration;
+        // Store the duration for the current track
+        if (_currentTrackIndex >= 0)
+        {
+            _trackDurations[_currentTrackIndex] = duration;
+        }
         InvokeAsync(StateHasChanged);
+    }
+
+    protected string GetTrackDuration(int index)
+    {
+        if (_trackDurations.TryGetValue(index, out var duration) && duration > 0)
+        {
+            return FormatTime(duration);
+        }
+        return UNKNOWN_DURATION_PLACEHOLDER;
     }
 
     [JSInvokable]
