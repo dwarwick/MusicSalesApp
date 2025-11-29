@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
 using System.Net.Http.Json;
 
@@ -8,8 +9,7 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 {
-    [Inject]
-    protected IJSRuntime JS { get; set; }
+    private const double PREVIEW_DURATION_SECONDS = 60.0;
 
     [Parameter]
     public string SongTitle { get; set; }
@@ -29,6 +29,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected double _volume = 1.0;
     protected double _previousVolume = 1.0;
     protected bool _isMuted;
+    protected bool _isAuthenticated;
+    protected bool _ownsSong;
+    protected bool _inCart;
+    protected bool _cartAnimating;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -45,8 +49,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef);
-            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, !_ownsSong, PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, !_ownsSong, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
         }
     }
@@ -81,6 +85,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
         try
         {
+            // Check authentication status
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+            
             // URL decode the song title
             var decodedTitle = Uri.UnescapeDataString(SongTitle);
 
@@ -121,6 +129,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 // Default placeholder if no album art found
                 _albumArtUrl = null;
             }
+
+            // Check ownership and cart status if authenticated
+            if (_isAuthenticated)
+            {
+                await LoadSongStatus();
+            }
         }
         catch (Exception ex)
         {
@@ -130,6 +144,108 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadSongStatus()
+    {
+        if (_songInfo == null) return;
+        
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SongStatusResponse>($"api/cart/status/{SafeEncodePath(_songInfo.Name)}");
+            if (response != null)
+            {
+                _ownsSong = response.Owns;
+                _inCart = response.InCart;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Not authenticated or error, ignore
+        }
+    }
+
+    protected async Task ToggleCart()
+    {
+        if (_songInfo == null) return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = 0.99m });
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CartToggleResponseDto>();
+                if (result != null)
+                {
+                    _inCart = result.InCart;
+                    
+                    if (_inCart)
+                    {
+                        // Trigger animation
+                        _cartAnimating = true;
+                        await InvokeAsync(StateHasChanged);
+                        
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(800);
+                            _cartAnimating = false;
+                            await InvokeAsync(StateHasChanged);
+                        });
+                    }
+
+                    NavMenuModel.NotifyCartUpdated();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error toggling cart: {ex.Message}");
+        }
+    }
+
+    protected bool IsProgressBarRestricted()
+    {
+        return _isAuthenticated && !_ownsSong;
+    }
+
+    protected double GetProgressBarWidth()
+    {
+        if (_duration <= 0) return 0;
+        
+        if (IsProgressBarRestricted())
+        {
+            var maxTime = Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+            return (_currentTime / maxTime) * GetPreviewLimitPercentage();
+        }
+        
+        return (_currentTime / _duration) * 100;
+    }
+
+    protected double GetPreviewLimitPercentage()
+    {
+        if (_duration <= 0) return 100;
+        return Math.Min(100, (PREVIEW_DURATION_SECONDS / _duration) * 100);
+    }
+
+    protected double GetDisplayDuration()
+    {
+        if (IsProgressBarRestricted())
+        {
+            return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+        }
+        return _duration;
+    }
+
+    private class SongStatusResponse
+    {
+        public bool Owns { get; set; }
+        public bool InCart { get; set; }
+    }
+
+    private class CartToggleResponseDto
+    {
+        public bool InCart { get; set; }
+        public int Count { get; set; }
     }
 
     private bool IsImageFile(string fileName)
