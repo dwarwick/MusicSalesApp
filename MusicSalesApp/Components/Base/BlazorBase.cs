@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using MusicSalesApp.Services;
@@ -35,4 +36,7 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IJSRuntime JS { get; set; } = default!;
+
+    [Inject]
+    protected IWebHostEnvironment Environment { get; set; } = default!;
 }

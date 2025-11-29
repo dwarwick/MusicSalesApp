@@ -2,8 +2,10 @@ using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Moq;
 using MusicSalesApp.Services;
 using System.Net;
@@ -26,6 +28,7 @@ public abstract class BUnitTestBase
     protected Mock<IMusicService> MockMusicService { get; private set; } = default!;
     protected Mock<IAzureStorageService> MockAzureStorageService { get; private set; } = default!;
     protected Mock<ICartService> MockCartService { get; private set; } = default!;
+    protected Mock<IWebHostEnvironment> MockWebHostEnvironment { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -40,6 +43,13 @@ public abstract class BUnitTestBase
         MockMusicService = new Mock<IMusicService>();
         MockAzureStorageService = new Mock<IAzureStorageService>();
         MockCartService = new Mock<ICartService>();
+        MockWebHostEnvironment = new Mock<IWebHostEnvironment>();
+
+        // Configure WebHostEnvironment mock
+        MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Development");
+        MockWebHostEnvironment.Setup(x => x.ApplicationName).Returns("MusicSalesApp");
+        MockWebHostEnvironment.Setup(x => x.ContentRootPath).Returns(Directory.GetCurrentDirectory());
+        MockWebHostEnvironment.Setup(x => x.WebRootPath).Returns(Directory.GetCurrentDirectory());
 
         // Configure AuthenticationStateProvider mock to return unauthenticated user
         var anonymousUser = new ClaimsPrincipal(new ClaimsIdentity());
@@ -73,6 +83,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IMusicService>(MockMusicService.Object);
         TestContext.Services.AddSingleton<IAzureStorageService>(MockAzureStorageService.Object);
         TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
+        TestContext.Services.AddSingleton<IWebHostEnvironment>(MockWebHostEnvironment.Object);
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
