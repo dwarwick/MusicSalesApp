@@ -170,3 +170,12 @@ export function setupCardVolumeBarDrag(volumeBarContainer, audioElement, cardId,
 export function cleanupCardPlayer(cardId) {
     cardPlayers.delete(cardId);
 }
+
+// Change the track source for album playback (used when transitioning to next track)
+export function changeTrack(audioElement, newSrc) {
+    if (audioElement) {
+        audioElement.src = newSrc;
+        audioElement.load();
+        audioElement.play().catch(err => console.warn('Play after track change failed:', err));
+    }
+}

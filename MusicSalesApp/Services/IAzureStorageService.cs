@@ -26,5 +26,6 @@ namespace MusicSalesApp.Services
         public long Length { get; set; }
         public string ContentType { get; set; } = "application/octet-stream";
         public DateTimeOffset? LastModified { get; set; }
+        public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
     }
 }
