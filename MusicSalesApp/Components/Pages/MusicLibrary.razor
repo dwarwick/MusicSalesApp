@@ -156,12 +156,16 @@
                             <!-- Progress Bar Row -->
                             <div class="card-progress-container">
                                 <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
-                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
+                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCardRestricted(cardId) ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
                                     <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
                                         <div class="card-progress-thumb"></div>
                                     </div>
+                                    @if (IsCardRestricted(cardId))
+                                    {
+                                        <div class="card-progress-limit-marker" style="left: @(GetPreviewLimitPercentage(cardId))%;"></div>
+                                    }
                                 </div>
-                                <span class="card-time-display">@FormatTime(GetCardDuration(cardId))</span>
+                                <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
                             </div>
                         </div>
                     }
@@ -327,12 +331,16 @@
                             <!-- Progress Bar Row -->
                             <div class="card-progress-container">
                                 <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
-                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
+                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCardRestricted(cardId) ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
                                     <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
                                         <div class="card-progress-thumb"></div>
                                     </div>
+                                    @if (IsCardRestricted(cardId))
+                                    {
+                                        <div class="card-progress-limit-marker" style="left: @(GetPreviewLimitPercentage(cardId))%;"></div>
+                                    }
                                 </div>
-                                <span class="card-time-display">@FormatTime(GetCardDuration(cardId))</span>
+                                <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
                             </div>
                         </div>
                     }

@@ -337,6 +337,21 @@
     opacity: 1;
 }
 
+/* Progress Bar Restriction Styles */
+.card-progress-bar-container.restricted {
+    position: relative;
+}
+
+.card-progress-limit-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 3px;
+    background-color: #ffa500;
+    border-radius: 2px;
+    z-index: 2;
+}
+
 /* Hidden audio element */
 .card-audio-hidden {
     display: none;

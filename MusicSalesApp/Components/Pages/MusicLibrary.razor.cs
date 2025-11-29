@@ -33,6 +33,8 @@ public class AlbumInfo
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
+    private const double PREVIEW_DURATION_SECONDS = 60.0;
+    
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
@@ -46,6 +48,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Track which card is currently playing
     private string _playingCardId;
     private bool _isActuallyPlaying;
+    private bool _isCurrentCardRestricted; // Track if current card has preview restriction
+    private string _playingFileName; // Track the file name of single songs being played
     
     // Card player state for the currently active card
     private double _currentTime;
@@ -97,8 +101,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/MusicLibrary.razor.js");
             }
 
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef);
-            await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
+            // Pass restriction parameters based on whether the user owns the song/album
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, _isCurrentCardRestricted, PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef, _isCurrentCardRestricted, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
             // Auto-play when card is initialized
@@ -412,6 +417,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _playingCardId = cardId;
         _isActuallyPlaying = false;
         _needsJsInit = true;
+        _playingFileName = fileName;
+        _playingAlbum = null; // This is a single song, not an album
+
+        // Determine if this card is restricted (user doesn't own the song and is authenticated)
+        _isCurrentCardRestricted = _isAuthenticated && !_ownedSongs.Contains(fileName);
 
         // Reset state for new card
         _volume = 1.0;
@@ -469,7 +479,36 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected double GetCardProgressPercentage(string cardId)
     {
         if (_playingCardId != cardId) return 0;
+        
+        // For restricted cards, calculate percentage based on preview duration
+        if (_isCurrentCardRestricted && _duration > 0)
+        {
+            var maxTime = Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+            return (_currentTime / maxTime) * GetPreviewLimitPercentage(cardId);
+        }
+        
         return _duration > 0 ? (_currentTime / _duration * 100) : 0;
+    }
+
+    protected bool IsCardRestricted(string cardId)
+    {
+        return _playingCardId == cardId && _isCurrentCardRestricted;
+    }
+
+    protected double GetPreviewLimitPercentage(string cardId)
+    {
+        if (_playingCardId != cardId || _duration <= 0) return 100;
+        return Math.Min(100, (PREVIEW_DURATION_SECONDS / _duration) * 100);
+    }
+
+    protected double GetCardDisplayDuration(string cardId)
+    {
+        if (_playingCardId != cardId) return 0;
+        if (_isCurrentCardRestricted && _duration > PREVIEW_DURATION_SECONDS)
+        {
+            return PREVIEW_DURATION_SECONDS;
+        }
+        return _duration;
     }
 
     protected double GetCardVolume(string cardId)
@@ -649,7 +688,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _isActuallyPlaying = false;
         _needsJsInit = true;
         _playingAlbum = album;
+        _playingFileName = null; // This is an album, not a single song
         _currentTrackIndex = 0;
+
+        // Determine if this card is restricted (user doesn't own the album and is authenticated)
+        _isCurrentCardRestricted = _isAuthenticated && !IsAlbumOwned(album);
 
         // Build list of track URLs for the album
         _albumTrackUrls = album.Tracks.Select(t => GetStreamUrl(t.Name)).ToList();

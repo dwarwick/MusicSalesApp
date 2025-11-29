@@ -3,13 +3,20 @@
 // Map of audio elements by cardId for tracking multiple audio players
 const cardPlayers = new Map();
 
-export function initCardAudioPlayer(audioElement, cardId, dotNetRef) {
+export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!audioElement) return;
 
-    // Store reference
-    cardPlayers.set(cardId, { audioElement, dotNetRef });
+    // Store reference with restriction info
+    cardPlayers.set(cardId, { audioElement, dotNetRef, isRestricted, maxDuration });
 
     audioElement.addEventListener('timeupdate', () => {
+        // Enforce preview limit for non-owners
+        if (isRestricted && audioElement.currentTime >= maxDuration) {
+            audioElement.pause();
+            audioElement.currentTime = maxDuration;
+            dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            return;
+        }
         dotNetRef.invokeMethodAsync('UpdateCardTime', cardId, audioElement.currentTime);
     });
 
@@ -75,10 +82,14 @@ export function getElementWidth(element) {
     return 0;
 }
 
-export function seekCardToPosition(audioElement, offsetX, progressBarWidth) {
+export function seekCardToPosition(audioElement, offsetX, progressBarWidth, isRestricted = false, maxDuration = 60) {
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
-        const newTime = audioElement.duration * percentage;
+        let newTime = audioElement.duration * percentage;
+        // Enforce max duration limit for restricted users
+        if (isRestricted && newTime > maxDuration) {
+            newTime = maxDuration;
+        }
         if (!isNaN(newTime) && isFinite(newTime)) {
             audioElement.currentTime = newTime;
         }
@@ -139,13 +150,17 @@ function setupBarDrag(barContainer, onDrag) {
 }
 
 // Setup progress bar drag functionality for card player
-export function setupCardProgressBarDrag(progressBarContainer, audioElement, cardId, dotNetRef) {
+export function setupCardProgressBarDrag(progressBarContainer, audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!progressBarContainer || !audioElement) return;
 
     setupBarDrag(progressBarContainer, (clientX) => {
         const percentage = calculatePercentage(clientX, progressBarContainer);
         if (percentage !== null) {
-            const newTime = audioElement.duration * percentage;
+            let newTime = audioElement.duration * percentage;
+            // Enforce max duration limit for restricted users
+            if (isRestricted && newTime > maxDuration) {
+                newTime = maxDuration;
+            }
             if (!isNaN(newTime) && isFinite(newTime)) {
                 audioElement.currentTime = newTime;
             }
