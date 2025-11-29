@@ -1,4 +1,5 @@
 let paypalLoaded = false;
+let currentOrderId = null;
 
 export async function initPayPal(clientId, amount, dotNetRef) {
     if (!clientId || clientId === '__REPLACE_WITH_PAYPAL_CLIENT_ID__') {
@@ -34,14 +35,21 @@ export async function initPayPal(clientId, amount, dotNetRef) {
 
         createOrder: async function (data, actions) {
             try {
+                console.log('PayPal createOrder called');
+                
                 // First, create our internal order record
                 const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
+                console.log('Internal order created:', orderId);
+                
                 if (!orderId) {
-                    throw new Error('Failed to create order');
+                    throw new Error('Failed to create internal order');
                 }
 
+                // Store the order ID for use in onApprove
+                currentOrderId = orderId;
+
                 // Create PayPal order using client-side SDK
-                return actions.order.create({
+                const paypalOrderId = await actions.order.create({
                     purchase_units: [{
                         reference_id: orderId,
                         amount: {
@@ -49,36 +57,56 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                         }
                     }]
                 });
+                
+                console.log('PayPal order created:', paypalOrderId);
+                return paypalOrderId;
             } catch (error) {
                 console.error('Error creating order:', error);
-                dotNetRef.invokeMethodAsync('OnError', error.message);
+                dotNetRef.invokeMethodAsync('OnError', error.message || error.toString());
                 throw error;
             }
         },
 
         onApprove: async function (data, actions) {
+            console.log('PayPal onApprove called, data:', data);
+            
             try {
                 // Show processing state
                 await dotNetRef.invokeMethodAsync('SetProcessing', true);
                 
                 // Capture the order on PayPal side
+                console.log('Capturing PayPal order...');
                 const details = await actions.order.capture();
+                console.log('PayPal capture details:', details);
+
+                // Use our stored internal order ID
+                const internalOrderId = currentOrderId || 
+                    (details.purchase_units && details.purchase_units[0] && details.purchase_units[0].reference_id);
+                
+                console.log('Using internal order ID:', internalOrderId);
+                
+                if (!internalOrderId) {
+                    throw new Error('Could not find internal order ID');
+                }
 
                 // Notify server of successful payment
-                await dotNetRef.invokeMethodAsync('OnApprove', details.purchase_units[0].reference_id);
+                await dotNetRef.invokeMethodAsync('OnApprove', internalOrderId);
+                console.log('Server notified of payment completion');
             } catch (error) {
-                console.error('Error capturing order:', error);
-                await dotNetRef.invokeMethodAsync('OnError', error.message);
+                console.error('Error in onApprove:', error);
+                await dotNetRef.invokeMethodAsync('OnError', error.message || error.toString());
             }
         },
 
         onCancel: function (data) {
-            console.log('Payment cancelled');
+            console.log('Payment cancelled by user');
+            currentOrderId = null;
             dotNetRef.invokeMethodAsync('OnCancel');
         },
 
         onError: function (err) {
-            console.error('PayPal error:', err);
+            console.error('PayPal button error:', err);
+            currentOrderId = null;
             dotNetRef.invokeMethodAsync('OnError', err.toString());
         }
     }).render('#paypal-button-container');
@@ -94,8 +122,14 @@ function loadPayPalScript(clientId) {
         const script = document.createElement('script');
         script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
         script.async = true;
-        script.onload = resolve;
-        script.onerror = reject;
+        script.onload = () => {
+            console.log('PayPal SDK loaded successfully');
+            resolve();
+        };
+        script.onerror = (e) => {
+            console.error('Failed to load PayPal SDK:', e);
+            reject(e);
+        };
         document.head.appendChild(script);
     });
 }

@@ -116,11 +116,20 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
         try
         {
+            Console.WriteLine("CreateOrder called from JavaScript");
             var response = await Http.PostAsync("api/cart/create-order", null);
+            Console.WriteLine($"CreateOrder response status: {response.StatusCode}");
+            
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
+                Console.WriteLine($"Created order ID: {result?.OrderId}");
                 return result?.OrderId ?? "";
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"CreateOrder error: {errorContent}");
             }
         }
         catch (Exception ex)
@@ -134,6 +143,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task SetProcessing(bool processing)
     {
+        Console.WriteLine($"SetProcessing called: {processing}");
         _checkoutInProgress = processing;
         await InvokeAsync(StateHasChanged);
     }
@@ -141,17 +151,27 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnApprove(string orderId)
     {
+        Console.WriteLine($"OnApprove called with orderId: {orderId}");
+        
         try
         {
             var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { OrderId = orderId });
+            Console.WriteLine($"capture-order response status: {response.StatusCode}");
+            
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CaptureOrderResponse>();
+                Console.WriteLine($"Purchase completed, count: {result?.PurchasedCount}");
                 _purchasedCount = result?.PurchasedCount ?? 0;
                 _checkoutComplete = true;
                 _cartItems.Clear();
                 _cartTotal = 0;
                 NavMenuModel.NotifyCartUpdated();
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"capture-order error: {errorContent}");
             }
         }
         catch (Exception ex)
@@ -168,6 +188,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnCancel()
     {
+        Console.WriteLine("OnCancel called - payment was cancelled");
         _checkoutInProgress = false;
         await InvokeAsync(StateHasChanged);
     }
@@ -175,7 +196,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnError(string error)
     {
-        Console.WriteLine($"PayPal error: {error}");
+        Console.WriteLine($"OnError called - PayPal error: {error}");
         _checkoutInProgress = false;
         await InvokeAsync(StateHasChanged);
     }
