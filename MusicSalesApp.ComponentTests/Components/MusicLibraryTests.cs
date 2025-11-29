@@ -7,6 +7,7 @@ using MusicSalesApp.Components.Pages;
 using MusicSalesApp.ComponentTests.Testing;
 using System.Net;
 using System.Net.Http;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace MusicSalesApp.ComponentTests.Components;

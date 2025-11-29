@@ -53,13 +53,32 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddControllers();
 
-// Provide HttpClient with base address configured once here.
-// Using scoped factory so each circuit gets proper NavigationManager base URI.
+// Provide HttpClient with base address and cookies configured.
+// For Blazor Server, we need to forward the authentication cookies from the HttpContext.
 builder.Services.AddScoped(sp =>
 {
     var nav = sp.GetRequiredService<NavigationManager>();
-    return new HttpClient { BaseAddress = new Uri(nav.BaseUri) };
+    var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
+    
+    var handler = new HttpClientHandler();
+    var httpClient = new HttpClient(handler) { BaseAddress = new Uri(nav.BaseUri) };
+    
+    // Forward the authentication cookie from the current request to API calls
+    var httpContext = httpContextAccessor.HttpContext;
+    if (httpContext != null)
+    {
+        var cookies = httpContext.Request.Headers["Cookie"].ToString();
+        if (!string.IsNullOrEmpty(cookies))
+        {
+            httpClient.DefaultRequestHeaders.Add("Cookie", cookies);
+        }
+    }
+    
+    return httpClient;
 });
+
+// Register factory for external HTTP calls (PayPal)
+builder.Services.AddHttpClient();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -85,6 +104,7 @@ builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // 
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<ICartService, CartService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();

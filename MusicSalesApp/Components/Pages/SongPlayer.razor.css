@@ -330,3 +330,136 @@
         align-items: flex-start;
     }
 }
+
+/* Owned Badge */
+.album-art-container {
+    position: relative;
+}
+
+.owned-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background-color: #1db954;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.owned-badge svg {
+    width: 20px;
+    height: 20px;
+    color: #fff;
+}
+
+/* Preview Label */
+.preview-label {
+    color: #ffa500;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+}
+
+/* Add to Cart Button on SongPlayer */
+.action-controls {
+    position: relative;
+}
+
+.cart-button-large {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background-color: transparent;
+    border: 2px solid #b3b3b3;
+    border-radius: 500px;
+    color: #b3b3b3;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cart-button-large:hover {
+    border-color: #fff;
+    color: #fff;
+    transform: scale(1.02);
+}
+
+.cart-button-large.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.cart-button-large.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+.cart-icon-large {
+    width: 20px;
+    height: 20px;
+}
+
+.cart-button-large.animating {
+    animation: cartPulseLarge 0.3s ease-out;
+}
+
+@keyframes cartPulseLarge {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Music Note Float Animation for Song Player */
+.music-note-float-player {
+    position: absolute;
+    right: 100px;
+    top: 0;
+    color: #1db954;
+    font-size: 28px;
+    pointer-events: none;
+    animation: musicNoteFloatPlayer 0.8s ease-out forwards;
+    z-index: 10;
+}
+
+@keyframes musicNoteFloatPlayer {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: translate(20px, -30px) rotate(20deg) scale(1.5);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(40px, -60px) rotate(40deg) scale(0.5);
+    }
+}
+
+/* Progress Bar Restriction Styles */
+.progress-bar-container.restricted {
+    position: relative;
+}
+
+.progress-limit-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 3px;
+    background-color: #ffa500;
+    border-radius: 2px;
+    z-index: 2;
+}

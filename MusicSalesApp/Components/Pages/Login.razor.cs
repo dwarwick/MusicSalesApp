@@ -6,9 +6,6 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class LoginModel : BlazorBase
 {   
-    [Inject]
-    private IWebHostEnvironment Environment { get; set; }
-
     [SupplyParameterFromQuery(Name = "error")]
     public string Error { get; set; }
 

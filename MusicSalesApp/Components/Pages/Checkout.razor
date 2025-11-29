@@ -1,0 +1,80 @@
+@page "/checkout"
+@inherits CheckoutModel
+@rendermode InteractiveServer
+
+<PageTitle>Checkout</PageTitle>
+
+<div class="checkout-container">
+    <h2>Shopping Cart</h2>
+
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <p>Loading...</p>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <div class="login-prompt">
+            <p>Please <a href="/login">log in</a> to view your cart.</p>
+        </div>
+    }
+    else if (_cartItems.Count == 0)
+    {
+        <div class="empty-cart">
+            <svg class="empty-cart-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+            <p>Your cart is empty</p>
+            <a href="/music-library" class="btn-browse">Browse Music</a>
+        </div>
+    }
+    else
+    {
+        <div class="cart-items">
+            @foreach (var item in _cartItems)
+            {
+                <div class="cart-item">
+                    <div class="item-info">
+                        <span class="item-title">@item.SongTitle</span>
+                    </div>
+                    <div class="item-price">$@item.Price.ToString("F2")</div>
+                    <button class="remove-button" @onclick="() => RemoveItem(item.SongFileName)" title="Remove">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+            }
+
+            <div class="cart-total">
+                <span class="total-label">Total:</span>
+                <span class="total-amount">$@_cartTotal.ToString("F2")</span>
+            </div>
+        </div>
+
+        <div class="checkout-actions">
+            @if (_checkoutInProgress)
+            {
+                <div class="checkout-progress">
+                    <p>Processing payment...</p>
+                </div>
+            }
+            else if (_checkoutComplete)
+            {
+                <div class="checkout-success">
+                    <svg class="success-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    <h3>Purchase Complete!</h3>
+                    <p>Thank you for your purchase. You now own @_purchasedCount song(s).</p>
+                    <a href="/music-library" class="btn-browse">Go to Music Library</a>
+                </div>
+            }
+            else
+            {
+                <div id="paypal-button-container"></div>
+            }
+        </div>
+    }
+</div>

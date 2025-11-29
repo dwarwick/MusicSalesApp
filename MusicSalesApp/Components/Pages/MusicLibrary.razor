@@ -6,6 +6,26 @@
 <div class="music-library-container">
     <h3>Music Library</h3>
 
+    <AuthorizeView>
+        <Authorized>
+            <!-- Filter Radio Buttons -->
+            <div class="music-filter-group">
+                <label class="filter-option">
+                    <input type="radio" name="musicFilter" value="all" checked="@(_filterMode == FilterMode.All)" @onchange="@(() => SetFilter(FilterMode.All))" />
+                    <span>All Music</span>
+                </label>
+                <label class="filter-option">
+                    <input type="radio" name="musicFilter" value="owned" checked="@(_filterMode == FilterMode.Owned)" @onchange="@(() => SetFilter(FilterMode.Owned))" />
+                    <span>Owned</span>
+                </label>
+                <label class="filter-option">
+                    <input type="radio" name="musicFilter" value="notowned" checked="@(_filterMode == FilterMode.NotOwned)" @onchange="@(() => SetFilter(FilterMode.NotOwned))" />
+                    <span>Not Owned</span>
+                </label>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
     @if (_loading)
     {
         <div class="loading-state">
@@ -21,11 +41,13 @@
     else
     {
         <div class="music-cards-grid">
-            @foreach (var f in _files)
+            @foreach (var f in GetFilteredFiles())
             {
                 var cardId = GetCardId(f.Name);
                 var isPlaying = IsCardPlaying(cardId);
                 var albumArtUrl = GetAlbumArtUrl(f.Name);
+                var owned = IsSongOwned(f.Name);
+                var inCart = IsSongInCart(f.Name);
 
                 <div class="music-card">
                     <!-- Album Art -->
@@ -39,6 +61,14 @@
                             <div class="card-album-art-placeholder">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
                                     <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                                </svg>
+                            </div>
+                        }
+                        @if (owned)
+                        {
+                            <div class="owned-badge">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                                 </svg>
                             </div>
                         }
@@ -146,6 +176,38 @@
                             </a>
                         </div>
                     }
+
+                    <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the song) -->
+                    <AuthorizeView>
+                        <Authorized>
+                            @if (!owned)
+                            {
+                                <button class="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")" 
+                                        @onclick="() => ToggleCartItem(f.Name)"
+                                        @onclick:stopPropagation="true"
+                                        title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                    @if (inCart)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                        </svg>
+                                        <span>Added</span>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                            <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z"/>
+                                        </svg>
+                                        <span>$0.99</span>
+                                    }
+                                </button>
+                                @if (_animatingCartButtons.Contains(f.Name))
+                                {
+                                    <div class="music-note-float">♪</div>
+                                }
+                            }
+                        </Authorized>
+                    </AuthorizeView>
                 </div>
             }
         </div>

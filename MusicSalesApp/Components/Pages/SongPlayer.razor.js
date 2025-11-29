@@ -1,7 +1,13 @@
-export function initAudioPlayer(audioElement, dotNetRef) {
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!audioElement) return;
 
     audioElement.addEventListener('timeupdate', () => {
+        // Enforce 60 second limit for non-owners
+        if (isRestricted && audioElement.currentTime >= maxDuration) {
+            audioElement.pause();
+            audioElement.currentTime = maxDuration;
+            dotNetRef.invokeMethodAsync('AudioEnded');
+        }
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
     });
 
@@ -48,10 +54,16 @@ export function seekTo(audioElement, time) {
     }
 }
 
-export function seekToPosition(audioElement, offsetX, progressBarWidth) {
+export function seekToPosition(audioElement, offsetX, progressBarWidth, isRestricted = false, maxDuration = 60) {
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
-        const newTime = audioElement.duration * percentage;
+        let newTime = audioElement.duration * percentage;
+        
+        // Enforce max duration limit for restricted users
+        if (isRestricted && newTime > maxDuration) {
+            newTime = maxDuration;
+        }
+        
         if (!isNaN(newTime) && isFinite(newTime)) {
             audioElement.currentTime = newTime;
         }
@@ -73,7 +85,7 @@ export function getDuration(audioElement) {
 }
 
 // Setup progress bar drag functionality
-export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef) {
+export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!progressBarContainer || !audioElement) return;
 
     let isDragging = false;
@@ -84,7 +96,13 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         const width = rect.width;
         if (width > 0) {
             const percentage = Math.max(0, Math.min(1, offsetX / width));
-            const newTime = audioElement.duration * percentage;
+            let newTime = audioElement.duration * percentage;
+            
+            // Enforce max duration limit for restricted users
+            if (isRestricted && newTime > maxDuration) {
+                newTime = maxDuration;
+            }
+            
             if (!isNaN(newTime) && isFinite(newTime)) {
                 audioElement.currentTime = newTime;
             }
