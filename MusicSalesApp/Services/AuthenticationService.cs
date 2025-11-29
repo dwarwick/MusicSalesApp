@@ -125,7 +125,12 @@ public class AuthenticationService : IAuthenticationService
                 if (timeSinceLastEmail.TotalMinutes < VerificationEmailCooldownMinutes)
                 {
                     var remainingSeconds = (int)(VerificationEmailCooldownMinutes * 60 - timeSinceLastEmail.TotalSeconds);
-                    return (false, $"Please wait {remainingSeconds / 60} minutes and {remainingSeconds % 60} seconds before requesting another verification email");
+                    var minutes = remainingSeconds / 60;
+                    var seconds = remainingSeconds % 60;
+                    var timeMessage = minutes > 0 
+                        ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
+                        : $"{seconds} second{(seconds != 1 ? "s" : "")}";
+                    return (false, $"Please wait {timeMessage} before requesting another verification email");
                 }
             }
 
@@ -161,7 +166,7 @@ public class AuthenticationService : IAuthenticationService
     {
         try
         {
-            if (!int.TryParse(userId, out var id))
+            if (!int.TryParse(userId, out _))
             {
                 return (false, "Invalid user ID");
             }
