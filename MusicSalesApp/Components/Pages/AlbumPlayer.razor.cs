@@ -390,13 +390,13 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
         _streamUrl = GetTrackStreamUrl(index);
         _currentTime = 0;
         _duration = 0;
+        _isPlaying = true;
 
         if (_jsModule != null)
         {
             await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl);
-            _isPlaying = true;
         }
-        
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -438,7 +438,8 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             _streamUrl = GetTrackStreamUrl(_currentTrackIndex);
             _currentTime = 0;
             _duration = 0;
-            
+            _isPlaying = true;
+
             if (_jsModule != null)
             {
                 await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl);
