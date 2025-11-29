@@ -4,6 +4,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -149,13 +150,30 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public async Task OnApprove(string orderId)
+    public async Task OnApprove(JsonElement payload)
     {
-        Console.WriteLine($"OnApprove called with orderId: {orderId}");
+        string orderId = null;
+        string payPalOrderId = null;
+
+        try
+        {
+            if (payload.ValueKind == JsonValueKind.Object)
+            {
+                if (payload.TryGetProperty("orderId", out var o)) orderId = o.GetString();
+                if (payload.TryGetProperty("payPalOrderId", out var p)) payPalOrderId = p.GetString();
+            }
+            else if (payload.ValueKind == JsonValueKind.String)
+            {
+                orderId = payload.GetString();
+            }
+        }
+        catch { }
+
+        Console.WriteLine($"OnApprove called with orderId: {orderId}, payPalOrderId: {payPalOrderId}");
         
         try
         {
-            var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { OrderId = orderId });
+            var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { OrderId = orderId, PayPalOrderId = payPalOrderId });
             Console.WriteLine($"capture-order response status: {response.StatusCode}");
             
             if (response.IsSuccessStatusCode)

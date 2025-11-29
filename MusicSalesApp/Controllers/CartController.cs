@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 
 namespace MusicSalesApp.Controllers;
 
@@ -15,17 +18,20 @@ public class CartController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CartController> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public CartController(
         ICartService cartService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
-        ILogger<CartController> logger)
+        ILogger<CartController> logger,
+        IHttpClientFactory httpClientFactory)
     {
         _cartService = cartService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     [HttpGet]
@@ -195,6 +201,8 @@ public class CartController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(request.OrderId))
             return BadRequest("Order ID is required");
+        if (string.IsNullOrWhiteSpace(request.PayPalOrderId))
+            return BadRequest("PayPal order ID is required");
 
         var order = await _cartService.GetPayPalOrderAsync(request.OrderId);
         if (order == null)
@@ -202,6 +210,14 @@ public class CartController : ControllerBase
 
         if (order.UserId != user.Id)
             return Forbid();
+
+        // Capture with PayPal first
+        var captured = await CaptureWithPayPalAsync(request.PayPalOrderId);
+        if (!captured)
+        {
+            _logger.LogWarning("PayPal capture failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}", request.PayPalOrderId, request.OrderId);
+            return BadRequest("Failed to capture PayPal order");
+        }
 
         // Get cart items before clearing
         var cartItems = await _cartService.GetCartItemsAsync(user.Id);
@@ -220,6 +236,85 @@ public class CartController : ControllerBase
 
         return Ok(new { success = true, purchasedCount = songFileNames.Count });
     }
+
+    private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
+    {
+        try
+        {
+            var token = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogError("Unable to retrieve PayPal access token.");
+                return false;
+            }
+
+            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
+
+            var response = await client.PostAsync($"v2/checkout/orders/{payPalOrderId}/capture", new StringContent("{}", Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal capture failed: {Status} {Body}", response.StatusCode, body);
+                return false;
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var status = doc.RootElement.GetProperty("status").GetString();
+            var succeeded = string.Equals(status, "COMPLETED", StringComparison.OrdinalIgnoreCase);
+            if (!succeeded)
+            {
+                _logger.LogWarning("PayPal capture returned non-completed status {Status} for order {OrderId}", status, payPalOrderId);
+            }
+            return succeeded;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error capturing PayPal order {OrderId}", payPalOrderId);
+            return false;
+        }
+    }
+
+    private async Task<string> GetPayPalAccessTokenAsync()
+    {
+        var clientId = _configuration["PayPal:ClientId"];
+        var secret = _configuration["PayPal:Secret"];
+        var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret) || clientId.Contains("REPLACE") || secret.Contains("REPLACE"))
+        {
+            _logger.LogError("PayPal ClientId/Secret not configured");
+            return string.Empty;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+
+            var authBytes = Encoding.ASCII.GetBytes($"{clientId}:{secret}");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            var content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("grant_type", "client_credentials") });
+            var response = await client.PostAsync("v1/oauth2/token", content);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal token request failed: {Status} {Body}", response.StatusCode, body);
+                return string.Empty;
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.GetProperty("access_token").GetString() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting PayPal access token");
+            return string.Empty;
+        }
+    }
 }
 
 public class AddToCartRequest
@@ -236,4 +331,5 @@ public class RemoveFromCartRequest
 public class CaptureOrderRequest
 {
     public string OrderId { get; set; }
+    public string PayPalOrderId { get; set; }
 }

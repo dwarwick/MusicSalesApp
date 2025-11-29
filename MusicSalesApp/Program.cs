@@ -77,6 +77,9 @@ builder.Services.AddScoped(sp =>
     return httpClient;
 });
 
+// Register factory for external HTTP calls (PayPal)
+builder.Services.AddHttpClient();
+
 builder.Services.AddHttpContextAccessor();
 
 // Register Antiforgery services for DI

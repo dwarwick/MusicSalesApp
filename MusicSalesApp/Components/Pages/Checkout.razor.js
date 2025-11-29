@@ -74,23 +74,21 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 // Show processing state
                 await dotNetRef.invokeMethodAsync('SetProcessing', true);
                 
-                // Capture the order on PayPal side
-                console.log('Capturing PayPal order...');
-                const details = await actions.order.capture();
-                console.log('PayPal capture details:', details);
+                // Do NOT call actions.order.capture(); this can fail if the popup is already closed
+                console.log('Skipping client-side capture; notifying server to finalize order');
 
                 // Use our stored internal order ID
-                const internalOrderId = currentOrderId || 
-                    (details.purchase_units && details.purchase_units[0] && details.purchase_units[0].reference_id);
-                
+                const internalOrderId = currentOrderId || (data && data.orderID);
+                const paypalOrderId = data && data.orderID;
                 console.log('Using internal order ID:', internalOrderId);
+                console.log('PayPal order ID:', paypalOrderId);
                 
-                if (!internalOrderId) {
-                    throw new Error('Could not find internal order ID');
+                if (!internalOrderId || !paypalOrderId) {
+                    throw new Error('Missing order identifiers');
                 }
 
-                // Notify server of successful payment
-                await dotNetRef.invokeMethodAsync('OnApprove', internalOrderId);
+                // Notify server of successful payment approval
+                await dotNetRef.invokeMethodAsync('OnApprove', { orderId: internalOrderId, payPalOrderId: paypalOrderId });
                 console.log('Server notified of payment completion');
             } catch (error) {
                 console.error('Error in onApprove:', error);
