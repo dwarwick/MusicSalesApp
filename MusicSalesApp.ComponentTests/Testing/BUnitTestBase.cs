@@ -45,6 +45,14 @@ public abstract class BUnitTestBase
             .Setup(x => x.GetAuthenticationStateAsync())
             .ReturnsAsync(authState);
 
+        // Setup default returns for IAuthenticationService methods
+        MockAuthService.Setup(x => x.SendVerificationEmailAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, string.Empty));
+        MockAuthService.Setup(x => x.CanResendVerificationEmailAsync(It.IsAny<string>()))
+            .ReturnsAsync((true, 0));
+        MockAuthService.Setup(x => x.IsEmailVerifiedAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);

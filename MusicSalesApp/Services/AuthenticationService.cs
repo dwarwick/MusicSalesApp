@@ -3,31 +3,40 @@ using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using System.Security.Claims;
+using System.Web;
 
 namespace MusicSalesApp.Services;
 
+/// <summary>
+/// Service for handling user authentication and email verification operations.
+/// </summary>
 public class AuthenticationService : IAuthenticationService
 {
     private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly RoleManager<IdentityRole<int>> _roleManager; // added role manager
+    private readonly RoleManager<IdentityRole<int>> _roleManager;
+    private readonly IEmailService _emailService;
     private readonly ILogger<AuthenticationService> _logger;
+    private const int VerificationEmailCooldownMinutes = 10;
 
     public AuthenticationService(
         AuthenticationStateProvider authenticationStateProvider,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        RoleManager<IdentityRole<int>> roleManager,        
+        RoleManager<IdentityRole<int>> roleManager,
+        IEmailService emailService,
         ILogger<AuthenticationService> logger)
     {
         _authenticationStateProvider = authenticationStateProvider;
         _userManager = userManager;
         _signInManager = signInManager;
-        _roleManager = roleManager;        
+        _roleManager = roleManager;
+        _emailService = emailService;
         _logger = logger;
     }
-    
+
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> RegisterAsync(string email, string password)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -98,6 +107,200 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> SendVerificationEmailAsync(string email, string baseUrl)
+    {
+        try
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return (false, "Email is already verified");
+            }
+
+            // Check cooldown period
+            if (user.LastVerificationEmailSent.HasValue)
+            {
+                var remainingSeconds = CalculateRemainingCooldownSeconds(user.LastVerificationEmailSent.Value);
+                if (remainingSeconds > 0)
+                {
+                    var timeMessage = FormatRemainingTime(remainingSeconds);
+                    return (false, $"Please wait {timeMessage} before requesting another verification email");
+                }
+            }
+
+            // Generate email confirmation token (expires based on Identity token provider settings)
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            
+            // URL-encode the token to handle special characters
+            var encodedToken = HttpUtility.UrlEncode(token);
+            var verificationUrl = $"{baseUrl.TrimEnd('/')}/verify-email?userId={user.Id}&token={encodedToken}";
+
+            // Send verification email
+            var emailSent = _emailService.SendEmailVerificationMessage(email, verificationUrl);
+            if (!emailSent)
+            {
+                return (false, "Failed to send verification email. Please try again later.");
+            }
+
+            // Update last verification email sent timestamp
+            user.LastVerificationEmailSent = DateTime.UtcNow;
+            await _userManager.UpdateAsync(user);
+
+            _logger.LogInformation("Verification email sent to {Email}", email);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending verification email to {Email}", email);
+            return (false, "Unexpected error sending verification email");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> VerifyEmailAsync(string userId, string token)
+    {
+        try
+        {
+            if (!int.TryParse(userId, out _))
+            {
+                return (false, "Invalid user ID");
+            }
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return (true, "Email is already verified");
+            }
+
+            // URL-decode the token
+            var decodedToken = HttpUtility.UrlDecode(token);
+            
+            var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(";", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Email verification failed for user {UserId}: {Errors}", userId, errors);
+                return (false, "Email verification failed. The link may have expired. Please request a new verification email.");
+            }
+
+            // Remove from NonValidatedUser role and add to User role
+            if (await _userManager.IsInRoleAsync(user, Roles.NonValidatedUser))
+            {
+                await _userManager.RemoveFromRoleAsync(user, Roles.NonValidatedUser);
+            }
+
+            // Ensure User role exists
+            if (!await _roleManager.RoleExistsAsync(Roles.User))
+            {
+                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.User, NormalizedName = Roles.User.ToUpper() });
+            }
+
+            if (!await _userManager.IsInRoleAsync(user, Roles.User))
+            {
+                await _userManager.AddToRoleAsync(user, Roles.User);
+            }
+
+            _logger.LogInformation("Email verified for user {UserId}", userId);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying email for user {UserId}", userId);
+            return (false, "Unexpected error verifying email");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> UpdateEmailAsync(string currentEmail, string newEmail, string baseUrl)
+    {
+        try
+        {
+            var user = await _userManager.FindByEmailAsync(currentEmail);
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return (false, "Cannot change email after verification. Please create a new account.");
+            }
+
+            // Check if new email is already taken
+            var existingUser = await _userManager.FindByEmailAsync(newEmail);
+            if (existingUser != null && existingUser.Id != user.Id)
+            {
+                return (false, "Email already registered");
+            }
+
+            // Update email and username
+            user.Email = newEmail;
+            user.NormalizedEmail = newEmail.ToUpperInvariant();
+            user.UserName = newEmail;
+            user.NormalizedUserName = newEmail.ToUpperInvariant();
+            user.LastVerificationEmailSent = null; // Reset cooldown
+            
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+            {
+                var errors = string.Join(";", updateResult.Errors.Select(e => e.Description));
+                return (false, errors);
+            }
+
+            // Send verification email to new address
+            var (emailSent, emailError) = await SendVerificationEmailAsync(newEmail, baseUrl);
+            if (!emailSent)
+            {
+                return (false, $"Email updated but failed to send verification: {emailError}");
+            }
+
+            _logger.LogInformation("Email updated from {OldEmail} to {NewEmail}", currentEmail, newEmail);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating email from {CurrentEmail} to {NewEmail}", currentEmail, newEmail);
+            return (false, "Unexpected error updating email");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool CanResend, int SecondsRemaining)> CanResendVerificationEmailAsync(string email)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        if (user == null || user.EmailConfirmed)
+        {
+            return (false, 0);
+        }
+
+        if (!user.LastVerificationEmailSent.HasValue)
+        {
+            return (true, 0);
+        }
+
+        var remainingSeconds = CalculateRemainingCooldownSeconds(user.LastVerificationEmailSent.Value);
+        return remainingSeconds > 0 ? (false, remainingSeconds) : (true, 0);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsEmailVerifiedAsync(string email)
+    {
+        var user = await _userManager.FindByEmailAsync(email);
+        return user?.EmailConfirmed ?? false;
+    }
+
+    /// <inheritdoc />
     public async Task LogoutAsync()
     {
         try
@@ -113,6 +316,20 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ClaimsPrincipal> GetCurrentUserAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsAuthenticatedAsync()
+    {
+        var user = await GetCurrentUserAsync();
+        return user?.Identity?.IsAuthenticated ?? false;
+    }
+
     private void NotifyAuthenticationStateChange()
     {
         if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
@@ -121,15 +338,29 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
-    public async Task<ClaimsPrincipal> GetCurrentUserAsync()
+    /// <summary>
+    /// Calculates the remaining seconds until the cooldown period expires.
+    /// </summary>
+    /// <param name="lastSent">The timestamp when the last verification email was sent.</param>
+    /// <returns>The number of seconds remaining, or 0 if the cooldown has expired.</returns>
+    private int CalculateRemainingCooldownSeconds(DateTime lastSent)
     {
-        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
-        return authState.User;
+        var timeSinceLastEmail = DateTime.UtcNow - lastSent;
+        var remainingSeconds = (int)(VerificationEmailCooldownMinutes * 60 - timeSinceLastEmail.TotalSeconds);
+        return remainingSeconds > 0 ? remainingSeconds : 0;
     }
 
-    public async Task<bool> IsAuthenticatedAsync()
+    /// <summary>
+    /// Formats the remaining seconds into a human-readable time string.
+    /// </summary>
+    /// <param name="remainingSeconds">The number of seconds remaining.</param>
+    /// <returns>A formatted time string like "5 minutes and 30 seconds" or "45 seconds".</returns>
+    private static string FormatRemainingTime(int remainingSeconds)
     {
-        var user = await GetCurrentUserAsync();
-        return user?.Identity?.IsAuthenticated ?? false;
+        var minutes = remainingSeconds / 60;
+        var seconds = remainingSeconds % 60;
+        return minutes > 0 
+            ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
+            : $"{seconds} second{(seconds != 1 ? "s" : "")}";
     }
 }

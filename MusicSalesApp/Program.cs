@@ -31,9 +31,17 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
     options.Password.RequireUppercase = true;
     options.Password.RequireNonAlphanumeric = true;
     options.Password.RequiredLength = 8;
+    // Token expiration settings
+    options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
+
+// Configure email confirmation token lifespan to 10 minutes
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromMinutes(10);
+});
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -76,6 +84,7 @@ builder.Services.AddScoped<ServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
 builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
@@ -131,7 +140,7 @@ app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery)
 {
     var tokens = antiforgery.GetAndStoreTokens(context);
 
-    // Use the framework’s own field name instead of hard-coding
+    // Use the frameworkï¿½s own field name instead of hard-coding
     return Results.Json(new
     {
         token = tokens.RequestToken,
