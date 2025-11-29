@@ -16,6 +16,7 @@ public class AuthenticationServiceTests
     private Mock<SignInManager<ApplicationUser>> _mockSignInManager;
     private Mock<ILogger<AuthenticationService>> _mockLogger;
     private Mock<IHttpContextAccessor> _mockHttpContextAccessor;
+    private Mock<IEmailService> _mockEmailService;
     private ServerAuthenticationStateProvider _serverAuthStateProvider;
     private AuthenticationService _service;
     private Mock<RoleManager<IdentityRole<int>>> _mockRoleManager;
@@ -27,6 +28,7 @@ public class AuthenticationServiceTests
     {
         _mockLogger = new Mock<ILogger<AuthenticationService>>();
         _mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
+        _mockEmailService = new Mock<IEmailService>();
 
         var userStore = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
@@ -53,6 +55,7 @@ public class AuthenticationServiceTests
             _mockUserManager.Object,
             _mockSignInManager.Object,
             _mockRoleManager.Object,
+            _mockEmailService.Object,
             _mockLogger.Object);
     }
 
@@ -109,6 +112,47 @@ public class AuthenticationServiceTests
 
         // Act
         var result = await _service.IsAuthenticatedAsync();
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsEmailVerifiedAsync_WhenUserNotFound_ReturnsFalse()
+    {
+        // Arrange
+        _mockUserManager.Setup(um => um.FindByEmailAsync(It.IsAny<string>())).ReturnsAsync((ApplicationUser)null);
+
+        // Act
+        var result = await _service.IsEmailVerifiedAsync("test@example.com");
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsEmailVerifiedAsync_WhenUserEmailNotConfirmed_ReturnsFalse()
+    {
+        // Arrange
+        var user = new ApplicationUser { Email = "test@example.com", EmailConfirmed = false };
+        _mockUserManager.Setup(um => um.FindByEmailAsync("test@example.com")).ReturnsAsync(user);
+
+        // Act
+        var result = await _service.IsEmailVerifiedAsync("test@example.com");
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsEmailVerifiedAsync_WhenUserEmailConfirmed_ReturnsTrue()
+    {
+        // Arrange
+        var user = new ApplicationUser { Email = "test@example.com", EmailConfirmed = true };
+        _mockUserManager.Setup(um => um.FindByEmailAsync("test@example.com")).ReturnsAsync(user);
+
+        // Act
+        var result = await _service.IsEmailVerifiedAsync("test@example.com");
 
         // Assert
         Assert.That(result, Is.True);

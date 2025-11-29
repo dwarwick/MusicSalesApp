@@ -4,5 +4,6 @@ namespace MusicSalesApp.Models;
 
 public class ApplicationUser : IdentityUser<int>
 {
-    // Additional properties can be added here as needed
+    // Track when the last verification email was sent
+    public DateTime? LastVerificationEmailSent { get; set; }
 }
