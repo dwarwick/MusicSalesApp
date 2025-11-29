@@ -9,10 +9,10 @@ namespace MusicSalesApp.Components.Layout;
 public partial class NavMenuModel : ComponentBase, IDisposable
 {
     [Inject]
-    private AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+    protected AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
 
     [Inject]
-    private IServiceScopeFactory ScopeFactory { get; set; }
+    protected IServiceScopeFactory ScopeFactory { get; set; } = default!;
 
     protected int _cartCount = 0;
 

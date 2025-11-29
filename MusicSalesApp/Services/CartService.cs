@@ -114,12 +114,17 @@ public class CartService : ICartService
 
     public async Task AddOwnedSongsAsync(int userId, IEnumerable<string> songFileNames, string payPalOrderId)
     {
-        foreach (var songFileName in songFileNames)
-        {
-            var alreadyOwned = await _context.OwnedSongs
-                .AnyAsync(o => o.UserId == userId && o.SongFileName == songFileName);
+        var songFileNamesList = songFileNames.ToList();
+        
+        // Fetch all existing owned songs for the user in a single query to avoid N+1
+        var existingOwnedSongs = await _context.OwnedSongs
+            .Where(o => o.UserId == userId && songFileNamesList.Contains(o.SongFileName))
+            .Select(o => o.SongFileName)
+            .ToHashSetAsync();
 
-            if (!alreadyOwned)
+        foreach (var songFileName in songFileNamesList)
+        {
+            if (!existingOwnedSongs.Contains(songFileName))
             {
                 var ownedSong = new OwnedSong
                 {
@@ -135,7 +140,7 @@ public class CartService : ICartService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Added {Count} songs to owned songs for user {UserId}", songFileNames.Count(), userId);
+        _logger.LogInformation("Added {Count} songs to owned songs for user {UserId}", songFileNamesList.Count, userId);
     }
 
     public async Task<PayPalOrder> CreatePayPalOrderAsync(int userId, string orderId, decimal totalAmount)
