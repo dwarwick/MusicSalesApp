@@ -45,6 +45,11 @@ namespace MusicSalesApp.Services
 
         public async Task UploadAsync(string fileName, Stream data, string contentType)
         {
+            await UploadAsync(fileName, data, contentType, null);
+        }
+
+        public async Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> metadata)
+        {
             if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
             if (data == null) throw new ArgumentNullException(nameof(data));
             try
@@ -52,7 +57,12 @@ namespace MusicSalesApp.Services
                 var blobClient = _containerClient.GetBlobClient(fileName);
                 var headers = new BlobHttpHeaders { ContentType = contentType };
                 data.Position = 0;
-                await blobClient.UploadAsync(data, new BlobUploadOptions { HttpHeaders = headers });
+                var uploadOptions = new BlobUploadOptions { HttpHeaders = headers };
+                if (metadata != null && metadata.Count > 0)
+                {
+                    uploadOptions.Metadata = metadata;
+                }
+                await blobClient.UploadAsync(data, uploadOptions);
                 _logger.LogInformation("Uploaded blob {FileName} ({Length} bytes).", fileName, data.Length);
             }
             catch (RequestFailedException ex)

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Services;
+using System.Collections.Generic;
 using System.Text;
 
 namespace MusicSalesApp.Tests.Services;
@@ -383,7 +384,7 @@ public class MusicUploadServiceTests
         _mockMusicService.Setup(s => s.IsValidAudioFileAsync(It.IsAny<Stream>(), audioFileName))
             .ReturnsAsync(true);
         _mockMusicService.Setup(s => s.IsMp3File(audioFileName)).Returns(true);
-        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -395,11 +396,56 @@ public class MusicUploadServiceTests
         _mockStorageService.Verify(s => s.UploadAsync(
             "Lipstick and Leather/Lipstick and Leather.mp3", 
             It.IsAny<Stream>(), 
-            "audio/mpeg"), Times.Once);
+            "audio/mpeg",
+            It.IsAny<IDictionary<string, string>>()), Times.Once);
         _mockStorageService.Verify(s => s.UploadAsync(
             "Lipstick and Leather/Lipstick and Leather.jpeg", 
             It.IsAny<Stream>(), 
-            "image/jpeg"), Times.Once);
+            "image/jpeg",
+            It.IsAny<IDictionary<string, string>>()), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadMusicWithAlbumArtAsync_WithAlbumName_SetsMetadata()
+    {
+        // Arrange
+        var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("audio content"));
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var audioFileName = "Song.mp3";
+        var albumArtFileName = "Song.jpeg";
+        var albumName = "My Test Album";
+
+        _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
+        _mockMusicService.Setup(s => s.IsValidAudioFileAsync(It.IsAny<Stream>(), audioFileName))
+            .ReturnsAsync(true);
+        _mockMusicService.Setup(s => s.IsMp3File(audioFileName)).Returns(true);
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UploadMusicWithAlbumArtAsync(
+            audioStream, audioFileName, albumArtStream, albumArtFileName, albumName);
+
+        // Assert
+        Assert.That(result, Is.EqualTo("Song"));
+        
+        // Verify audio file upload has AlbumName metadata
+        _mockStorageService.Verify(s => s.UploadAsync(
+            "Song/Song.mp3", 
+            It.IsAny<Stream>(), 
+            "audio/mpeg",
+            It.Is<IDictionary<string, string>>(m => 
+                m != null && m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album")), Times.Once);
+        
+        // Verify album art upload has AlbumName and IsAlbumCover=false metadata
+        _mockStorageService.Verify(s => s.UploadAsync(
+            "Song/Song.jpeg", 
+            It.IsAny<Stream>(), 
+            "image/jpeg",
+            It.Is<IDictionary<string, string>>(m => 
+                m != null && 
+                m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album" &&
+                m.ContainsKey("IsAlbumCover") && m["IsAlbumCover"] == "false")), Times.Once);
     }
 
     [Test]
@@ -475,6 +521,124 @@ public class MusicUploadServiceTests
         Assert.ThrowsAsync<ArgumentException>(async () =>
             await _service.UploadMusicWithAlbumArtAsync(
                 audioStream, audioFileName, albumArtStream, albumArtFileName));
+    }
+
+    #endregion
+
+    #region UploadAlbumCoverAsync Tests
+
+    [Test]
+    public async Task UploadAlbumCoverAsync_ValidAlbumCover_UploadsWithCorrectMetadata()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = "cover.jpeg";
+        var albumName = "My Test Album";
+
+        _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName);
+
+        // Assert
+        Assert.That(result, Is.EqualTo("My Test Album/cover_cover.jpeg"));
+        _mockStorageService.Verify(s => s.UploadAsync(
+            "My Test Album/cover_cover.jpeg",
+            It.IsAny<Stream>(),
+            "image/jpeg",
+            It.Is<IDictionary<string, string>>(m =>
+                m != null &&
+                m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album" &&
+                m.ContainsKey("IsAlbumCover") && m["IsAlbumCover"] == "true")), Times.Once);
+    }
+
+    [Test]
+    public void UploadAlbumCoverAsync_NullStream_ThrowsException()
+    {
+        // Arrange
+        Stream albumArtStream = null;
+        var albumArtFileName = "cover.jpeg";
+        var albumName = "My Test Album";
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName));
+    }
+
+    [Test]
+    public void UploadAlbumCoverAsync_EmptyFileName_ThrowsException()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = string.Empty;
+        var albumName = "My Test Album";
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName));
+    }
+
+    [Test]
+    public void UploadAlbumCoverAsync_EmptyAlbumName_ThrowsException()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = "cover.jpeg";
+        var albumName = string.Empty;
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName));
+    }
+
+    [Test]
+    public void UploadAlbumCoverAsync_InvalidFileExtension_ThrowsException()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = "cover.png";
+        var albumName = "My Test Album";
+
+        // Act & Assert
+        Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName));
+    }
+
+    #endregion
+
+    #region ValidateAllFilePairings RequireAudioFile Tests
+
+    [Test]
+    public void ValidateAllFilePairings_RequireAudioFileFalse_OnlyAlbumArtValid()
+    {
+        // Arrange
+        var fileNames = new List<string>
+        {
+            "cover.jpeg"
+        };
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames, requireAudioFile: false);
+
+        // Assert
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.UnmatchedMp3Files, Is.Empty);
+        Assert.That(result.UnmatchedAlbumArtFiles, Is.Empty);
+    }
+
+    [Test]
+    public void ValidateAllFilePairings_RequireAudioFileFalse_NoFilesInvalid()
+    {
+        // Arrange
+        var fileNames = new List<string>();
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames, requireAudioFile: false);
+
+        // Assert
+        Assert.That(result.IsValid, Is.False);
     }
 
     #endregion
