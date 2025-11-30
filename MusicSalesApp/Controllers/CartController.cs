@@ -52,6 +52,7 @@ public class CartController : ControllerBase
                 price = i.Price,
                 addedAt = i.AddedAt
             }),
+            albums = Array.Empty<object>(), // Albums are stored as individual tracks
             total
         });
     }
@@ -122,6 +123,57 @@ public class CartController : ControllerBase
         else
         {
             await _cartService.AddToCartAsync(user.Id, request.SongFileName, request.Price);
+        }
+
+        var count = await _cartService.GetCartItemCountAsync(user.Id);
+
+        return Ok(new { inCart = !inCart, count });
+    }
+
+    [HttpPost("toggle-album")]
+    public async Task<IActionResult> ToggleAlbumCart([FromBody] ToggleAlbumRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request.AlbumName))
+            return BadRequest("Album name is required");
+
+        if (request.TrackFileNames == null || !request.TrackFileNames.Any())
+            return BadRequest("Track file names are required");
+
+        // Check if user already owns all tracks in the album
+        var ownedSongs = await _cartService.GetOwnedSongsAsync(user.Id);
+        var ownedSet = new HashSet<string>(ownedSongs);
+        var ownsAll = request.TrackFileNames.All(t => ownedSet.Contains(t));
+        if (ownsAll)
+            return BadRequest("You already own this album");
+
+        // Check if album is currently in cart (all tracks are in cart)
+        var cartItems = await _cartService.GetCartItemsAsync(user.Id);
+        var cartItemSet = new HashSet<string>(cartItems.Select(c => c.SongFileName));
+        var inCart = request.TrackFileNames.All(t => cartItemSet.Contains(t));
+
+        if (inCart)
+        {
+            // Remove all album tracks from cart
+            foreach (var trackFileName in request.TrackFileNames)
+            {
+                await _cartService.RemoveFromCartAsync(user.Id, trackFileName);
+            }
+        }
+        else
+        {
+            // Add all album tracks to cart (skip tracks that are already owned)
+            var trackCount = request.TrackFileNames.Count();
+            var pricePerTrack = trackCount > 0 ? request.Price / trackCount : 0m;
+            foreach (var trackFileName in request.TrackFileNames)
+            {
+                if (!ownedSet.Contains(trackFileName) && !cartItemSet.Contains(trackFileName))
+                {
+                    await _cartService.AddToCartAsync(user.Id, trackFileName, pricePerTrack);
+                }
+            }
         }
 
         var count = await _cartService.GetCartItemCountAsync(user.Id);
@@ -326,6 +378,13 @@ public class AddToCartRequest
 public class RemoveFromCartRequest
 {
     public string SongFileName { get; set; }
+}
+
+public class ToggleAlbumRequest
+{
+    public string AlbumName { get; set; }
+    public IEnumerable<string> TrackFileNames { get; set; }
+    public decimal Price { get; set; } = 9.99m;
 }
 
 public class CaptureOrderRequest

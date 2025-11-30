@@ -6,6 +6,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Services;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -16,19 +17,39 @@ public enum FilterMode
     NotOwned
 }
 
+/// <summary>
+/// Represents an album with its cover art and tracks.
+/// </summary>
+public class AlbumInfo
+{
+    public const decimal DEFAULT_ALBUM_PRICE = 9.99m;
+    
+    public string AlbumName { get; set; }
+    public string CoverArtUrl { get; set; }
+    public string CoverArtFileName { get; set; }
+    public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
+    public decimal Price { get; set; } = DEFAULT_ALBUM_PRICE;
+}
+
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
+    private const double PREVIEW_DURATION_SECONDS = 60.0;
+    
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
+    protected List<AlbumInfo> _albums = new List<AlbumInfo>();
     protected FilterMode _filterMode = FilterMode.All;
     protected HashSet<string> _ownedSongs = new HashSet<string>();
     protected HashSet<string> _cartSongs = new HashSet<string>();
+    protected HashSet<string> _cartAlbums = new HashSet<string>();
     protected HashSet<string> _animatingCartButtons = new HashSet<string>();
 
     // Track which card is currently playing
     private string _playingCardId;
     private bool _isActuallyPlaying;
+    private bool _isCurrentCardRestricted; // Track if current card has preview restriction
+    private string _playingFileName; // Track the file name of single songs being played
     
     // Card player state for the currently active card
     private double _currentTime;
@@ -36,6 +57,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private double _volume = 1.0;
     private bool _isMuted;
     private double _previousVolume = 1.0;
+
+    // Album playback state
+    private AlbumInfo _playingAlbum;
+    private int _currentTrackIndex;
+    private List<string> _albumTrackUrls = new List<string>();
 
     // Single set of element references for the active card
     protected ElementReference _activeAudioElement;
@@ -75,8 +101,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/MusicLibrary.razor.js");
             }
 
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef);
-            await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
+            // Pass restriction parameters based on whether the user owns the song/album
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, _isCurrentCardRestricted, PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef, _isCurrentCardRestricted, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
             // Auto-play when card is initialized
@@ -112,12 +139,61 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var result = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
             var allFiles = result?.ToList() ?? new List<StorageFileInfo>();
             
-            // Filter audio files
-            _files = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
+            // Get all audio files
+            var audioFiles = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
+            
+            // Get all image files
+            var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
 
-            // Pre-compute image file lookup for faster album art matching
-            var imageFilesLookup = allFiles
-                .Where(f => IsImageFile(f.Name))
+            // Find album covers (images with IsAlbumCover=true metadata)
+            var albumCovers = imageFiles
+                .Where(f => f.Metadata != null && 
+                            f.Metadata.TryGetValue(MetadataNames.IsAlbumCover, out var isAlbumCover) && 
+                            string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Build albums from album covers
+            _albums.Clear();
+            var tracksInAlbums = new HashSet<string>();
+            
+            foreach (var cover in albumCovers)
+            {
+                if (cover.Metadata.TryGetValue(MetadataNames.AlbumName, out var albumName) && !string.IsNullOrWhiteSpace(albumName))
+                {
+                    // Find all tracks with the same album name
+                    var albumTracks = audioFiles
+                        .Where(f => f.Metadata != null && 
+                                    f.Metadata.TryGetValue(MetadataNames.AlbumName, out var trackAlbum) && 
+                                    string.Equals(trackAlbum, albumName, StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(f => Path.GetFileName(f.Name))
+                        .ToList();
+
+                    if (albumTracks.Any())
+                    {
+                        var album = new AlbumInfo
+                        {
+                            AlbumName = albumName,
+                            CoverArtUrl = $"api/music/{SafeEncodePath(cover.Name)}",
+                            CoverArtFileName = cover.Name,
+                            Tracks = albumTracks,
+                            Price = AlbumInfo.DEFAULT_ALBUM_PRICE
+                        };
+                        _albums.Add(album);
+
+                        // Mark these tracks as being part of an album
+                        foreach (var track in albumTracks)
+                        {
+                            tracksInAlbums.Add(track.Name);
+                        }
+                    }
+                }
+            }
+
+            // Filter audio files to only include standalone tracks (not part of any album)
+            _files = audioFiles.Where(f => !tracksInAlbums.Contains(f.Name)).ToList();
+
+            // Pre-compute image file lookup for faster album art matching (for standalone tracks)
+            var imageFilesLookup = imageFiles
                 .Select(f => new
                 {
                     File = f,
@@ -126,7 +202,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 })
                 .ToLookup(x => (x.BaseName, x.Folder));
 
-            // Build album art URL map using pre-computed lookup
+            // Build album art URL map using pre-computed lookup for standalone tracks
             foreach (var audioFile in _files)
             {
                 var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
@@ -162,6 +238,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             if (cartResponse?.Items != null)
             {
                 _cartSongs = new HashSet<string>(cartResponse.Items.Select(i => i.SongFileName));
+            }
+            if (cartResponse?.Albums != null)
+            {
+                _cartAlbums = new HashSet<string>(cartResponse.Albums.Select(a => a.AlbumName));
             }
         }
         catch (HttpRequestException)
@@ -239,6 +319,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private class CartResponseDto
     {
         public IEnumerable<CartItemDto> Items { get; set; }
+        public IEnumerable<CartAlbumDto> Albums { get; set; }
         public decimal Total { get; set; }
     }
 
@@ -247,6 +328,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         public string SongFileName { get; set; }
         public string SongTitle { get; set; }
         public decimal Price { get; set; }
+    }
+
+    private class CartAlbumDto
+    {
+        public string AlbumName { get; set; }
+        public decimal Price { get; set; }
+        public IEnumerable<string> TrackFileNames { get; set; }
     }
 
     private class CartToggleResponse
@@ -329,6 +417,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _playingCardId = cardId;
         _isActuallyPlaying = false;
         _needsJsInit = true;
+        _playingFileName = fileName;
+        _playingAlbum = null; // This is a single song, not an album
+
+        // Determine if this card is restricted (user doesn't own the song and is authenticated)
+        _isCurrentCardRestricted = _isAuthenticated && !_ownedSongs.Contains(fileName);
 
         // Reset state for new card
         _volume = 1.0;
@@ -386,7 +479,36 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected double GetCardProgressPercentage(string cardId)
     {
         if (_playingCardId != cardId) return 0;
+        
+        // For restricted cards, calculate percentage based on preview duration
+        if (_isCurrentCardRestricted && _duration > 0)
+        {
+            var maxTime = Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+            return (_currentTime / maxTime) * GetPreviewLimitPercentage(cardId);
+        }
+        
         return _duration > 0 ? (_currentTime / _duration * 100) : 0;
+    }
+
+    protected bool IsCardRestricted(string cardId)
+    {
+        return _playingCardId == cardId && _isCurrentCardRestricted;
+    }
+
+    protected double GetPreviewLimitPercentage(string cardId)
+    {
+        if (_playingCardId != cardId || _duration <= 0) return 100;
+        return Math.Min(100, (PREVIEW_DURATION_SECONDS / _duration) * 100);
+    }
+
+    protected double GetCardDisplayDuration(string cardId)
+    {
+        if (_playingCardId != cardId) return 0;
+        if (_isCurrentCardRestricted && _duration > PREVIEW_DURATION_SECONDS)
+        {
+            return PREVIEW_DURATION_SECONDS;
+        }
+        return _duration;
     }
 
     protected double GetCardVolume(string cardId)
@@ -512,8 +634,167 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         if (_playingCardId == cardId)
         {
+            // Check if this is an album playing and we need to play the next track
+            if (_playingAlbum != null && _currentTrackIndex < _albumTrackUrls.Count - 1)
+            {
+                _currentTrackIndex++;
+                // Will need to trigger next track play via JS
+                InvokeAsync(async () =>
+                {
+                    await PlayNextAlbumTrack();
+                });
+                return;
+            }
+            
             _isActuallyPlaying = false;
+            _playingAlbum = null;
+            _currentTrackIndex = 0;
             InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Album-specific methods
+    protected IEnumerable<AlbumInfo> GetFilteredAlbums()
+    {
+        return _filterMode switch
+        {
+            FilterMode.Owned => _albums.Where(a => IsAlbumOwned(a)),
+            FilterMode.NotOwned => _albums.Where(a => !IsAlbumOwned(a)),
+            _ => _albums
+        };
+    }
+
+    protected string GetAlbumCardId(AlbumInfo album)
+    {
+        // Create a stable card ID from the album name prefixed with "album:"
+        return "album_" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(album.AlbumName)).Replace("+", "-").Replace("/", "_");
+    }
+
+    protected bool IsAlbumOwned(AlbumInfo album)
+    {
+        // An album is owned if all of its tracks are owned
+        return album.Tracks.All(t => _ownedSongs.Contains(t.Name));
+    }
+
+    protected bool IsAlbumInCart(AlbumInfo album)
+    {
+        return _cartAlbums.Contains(album.AlbumName);
+    }
+
+    protected async Task PlayAlbum(AlbumInfo album)
+    {
+        var cardId = GetAlbumCardId(album);
+        _playingCardId = cardId;
+        _isActuallyPlaying = false;
+        _needsJsInit = true;
+        _playingAlbum = album;
+        _playingFileName = null; // This is an album, not a single song
+        _currentTrackIndex = 0;
+
+        // Determine if this card is restricted (user doesn't own the album and is authenticated)
+        _isCurrentCardRestricted = _isAuthenticated && !IsAlbumOwned(album);
+
+        // Build list of track URLs for the album
+        _albumTrackUrls = album.Tracks.Select(t => GetStreamUrl(t.Name)).ToList();
+
+        // Reset state for new card
+        _volume = 1.0;
+        _previousVolume = 1.0;
+        _isMuted = false;
+        _currentTime = 0;
+        _duration = 0;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected string GetCurrentAlbumTrackUrl()
+    {
+        if (_playingAlbum == null || _currentTrackIndex >= _albumTrackUrls.Count)
+            return string.Empty;
+        return _albumTrackUrls[_currentTrackIndex];
+    }
+
+    protected string GetCurrentAlbumTrackName()
+    {
+        if (_playingAlbum == null || _currentTrackIndex >= _playingAlbum.Tracks.Count)
+            return string.Empty;
+        return GetDisplayTitle(_playingAlbum.Tracks[_currentTrackIndex].Name);
+    }
+
+    private async Task PlayNextAlbumTrack()
+    {
+        if (_jsModule != null && _playingAlbum != null && _currentTrackIndex < _albumTrackUrls.Count)
+        {
+            _currentTime = 0;
+            _duration = 0;
+            await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex]);
+            _isActuallyPlaying = true; // Ensure play state is updated when track changes
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected string GetAlbumPlayerUrl(AlbumInfo album)
+    {
+        return $"/album/{Uri.EscapeDataString(album.AlbumName)}";
+    }
+
+    protected async Task ToggleAlbumCartItem(AlbumInfo album)
+    {
+        try
+        {
+            // Get all track file names in the album
+            var trackFileNames = album.Tracks.Select(t => t.Name).ToList();
+            
+            var response = await Http.PostAsJsonAsync("api/cart/toggle-album", new 
+            { 
+                AlbumName = album.AlbumName,
+                TrackFileNames = trackFileNames,
+                Price = album.Price
+            });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
+                if (result != null)
+                {
+                    if (result.InCart)
+                    {
+                        _cartAlbums.Add(album.AlbumName);
+                        // Also add individual tracks to cart tracking
+                        foreach (var track in album.Tracks)
+                        {
+                            _cartSongs.Add(track.Name);
+                        }
+                        // Trigger animation
+                        _animatingCartButtons.Add(album.AlbumName);
+                        await InvokeAsync(StateHasChanged);
+                        
+                        // Remove animation class after animation completes
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(800);
+                            _animatingCartButtons.Remove(album.AlbumName);
+                            await InvokeAsync(StateHasChanged);
+                        });
+                    }
+                    else
+                    {
+                        _cartAlbums.Remove(album.AlbumName);
+                        // Also remove individual tracks from cart tracking
+                        foreach (var track in album.Tracks)
+                        {
+                            _cartSongs.Remove(track.Name);
+                        }
+                    }
+                    
+                    // Notify the NavMenu to update the cart count
+                    NavMenuModel.NotifyCartUpdated();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error toggling album cart: {ex.Message}");
         }
     }
 }
