@@ -1,9 +1,9 @@
 namespace MusicSalesApp.Common.Helpers;
 
 /// <summary>
-/// Contains constant strings for blob metadata names used throughout the application.
+/// Contains constant strings for blob index tag names used throughout the application.
 /// </summary>
-public static class MetadataNames
+public static class IndexTagNames
 {
     /// <summary>
     /// The name of the album that this file belongs to.

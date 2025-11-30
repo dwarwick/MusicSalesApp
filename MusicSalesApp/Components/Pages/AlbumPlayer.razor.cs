@@ -105,10 +105,10 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             // Find album cover (image with IsAlbumCover=true and matching AlbumName)
             var albumCover = allFiles.FirstOrDefault(f =>
                 IsImageFile(f.Name) &&
-                f.Metadata != null &&
-                f.Metadata.TryGetValue(MetadataNames.IsAlbumCover, out var isAlbumCover) &&
+                f.Tags != null &&
+                f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) &&
                 string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase) &&
-                f.Metadata.TryGetValue(MetadataNames.AlbumName, out var albumName) &&
+                f.Tags.TryGetValue(IndexTagNames.AlbumName, out var albumName) &&
                 string.Equals(albumName, decodedAlbumName, StringComparison.OrdinalIgnoreCase));
 
             if (albumCover == null)
@@ -121,8 +121,8 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             // Find all tracks with the same album name
             var tracks = allFiles
                 .Where(f => IsAudioFile(f.Name) &&
-                            f.Metadata != null &&
-                            f.Metadata.TryGetValue(MetadataNames.AlbumName, out var trackAlbum) &&
+                            f.Tags != null &&
+                            f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) &&
                             string.Equals(trackAlbum, decodedAlbumName, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => Path.GetFileName(f.Name))
                 .ToList();

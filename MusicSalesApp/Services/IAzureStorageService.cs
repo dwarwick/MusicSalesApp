@@ -7,7 +7,7 @@ namespace MusicSalesApp.Services
     public interface IAzureStorageService
     {
         Task UploadAsync(string fileName, Stream data, string contentType);
-        Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> metadata);
+        Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> tags);
         Task<Stream> DownloadAsync(string fileName); // full download (legacy)
         Task<bool> DeleteAsync(string fileName);
         Task<bool> ExistsAsync(string fileName);
@@ -26,6 +26,9 @@ namespace MusicSalesApp.Services
         public long Length { get; set; }
         public string ContentType { get; set; } = "application/octet-stream";
         public DateTimeOffset? LastModified { get; set; }
-        public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+        /// <summary>
+        /// The blob index tags associated with this file.
+        /// </summary>
+        public IDictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
     }
 }
