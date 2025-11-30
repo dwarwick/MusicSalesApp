@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services
 {
@@ -199,7 +200,7 @@ namespace MusicSalesApp.Services
             {
                 audioMetadata = new Dictionary<string, string>
                 {
-                    { "AlbumName", albumName }
+                    { MetadataNames.AlbumName, albumName }
                 };
             }
 
@@ -209,8 +210,8 @@ namespace MusicSalesApp.Services
             {
                 albumArtMetadata = new Dictionary<string, string>
                 {
-                    { "AlbumName", albumName },
-                    { "IsAlbumCover", "false" }
+                    { MetadataNames.AlbumName, albumName },
+                    { MetadataNames.IsAlbumCover, "false" }
                 };
             }
 
@@ -279,8 +280,8 @@ namespace MusicSalesApp.Services
             // Build metadata for album cover
             var metadata = new Dictionary<string, string>
             {
-                { "AlbumName", albumName },
-                { "IsAlbumCover", "true" }
+                { MetadataNames.AlbumName, albumName },
+                { MetadataNames.IsAlbumCover, "true" }
             };
 
             // Upload album cover

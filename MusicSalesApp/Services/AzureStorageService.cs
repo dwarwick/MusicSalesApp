@@ -135,14 +135,15 @@ namespace MusicSalesApp.Services
             var list = new List<StorageFileInfo>();
             try
             {
-                await foreach (var blobItem in _containerClient.GetBlobsAsync())
+                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Metadata))
                 {
                     list.Add(new StorageFileInfo
                     {
                         Name = blobItem.Name,
                         Length = blobItem.Properties.ContentLength ?? 0,
                         ContentType = blobItem.Properties.ContentType ?? "application/octet-stream",
-                        LastModified = blobItem.Properties.LastModified
+                        LastModified = blobItem.Properties.LastModified,
+                        Metadata = blobItem.Metadata != null ? new Dictionary<string, string>(blobItem.Metadata) : new Dictionary<string, string>()
                     });
                 }
             }
@@ -167,7 +168,8 @@ namespace MusicSalesApp.Services
                     Name = fileName,
                     Length = props.Value.ContentLength,
                     ContentType = props.Value.ContentType ?? "application/octet-stream",
-                    LastModified = props.Value.LastModified
+                    LastModified = props.Value.LastModified,
+                    Metadata = props.Value.Metadata != null ? new Dictionary<string, string>(props.Value.Metadata) : new Dictionary<string, string>()
                 };
             }
             catch (RequestFailedException ex)
