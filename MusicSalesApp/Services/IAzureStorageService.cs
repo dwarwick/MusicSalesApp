@@ -18,6 +18,10 @@ namespace MusicSalesApp.Services
         Task<Stream> DownloadSegmentAsync(string fileName, long start, long end); // slice via seek
         Task<Stream> DownloadRangeDirectAsync(string fileName, long start, long end); // direct range fetch via SDK
         Task EnsureContainerExistsAsync(); // ensure container exists
+
+        Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName);
+
+        Uri GetReadSasUri(string fileName, TimeSpan lifetime);
     }
 
     public class StorageFileInfo

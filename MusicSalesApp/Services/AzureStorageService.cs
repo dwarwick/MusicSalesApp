@@ -1,7 +1,7 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using FFMpegCore;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
@@ -56,10 +56,13 @@ namespace MusicSalesApp.Services
             {
                 var blobClient = _containerClient.GetBlobClient(fileName);
                 var headers = new BlobHttpHeaders { ContentType = contentType };
-                data.Position = 0;
+                if (data.CanSeek)
+                {
+                    data.Position = 0;
+                }
                 var uploadOptions = new BlobUploadOptions { HttpHeaders = headers };
                 await blobClient.UploadAsync(data, uploadOptions);
-                
+
                 // Set index tags after upload if provided
                 if (tags != null && tags.Count > 0)
                 {
@@ -106,7 +109,8 @@ namespace MusicSalesApp.Services
             {
                 var blobClient = _containerClient.GetBlobClient(fileName);
                 var result = await blobClient.DeleteIfExistsAsync();
-                if (result) _logger.LogInformation("Deleted blob {FileName}.", fileName); else _logger.LogWarning("Blob {FileName} not found to delete.", fileName);
+                if (result) _logger.LogInformation("Deleted blob {FileName}.", fileName);
+                else _logger.LogWarning("Blob {FileName} not found to delete.", fileName);
                 return result;
             }
             catch (RequestFailedException ex)
@@ -156,6 +160,58 @@ namespace MusicSalesApp.Services
             }
             return list.OrderBy(b => b.Name);
         }
+
+        // New: List blobs for a specific album using index tags
+        public async Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName)
+        {
+            if (string.IsNullOrWhiteSpace(albumName))
+                throw new ArgumentNullException(nameof(albumName));
+
+            var list = new List<StorageFileInfo>();
+
+            try
+            {
+                // Escape single quotes for the tag query
+                var safeAlbumName = albumName.Replace("'", "''");
+
+                // Correct tag query: NO leading @
+                var expression = $"\"AlbumName\" = '{safeAlbumName}'";
+
+                await foreach (var taggedBlob in _containerClient.FindBlobsByTagsAsync(expression))
+                {
+                    var blobClient = _containerClient.GetBlobClient(taggedBlob.BlobName);
+
+                    // Fetch properties and *all* tags for this blob
+                    var propsTask = blobClient.GetPropertiesAsync();
+                    var tagsTask = blobClient.GetTagsAsync();
+
+                    await Task.WhenAll(propsTask, tagsTask);
+
+                    var props = propsTask.Result;
+                    var tags = tagsTask.Result;
+
+                    list.Add(new StorageFileInfo
+                    {
+                        Name = taggedBlob.BlobName,
+                        Length = props.Value.ContentLength,
+                        ContentType = props.Value.ContentType ?? "application/octet-stream",
+                        LastModified = props.Value.LastModified,
+                        // Use the full tag set from GetTagsAsync, not taggedBlob.Tags
+                        Tags = tags.Value.Tags != null
+                            ? new Dictionary<string, string>(tags.Value.Tags)
+                            : new Dictionary<string, string>()
+                    });
+                }
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed listing blobs by album {AlbumName}", albumName);
+                throw;
+            }
+
+            return list.OrderBy(b => b.Name);
+        }
+
 
         public async Task<StorageFileInfo> GetFileInfoAsync(string fileName)
         {
@@ -316,6 +372,31 @@ namespace MusicSalesApp.Services
                 _logger.LogError(ex, "Azure request failed direct range {Start}-{End} for blob {FileName}", start, end, fileName);
                 throw;
             }
+        }
+
+        // New: generate a short-lived SAS URL for direct browser streaming
+        public Uri GetReadSasUri(string fileName, TimeSpan lifetime)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
+
+            var blobClient = _containerClient.GetBlobClient(fileName);
+
+            if (!blobClient.CanGenerateSasUri)
+            {
+                throw new InvalidOperationException("BlobClient cannot generate SAS URIs. Ensure a key-based connection string is used.");
+            }
+
+            var sasBuilder = new BlobSasBuilder
+            {
+                BlobContainerName = _containerClient.Name,
+                BlobName = fileName,
+                Resource = "b",
+                ExpiresOn = DateTimeOffset.UtcNow.Add(lifetime)
+            };
+
+            sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+            return blobClient.GenerateSasUri(sasBuilder);
         }
     }
 }

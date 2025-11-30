@@ -2,7 +2,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     if (!audioElement) return;
 
     audioElement.addEventListener('timeupdate', () => {
-        // Enforce 60 second limit for non-owners
+        // Enforce 60 second limit for restricted users
         if (isRestricted && audioElement.currentTime >= maxDuration) {
             audioElement.pause();
             audioElement.currentTime = maxDuration;
@@ -58,12 +58,12 @@ export function seekToPosition(audioElement, offsetX, progressBarWidth, isRestri
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
         let newTime = audioElement.duration * percentage;
-        
+
         // Enforce max duration limit for restricted users
         if (isRestricted && newTime > maxDuration) {
             newTime = maxDuration;
         }
-        
+
         if (!isNaN(newTime) && isFinite(newTime)) {
             audioElement.currentTime = newTime;
         }
@@ -98,25 +98,22 @@ export function changeTrack(audioElement, newSrc) {
         // Pause and reset first
         audioElement.pause();
         audioElement.currentTime = 0;
-        
+
         // Set new source
         audioElement.src = newSrc;
-        
+
         // Load and play
         audioElement.load();
-        
-        // Wait for the audio to be ready before playing
+
         const playWhenReady = () => {
             audioElement.play().catch(err => {
                 console.warn('Play after track change failed:', err);
             });
         };
-        
-        // If ready state is sufficient, play immediately
+
         if (audioElement.readyState >= 2) {
             playWhenReady();
         } else {
-            // Otherwise wait for canplay event
             audioElement.addEventListener('canplay', playWhenReady, { once: true });
         }
     }
@@ -135,12 +132,12 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
         if (width > 0) {
             const percentage = Math.max(0, Math.min(1, offsetX / width));
             let newTime = audioElement.duration * percentage;
-            
+
             // Enforce max duration limit for restricted users
             if (isRestricted && newTime > maxDuration) {
                 newTime = maxDuration;
             }
-            
+
             if (!isNaN(newTime) && isFinite(newTime)) {
                 audioElement.currentTime = newTime;
             }
