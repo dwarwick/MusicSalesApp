@@ -140,7 +140,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Get all image files
             var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
 
-            // Find album covers (images with IsAlbumCover=true metadata)
+            // Find album covers (images with IsAlbumCover=true IndexTag)
             var albumCovers = imageFiles
                 .Where(f => f.Tags != null && 
                             f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) && 
