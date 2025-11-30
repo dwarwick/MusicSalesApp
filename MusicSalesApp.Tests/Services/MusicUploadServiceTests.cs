@@ -406,7 +406,7 @@ public class MusicUploadServiceTests
     }
 
     [Test]
-    public async Task UploadMusicWithAlbumArtAsync_WithAlbumName_SetsMetadata()
+    public async Task UploadMusicWithAlbumArtAsync_WithAlbumName_SetsIndexTags()
     {
         // Arrange
         var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("audio content"));
@@ -429,7 +429,7 @@ public class MusicUploadServiceTests
         // Assert
         Assert.That(result, Is.EqualTo("Song"));
         
-        // Verify audio file upload has AlbumName metadata
+        // Verify audio file upload has AlbumName index tag
         _mockStorageService.Verify(s => s.UploadAsync(
             "Song/Song.mp3", 
             It.IsAny<Stream>(), 
@@ -437,7 +437,7 @@ public class MusicUploadServiceTests
             It.Is<IDictionary<string, string>>(m => 
                 m != null && m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album")), Times.Once);
         
-        // Verify album art upload has AlbumName and IsAlbumCover=false metadata
+        // Verify album art upload has AlbumName and IsAlbumCover=false index tags
         _mockStorageService.Verify(s => s.UploadAsync(
             "Song/Song.jpeg", 
             It.IsAny<Stream>(), 
@@ -528,7 +528,7 @@ public class MusicUploadServiceTests
     #region UploadAlbumCoverAsync Tests
 
     [Test]
-    public async Task UploadAlbumCoverAsync_ValidAlbumCover_UploadsWithCorrectMetadata()
+    public async Task UploadAlbumCoverAsync_ValidAlbumCover_UploadsWithCorrectIndexTags()
     {
         // Arrange
         var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
