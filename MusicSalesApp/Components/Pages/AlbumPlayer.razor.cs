@@ -98,18 +98,17 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             // URL decode the album name
             var decodedAlbumName = Uri.UnescapeDataString(AlbumName);
 
-            // Get list of files from blob storage
-            var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
-            var allFiles = files?.ToList() ?? new List<StorageFileInfo>();
+            // Query files for this specific album using index tags instead of fetching all files
+            var encodedAlbumName = Uri.EscapeDataString(decodedAlbumName);
+            var albumFiles = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>($"api/music/album/{encodedAlbumName}");
+            var files = albumFiles?.ToList() ?? new List<StorageFileInfo>();
 
-            // Find album cover (image with IsAlbumCover=true and matching AlbumName)
-            var albumCover = allFiles.FirstOrDefault(f =>
+            // Find album cover (image with IsAlbumCover=true)
+            var albumCover = files.FirstOrDefault(f =>
                 IsImageFile(f.Name) &&
                 f.Tags != null &&
                 f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) &&
-                string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase) &&
-                f.Tags.TryGetValue(IndexTagNames.AlbumName, out var albumName) &&
-                string.Equals(albumName, decodedAlbumName, StringComparison.OrdinalIgnoreCase));
+                string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase));
 
             if (albumCover == null)
             {
@@ -118,12 +117,9 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Find all tracks with the same album name
-            var tracks = allFiles
-                .Where(f => IsAudioFile(f.Name) &&
-                            f.Tags != null &&
-                            f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) &&
-                            string.Equals(trackAlbum, decodedAlbumName, StringComparison.OrdinalIgnoreCase))
+            // Find all tracks (audio files only, album name already filtered by the API)
+            var tracks = files
+                .Where(f => IsAudioFile(f.Name))
                 .OrderBy(f => Path.GetFileName(f.Name))
                 .ToList();
 

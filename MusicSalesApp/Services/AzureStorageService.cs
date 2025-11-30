@@ -14,6 +14,7 @@ namespace MusicSalesApp.Services
 {
     public class AzureStorageService : IAzureStorageService
     {
+        private readonly BlobServiceClient _blobServiceClient;
         private readonly BlobContainerClient _containerClient;
         private readonly ILogger<AzureStorageService> _logger;
 
@@ -26,7 +27,8 @@ namespace MusicSalesApp.Services
             if (string.IsNullOrWhiteSpace(opts.ContainerName))
                 throw new ArgumentException("ContainerName configuration missing.");
 
-            _containerClient = new BlobContainerClient(opts.StorageAccountConnectionString, opts.ContainerName);
+            _blobServiceClient = new BlobServiceClient(opts.StorageAccountConnectionString);
+            _containerClient = _blobServiceClient.GetBlobContainerClient(opts.ContainerName);
         }
 
         public async Task EnsureContainerExistsAsync()
@@ -152,6 +154,48 @@ namespace MusicSalesApp.Services
             catch (RequestFailedException ex)
             {
                 _logger.LogError(ex, "Azure request failed listing blobs");
+                throw;
+            }
+            return list.OrderBy(b => b.Name);
+        }
+
+        public async Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName)
+        {
+            if (string.IsNullOrWhiteSpace(albumName)) throw new ArgumentNullException(nameof(albumName));
+
+            var list = new List<StorageFileInfo>();
+            try
+            {
+                // Use blob index tags to query for blobs with matching album name
+                // The query format uses OData-like syntax for blob index tags
+                // Escape single quotes in album name to prevent query injection
+                var escapedAlbumName = albumName.Replace("'", "''");
+                var tagQuery = $"\"{Common.Helpers.IndexTagNames.AlbumName}\" = '{escapedAlbumName}'";
+                await foreach (var taggedBlob in _blobServiceClient.FindBlobsByTagsAsync(tagQuery))
+                {
+                    // Only include blobs from our container
+                    if (!string.Equals(taggedBlob.BlobContainerName, _containerClient.Name, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // Get blob properties (required for ContentLength, ContentType, LastModified)
+                    // and all tags (FindBlobsByTagsAsync only returns tags matching the query, not all tags)
+                    var blobClient = _containerClient.GetBlobClient(taggedBlob.BlobName);
+                    var props = await blobClient.GetPropertiesAsync();
+                    var allTags = await blobClient.GetTagsAsync();
+
+                    list.Add(new StorageFileInfo
+                    {
+                        Name = taggedBlob.BlobName,
+                        Length = props.Value.ContentLength,
+                        ContentType = props.Value.ContentType ?? "application/octet-stream",
+                        LastModified = props.Value.LastModified,
+                        Tags = allTags.Value.Tags != null ? new Dictionary<string, string>(allTags.Value.Tags) : new Dictionary<string, string>()
+                    });
+                }
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed querying blobs by album name {AlbumName}", albumName);
                 throw;
             }
             return list.OrderBy(b => b.Name);

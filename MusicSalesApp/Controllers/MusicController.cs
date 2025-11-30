@@ -26,6 +26,17 @@ namespace MusicSalesApp.Controllers
             return Ok(files);
         }
 
+        [HttpGet("album/{albumName}")]
+        public async Task<IActionResult> ListByAlbum(string albumName)
+        {
+            if (string.IsNullOrWhiteSpace(albumName))
+                return BadRequest("Album name is required");
+
+            var decodedAlbumName = Uri.UnescapeDataString(albumName);
+            var files = await _storageService.ListFilesByAlbumAsync(decodedAlbumName);
+            return Ok(files);
+        }
+
         [HttpGet("{*fileName}")]
         public async Task<IActionResult> Stream(string fileName)
         {

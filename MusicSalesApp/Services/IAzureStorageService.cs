@@ -12,6 +12,7 @@ namespace MusicSalesApp.Services
         Task<bool> DeleteAsync(string fileName);
         Task<bool> ExistsAsync(string fileName);
         Task<IEnumerable<StorageFileInfo>> ListFilesAsync();
+        Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName); // query by album name using index tags
         Task<StorageFileInfo> GetFileInfoAsync(string fileName); // null if not found
         Task<Stream> DownloadRangeAsync(string fileName, long? offset, long? length); // legacy manual range
         Task<Stream> OpenReadAsync(string fileName); // optimized streaming seekable stream (empty if not found)
