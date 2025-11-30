@@ -42,6 +42,80 @@ public class MusicControllerTests
     }
 
     [Test]
+    public async Task ListByAlbum_WithValidAlbumName_ReturnsOkWithFiles()
+    {
+        // Arrange
+        var albumName = "Test Album";
+        var files = new List<StorageFileInfo>
+        {
+            new StorageFileInfo { Name = "album/track1.mp3", Length = 1000 },
+            new StorageFileInfo { Name = "album/track2.mp3", Length = 2000 },
+            new StorageFileInfo { Name = "album/cover.jpg", Length = 500 }
+        };
+        _mockStorageService.Setup(s => s.ListFilesByAlbumAsync(albumName)).ReturnsAsync(files);
+
+        // Act
+        var result = await _controller.ListByAlbum(albumName);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult.Value, Is.EqualTo(files));
+    }
+
+    [Test]
+    public async Task ListByAlbum_WithEmptyAlbumName_ReturnsBadRequest()
+    {
+        // Arrange
+        var albumName = string.Empty;
+
+        // Act
+        var result = await _controller.ListByAlbum(albumName);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestResult>());
+    }
+
+    [Test]
+    public async Task ListByAlbum_WithEncodedAlbumName_DecodesAndReturnsFiles()
+    {
+        // Arrange
+        var encodedAlbumName = "Lipstick%20and%20Leather";
+        var decodedAlbumName = "Lipstick and Leather";
+        var files = new List<StorageFileInfo>
+        {
+            new StorageFileInfo { Name = "album/track1.mp3", Length = 1000 }
+        };
+        _mockStorageService.Setup(s => s.ListFilesByAlbumAsync(decodedAlbumName)).ReturnsAsync(files);
+
+        // Act
+        var result = await _controller.ListByAlbum(encodedAlbumName);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult.Value, Is.EqualTo(files));
+    }
+
+    [Test]
+    public async Task ListByAlbum_WithNoMatchingFiles_ReturnsOkWithEmptyList()
+    {
+        // Arrange
+        var albumName = "Nonexistent Album";
+        var files = new List<StorageFileInfo>();
+        _mockStorageService.Setup(s => s.ListFilesByAlbumAsync(albumName)).ReturnsAsync(files);
+
+        // Act
+        var result = await _controller.ListByAlbum(albumName);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var resultFiles = okResult.Value as IEnumerable<StorageFileInfo>;
+        Assert.That(resultFiles, Is.Empty);
+    }
+
+    [Test]
     public async Task Stream_WithValidFile_ReturnsFileResult()
     {
         // Arrange
