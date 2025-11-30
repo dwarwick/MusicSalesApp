@@ -178,10 +178,10 @@ namespace MusicSalesApp.Services
                         continue;
 
                     // Get blob properties (required for ContentLength, ContentType, LastModified)
-                    // Note: FindBlobsByTagsAsync provides tags but not properties, so we need one additional call per blob
-                    // Tags are already available in taggedBlob.Tags, avoiding a second call to GetTagsAsync
+                    // and all tags (FindBlobsByTagsAsync only returns tags matching the query, not all tags)
                     var blobClient = _containerClient.GetBlobClient(taggedBlob.BlobName);
                     var props = await blobClient.GetPropertiesAsync();
+                    var allTags = await blobClient.GetTagsAsync();
 
                     list.Add(new StorageFileInfo
                     {
@@ -189,7 +189,7 @@ namespace MusicSalesApp.Services
                         Length = props.Value.ContentLength,
                         ContentType = props.Value.ContentType ?? "application/octet-stream",
                         LastModified = props.Value.LastModified,
-                        Tags = taggedBlob.Tags != null ? new Dictionary<string, string>(taggedBlob.Tags) : new Dictionary<string, string>()
+                        Tags = allTags.Value.Tags != null ? new Dictionary<string, string>(allTags.Value.Tags) : new Dictionary<string, string>()
                     });
                 }
             }
