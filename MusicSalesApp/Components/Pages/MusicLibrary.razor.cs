@@ -142,8 +142,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
             // Find album covers (images with IsAlbumCover=true metadata)
             var albumCovers = imageFiles
-                .Where(f => f.Metadata != null && 
-                            f.Metadata.TryGetValue(MetadataNames.IsAlbumCover, out var isAlbumCover) && 
+                .Where(f => f.Tags != null && 
+                            f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) && 
                             string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
@@ -153,12 +153,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             
             foreach (var cover in albumCovers)
             {
-                if (cover.Metadata.TryGetValue(MetadataNames.AlbumName, out var albumName) && !string.IsNullOrWhiteSpace(albumName))
+                if (cover.Tags.TryGetValue(IndexTagNames.AlbumName, out var albumName) && !string.IsNullOrWhiteSpace(albumName))
                 {
                     // Find all tracks with the same album name
                     var albumTracks = audioFiles
-                        .Where(f => f.Metadata != null && 
-                                    f.Metadata.TryGetValue(MetadataNames.AlbumName, out var trackAlbum) && 
+                        .Where(f => f.Tags != null && 
+                                    f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) && 
                                     string.Equals(trackAlbum, albumName, StringComparison.OrdinalIgnoreCase))
                         .OrderBy(f => Path.GetFileName(f.Name))
                         .ToList();

@@ -48,7 +48,7 @@ namespace MusicSalesApp.Services
             await UploadAsync(fileName, data, contentType, null);
         }
 
-        public async Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> metadata)
+        public async Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> tags)
         {
             if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
             if (data == null) throw new ArgumentNullException(nameof(data));
@@ -58,11 +58,13 @@ namespace MusicSalesApp.Services
                 var headers = new BlobHttpHeaders { ContentType = contentType };
                 data.Position = 0;
                 var uploadOptions = new BlobUploadOptions { HttpHeaders = headers };
-                if (metadata != null && metadata.Count > 0)
-                {
-                    uploadOptions.Metadata = metadata;
-                }
                 await blobClient.UploadAsync(data, uploadOptions);
+                
+                // Set index tags after upload if provided
+                if (tags != null && tags.Count > 0)
+                {
+                    await blobClient.SetTagsAsync(tags);
+                }
                 _logger.LogInformation("Uploaded blob {FileName} ({Length} bytes).", fileName, data.Length);
             }
             catch (RequestFailedException ex)
@@ -135,7 +137,7 @@ namespace MusicSalesApp.Services
             var list = new List<StorageFileInfo>();
             try
             {
-                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Metadata))
+                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Tags))
                 {
                     list.Add(new StorageFileInfo
                     {
@@ -143,7 +145,7 @@ namespace MusicSalesApp.Services
                         Length = blobItem.Properties.ContentLength ?? 0,
                         ContentType = blobItem.Properties.ContentType ?? "application/octet-stream",
                         LastModified = blobItem.Properties.LastModified,
-                        Metadata = blobItem.Metadata != null ? new Dictionary<string, string>(blobItem.Metadata) : new Dictionary<string, string>()
+                        Tags = blobItem.Tags != null ? new Dictionary<string, string>(blobItem.Tags) : new Dictionary<string, string>()
                     });
                 }
             }
@@ -163,13 +165,14 @@ namespace MusicSalesApp.Services
                 var blobClient = _containerClient.GetBlobClient(fileName);
                 if (!(await blobClient.ExistsAsync())) return null;
                 var props = await blobClient.GetPropertiesAsync();
+                var tags = await blobClient.GetTagsAsync();
                 return new StorageFileInfo
                 {
                     Name = fileName,
                     Length = props.Value.ContentLength,
                     ContentType = props.Value.ContentType ?? "application/octet-stream",
                     LastModified = props.Value.LastModified,
-                    Metadata = props.Value.Metadata != null ? new Dictionary<string, string>(props.Value.Metadata) : new Dictionary<string, string>()
+                    Tags = tags.Value.Tags != null ? new Dictionary<string, string>(tags.Value.Tags) : new Dictionary<string, string>()
                 };
             }
             catch (RequestFailedException ex)
