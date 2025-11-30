@@ -168,17 +168,20 @@ namespace MusicSalesApp.Services
             {
                 // Use blob index tags to query for blobs with matching album name
                 // The query format uses OData-like syntax for blob index tags
-                var tagQuery = $"\"{Common.Helpers.IndexTagNames.AlbumName}\" = '{albumName}'";
+                // Escape single quotes in album name to prevent query injection
+                var escapedAlbumName = albumName.Replace("'", "''");
+                var tagQuery = $"\"{Common.Helpers.IndexTagNames.AlbumName}\" = '{escapedAlbumName}'";
                 await foreach (var taggedBlob in _blobServiceClient.FindBlobsByTagsAsync(tagQuery))
                 {
                     // Only include blobs from our container
                     if (!string.Equals(taggedBlob.BlobContainerName, _containerClient.Name, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    // Get additional blob info including tags
+                    // Get blob properties (required for ContentLength, ContentType, LastModified)
+                    // Note: FindBlobsByTagsAsync provides tags but not properties, so we need one additional call per blob
+                    // Tags are already available in taggedBlob.Tags, avoiding a second call to GetTagsAsync
                     var blobClient = _containerClient.GetBlobClient(taggedBlob.BlobName);
                     var props = await blobClient.GetPropertiesAsync();
-                    var tags = await blobClient.GetTagsAsync();
 
                     list.Add(new StorageFileInfo
                     {
@@ -186,7 +189,7 @@ namespace MusicSalesApp.Services
                         Length = props.Value.ContentLength,
                         ContentType = props.Value.ContentType ?? "application/octet-stream",
                         LastModified = props.Value.LastModified,
-                        Tags = tags.Value.Tags != null ? new Dictionary<string, string>(tags.Value.Tags) : new Dictionary<string, string>()
+                        Tags = taggedBlob.Tags != null ? new Dictionary<string, string>(taggedBlob.Tags) : new Dictionary<string, string>()
                     });
                 }
             }

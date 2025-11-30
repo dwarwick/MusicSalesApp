@@ -73,7 +73,9 @@ public class MusicControllerTests
         var result = await _controller.ListByAlbum(albumName);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<BadRequestResult>());
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequestResult = result as BadRequestObjectResult;
+        Assert.That(badRequestResult.Value, Is.EqualTo("Album name is required"));
     }
 
     [Test]

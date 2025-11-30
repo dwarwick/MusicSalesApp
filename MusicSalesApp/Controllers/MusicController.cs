@@ -30,7 +30,7 @@ namespace MusicSalesApp.Controllers
         public async Task<IActionResult> ListByAlbum(string albumName)
         {
             if (string.IsNullOrWhiteSpace(albumName))
-                return BadRequest();
+                return BadRequest("Album name is required");
 
             var decodedAlbumName = Uri.UnescapeDataString(albumName);
             var files = await _storageService.ListFilesByAlbumAsync(decodedAlbumName);
