@@ -728,6 +728,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             _currentTime = 0;
             _duration = 0;
             await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex]);
+            _isActuallyPlaying = true; // Ensure play state is updated when track changes
             await InvokeAsync(StateHasChanged);
         }
     }

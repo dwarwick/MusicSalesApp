@@ -442,6 +442,7 @@ public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
             if (_jsModule != null)
             {
                 await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl);
+                _isPlaying = true; // Ensure play state is updated when track changes
             }
             await InvokeAsync(StateHasChanged);
         }
