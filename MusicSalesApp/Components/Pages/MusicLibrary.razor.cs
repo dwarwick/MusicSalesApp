@@ -684,13 +684,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _currentTrackIndex = 0;
 
         // Build list of track URLs for the album using SAS URLs for direct blob streaming
-        var trackUrls = new List<string>();
-        foreach (var track in album.Tracks)
-        {
-            var url = await GetTrackStreamUrlAsync(track.Name);
-            trackUrls.Add(url);
-        }
-        _albumTrackUrls = trackUrls;
+        // Use Task.WhenAll for parallel fetching to improve performance with many tracks
+        var trackUrlTasks = album.Tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+        _albumTrackUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
 
         // Reset state for new card
         _volume = 1.0;
