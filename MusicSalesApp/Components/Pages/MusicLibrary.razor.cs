@@ -446,7 +446,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// Checks if the currently playing track is restricted (60 second preview).
     /// Restricted for non-authenticated users OR authenticated users who don't own the track.
     /// </summary>
-    private bool IsCurrentPlayingTrackRestricted()
+    protected bool IsCurrentPlayingTrackRestricted()
     {
         // Non-authenticated users are always restricted
         if (!_isAuthenticated)
@@ -532,7 +532,30 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected double GetCardProgressPercentage(string cardId)
     {
         if (_playingCardId != cardId) return 0;
+        
+        if (IsCurrentPlayingTrackRestricted() && _duration > 0)
+        {
+            var maxTime = Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+            return (_currentTime / maxTime) * GetCardPreviewLimitPercentage(cardId);
+        }
+        
         return _duration > 0 ? (_currentTime / _duration * 100) : 0;
+    }
+
+    protected double GetCardPreviewLimitPercentage(string cardId)
+    {
+        if (_playingCardId != cardId || _duration <= 0) return 100;
+        return Math.Min(100, (PREVIEW_DURATION_SECONDS / _duration) * 100);
+    }
+
+    protected double GetCardDisplayDuration(string cardId)
+    {
+        if (_playingCardId != cardId) return 0;
+        if (IsCurrentPlayingTrackRestricted())
+        {
+            return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+        }
+        return _duration;
     }
 
     protected double GetCardVolume(string cardId)
