@@ -36,6 +36,7 @@ namespace MusicSalesApp.Components.Pages
         protected bool _cartAnimating;
         protected int _currentTrackIndex;
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
+        private List<string> _trackStreamUrls = new List<string>();
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
@@ -150,9 +151,13 @@ namespace MusicSalesApp.Components.Pages
                     Price = AlbumInfo.DEFAULT_ALBUM_PRICE
                 };
 
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
                 // Set up the first track
                 _currentTrackIndex = 0;
-                _streamUrl = await GetTrackStreamUrlAsync(_currentTrackIndex);
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
 
                 // Check ownership and cart status if authenticated
                 if (_isAuthenticated)
@@ -343,11 +348,28 @@ namespace MusicSalesApp.Components.Pages
             return Path.GetFileNameWithoutExtension(Path.GetFileName(_albumInfo.Tracks[index].Name));
         }
 
+        /// <summary>
+        /// Gets a track stream URL by index. Uses pre-fetched URLs if available.
+        /// </summary>
         private async Task<string> GetTrackStreamUrlAsync(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return string.Empty;
+            // Use pre-fetched URL if available
+            if (_trackStreamUrls.Count > index && !string.IsNullOrWhiteSpace(_trackStreamUrls[index]))
+            {
+                return _trackStreamUrls[index];
+            }
 
-            var fileName = _albumInfo.Tracks[index].Name;
+            // Fall back to fetching on-demand
+            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return string.Empty;
+            return await GetTrackStreamUrlAsync(_albumInfo.Tracks[index].Name);
+        }
+
+        /// <summary>
+        /// Gets a direct SAS URL for streaming a track from blob storage.
+        /// Falls back to the controller streaming endpoint if SAS URL is unavailable.
+        /// </summary>
+        private async Task<string> GetTrackStreamUrlAsync(string fileName)
+        {
             var safePath = SafeEncodePath(fileName);
 
             // Preferred: direct SAS URL from Blob Storage via API
