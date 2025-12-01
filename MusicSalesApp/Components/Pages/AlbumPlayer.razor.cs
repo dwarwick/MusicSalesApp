@@ -354,13 +354,13 @@ namespace MusicSalesApp.Components.Pages
         private async Task<string> GetTrackStreamUrlAsync(int index)
         {
             // Use pre-fetched URL if available
-            if (_trackStreamUrls.Count > index && !string.IsNullOrWhiteSpace(_trackStreamUrls[index]))
+            if (index >= 0 && _trackStreamUrls.Count > index && !string.IsNullOrWhiteSpace(_trackStreamUrls[index]))
             {
                 return _trackStreamUrls[index];
             }
 
             // Fall back to fetching on-demand
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return string.Empty;
+            if (_albumInfo == null || index < 0 || index >= _albumInfo.Tracks.Count) return string.Empty;
             return await GetTrackStreamUrlAsync(_albumInfo.Tracks[index].Name);
         }
 
