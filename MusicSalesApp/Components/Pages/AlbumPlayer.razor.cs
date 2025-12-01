@@ -32,6 +32,7 @@ namespace MusicSalesApp.Components.Pages
         protected bool _isMuted;
         protected bool _isAuthenticated;
         protected bool _ownsAlbum;
+        protected HashSet<string> _ownedSongs = new HashSet<string>();
         protected bool _inCart;
         protected bool _cartAnimating;
         protected int _currentTrackIndex;
@@ -54,8 +55,8 @@ namespace MusicSalesApp.Components.Pages
                 _dotNetRef = DotNetObjectReference.Create(this);
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/AlbumPlayer.razor.js");
 
-                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, !_ownsAlbum && _isAuthenticated, PREVIEW_DURATION_SECONDS);
-                await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, !_ownsAlbum && _isAuthenticated, PREVIEW_DURATION_SECONDS);
+                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS);
+                await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS);
                 await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
                 // Ensure an initial track source is set for the audio element
@@ -181,10 +182,10 @@ namespace MusicSalesApp.Components.Pages
 
             try
             {
-                // Check if user owns all tracks in the album
+                // Check if user owns tracks in the album
                 var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
-                var ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
-                _ownsAlbum = _albumInfo.Tracks.All(t => ownedSongs.Contains(t.Name));
+                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
+                _ownsAlbum = _albumInfo.Tracks.All(t => _ownedSongs.Contains(t.Name));
 
                 // Check if album is in cart
                 var cartResponse = await Http.GetFromJsonAsync<CartResponseDto>("api/cart");
@@ -246,10 +247,29 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        /// <summary>
+        /// Checks if the user owns the specified track.
+        /// </summary>
+        protected bool OwnsTrack(int trackIndex)
+        {
+            if (!_isAuthenticated || _albumInfo == null || trackIndex < 0 || trackIndex >= _albumInfo.Tracks.Count)
+                return false;
+            return _ownedSongs.Contains(_albumInfo.Tracks[trackIndex].Name);
+        }
+
+        /// <summary>
+        /// Checks if the current track should be restricted (60 second preview).
+        /// Restricted for non-authenticated users OR authenticated users who don't own the current track.
+        /// </summary>
+        protected bool IsCurrentTrackRestricted()
+        {
+            return !_isAuthenticated || !OwnsTrack(_currentTrackIndex);
+        }
+
         protected bool IsProgressBarRestricted()
         {
-            // Restrict preview for authenticated users who don't own the album
-            return _isAuthenticated && !_ownsAlbum;
+            // Restrict preview for non-authenticated users OR authenticated users who don't own the current track
+            return IsCurrentTrackRestricted();
         }
 
         protected double GetProgressBarWidth()
@@ -443,7 +463,7 @@ namespace MusicSalesApp.Components.Pages
 
             if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
             {
-                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl);
+                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted());
                 _isPlaying = true;
             }
 
@@ -491,7 +511,7 @@ namespace MusicSalesApp.Components.Pages
 
                 if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
                 {
-                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl);
+                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted());
                 }
                 await InvokeAsync(StateHasChanged);
             }

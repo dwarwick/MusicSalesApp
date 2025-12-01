@@ -1,11 +1,21 @@
+// State object to store restriction settings (can be updated when tracks change)
+let playerState = {
+    isRestricted: false,
+    maxDuration: 60
+};
+
 export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!audioElement) return;
 
+    // Store initial state
+    playerState.isRestricted = isRestricted;
+    playerState.maxDuration = maxDuration;
+
     audioElement.addEventListener('timeupdate', () => {
-        // Enforce 60 second limit for restricted users
-        if (isRestricted && audioElement.currentTime >= maxDuration) {
+        // Enforce 60 second limit for restricted users (uses current state)
+        if (playerState.isRestricted && audioElement.currentTime >= playerState.maxDuration) {
             audioElement.pause();
-            audioElement.currentTime = maxDuration;
+            audioElement.currentTime = playerState.maxDuration;
             dotNetRef.invokeMethodAsync('AudioEnded');
         }
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
@@ -34,6 +44,11 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         // Trigger metadata load
         audioElement.load();
     }
+}
+
+// Update the restriction state (called when track ownership changes)
+export function updateRestrictionState(isRestricted) {
+    playerState.isRestricted = isRestricted;
 }
 
 export function play(audioElement) {
@@ -93,8 +108,14 @@ export function setTrackSource(audioElement, src) {
 }
 
 // Change the track source for album playback (used when transitioning to next/previous track)
-export function changeTrack(audioElement, newSrc) {
+// isRestricted parameter updates the player state for the new track
+export function changeTrack(audioElement, newSrc, isRestricted = null) {
     if (audioElement) {
+        // Update restriction state if provided
+        if (isRestricted !== null) {
+            playerState.isRestricted = isRestricted;
+        }
+
         // Pause and reset first
         audioElement.pause();
         audioElement.currentTime = 0;
@@ -120,6 +141,7 @@ export function changeTrack(audioElement, newSrc) {
 }
 
 // Setup progress bar drag functionality
+// Note: Uses playerState for restriction checking to stay in sync with current track
 export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!progressBarContainer || !audioElement) return;
 
@@ -133,9 +155,9 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
             const percentage = Math.max(0, Math.min(1, offsetX / width));
             let newTime = audioElement.duration * percentage;
 
-            // Enforce max duration limit for restricted users
-            if (isRestricted && newTime > maxDuration) {
-                newTime = maxDuration;
+            // Enforce max duration limit for restricted users (uses current state)
+            if (playerState.isRestricted && newTime > playerState.maxDuration) {
+                newTime = playerState.maxDuration;
             }
 
             if (!isNaN(newTime) && isFinite(newTime)) {
