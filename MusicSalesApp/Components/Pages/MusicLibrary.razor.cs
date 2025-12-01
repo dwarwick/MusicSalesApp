@@ -338,6 +338,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         public int Count { get; set; }
     }
 
+    private class StreamUrlResponseDto
+    {
+        public string Url { get; set; }
+    }
+
     private bool IsAudioFile(string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -383,6 +388,33 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected string GetStreamUrl(string fileName)
     {
         return $"api/music/{SafeEncodePath(fileName)}";
+    }
+
+    /// <summary>
+    /// Gets a direct SAS URL for streaming a track from blob storage.
+    /// Falls back to the controller streaming endpoint if SAS URL is unavailable.
+    /// </summary>
+    private async Task<string> GetTrackStreamUrlAsync(string fileName)
+    {
+        var safePath = SafeEncodePath(fileName);
+
+        // Preferred: direct SAS URL from Blob Storage via API
+        try
+        {
+            var result = await Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{safePath}");
+            if (!string.IsNullOrWhiteSpace(result?.Url))
+            {
+                return result.Url;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log and fall back to server streaming if SAS is unavailable
+            Console.WriteLine($"Failed to get SAS URL for {fileName}: {ex.Message}");
+        }
+
+        // Fallback: stream through the MusicController
+        return $"api/music/{safePath}";
     }
 
     protected string GetAlbumArtUrl(string fileName)
@@ -651,8 +683,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _playingAlbum = album;
         _currentTrackIndex = 0;
 
-        // Build list of track URLs for the album
-        _albumTrackUrls = album.Tracks.Select(t => GetStreamUrl(t.Name)).ToList();
+        // Build list of track URLs for the album using SAS URLs for direct blob streaming
+        // Use Task.WhenAll for parallel fetching to improve performance with many tracks
+        var trackUrlTasks = album.Tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+        _albumTrackUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
 
         // Reset state for new card
         _volume = 1.0;
