@@ -142,7 +142,7 @@ export function changeTrack(audioElement, newSrc, isRestricted = null) {
 
 // Setup progress bar drag functionality
 // Note: Uses playerState for restriction checking to stay in sync with current track
-export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
+export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef) {
     if (!progressBarContainer || !audioElement) return;
 
     let isDragging = false;
