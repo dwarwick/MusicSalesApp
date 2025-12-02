@@ -278,7 +278,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     private class SasUrlResponse
     {
-        public string Url { get; set; }
+        public string Url { get; set; } = string.Empty;
     }
 
     private bool IsImageFile(string fileName)
