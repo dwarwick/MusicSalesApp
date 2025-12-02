@@ -3,13 +3,21 @@
 // Map of audio elements by cardId for tracking multiple audio players
 const cardPlayers = new Map();
 
-export function initCardAudioPlayer(audioElement, cardId, dotNetRef) {
+export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60) {
     if (!audioElement) return;
 
-    // Store reference
-    cardPlayers.set(cardId, { audioElement, dotNetRef });
+    // Store reference with restriction state
+    cardPlayers.set(cardId, { audioElement, dotNetRef, isRestricted, maxDuration });
 
     audioElement.addEventListener('timeupdate', () => {
+        const player = cardPlayers.get(cardId);
+        // Enforce 60 second limit for restricted users
+        if (player && player.isRestricted && audioElement.currentTime >= player.maxDuration) {
+            audioElement.pause();
+            audioElement.currentTime = player.maxDuration;
+            dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            return;
+        }
         dotNetRef.invokeMethodAsync('UpdateCardTime', cardId, audioElement.currentTime);
     });
 
@@ -75,10 +83,17 @@ export function getElementWidth(element) {
     return 0;
 }
 
-export function seekCardToPosition(audioElement, offsetX, progressBarWidth) {
+export function seekCardToPosition(audioElement, offsetX, progressBarWidth, cardId) {
     if (audioElement && progressBarWidth > 0) {
+        const player = cardPlayers.get(cardId);
         const percentage = offsetX / progressBarWidth;
-        const newTime = audioElement.duration * percentage;
+        let newTime = audioElement.duration * percentage;
+        
+        // Enforce max duration limit for restricted users
+        if (player && player.isRestricted && newTime > player.maxDuration) {
+            newTime = player.maxDuration;
+        }
+        
         if (!isNaN(newTime) && isFinite(newTime)) {
             audioElement.currentTime = newTime;
         }
@@ -143,9 +158,16 @@ export function setupCardProgressBarDrag(progressBarContainer, audioElement, car
     if (!progressBarContainer || !audioElement) return;
 
     setupBarDrag(progressBarContainer, (clientX) => {
+        const player = cardPlayers.get(cardId);
         const percentage = calculatePercentage(clientX, progressBarContainer);
         if (percentage !== null) {
-            const newTime = audioElement.duration * percentage;
+            let newTime = audioElement.duration * percentage;
+            
+            // Enforce max duration limit for restricted users
+            if (player && player.isRestricted && newTime > player.maxDuration) {
+                newTime = player.maxDuration;
+            }
+            
             if (!isNaN(newTime) && isFinite(newTime)) {
                 audioElement.currentTime = newTime;
             }
@@ -171,9 +193,24 @@ export function cleanupCardPlayer(cardId) {
     cardPlayers.delete(cardId);
 }
 
+// Set the track source without auto-playing (for initial load)
+export function setTrackSource(audioElement, src) {
+    if (audioElement && src) {
+        audioElement.src = src;
+        audioElement.load();
+    }
+}
+
 // Change the track source for album playback (used when transitioning to next track)
-export function changeTrack(audioElement, newSrc) {
+// isRestricted parameter updates the player state for the new track
+export function changeTrack(audioElement, newSrc, cardId, isRestricted = null) {
     if (audioElement) {
+        // Update restriction state if provided
+        const player = cardPlayers.get(cardId);
+        if (player && isRestricted !== null) {
+            player.isRestricted = isRestricted;
+        }
+
         // Pause and reset first
         audioElement.pause();
         audioElement.currentTime = 0;

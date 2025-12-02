@@ -48,7 +48,7 @@
                 <span class="song-label">Album</span>
                 <h1 class="song-title">@GetDisplayTitle()</h1>
                 <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>
-                @if (!_ownsAlbum && _isAuthenticated)
+                @if (!_ownsAlbum)
                 {
                     <span class="preview-label">Preview Only (60 seconds per track)</span>
                 }

@@ -205,7 +205,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected bool IsProgressBarRestricted()
     {
-        return _isAuthenticated && !_ownsSong;
+        // Restrict for non-authenticated users OR authenticated users who don't own the song
+        return !_isAuthenticated || !_ownsSong;
     }
 
     protected double GetProgressBarWidth()
