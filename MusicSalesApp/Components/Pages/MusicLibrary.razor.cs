@@ -105,6 +105,24 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
+            // Set the initial track source
+            string initialTrackUrl = null;
+            if (_playingAlbum != null && _albumTrackUrls.Count > 0)
+            {
+                // Playing an album - get the current track URL
+                initialTrackUrl = GetCurrentAlbumTrackUrl();
+            }
+            else if (!string.IsNullOrEmpty(_playingFileName))
+            {
+                // Playing an individual song - get the stream URL
+                initialTrackUrl = await GetTrackStreamUrlAsync(_playingFileName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(initialTrackUrl))
+            {
+                await _jsModule.InvokeVoidAsync("setTrackSource", _activeAudioElement, initialTrackUrl);
+            }
+
             // Auto-play when card is initialized
             await _jsModule.InvokeVoidAsync("playCard", _activeAudioElement);
             _isActuallyPlaying = true;

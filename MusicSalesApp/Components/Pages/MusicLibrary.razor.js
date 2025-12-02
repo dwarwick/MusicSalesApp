@@ -193,6 +193,14 @@ export function cleanupCardPlayer(cardId) {
     cardPlayers.delete(cardId);
 }
 
+// Set the track source without auto-playing (for initial load)
+export function setTrackSource(audioElement, src) {
+    if (audioElement && src) {
+        audioElement.src = src;
+        audioElement.load();
+    }
+}
+
 // Change the track source for album playback (used when transitioning to next track)
 // isRestricted parameter updates the player state for the new track
 export function changeTrack(audioElement, newSrc, cardId, isRestricted = null) {
