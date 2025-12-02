@@ -33,6 +33,8 @@ public class AlbumInfo
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
+    private const double PREVIEW_DURATION_SECONDS = 60.0;
+
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
@@ -46,6 +48,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Track which card is currently playing
     private string _playingCardId;
     private bool _isActuallyPlaying;
+    private string _playingFileName; // Track the file name of the currently playing song
     
     // Card player state for the currently active card
     private double _currentTime;
@@ -97,9 +100,28 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/MusicLibrary.razor.js");
             }
 
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef);
+            var isRestricted = IsCurrentPlayingTrackRestricted();
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
+
+            // Set the initial track source
+            string initialTrackUrl = null;
+            if (_playingAlbum != null && _albumTrackUrls.Count > 0)
+            {
+                // Playing an album - get the current track URL
+                initialTrackUrl = GetCurrentAlbumTrackUrl();
+            }
+            else if (!string.IsNullOrEmpty(_playingFileName))
+            {
+                // Playing an individual song - get the stream URL
+                initialTrackUrl = await GetTrackStreamUrlAsync(_playingFileName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(initialTrackUrl))
+            {
+                await _jsModule.InvokeVoidAsync("setTrackSource", _activeAudioElement, initialTrackUrl);
+            }
 
             // Auto-play when card is initialized
             await _jsModule.InvokeVoidAsync("playCard", _activeAudioElement);
@@ -438,12 +460,39 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _playingCardId == cardId && _isActuallyPlaying;
     }
 
+    /// <summary>
+    /// Checks if the currently playing track is restricted (60 second preview).
+    /// Restricted for non-authenticated users OR authenticated users who don't own the track.
+    /// </summary>
+    protected bool IsCurrentPlayingTrackRestricted()
+    {
+        // Non-authenticated users are always restricted
+        if (!_isAuthenticated)
+            return true;
+
+        // For albums, check if the current track is owned
+        if (_playingAlbum != null && _currentTrackIndex < _playingAlbum.Tracks.Count)
+        {
+            return !_ownedSongs.Contains(_playingAlbum.Tracks[_currentTrackIndex].Name);
+        }
+
+        // For individual songs, check if the file is owned
+        if (!string.IsNullOrEmpty(_playingFileName))
+        {
+            return !_ownedSongs.Contains(_playingFileName);
+        }
+
+        return true; // Default to restricted if we can't determine
+    }
+
     protected async Task PlayCard(string fileName)
     {
         var cardId = GetCardId(fileName);
         _playingCardId = cardId;
+        _playingFileName = fileName;
         _isActuallyPlaying = false;
         _needsJsInit = true;
+        _playingAlbum = null; // Clear album state since this is an individual song
 
         // Reset state for new card
         _volume = 1.0;
@@ -501,7 +550,30 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected double GetCardProgressPercentage(string cardId)
     {
         if (_playingCardId != cardId) return 0;
+        
+        if (IsCurrentPlayingTrackRestricted() && _duration > 0)
+        {
+            var maxTime = Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+            return (_currentTime / maxTime) * GetCardPreviewLimitPercentage(cardId);
+        }
+        
         return _duration > 0 ? (_currentTime / _duration * 100) : 0;
+    }
+
+    protected double GetCardPreviewLimitPercentage(string cardId)
+    {
+        if (_playingCardId != cardId || _duration <= 0) return 100;
+        return Math.Min(100, (PREVIEW_DURATION_SECONDS / _duration) * 100);
+    }
+
+    protected double GetCardDisplayDuration(string cardId)
+    {
+        if (_playingCardId != cardId) return 0;
+        if (IsCurrentPlayingTrackRestricted())
+        {
+            return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
+        }
+        return _duration;
     }
 
     protected double GetCardVolume(string cardId)
@@ -570,7 +642,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var width = await _jsModule.InvokeAsync<double>("getElementWidth", _activeProgressBarElement);
             if (width > 0)
             {
-                await _jsModule.InvokeVoidAsync("seekCardToPosition", _activeAudioElement, e.OffsetX, width);
+                await _jsModule.InvokeVoidAsync("seekCardToPosition", _activeAudioElement, e.OffsetX, width, cardId);
             }
         }
     }
@@ -681,6 +753,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _isActuallyPlaying = false;
         _needsJsInit = true;
         _playingAlbum = album;
+        _playingFileName = null; // Clear individual song state since this is an album
         _currentTrackIndex = 0;
 
         // Build list of track URLs for the album using SAS URLs for direct blob streaming
@@ -718,7 +791,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _currentTime = 0;
             _duration = 0;
-            await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex]);
+            var isRestricted = IsCurrentPlayingTrackRestricted();
+            await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex], _playingCardId, isRestricted);
             await InvokeAsync(StateHasChanged);
         }
     }
