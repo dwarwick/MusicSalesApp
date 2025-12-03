@@ -534,8 +534,8 @@
 
     /* Mobile player bar adjustments */
     .player-bar {
-        left: 1rem;
-        right: 1rem;
+        left: 2rem;
+        right: 2rem;
         padding: 0 12px;
     }
 
