@@ -12,10 +12,10 @@ namespace MusicSalesApp.Services
     {
         private readonly ILogger<MusicService> _logger;
         private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
-        private static readonly string[] ValidAudioMimeTypes = { 
-            "audio/mpeg", "audio/wav", "audio/wave", "audio/x-wav", 
-            "audio/flac", "audio/ogg", "audio/mp4", "audio/aac", 
-            "audio/x-ms-wma", "audio/x-m4a" 
+        private static readonly string[] ValidAudioMimeTypes = {
+            "audio/mpeg", "audio/wav", "audio/wave", "audio/x-wav",
+            "audio/flac", "audio/ogg", "audio/mp4", "audio/aac",
+            "audio/x-ms-wma", "audio/x-m4a"
         };
 
         public MusicService(ILogger<MusicService> logger)
@@ -41,9 +41,9 @@ namespace MusicSalesApp.Services
         }
 
         public async Task<Stream> ConvertToMp3Async(
-    Stream inputStream,
-    string originalFileName,
-    IProgress<double> progress = null)
+            Stream inputStream,
+            string originalFileName,
+            IProgress<double> progress = null)
         {
             if (inputStream == null)
                 throw new ArgumentNullException(nameof(inputStream));
@@ -55,7 +55,6 @@ namespace MusicSalesApp.Services
             {
                 var outputStream = new MemoryStream();
 
-                // Only attempt to reposition if the stream supports seeking
                 if (inputStream.CanSeek)
                 {
                     inputStream.Position = 0;

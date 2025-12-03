@@ -47,7 +47,7 @@
             <div class="song-info">
                 <span class="song-label">Song</span>
                 <h1 class="song-title">@GetDisplayTitle()</h1>
-                @if (!_ownsSong && _isAuthenticated)
+                @if (!_ownsSong)
                 {
                     <span class="preview-label">Preview Only (60 seconds)</span>
                 }

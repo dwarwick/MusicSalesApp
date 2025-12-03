@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services
 {
@@ -193,24 +194,24 @@ namespace MusicSalesApp.Services
             string mp3Path = $"{folderPath}/{mp3FileName}";
             string albumArtPath = $"{folderPath}/{baseName}.jpeg";
 
-            // Build metadata for audio file
-            Dictionary<string, string> audioMetadata = null;
+            // Build index tags for audio file
+            Dictionary<string, string> audioTags = null;
             if (!string.IsNullOrWhiteSpace(albumName))
             {
-                audioMetadata = new Dictionary<string, string>
+                audioTags = new Dictionary<string, string>
                 {
-                    { "AlbumName", albumName }
+                    { IndexTagNames.AlbumName, albumName }
                 };
             }
 
-            // Build metadata for album art file
-            Dictionary<string, string> albumArtMetadata = null;
+            // Build index tags for album art file
+            Dictionary<string, string> albumArtTags = null;
             if (!string.IsNullOrWhiteSpace(albumName))
             {
-                albumArtMetadata = new Dictionary<string, string>
+                albumArtTags = new Dictionary<string, string>
                 {
-                    { "AlbumName", albumName },
-                    { "IsAlbumCover", "false" }
+                    { IndexTagNames.AlbumName, albumName },
+                    { IndexTagNames.IsAlbumCover, "false" }
                 };
             }
 
@@ -218,12 +219,12 @@ namespace MusicSalesApp.Services
             {
                 // Upload MP3 file
                 _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioMetadata);
+                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioTags);
 
                 // Upload album art
                 _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
                 albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg", albumArtMetadata);
+                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg", albumArtTags);
 
                 _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
             }
@@ -276,17 +277,17 @@ namespace MusicSalesApp.Services
             var baseName = GetNormalizedBaseName(albumArtFileName);
             string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover.jpeg";
 
-            // Build metadata for album cover
-            var metadata = new Dictionary<string, string>
+            // Build index tags for album cover
+            var tags = new Dictionary<string, string>
             {
-                { "AlbumName", albumName },
-                { "IsAlbumCover", "true" }
+                { IndexTagNames.AlbumName, albumName },
+                { IndexTagNames.IsAlbumCover, "true" }
             };
 
             // Upload album cover
             _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
             albumArtStream.Position = 0;
-            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg", metadata);
+            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg", tags);
 
             _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
 
