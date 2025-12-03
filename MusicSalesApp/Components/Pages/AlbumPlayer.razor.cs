@@ -237,7 +237,7 @@ namespace MusicSalesApp.Components.Pages
                             });
                         }
 
-                        NavMenuModel.NotifyCartUpdated();
+                        CartService.NotifyCartUpdated();
                     }
                 }
             }

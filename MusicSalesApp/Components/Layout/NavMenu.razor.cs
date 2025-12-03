@@ -7,16 +7,15 @@ using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Components.Layout;
 
-public partial class NavMenuModel : BlazorBase, IDisposable
+public class NavMenuModel : BlazorBase, IDisposable
 {
     protected int _cartCount = 0;
-
-    private static event Action OnCartUpdated;
+    
     private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
-        OnCartUpdated += HandleCartUpdate;
+        CartService.OnCartUpdated += HandleCartUpdate;
         await LoadCartCount();
     }
 
@@ -33,32 +32,24 @@ public partial class NavMenuModel : BlazorBase, IDisposable
 
         if (user.Identity?.IsAuthenticated == true)
         {
-            using var scope = ScopeFactory.CreateScope();
-            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var cartService = scope.ServiceProvider.GetRequiredService<ICartService>();
-
-            var appUser = await userManager.GetUserAsync(user);
+            var appUser = await UserManager.GetUserAsync(user);
             if (appUser != null)
             {
-                _cartCount = await cartService.GetCartItemCountAsync(appUser.Id);
+                // Use the injected CartService instance to ensure the same event subscription instance is used
+                _cartCount = await CartService.GetCartItemCountAsync(appUser.Id);
             }
         }
         else
         {
             _cartCount = 0;
         }
-    }
-
-    public static void NotifyCartUpdated()
-    {
-        OnCartUpdated?.Invoke();
-    }
+    }   
 
     public void Dispose()
     {
         if (!_disposed)
         {
-            OnCartUpdated -= HandleCartUpdate;
+            CartService.OnCartUpdated -= HandleCartUpdate;
             _disposed = true;
         }
     }

@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using MusicSalesApp.Services;
 using System.Net.Http; // HttpClient
+using Microsoft.AspNetCore.Identity;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Base;
 
@@ -29,14 +31,18 @@ public abstract class BlazorBase : ComponentBase
     protected IHttpContextAccessor HttpContextAccessor { get; set; } = default!;
 
     [Inject]
-    protected IMusicUploadService MusicUploadService { get; set; } = default!;
-
-    [Inject]
-    protected IServiceScopeFactory ScopeFactory { get; set; } = default!;
+    protected IMusicUploadService MusicUploadService { get; set; } = default!;    
 
     [Inject]
     protected IJSRuntime JS { get; set; } = default!;
 
     [Inject]
     protected IWebHostEnvironment Environment { get; set; } = default!;
+
+    [Inject]
+    protected ICartService CartService { get; set; } = default!;
+
+    // Ensure components can access the same scoped UserManager used by DI
+    [Inject]
+    protected UserManager<ApplicationUser> UserManager { get; set; } = default!;
 }
