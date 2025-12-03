@@ -318,6 +318,14 @@
     z-index: 100;
 }
 
+/* Desktop layout - account for sidebar and article padding */
+@media (min-width: 641px) {
+    .player-bar {
+        left: calc(250px + 2rem);
+        right: 1.5rem;
+    }
+}
+
 .controls-wrapper {
     display: flex;
     align-items: center;
@@ -522,6 +530,102 @@
     .track-list th,
     .track-list td {
         padding: 8px;
+    }
+
+    /* Mobile player bar adjustments */
+    .player-bar {
+        left: 2rem;
+        right: 2rem;
+        padding: 0 12px;
+    }
+
+    .time-spacer {
+        min-width: 0;
+        display: none;
+    }
+
+    .controls-wrapper {
+        gap: 2px;
+        margin-bottom: 4px;
+    }
+
+    .player-controls {
+        gap: 4px;
+    }
+
+    .player-controls-row {
+        gap: 2px;
+    }
+
+    /* Keep volume controls but reduce size */
+    .volume-bar-container {
+        width: 60px;
+    }
+
+    .volume-controls {
+        gap: 4px;
+    }
+
+    .control-button {
+        width: 28px;
+        height: 28px;
+    }
+
+    .control-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .play-button-small {
+        width: 28px;
+        height: 28px;
+    }
+
+    .play-icon-small {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* Progress bar adjustments */
+    .progress-container {
+        gap: 4px;
+    }
+
+    .time-display {
+        min-width: 28px;
+        font-size: 10px;
+    }
+
+    /* Action controls adjustments */
+    .action-controls {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .cart-button-large {
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+
+    .cart-icon-large {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .song-title {
+        font-size: 24px;
+    }
+
+    /* Further reduce spacing on very small screens */
+    .player-controls {
+        gap: 2px;
+    }
+
+    .volume-bar-container {
+        width: 50px;
     }
 }
 
