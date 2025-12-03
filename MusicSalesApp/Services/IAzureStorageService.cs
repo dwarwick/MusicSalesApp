@@ -7,7 +7,7 @@ namespace MusicSalesApp.Services
     public interface IAzureStorageService
     {
         Task UploadAsync(string fileName, Stream data, string contentType);
-        Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> metadata);
+        Task UploadAsync(string fileName, Stream data, string contentType, IDictionary<string, string> tags);
         Task<Stream> DownloadAsync(string fileName); // full download (legacy)
         Task<bool> DeleteAsync(string fileName);
         Task<bool> ExistsAsync(string fileName);
@@ -18,6 +18,10 @@ namespace MusicSalesApp.Services
         Task<Stream> DownloadSegmentAsync(string fileName, long start, long end); // slice via seek
         Task<Stream> DownloadRangeDirectAsync(string fileName, long start, long end); // direct range fetch via SDK
         Task EnsureContainerExistsAsync(); // ensure container exists
+
+        Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName);
+
+        Uri GetReadSasUri(string fileName, TimeSpan lifetime);
     }
 
     public class StorageFileInfo
@@ -26,5 +30,9 @@ namespace MusicSalesApp.Services
         public long Length { get; set; }
         public string ContentType { get; set; } = "application/octet-stream";
         public DateTimeOffset? LastModified { get; set; }
+        /// <summary>
+        /// The blob index tags associated with this file.
+        /// </summary>
+        public IDictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
     }
 }
