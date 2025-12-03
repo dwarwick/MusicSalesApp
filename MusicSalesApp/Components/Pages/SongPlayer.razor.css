@@ -329,6 +329,96 @@
         flex-direction: column;
         align-items: flex-start;
     }
+
+    /* Mobile player bar adjustments */
+    .player-bar {
+        padding: 0 8px;
+    }
+
+    .time-spacer {
+        min-width: 0;
+        display: none;
+    }
+
+    .controls-wrapper {
+        gap: 4px;
+        margin-bottom: 4px;
+    }
+
+    .player-controls {
+        gap: 8px;
+    }
+
+    .player-controls-row {
+        gap: 4px;
+    }
+
+    /* Hide volume controls on very small screens */
+    .volume-controls {
+        display: none;
+    }
+
+    .control-button {
+        width: 28px;
+        height: 28px;
+    }
+
+    .control-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .play-button-small {
+        width: 28px;
+        height: 28px;
+    }
+
+    .play-icon-small {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* Progress bar adjustments */
+    .progress-container {
+        gap: 4px;
+    }
+
+    .time-display {
+        min-width: 32px;
+        font-size: 10px;
+    }
+
+    /* Action controls adjustments */
+    .action-controls {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .cart-button-large {
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+
+    .cart-icon-large {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .song-title {
+        font-size: 28px;
+    }
+
+    .player-controls button:nth-child(1),
+    .player-controls button:nth-child(5) {
+        display: none;
+    }
+
+    .player-controls {
+        gap: 12px;
+    }
 }
 
 /* Owned Badge */
