@@ -33,6 +33,12 @@ public class MusicControllerTests
             _mockStorageService.Object,
             _mockCartService.Object,
             _mockUserManager.Object);
+
+        // Set up HttpContext for controller (required for Response.Headers access)
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
     
     [Test]

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Components.Base;
@@ -9,9 +8,9 @@ namespace MusicSalesApp.Components.Layout;
 
 public partial class NavMenuModel : BlazorBase, IDisposable
 {
-    protected int _cartCount = 0;
-
     private static event Action OnCartUpdated;
+
+    protected int _cartCount = 0;
     private bool _disposed;
 
     protected override async Task OnInitializedAsync()
