@@ -80,12 +80,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
-        await LoadFiles();
-        
+        // Load cart and owned songs first if authenticated
         if (_isAuthenticated)
         {
             await LoadCartAndOwnedSongs();
         }
+        
+        // Then load files - this will set _loading to false
+        await LoadFiles();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

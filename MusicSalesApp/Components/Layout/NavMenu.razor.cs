@@ -8,8 +8,6 @@ namespace MusicSalesApp.Components.Layout;
 
 public class NavMenuModel : BlazorBase, IDisposable
 {
-    private static event Action OnCartUpdated;
-
     protected int _cartCount = 0;
 
     private bool _disposed;
