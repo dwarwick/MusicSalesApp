@@ -108,8 +108,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Set the streaming URL for the audio - safely encode path segments while preserving slashes
-            _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
+            // Get SAS URL for direct streaming from blob storage
+            // Non-owners and unauthenticated users get short-lived URLs (preview only)
+            // Owners get longer-lived URLs for full access
+            await LoadStreamUrl();
 
             // Try to find album art (look for image files with matching name in the same folder)
             var songBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
@@ -162,6 +164,31 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         catch (HttpRequestException)
         {
             // Not authenticated or error, ignore
+        }
+    }
+
+    private async Task LoadStreamUrl()
+    {
+        if (_songInfo == null) return;
+        
+        try
+        {
+            // Request SAS URL from the server
+            var response = await Http.GetFromJsonAsync<SasUrlResponse>($"api/music/url/{SafeEncodePath(_songInfo.Name)}");
+            if (response != null && !string.IsNullOrEmpty(response.Url))
+            {
+                _streamUrl = response.Url;
+            }
+            else
+            {
+                // Fallback to server proxy if SAS URL generation fails
+                _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
+            }
+        }
+        catch (Exception)
+        {
+            // Fallback to server proxy on error
+            _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
         }
     }
 
@@ -247,6 +274,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     {
         public bool InCart { get; set; }
         public int Count { get; set; }
+    }
+
+    private class SasUrlResponse
+    {
+        public string Url { get; set; } = string.Empty;
     }
 
     private bool IsImageFile(string fileName)
