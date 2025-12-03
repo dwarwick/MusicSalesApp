@@ -408,7 +408,7 @@
 /* Extra small screens */
 @media (max-width: 480px) {
     .song-title {
-        font-size: 28px;
+        font-size: 24px;
     }
 
     .player-controls button:nth-child(1),
