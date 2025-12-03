@@ -128,10 +128,11 @@
     z-index: 100;
 }
 
-/* Desktop layout - account for sidebar */
+/* Desktop layout - account for sidebar and article padding */
 @media (min-width: 641px) {
     .player-bar {
-        left: 250px;
+        left: calc(250px + 2rem);
+        right: 1.5rem;
     }
 }
 
@@ -339,6 +340,8 @@
 
     /* Mobile player bar adjustments */
     .player-bar {
+        left: 1rem;
+        right: 1rem;
         padding: 0 12px;
     }
 
