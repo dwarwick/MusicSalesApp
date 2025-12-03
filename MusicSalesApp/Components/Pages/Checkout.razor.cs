@@ -93,7 +93,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             {
                 _cartItems.RemoveAll(i => i.SongFileName == songFileName);
                 _cartTotal = _cartItems.Sum(i => i.Price);
-                NavMenuModel.NotifyCartUpdated();
+                CartService.NotifyCartUpdated();
                 await InvokeAsync(StateHasChanged);
 
                 // Reinitialize PayPal if there are still items
@@ -184,7 +184,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 _checkoutComplete = true;
                 _cartItems.Clear();
                 _cartTotal = 0;
-                NavMenuModel.NotifyCartUpdated();
+                CartService.NotifyCartUpdated();
             }
             else
             {

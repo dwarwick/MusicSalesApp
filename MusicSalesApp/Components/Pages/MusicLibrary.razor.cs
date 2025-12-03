@@ -323,7 +323,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     }
                     
                     // Notify the NavMenu to update the cart count
-                    NavMenuModel.NotifyCartUpdated();
+                    CartService.NotifyCartUpdated();
                 }
             }
         }
@@ -852,7 +852,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     }
                     
                     // Notify the NavMenu to update the cart count
-                    NavMenuModel.NotifyCartUpdated();
+                    CartService.NotifyCartUpdated();
                 }
             }
         }

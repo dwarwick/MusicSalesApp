@@ -4,6 +4,10 @@ namespace MusicSalesApp.Services;
 
 public interface ICartService
 {
+    event Action OnCartUpdated;
+
+    void NotifyCartUpdated();
+
     Task<IEnumerable<CartItem>> GetCartItemsAsync(int userId);
     Task<int> GetCartItemCountAsync(int userId);
     Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price);

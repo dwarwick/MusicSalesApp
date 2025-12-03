@@ -6,6 +6,7 @@ namespace MusicSalesApp.Services;
 
 public class CartService : ICartService
 {
+    public event Action OnCartUpdated;
     private readonly AppDbContext _context;
     private readonly ILogger<CartService> _logger;
 
@@ -13,6 +14,11 @@ public class CartService : ICartService
     {
         _context = context;
         _logger = logger;
+    }
+
+    public void NotifyCartUpdated()
+    {
+        OnCartUpdated?.Invoke();
     }
 
     public async Task<IEnumerable<CartItem>> GetCartItemsAsync(int userId)
@@ -50,6 +56,8 @@ public class CartService : ICartService
         _context.CartItems.Add(cartItem);
         await _context.SaveChangesAsync();
 
+        NotifyCartUpdated();
+
         _logger.LogInformation("Added song {SongFileName} to cart for user {UserId}", songFileName, userId);
 
         return cartItem;
@@ -67,7 +75,7 @@ public class CartService : ICartService
 
         _context.CartItems.Remove(cartItem);
         await _context.SaveChangesAsync();
-
+        NotifyCartUpdated();
         _logger.LogInformation("Removed song {SongFileName} from cart for user {UserId}", songFileName, userId);
 
         return true;
@@ -87,6 +95,7 @@ public class CartService : ICartService
 
         _context.CartItems.RemoveRange(cartItems);
         await _context.SaveChangesAsync();
+        NotifyCartUpdated();
 
         _logger.LogInformation("Cleared cart for user {UserId}", userId);
     }

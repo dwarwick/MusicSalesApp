@@ -220,7 +220,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                         });
                     }
 
-                    NavMenuModel.NotifyCartUpdated();
+                    CartService.NotifyCartUpdated();
                 }
             }
         }
