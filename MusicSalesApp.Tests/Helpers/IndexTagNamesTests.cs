@@ -46,4 +46,18 @@ public class IndexTagNamesTests
         // Assert
         Assert.That(IndexTagNames.Genre, Is.EqualTo("Genre"));
     }
+
+    [Test]
+    public void TrackNumber_ShouldHaveCorrectValue()
+    {
+        // Assert
+        Assert.That(IndexTagNames.TrackNumber, Is.EqualTo("TrackNumber"));
+    }
+
+    [Test]
+    public void TrackLength_ShouldHaveCorrectValue()
+    {
+        // Assert
+        Assert.That(IndexTagNames.TrackLength, Is.EqualTo("TrackLength"));
+    }
 }

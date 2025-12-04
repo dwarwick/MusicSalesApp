@@ -110,5 +110,43 @@ namespace MusicSalesApp.Services
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
             return extension == ".mp3";
         }
+
+        public async Task<double?> GetAudioDurationAsync(Stream audioStream, string fileName)
+        {
+            if (audioStream == null || string.IsNullOrWhiteSpace(fileName))
+                return null;
+
+            try
+            {
+                // Ensure the stream is at the beginning
+                if (audioStream.CanSeek)
+                {
+                    audioStream.Position = 0;
+                }
+
+                // Use FFProbe to get media info
+                var mediaInfo = await FFProbe.AnalyseAsync(audioStream);
+                
+                if (mediaInfo?.Duration != null)
+                {
+                    return mediaInfo.Duration.TotalSeconds;
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get duration for {FileName}", fileName);
+                return null;
+            }
+            finally
+            {
+                // Reset stream position if seekable
+                if (audioStream.CanSeek)
+                {
+                    audioStream.Position = 0;
+                }
+            }
+        }
     }
 }

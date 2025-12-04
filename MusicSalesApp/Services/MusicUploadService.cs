@@ -194,14 +194,31 @@ namespace MusicSalesApp.Services
             string mp3Path = $"{folderPath}/{mp3FileName}";
             string albumArtPath = $"{folderPath}/{baseName}.jpeg";
 
+            // Get track duration for standalone songs (Album = false)
+            double? trackDuration = null;
+            try
+            {
+                uploadAudioStream.Position = 0;
+                trackDuration = await _musicService.GetAudioDurationAsync(uploadAudioStream, mp3FileName);
+                uploadAudioStream.Position = 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
+            }
+
             // Build index tags for audio file
-            Dictionary<string, string> audioTags = null;
+            Dictionary<string, string> audioTags = new Dictionary<string, string>();
+            
             if (!string.IsNullOrWhiteSpace(albumName))
             {
-                audioTags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, albumName }
-                };
+                audioTags[IndexTagNames.AlbumName] = albumName;
+            }
+
+            // Add track length for standalone songs (Album = false)
+            if (trackDuration.HasValue)
+            {
+                audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");
             }
 
             // Build index tags for album art file
@@ -219,7 +236,7 @@ namespace MusicSalesApp.Services
             {
                 // Upload MP3 file
                 _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioTags);
+                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioTags.Any() ? audioTags : null);
 
                 // Upload album art
                 _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
