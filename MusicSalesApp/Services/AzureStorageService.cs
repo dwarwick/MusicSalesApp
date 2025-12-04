@@ -398,5 +398,40 @@ namespace MusicSalesApp.Services
 
             return blobClient.GenerateSasUri(sasBuilder);
         }
+
+        public async Task SetTagsAsync(string fileName, IDictionary<string, string> tags)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
+            if (tags == null) throw new ArgumentNullException(nameof(tags));
+            try
+            {
+                var blobClient = _containerClient.GetBlobClient(fileName);
+                await blobClient.SetTagsAsync(tags);
+                _logger.LogInformation("Set tags for blob {FileName}", fileName);
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed setting tags for blob {FileName}", fileName);
+                throw;
+            }
+        }
+
+        public async Task<IDictionary<string, string>> GetTagsAsync(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
+            try
+            {
+                var blobClient = _containerClient.GetBlobClient(fileName);
+                var tags = await blobClient.GetTagsAsync();
+                return tags.Value.Tags != null 
+                    ? new Dictionary<string, string>(tags.Value.Tags) 
+                    : new Dictionary<string, string>();
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed getting tags for blob {FileName}", fileName);
+                throw;
+            }
+        }
     }
 }

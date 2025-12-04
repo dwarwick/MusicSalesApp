@@ -22,6 +22,9 @@ namespace MusicSalesApp.Services
         Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName);
 
         Uri GetReadSasUri(string fileName, TimeSpan lifetime);
+
+        Task SetTagsAsync(string fileName, IDictionary<string, string> tags);
+        Task<IDictionary<string, string>> GetTagsAsync(string fileName);
     }
 
     public class StorageFileInfo
