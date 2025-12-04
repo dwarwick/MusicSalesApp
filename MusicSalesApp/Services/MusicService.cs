@@ -116,7 +116,7 @@ namespace MusicSalesApp.Services
             if (audioStream == null || string.IsNullOrWhiteSpace(fileName))
                 return null;
 
-            string tempFilePath = null;
+            string tempInputPath = null;
             try
             {
                 // Ensure the stream is at the beginning
@@ -125,20 +125,45 @@ namespace MusicSalesApp.Services
                     audioStream.Position = 0;
                 }
 
-                // FFProbe requires a file path, so we write the stream to a temporary file
-                tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
+                // Write the stream to a temporary file for analysis
+                tempInputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
                 
-                await using (var fileStream = File.Create(tempFilePath))
+                await using (var fileStream = File.Create(tempInputPath))
                 {
                     await audioStream.CopyToAsync(fileStream);
                 }
 
-                // Analyze the temporary file
-                var mediaInfo = await FFProbe.AnalyseAsync(tempFilePath);
-                
-                if (mediaInfo?.Duration != null)
+                // Use FFMpeg to get duration by processing the file with null output
+                // This is more reliable than FFProbe as it uses the same binary
+                TimeSpan? duration = null;
+                var analysis = await FFMpegArguments
+                    .FromFileInput(tempInputPath)
+                    .OutputToFile("NUL", true, options => options
+                        .WithCustomArgument("-f null"))
+                    .NotifyOnProgress(progress =>
+                    {
+                        // Capture the duration from progress
+                        duration = progress;
+                    })
+                    .ProcessAsynchronously(throwOnError: false);
+
+                if (duration.HasValue && duration.Value.TotalSeconds > 0)
                 {
-                    return mediaInfo.Duration.TotalSeconds;
+                    return duration.Value.TotalSeconds;
+                }
+
+                // Fallback: Try using FFProbe if available
+                try
+                {
+                    var mediaInfo = await FFProbe.AnalyseAsync(tempInputPath);
+                    if (mediaInfo?.Duration != null)
+                    {
+                        return mediaInfo.Duration.TotalSeconds;
+                    }
+                }
+                catch
+                {
+                    // FFProbe not available, continue without it
                 }
 
                 return null;
@@ -151,11 +176,11 @@ namespace MusicSalesApp.Services
             finally
             {
                 // Clean up temporary file
-                if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath))
+                if (!string.IsNullOrEmpty(tempInputPath) && File.Exists(tempInputPath))
                 {
                     try
                     {
-                        File.Delete(tempFilePath);
+                        File.Delete(tempInputPath);
                     }
                     catch
                     {
