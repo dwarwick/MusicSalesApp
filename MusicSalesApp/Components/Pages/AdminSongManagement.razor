@@ -113,19 +113,33 @@ else
                                     </button>
                                 </td>
                                 <td>
-                                    @if (!string.IsNullOrEmpty(song.SongImageUrl))
+                                    @if (!song.IsAlbum)
                                     {
-                                        <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                        @if (!string.IsNullOrEmpty(song.SongImageUrl))
+                                        {
+                                            <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">No image</span>
+                                        }
                                     }
                                     else
                                     {
-                                        <span class="text-muted">No image</span>
+                                        <span class="text-muted">N/A</span>
                                     }
                                 </td>
                                 <td>
-                                    @if (!string.IsNullOrEmpty(song.AlbumCoverImageUrl))
+                                    @if (song.IsAlbum)
                                     {
-                                        <img src="@song.AlbumCoverImageUrl" alt="Album cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                        @if (!string.IsNullOrEmpty(song.AlbumCoverImageUrl))
+                                        {
+                                            <img src="@song.AlbumCoverImageUrl" alt="Album cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">No image</span>
+                                        }
                                     }
                                     else
                                     {
@@ -144,8 +158,8 @@ else
                                 </td>
                                 <td>@song.AlbumName</td>
                                 <td>@song.SongTitle</td>
-                                <td><small>@song.Mp3FileName</small></td>
-                                <td><small>@song.JpegFileName</small></td>
+                                <td><small>@System.IO.Path.GetFileName(song.Mp3FileName)</small></td>
+                                <td><small>@System.IO.Path.GetFileName(song.JpegFileName)</small></td>
                                 <td>
                                     @if (song.AlbumPrice.HasValue)
                                     {
@@ -218,7 +232,7 @@ else
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Album (True/False)</label>
-                            <input type="text" class="form-control" value="@_editingSong.IsAlbum" disabled />
+                            <input type="text" class="form-control" value="@(_editingSong.IsAlbum ? "True" : "False")" disabled />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Album Name</label>
@@ -238,19 +252,19 @@ else
                             <label class="form-label">Album Price</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
-                                <input type="number" step="0.01" class="form-control" @bind="_editAlbumPrice" />
+                                <input type="number" step="0.01" class="form-control" @bind="_editAlbumPrice" disabled="@(!_editingSong.IsAlbum)" />
                             </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Song Price</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
-                                <input type="number" step="0.01" class="form-control" @bind="_editSongPrice" />
+                                <input type="number" step="0.01" class="form-control" @bind="_editSongPrice" disabled="@(_editingSong.IsAlbum)" />
                             </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Genre <span class="text-danger">*</span></label>
-                            <select class="form-select" @bind="_editGenre">
+                            <select class="form-select" @bind="_editGenre" disabled="@(_editingSong.IsAlbum)">
                                 <option value="">-- Select Genre --</option>
                                 <option value="Rock">Rock</option>
                                 <option value="Country">Country</option>
@@ -262,35 +276,42 @@ else
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Song Cover Image</label>
-                            @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
+                            @if (!_editingSong.IsAlbum)
                             {
-                                <div class="mb-2">
-                                    <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
-                                </div>
+                                @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
+                                {
+                                    <div class="mb-2">
+                                        <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
+                                    </div>
+                                }
+                                <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg" class="form-control" />
+                                <small class="text-muted">Upload a new song cover image (JPEG only)</small>
+                                @if (_songImageFile != null)
+                                {
+                                    <div class="mt-2 text-success">
+                                        <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
+                                    </div>
+                                }
                             }
-                            <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg" class="form-control" />
-                            <small class="text-muted">Upload a new song cover image (JPEG only)</small>
-                            @if (_songImageFile != null)
+                            else
                             {
-                                <div class="mt-2 text-success">
-                                    <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
-                                </div>
+                                <p class="text-muted">N/A (Album entries don't have song covers)</p>
                             }
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Album Cover Image</label>
-                            @if (!string.IsNullOrEmpty(_editingSong.AlbumCoverImageUrl))
+                            @if (_editingSong.IsAlbum)
                             {
-                                <div class="mb-2">
-                                    <img src="@_editingSong.AlbumCoverImageUrl" alt="Current album cover" class="img-thumbnail" style="max-width: 200px;" />
-                                </div>
-                            }
-                            else if (_editingSong.IsAlbum)
-                            {
-                                <div class="alert alert-warning mb-2">No album cover found</div>
-                            }
-                            @if (!string.IsNullOrEmpty(_editingSong.AlbumName))
-                            {
+                                @if (!string.IsNullOrEmpty(_editingSong.AlbumCoverImageUrl))
+                                {
+                                    <div class="mb-2">
+                                        <img src="@_editingSong.AlbumCoverImageUrl" alt="Current album cover" class="img-thumbnail" style="max-width: 200px;" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="alert alert-warning mb-2">No album cover found</div>
+                                }
                                 <InputFile OnChange="HandleAlbumImageUpload" accept=".jpeg,.jpg" class="form-control" />
                                 <small class="text-muted">Upload a new album cover image (JPEG only)</small>
                                 @if (_albumImageFile != null)
@@ -302,7 +323,7 @@ else
                             }
                             else
                             {
-                                <p class="text-muted">N/A (Not part of an album)</p>
+                                <p class="text-muted">N/A (Not an album)</p>
                             }
                         </div>
                     </div>

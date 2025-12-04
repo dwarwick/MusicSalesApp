@@ -290,30 +290,37 @@ public class AdminSongManagementModel : ComponentBase
 
         try
         {
-            // Validate
-            if (_editingSong.IsAlbum && !_editingSong.HasAlbumCover && _albumImageFile == null)
+            // Validate based on Album type
+            if (_editingSong.IsAlbum)
             {
-                _validationErrors.Add("All albums must have an album cover image.");
-            }
+                // Album validation
+                if (!_editingSong.HasAlbumCover && _albumImageFile == null)
+                {
+                    _validationErrors.Add("All albums must have an album cover image.");
+                }
 
-            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName) && string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
-            {
-                _validationErrors.Add("All MP3 files must have a song cover image.");
+                if (!_editAlbumPrice.HasValue)
+                {
+                    _validationErrors.Add("All albums must have a price.");
+                }
             }
-
-            if (_editingSong.IsAlbum && !_editAlbumPrice.HasValue)
+            else
             {
-                _validationErrors.Add("All albums must have a price.");
-            }
+                // Song validation
+                if (string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
+                {
+                    _validationErrors.Add("All songs must have a cover image.");
+                }
 
-            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName) && !_editSongPrice.HasValue)
-            {
-                _validationErrors.Add("All songs must have a price.");
-            }
+                if (!_editSongPrice.HasValue)
+                {
+                    _validationErrors.Add("All songs must have a price.");
+                }
 
-            if (string.IsNullOrWhiteSpace(_editGenre) && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
-            {
-                _validationErrors.Add("All songs must have a genre.");
+                if (string.IsNullOrWhiteSpace(_editGenre))
+                {
+                    _validationErrors.Add("All songs must have a genre.");
+                }
             }
 
             if (_validationErrors.Any())
@@ -323,7 +330,7 @@ public class AdminSongManagementModel : ComponentBase
             }
 
             // Upload new images if provided
-            if (_songImageFile != null)
+            if (_songImageFile != null && !_editingSong.IsAlbum)
             {
                 using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                 var newFileName = _editingSong.JpegFileName;
@@ -338,6 +345,7 @@ public class AdminSongManagementModel : ComponentBase
                     { IndexTagNames.IsAlbumCover, "false" }
                 };
 
+                // Only add song-specific tags for songs
                 if (!string.IsNullOrEmpty(_editGenre))
                 {
                     tags[IndexTagNames.Genre] = _editGenre;
@@ -348,16 +356,11 @@ public class AdminSongManagementModel : ComponentBase
                     tags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
                 }
 
-                if (_editAlbumPrice.HasValue)
-                {
-                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
-                }
-
                 await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
                 _editingSong.JpegFileName = newFileName;
             }
 
-            if (_albumImageFile != null)
+            if (_albumImageFile != null && _editingSong.IsAlbum)
             {
                 using var stream = _albumImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                 var newFileName = _editingSong.AlbumCoverBlobName;
@@ -372,9 +375,10 @@ public class AdminSongManagementModel : ComponentBase
                     { IndexTagNames.IsAlbumCover, "true" }
                 };
 
+                // Only add album price for albums
                 if (_editAlbumPrice.HasValue)
                 {
-                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString("F2");
+                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
                 }
 
                 await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
@@ -405,20 +409,30 @@ public class AdminSongManagementModel : ComponentBase
                 var isAlbumCover = existingTags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
                                   coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
 
-                // Update or add new tags
-                if (!string.IsNullOrEmpty(_editGenre) && !isAlbumCover)
+                // Update tags based on whether it's an album or song
+                if (_editingSong.IsAlbum)
                 {
-                    existingTags[IndexTagNames.Genre] = _editGenre;
+                    // For albums, only update album price
+                    if (_editAlbumPrice.HasValue)
+                    {
+                        existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
+                    }
                 }
-
-                if (_editSongPrice.HasValue && !isAlbumCover)
+                else
                 {
-                    existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
-                }
+                    // For songs, update genre and song price (but not on album cover images)
+                    if (!isAlbumCover)
+                    {
+                        if (!string.IsNullOrEmpty(_editGenre))
+                        {
+                            existingTags[IndexTagNames.Genre] = _editGenre;
+                        }
 
-                if (_editAlbumPrice.HasValue && !string.IsNullOrEmpty(_editingSong.AlbumName))
-                {
-                    existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
+                        if (_editSongPrice.HasValue)
+                        {
+                            existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
+                        }
+                    }
                 }
 
                 await StorageService.SetTagsAsync(fileName, existingTags);
