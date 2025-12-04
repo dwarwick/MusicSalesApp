@@ -745,7 +745,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected bool IsAlbumInCart(AlbumInfo album)
     {
-        return _cartAlbums.Contains(album.AlbumName);
+        // An album is in cart if all of its tracks are in cart
+        return album.Tracks.All(t => _cartSongs.Contains(t.Name));
     }
 
     protected async Task PlayAlbum(AlbumInfo album)
