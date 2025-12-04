@@ -187,12 +187,13 @@ namespace MusicSalesApp.Components.Pages
                 _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
                 _ownsAlbum = _albumInfo.Tracks.All(t => _ownedSongs.Contains(t.Name));
 
-                // Check if album is in cart
+                // Check if album is in cart (albums are stored as individual tracks)
                 var cartResponse = await Http.GetFromJsonAsync<CartResponseDto>("api/cart");
-                if (cartResponse?.Albums != null)
+                if (cartResponse?.Items != null)
                 {
-                    _inCart = cartResponse.Albums.Any(a =>
-                        string.Equals(a.AlbumName, _albumInfo.AlbumName, StringComparison.OrdinalIgnoreCase));
+                    var cartSongs = new HashSet<string>(cartResponse.Items.Select(i => i.SongFileName));
+                    // An album is in cart if all of its tracks are in cart
+                    _inCart = _albumInfo.Tracks.All(t => cartSongs.Contains(t.Name));
                 }
             }
             catch (HttpRequestException)
