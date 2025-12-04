@@ -336,18 +336,20 @@ public class AdminSongManagementModel : ComponentBase
                 else
                 {
                     // Check track number uniqueness within the album
+                    // Get all other tracks in the same album (excluding the current track being edited)
                     var albumTracks = _allSongs.Where(s => 
                         s.IsAlbum && 
                         s.AlbumName.Equals(_editingSong.AlbumName, StringComparison.OrdinalIgnoreCase) &&
                         s.Id != _editingSong.Id).ToList();
                     
-                    var maxTrackNumber = albumTracks.Count + 1; // Including current track
-                    if (_editTrackNumber.Value > maxTrackNumber)
+                    // Total tracks = other tracks + current track
+                    var totalTracksInAlbum = albumTracks.Count + 1;
+                    if (_editTrackNumber.Value > totalTracksInAlbum)
                     {
-                        _validationErrors.Add($"Track Number cannot exceed {maxTrackNumber} (the number of tracks in the album).");
+                        _validationErrors.Add($"Track Number cannot exceed {totalTracksInAlbum} (total tracks in album).");
                     }
 
-                    // Check for duplicate track number
+                    // Check for duplicate track number among other tracks
                     if (albumTracks.Any(t => t.TrackNumber == _editTrackNumber.Value))
                     {
                         _validationErrors.Add($"Track Number {_editTrackNumber.Value} is already used by another track in this album.");

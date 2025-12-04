@@ -142,7 +142,7 @@ namespace MusicSalesApp.Components.Pages
                         {
                             return trackNum;
                         }
-                        return int.MaxValue; // Put tracks without track number at the end
+                        return 9999; // Put tracks without track number at the end
                     })
                     .ThenBy(f => Path.GetFileName(f.Name))
                     .ToList();
