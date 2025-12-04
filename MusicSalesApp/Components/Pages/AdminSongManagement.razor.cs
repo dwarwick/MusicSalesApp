@@ -39,6 +39,7 @@ public class AdminSongManagementModel : ComponentBase
     protected decimal? _editAlbumPrice = null;
     protected decimal? _editSongPrice = null;
     protected string _editGenre = string.Empty;
+    protected int? _editTrackNumber = null;
     protected IBrowserFile _songImageFile = null;
     protected IBrowserFile _albumImageFile = null;
     protected List<string> _validationErrors = new();
@@ -120,6 +121,18 @@ public class AdminSongManagementModel : ComponentBase
             if (file.Tags.TryGetValue(IndexTagNames.Genre, out var genre))
             {
                 song.Genre = genre;
+            }
+
+            if (file.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumberStr) && 
+                int.TryParse(trackNumberStr, out var trackNumber))
+            {
+                song.TrackNumber = trackNumber;
+            }
+
+            if (file.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) && 
+                double.TryParse(trackLengthStr, out var trackLength))
+            {
+                song.TrackLength = trackLength;
             }
 
             if (isMp3)
@@ -221,6 +234,12 @@ public class AdminSongManagementModel : ComponentBase
                 nameof(SongAdminViewModel.Genre) => _sortAscending 
                     ? filtered.OrderBy(s => s.Genre) 
                     : filtered.OrderByDescending(s => s.Genre),
+                nameof(SongAdminViewModel.TrackNumber) => _sortAscending 
+                    ? filtered.OrderBy(s => s.TrackNumber ?? 0) 
+                    : filtered.OrderByDescending(s => s.TrackNumber ?? 0),
+                nameof(SongAdminViewModel.TrackLength) => _sortAscending 
+                    ? filtered.OrderBy(s => s.TrackLength ?? 0) 
+                    : filtered.OrderByDescending(s => s.TrackLength ?? 0),
                 _ => filtered
             };
         }
@@ -266,6 +285,7 @@ public class AdminSongManagementModel : ComponentBase
         _editAlbumPrice = song.AlbumPrice;
         _editSongPrice = song.SongPrice;
         _editGenre = song.Genre;
+        _editTrackNumber = song.TrackNumber;
         _songImageFile = null;
         _albumImageFile = null;
         _validationErrors.Clear();
@@ -302,6 +322,36 @@ public class AdminSongManagementModel : ComponentBase
                 if (!_editAlbumPrice.HasValue)
                 {
                     _validationErrors.Add("All albums must have a price.");
+                }
+
+                // Validate track number for album tracks
+                if (!_editTrackNumber.HasValue)
+                {
+                    _validationErrors.Add("Track Number is required for album tracks.");
+                }
+                else if (_editTrackNumber.Value < 1)
+                {
+                    _validationErrors.Add("Track Number must be at least 1.");
+                }
+                else
+                {
+                    // Check track number uniqueness within the album
+                    var albumTracks = _allSongs.Where(s => 
+                        s.IsAlbum && 
+                        s.AlbumName.Equals(_editingSong.AlbumName, StringComparison.OrdinalIgnoreCase) &&
+                        s.Id != _editingSong.Id).ToList();
+                    
+                    var maxTrackNumber = albumTracks.Count + 1; // Including current track
+                    if (_editTrackNumber.Value > maxTrackNumber)
+                    {
+                        _validationErrors.Add($"Track Number cannot exceed {maxTrackNumber} (the number of tracks in the album).");
+                    }
+
+                    // Check for duplicate track number
+                    if (albumTracks.Any(t => t.TrackNumber == _editTrackNumber.Value))
+                    {
+                        _validationErrors.Add($"Track Number {_editTrackNumber.Value} is already used by another track in this album.");
+                    }
                 }
             }
             else
@@ -412,10 +462,16 @@ public class AdminSongManagementModel : ComponentBase
                 // Update tags based on whether it's an album or song
                 if (_editingSong.IsAlbum)
                 {
-                    // For albums, only update album price
+                    // For albums, update album price and track number
                     if (_editAlbumPrice.HasValue)
                     {
                         existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
+                    }
+                    
+                    // Only set track number on MP3 files
+                    if (fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) && _editTrackNumber.HasValue)
+                    {
+                        existingTags[IndexTagNames.TrackNumber] = _editTrackNumber.Value.ToString();
                     }
                 }
                 else
@@ -442,6 +498,7 @@ public class AdminSongManagementModel : ComponentBase
             _editingSong.AlbumPrice = _editAlbumPrice;
             _editingSong.SongPrice = _editSongPrice;
             _editingSong.Genre = _editGenre;
+            _editingSong.TrackNumber = _editTrackNumber;
 
             // Close modal and refresh
             _showEditModal = false;

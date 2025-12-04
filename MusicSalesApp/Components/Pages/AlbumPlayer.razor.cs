@@ -38,6 +38,7 @@ namespace MusicSalesApp.Components.Pages
         protected int _currentTrackIndex;
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
         private List<string> _trackStreamUrls = new List<string>();
+        private Dictionary<int, string> _trackImageUrls = new Dictionary<int, string>();
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
@@ -133,7 +134,17 @@ namespace MusicSalesApp.Components.Pages
                                 f.Tags != null &&
                                 f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) &&
                                 string.Equals(trackAlbum, decodedAlbumName, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(f => Path.GetFileName(f.Name))
+                    .OrderBy(f =>
+                    {
+                        // Sort by track number if available, otherwise by file name
+                        if (f.Tags != null && f.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumStr) &&
+                            int.TryParse(trackNumStr, out var trackNum))
+                        {
+                            return trackNum;
+                        }
+                        return int.MaxValue; // Put tracks without track number at the end
+                    })
+                    .ThenBy(f => Path.GetFileName(f.Name))
                     .ToList();
 
                 if (!tracks.Any())
@@ -155,6 +166,36 @@ namespace MusicSalesApp.Components.Pages
                 // Pre-fetch all track SAS URLs in parallel for better performance
                 var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
                 _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Find and store track images (JPEGs with same base name as MP3, not album covers)
+                var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    var trackBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(track.Name));
+                    var trackFolder = Path.GetDirectoryName(track.Name)?.Replace("\\", "/") ?? "";
+                    
+                    // Look for JPEG with same base name in same folder, but not an album cover
+                    var trackImage = imageFiles.FirstOrDefault(img =>
+                    {
+                        if (img.Tags != null && img.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) &&
+                            string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return false; // Skip album covers
+                        }
+                        
+                        var imgBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(img.Name));
+                        var imgFolder = Path.GetDirectoryName(img.Name)?.Replace("\\", "/") ?? "";
+                        
+                        return string.Equals(imgBaseName, trackBaseName, StringComparison.OrdinalIgnoreCase) &&
+                               string.Equals(imgFolder, trackFolder, StringComparison.OrdinalIgnoreCase);
+                    });
+                    
+                    if (trackImage != null)
+                    {
+                        _trackImageUrls[i] = $"api/music/{SafeEncodePath(trackImage.Name)}";
+                    }
+                }
 
                 // Set up the first track
                 _currentTrackIndex = 0;
@@ -369,6 +410,38 @@ namespace MusicSalesApp.Components.Pages
             return Path.GetFileNameWithoutExtension(Path.GetFileName(_albumInfo.Tracks[index].Name));
         }
 
+        protected string GetTrackNumber(int index)
+        {
+            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return (index + 1).ToString();
+            
+            var track = _albumInfo.Tracks[index];
+            if (track.Tags != null && track.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNum))
+            {
+                return trackNum;
+            }
+            
+            return (index + 1).ToString(); // Fallback to 1-based index
+        }
+
+        protected string GetTrackImageUrl(int index)
+        {
+            return _trackImageUrls.TryGetValue(index, out var url) ? url : null;
+        }
+
+        protected double? GetTrackLengthSeconds(int index)
+        {
+            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return null;
+            
+            var track = _albumInfo.Tracks[index];
+            if (track.Tags != null && track.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) &&
+                double.TryParse(trackLengthStr, out var trackLength))
+            {
+                return trackLength;
+            }
+            
+            return null;
+        }
+
         /// <summary>
         /// Gets a track stream URL by index. Uses pre-fetched URLs if available.
         /// </summary>
@@ -492,10 +565,19 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetTrackDuration(int index)
         {
+            // First check if we have a stored duration from playback
             if (_trackDurations.TryGetValue(index, out var duration) && duration > 0)
             {
                 return FormatTime(duration);
             }
+            
+            // Otherwise, check if we have track length from index tags
+            var trackLength = GetTrackLengthSeconds(index);
+            if (trackLength.HasValue && trackLength.Value > 0)
+            {
+                return FormatTime(trackLength.Value);
+            }
+            
             return UNKNOWN_DURATION_PLACEHOLDER;
         }
 
