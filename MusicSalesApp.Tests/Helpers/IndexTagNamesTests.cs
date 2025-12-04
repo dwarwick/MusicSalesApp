@@ -25,4 +25,25 @@ public class IndexTagNamesTests
         // Assert
         Assert.That(IndexTagNames.Price, Is.EqualTo("Price"));
     }
+
+    [Test]
+    public void AlbumPrice_ShouldHaveCorrectValue()
+    {
+        // Assert
+        Assert.That(IndexTagNames.AlbumPrice, Is.EqualTo("AlbumPrice"));
+    }
+
+    [Test]
+    public void SongPrice_ShouldHaveCorrectValue()
+    {
+        // Assert
+        Assert.That(IndexTagNames.SongPrice, Is.EqualTo("SongPrice"));
+    }
+
+    [Test]
+    public void Genre_ShouldHaveCorrectValue()
+    {
+        // Assert
+        Assert.That(IndexTagNames.Genre, Is.EqualTo("Genre"));
+    }
 }

@@ -20,4 +20,19 @@ public static class IndexTagNames
     /// The price of the item. Reserved for future use.
     /// </summary>
     public const string Price = "Price";
+
+    /// <summary>
+    /// The price of an album.
+    /// </summary>
+    public const string AlbumPrice = "AlbumPrice";
+
+    /// <summary>
+    /// The price of a song.
+    /// </summary>
+    public const string SongPrice = "SongPrice";
+
+    /// <summary>
+    /// The genre of the song (e.g., Rock, Country, Pop).
+    /// </summary>
+    public const string Genre = "Genre";
 }
