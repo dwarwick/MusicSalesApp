@@ -80,12 +80,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
-        await LoadFiles();
-        
+        // Load cart and owned songs first if authenticated
         if (_isAuthenticated)
         {
             await LoadCartAndOwnedSongs();
         }
+        
+        // Then load files - this will set _loading to false
+        await LoadFiles();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -743,7 +745,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected bool IsAlbumInCart(AlbumInfo album)
     {
-        return _cartAlbums.Contains(album.AlbumName);
+        // An album is in cart if all of its tracks are in cart
+        return album.Tracks.All(t => _cartSongs.Contains(t.Name));
     }
 
     protected async Task PlayAlbum(AlbumInfo album)
