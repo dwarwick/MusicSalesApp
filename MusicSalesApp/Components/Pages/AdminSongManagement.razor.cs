@@ -12,6 +12,9 @@ namespace MusicSalesApp.Components.Pages;
 
 public class AdminSongManagementModel : ComponentBase
 {
+    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private const string PriceFormat = "F2";
+
     [Inject] protected IAzureStorageService StorageService { get; set; }
     [Inject] protected NavigationManager NavigationManager { get; set; }
 
@@ -322,7 +325,7 @@ public class AdminSongManagementModel : ComponentBase
             // Upload new images if provided
             if (_songImageFile != null)
             {
-                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                 var newFileName = _editingSong.JpegFileName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
@@ -342,12 +345,12 @@ public class AdminSongManagementModel : ComponentBase
 
                 if (_editSongPrice.HasValue)
                 {
-                    tags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString("F2");
+                    tags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
                 }
 
                 if (_editAlbumPrice.HasValue)
                 {
-                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString("F2");
+                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
                 }
 
                 await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
@@ -356,7 +359,7 @@ public class AdminSongManagementModel : ComponentBase
 
             if (_albumImageFile != null)
             {
-                using var stream = _albumImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+                using var stream = _albumImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                 var newFileName = _editingSong.AlbumCoverBlobName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
@@ -410,12 +413,12 @@ public class AdminSongManagementModel : ComponentBase
 
                 if (_editSongPrice.HasValue && !isAlbumCover)
                 {
-                    existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString("F2");
+                    existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
                 }
 
                 if (_editAlbumPrice.HasValue && !string.IsNullOrEmpty(_editingSong.AlbumName))
                 {
-                    existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString("F2");
+                    existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
                 }
 
                 await StorageService.SetTagsAsync(fileName, existingTags);
