@@ -194,7 +194,7 @@ namespace MusicSalesApp.Services
             string mp3Path = $"{folderPath}/{mp3FileName}";
             string albumArtPath = $"{folderPath}/{baseName}.jpeg";
 
-            // Get track duration for standalone songs (Album = false)
+            // Get track duration from the MP3 file (after conversion if needed)
             double? trackDuration = null;
             try
             {
@@ -219,7 +219,7 @@ namespace MusicSalesApp.Services
                     audioTags[IndexTagNames.AlbumName] = albumName;
                 }
 
-                // Add track length for standalone songs (Album = false)
+                // Add track length for all music files
                 if (trackDuration.HasValue)
                 {
                     audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");

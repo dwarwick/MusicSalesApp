@@ -116,6 +116,7 @@ namespace MusicSalesApp.Services
             if (audioStream == null || string.IsNullOrWhiteSpace(fileName))
                 return null;
 
+            string tempFilePath = null;
             try
             {
                 // Ensure the stream is at the beginning
@@ -124,8 +125,16 @@ namespace MusicSalesApp.Services
                     audioStream.Position = 0;
                 }
 
-                // Use FFProbe to get media info
-                var mediaInfo = await FFProbe.AnalyseAsync(audioStream);
+                // FFProbe requires a file path, so we write the stream to a temporary file
+                tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
+                
+                await using (var fileStream = File.Create(tempFilePath))
+                {
+                    await audioStream.CopyToAsync(fileStream);
+                }
+
+                // Analyze the temporary file
+                var mediaInfo = await FFProbe.AnalyseAsync(tempFilePath);
                 
                 if (mediaInfo?.Duration != null)
                 {
@@ -141,6 +150,19 @@ namespace MusicSalesApp.Services
             }
             finally
             {
+                // Clean up temporary file
+                if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath))
+                {
+                    try
+                    {
+                        File.Delete(tempFilePath);
+                    }
+                    catch
+                    {
+                        // Ignore cleanup errors
+                    }
+                }
+
                 // Reset stream position if seekable
                 if (audioStream.CanSeek)
                 {
