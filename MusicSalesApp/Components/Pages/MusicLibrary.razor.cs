@@ -22,13 +22,11 @@ public enum FilterMode
 /// </summary>
 public class AlbumInfo
 {
-    public const decimal DEFAULT_ALBUM_PRICE = 9.99m;
-    
     public string AlbumName { get; set; }
     public string CoverArtUrl { get; set; }
     public string CoverArtFileName { get; set; }
     public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
-    public decimal Price { get; set; } = DEFAULT_ALBUM_PRICE;
+    public decimal Price { get; set; } = PriceDefaults.DefaultAlbumPrice;
 }
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
@@ -193,7 +191,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     if (albumTracks.Any())
                     {
                         // Read album price from index tag, fallback to default if not found or invalid
-                        decimal albumPrice = AlbumInfo.DEFAULT_ALBUM_PRICE;
+                        decimal albumPrice = PriceDefaults.DefaultAlbumPrice;
                         if (cover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
                             decimal.TryParse(albumPriceStr, out var parsedPrice))
                         {
@@ -245,7 +243,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 }
                 
                 // Read song price from index tag, fallback to default if not found or invalid
-                decimal songPrice = 0.99m;
+                decimal songPrice = PriceDefaults.DefaultSongPrice;
                 if (audioFile.Tags != null && 
                     audioFile.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) &&
                     decimal.TryParse(songPriceStr, out var parsedPrice))
@@ -317,7 +315,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected decimal GetSongPrice(string fileName)
     {
-        return _songPrices.TryGetValue(fileName, out var price) ? price : 0.99m;
+        return _songPrices.TryGetValue(fileName, out var price) ? price : PriceDefaults.DefaultSongPrice;
     }
 
     protected async Task ToggleCartItem(string fileName)

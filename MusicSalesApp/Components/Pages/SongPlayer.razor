@@ -46,12 +46,9 @@
             <div class="song-info">
                 <span class="song-label">Song</span>
                 <h1 class="song-title">@GetDisplayTitle()</h1>
-                @{
-                    var trackLength = GetTrackLengthSeconds();
-                }
-                @if (trackLength.HasValue)
+                @if (GetTrackLengthSeconds() is double trackLength)
                 {
-                    <span class="album-track-info">Duration: @FormatTime(trackLength.Value)</span>
+                    <span class="album-track-info">Duration: @FormatTime(trackLength)</span>
                 }
                 @if (!_ownsSong)
                 {

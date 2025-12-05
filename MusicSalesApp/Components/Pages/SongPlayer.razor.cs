@@ -34,7 +34,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _ownsSong;
     protected bool _inCart;
     protected bool _cartAnimating;
-    protected decimal _songPrice = 0.99m; // Default price
+    protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;

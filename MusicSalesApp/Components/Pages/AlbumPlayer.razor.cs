@@ -155,7 +155,7 @@ namespace MusicSalesApp.Components.Pages
                 }
 
                 // Read album price from index tag, fallback to default if not found or invalid
-                decimal albumPrice = AlbumInfo.DEFAULT_ALBUM_PRICE;
+                decimal albumPrice = PriceDefaults.DefaultAlbumPrice;
                 if (albumCover.Tags != null && 
                     albumCover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
                     decimal.TryParse(albumPriceStr, out var parsedPrice))
