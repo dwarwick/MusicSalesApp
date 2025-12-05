@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
+using Syncfusion.Blazor.Grids;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,16 +23,13 @@ public class AdminSongManagementModel : ComponentBase
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
     protected IEnumerable<SongAdminViewModel> _filteredSongs = new List<SongAdminViewModel>();
+    protected SfGrid<SongAdminViewModel> _grid;
 
     // Filter fields
     protected string _filterAlbumName = string.Empty;
     protected string _filterSongTitle = string.Empty;
     protected string _filterGenre = string.Empty;
     protected string _filterType = string.Empty;
-
-    // Sort fields
-    protected string _sortColumn = string.Empty;
-    protected bool _sortAscending = true;
 
     // Edit modal fields
     protected bool _showEditModal = false;
@@ -211,63 +209,7 @@ public class AdminSongManagementModel : ComponentBase
             }
         }
 
-        // Apply sorting
-        if (!string.IsNullOrEmpty(_sortColumn))
-        {
-            filtered = _sortColumn switch
-            {
-                nameof(SongAdminViewModel.AlbumName) => _sortAscending 
-                    ? filtered.OrderBy(s => s.AlbumName) 
-                    : filtered.OrderByDescending(s => s.AlbumName),
-                nameof(SongAdminViewModel.SongTitle) => _sortAscending 
-                    ? filtered.OrderBy(s => s.SongTitle) 
-                    : filtered.OrderByDescending(s => s.SongTitle),
-                nameof(SongAdminViewModel.IsAlbum) => _sortAscending 
-                    ? filtered.OrderBy(s => s.IsAlbum) 
-                    : filtered.OrderByDescending(s => s.IsAlbum),
-                nameof(SongAdminViewModel.AlbumPrice) => _sortAscending 
-                    ? filtered.OrderBy(s => s.AlbumPrice ?? 0) 
-                    : filtered.OrderByDescending(s => s.AlbumPrice ?? 0),
-                nameof(SongAdminViewModel.SongPrice) => _sortAscending 
-                    ? filtered.OrderBy(s => s.SongPrice ?? 0) 
-                    : filtered.OrderByDescending(s => s.SongPrice ?? 0),
-                nameof(SongAdminViewModel.Genre) => _sortAscending 
-                    ? filtered.OrderBy(s => s.Genre) 
-                    : filtered.OrderByDescending(s => s.Genre),
-                nameof(SongAdminViewModel.TrackNumber) => _sortAscending 
-                    ? filtered.OrderBy(s => s.TrackNumber ?? 0) 
-                    : filtered.OrderByDescending(s => s.TrackNumber ?? 0),
-                nameof(SongAdminViewModel.TrackLength) => _sortAscending 
-                    ? filtered.OrderBy(s => s.TrackLength ?? 0) 
-                    : filtered.OrderByDescending(s => s.TrackLength ?? 0),
-                _ => filtered
-            };
-        }
-
         _filteredSongs = filtered.ToList();
-    }
-
-    protected void SortBy(string columnName)
-    {
-        if (_sortColumn == columnName)
-        {
-            _sortAscending = !_sortAscending;
-        }
-        else
-        {
-            _sortColumn = columnName;
-            _sortAscending = true;
-        }
-        ApplyFiltersAndSort();
-    }
-
-    protected string GetSortIcon(string columnName)
-    {
-        if (_sortColumn != columnName)
-        {
-            return string.Empty;
-        }
-        return _sortAscending ? "▲" : "▼";
     }
 
     protected void ClearFilters()
