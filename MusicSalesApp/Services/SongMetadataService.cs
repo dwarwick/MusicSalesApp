@@ -1,0 +1,179 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using MusicSalesApp.Data;
+using MusicSalesApp.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace MusicSalesApp.Services
+{
+    /// <summary>
+    /// Service for managing song metadata in the database
+    /// </summary>
+    public class SongMetadataService : ISongMetadataService
+    {
+        private readonly AppDbContext _context;
+        private readonly ILogger<SongMetadataService> _logger;
+
+        public SongMetadataService(AppDbContext context, ILogger<SongMetadataService> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        public async Task<List<SongMetadata>> GetAllAsync()
+        {
+            return await _context.SongMetadata.ToListAsync();
+        }
+
+        public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
+        {
+            return await _context.SongMetadata
+                .FirstOrDefaultAsync(s => s.BlobPath == blobPath);
+        }
+
+        public async Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName)
+        {
+            return await _context.SongMetadata
+                .Where(s => s.AlbumName == albumName)
+                .ToListAsync();
+        }
+
+        public async Task<SongMetadata> UpsertAsync(SongMetadata metadata)
+        {
+            var existing = await GetByBlobPathAsync(metadata.BlobPath);
+            
+            if (existing != null)
+            {
+                // Update existing
+                existing.AlbumName = metadata.AlbumName;
+                existing.IsAlbumCover = metadata.IsAlbumCover;
+                existing.AlbumPrice = metadata.AlbumPrice;
+                existing.SongPrice = metadata.SongPrice;
+                existing.Genre = metadata.Genre;
+                existing.TrackNumber = metadata.TrackNumber;
+                existing.TrackLength = metadata.TrackLength;
+                existing.UpdatedAt = DateTime.UtcNow;
+                
+                _context.SongMetadata.Update(existing);
+            }
+            else
+            {
+                // Create new
+                _context.SongMetadata.Add(metadata);
+            }
+
+            await _context.SaveChangesAsync();
+            return existing ?? metadata;
+        }
+
+        public async Task<bool> DeleteAsync(string blobPath)
+        {
+            var metadata = await GetByBlobPathAsync(blobPath);
+            if (metadata != null)
+            {
+                _context.SongMetadata.Remove(metadata);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            return false;
+        }
+
+        public async Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters)
+        {
+            var query = _context.SongMetadata.AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(parameters.FilterAlbumName))
+            {
+                query = query.Where(s => s.AlbumName != null && 
+                    s.AlbumName.Contains(parameters.FilterAlbumName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.FilterSongTitle))
+            {
+                // SongTitle is derived from BlobPath filename, filter by BlobPath
+                query = query.Where(s => s.BlobPath.Contains(parameters.FilterSongTitle));
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.FilterGenre))
+            {
+                query = query.Where(s => s.Genre != null && 
+                    s.Genre == parameters.FilterGenre);
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.FilterType))
+            {
+                if (parameters.FilterType == "album")
+                {
+                    query = query.Where(s => s.IsAlbumCover);
+                }
+                else if (parameters.FilterType == "song")
+                {
+                    query = query.Where(s => !s.IsAlbumCover && s.FileExtension == ".mp3");
+                }
+            }
+
+            // Apply sorting
+            if (!string.IsNullOrEmpty(parameters.SortColumn))
+            {
+                query = parameters.SortColumn switch
+                {
+                    "AlbumName" => parameters.SortAscending
+                        ? query.OrderBy(s => s.AlbumName)
+                        : query.OrderByDescending(s => s.AlbumName),
+                    "Genre" => parameters.SortAscending
+                        ? query.OrderBy(s => s.Genre)
+                        : query.OrderByDescending(s => s.Genre),
+                    "AlbumPrice" => parameters.SortAscending
+                        ? query.OrderBy(s => s.AlbumPrice)
+                        : query.OrderByDescending(s => s.AlbumPrice),
+                    "SongPrice" => parameters.SortAscending
+                        ? query.OrderBy(s => s.SongPrice)
+                        : query.OrderByDescending(s => s.SongPrice),
+                    "TrackNumber" => parameters.SortAscending
+                        ? query.OrderBy(s => s.TrackNumber)
+                        : query.OrderByDescending(s => s.TrackNumber),
+                    "TrackLength" => parameters.SortAscending
+                        ? query.OrderBy(s => s.TrackLength)
+                        : query.OrderByDescending(s => s.TrackLength),
+                    _ => query
+                };
+            }
+
+            var totalCount = await query.CountAsync();
+
+            // Apply pagination
+            var items = await query
+                .Skip(parameters.Skip)
+                .Take(parameters.Take)
+                .ToListAsync();
+
+            // Convert to SongAdminViewModel
+            var viewModels = items.Select(m => new SongAdminViewModel
+            {
+                Id = m.Id.ToString(),
+                AlbumName = m.AlbumName ?? string.Empty,
+                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
+                Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
+                JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+                AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+                IsAlbum = m.IsAlbumCover,
+                AlbumPrice = m.AlbumPrice,
+                SongPrice = m.SongPrice,
+                Genre = m.Genre ?? string.Empty,
+                TrackNumber = m.TrackNumber,
+                TrackLength = m.TrackLength,
+                HasAlbumCover = m.IsAlbumCover
+            }).ToList();
+
+            return new PaginatedSongResult
+            {
+                Items = viewModels,
+                TotalCount = totalCount
+            };
+        }
+    }
+}

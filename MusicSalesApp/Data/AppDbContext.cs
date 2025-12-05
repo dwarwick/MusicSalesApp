@@ -16,6 +16,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CartItem> CartItems { get; set; }
     public DbSet<OwnedSong> OwnedSongs { get; set; }
     public DbSet<PayPalOrder> PayPalOrders { get; set; }
+    public DbSet<SongMetadata> SongMetadata { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
