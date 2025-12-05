@@ -7,6 +7,7 @@ using MusicSalesApp.Services;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -163,8 +164,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var result = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
             var allFiles = result?.ToList() ?? new List<StorageFileInfo>();
             
-            // Create lookup dictionary for file metadata
-            var metadataLookup = allMetadata.ToDictionary(m => m.BlobPath, m => m);
+            // Create lookup dictionary for file metadata (prefer Mp3BlobPath, fallback to BlobPath)
+            var metadataLookup = allMetadata.ToDictionary(
+                m => m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath, 
+                m => m);
             
             // Get all audio files
             var audioFiles = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
@@ -185,7 +188,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 {
                     // Find all tracks with the same album name from metadata
                     var trackMetadata = allMetadata
-                        .Where(m => m.FileExtension == ".mp3" &&
+                        .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) &&
                                     !string.IsNullOrEmpty(m.AlbumName) &&
                                     string.Equals(m.AlbumName, coverMeta.AlbumName, StringComparison.OrdinalIgnoreCase))
                         .ToList();
@@ -194,7 +197,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     var albumTracks = new List<StorageFileInfo>();
                     foreach (var trackMeta in trackMetadata)
                     {
-                        var fileInfo = allFiles.FirstOrDefault(f => f.Name == trackMeta.BlobPath);
+                        var mp3Path = trackMeta.Mp3BlobPath ?? trackMeta.BlobPath;
+                        var fileInfo = allFiles.FirstOrDefault(f => f.Name == mp3Path);
                         if (fileInfo != null)
                         {
                             albumTracks.Add(fileInfo);
@@ -206,11 +210,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         // Get album price from database metadata
                         decimal albumPrice = coverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
+                        var imagePath = coverMeta.ImageBlobPath ?? coverMeta.BlobPath;
                         var album = new AlbumInfo
                         {
                             AlbumName = coverMeta.AlbumName,
-                            CoverArtUrl = $"api/music/{SafeEncodePath(coverMeta.BlobPath)}",
-                            CoverArtFileName = coverMeta.BlobPath,
+                            CoverArtUrl = $"api/music/{SafeEncodePath(imagePath)}",
+                            CoverArtFileName = imagePath,
                             Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
                             Price = albumPrice
                         };
@@ -250,9 +255,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _albumArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
                 }
                 
-                // Read song price from database metadata
+                // Read song price from database metadata (try Mp3BlobPath first, then BlobPath)
                 decimal songPrice = PriceDefaults.DefaultSongPrice;
-                if (metadataLookup.TryGetValue(audioFile.Name, out var songMeta) && songMeta.SongPrice.HasValue)
+                SongMetadata songMeta = null;
+                if (!metadataLookup.TryGetValue(audioFile.Name, out songMeta))
+                {
+                    // Try finding by Mp3BlobPath or BlobPath
+                    songMeta = allMetadata.FirstOrDefault(m => m.Mp3BlobPath == audioFile.Name || m.BlobPath == audioFile.Name);
+                }
+                if (songMeta != null && songMeta.SongPrice.HasValue)
                 {
                     songPrice = songMeta.SongPrice.Value;
                 }

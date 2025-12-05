@@ -31,7 +31,9 @@ namespace MusicSalesApp.Services
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
             return await _context.SongMetadata
-                .FirstOrDefaultAsync(s => s.BlobPath == blobPath);
+                .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
+                                         s.Mp3BlobPath == blobPath || 
+                                         s.ImageBlobPath == blobPath);
         }
 
         public async Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName)
@@ -55,6 +57,8 @@ namespace MusicSalesApp.Services
                 existing.Genre = metadata.Genre;
                 existing.TrackNumber = metadata.TrackNumber;
                 existing.TrackLength = metadata.TrackLength;
+                existing.Mp3BlobPath = metadata.Mp3BlobPath;
+                existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 _context.SongMetadata.Update(existing);
@@ -156,10 +160,10 @@ namespace MusicSalesApp.Services
             {
                 Id = m.Id.ToString(),
                 AlbumName = m.AlbumName ?? string.Empty,
-                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
-                Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
-                JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
-                AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+                Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
+                JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") ? m.BlobPath : string.Empty)),
+                AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
                 IsAlbum = m.IsAlbumCover,
                 AlbumPrice = m.AlbumPrice,
                 SongPrice = m.SongPrice,

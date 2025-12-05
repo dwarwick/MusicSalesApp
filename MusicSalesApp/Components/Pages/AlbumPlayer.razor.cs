@@ -134,15 +134,16 @@ namespace MusicSalesApp.Components.Pages
 
                 // Find track metadata and map to StorageFileInfo
                 var trackMetadata = albumMetadata
-                    .Where(m => m.FileExtension == ".mp3")
+                    .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) || m.FileExtension == ".mp3")
                     .OrderBy(m => m.TrackNumber ?? 9999) // Sort by track number
-                    .ThenBy(m => Path.GetFileName(m.BlobPath))
+                    .ThenBy(m => Path.GetFileName(m.Mp3BlobPath ?? m.BlobPath))
                     .ToList();
 
                 var tracks = new List<StorageFileInfo>();
                 foreach (var trackMeta in trackMetadata)
                 {
-                    var fileInfo = allFiles.FirstOrDefault(f => f.Name == trackMeta.BlobPath);
+                    var mp3Path = trackMeta.Mp3BlobPath ?? trackMeta.BlobPath;
+                    var fileInfo = allFiles.FirstOrDefault(f => f.Name == mp3Path);
                     if (fileInfo != null)
                     {
                         tracks.Add(fileInfo);
@@ -159,14 +160,15 @@ namespace MusicSalesApp.Components.Pages
                 // Get album price from database metadata
                 decimal albumPrice = albumCoverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
-                // Build metadata lookup for track info
-                _metadataLookup = albumMetadata.ToDictionary(m => m.BlobPath, m => m);
+                // Build metadata lookup for track info (use Mp3BlobPath if available)
+                _metadataLookup = albumMetadata.ToDictionary(m => m.Mp3BlobPath ?? m.BlobPath, m => m);
 
+                var coverImagePath = albumCoverMeta.ImageBlobPath ?? albumCoverMeta.BlobPath;
                 _albumInfo = new AlbumInfo
                 {
                     AlbumName = decodedAlbumName,
-                    CoverArtUrl = $"api/music/{SafeEncodePath(albumCoverMeta.BlobPath)}", // Cover art from metadata
-                    CoverArtFileName = albumCoverMeta.BlobPath,
+                    CoverArtUrl = $"api/music/{SafeEncodePath(coverImagePath)}", // Cover art from metadata
+                    CoverArtFileName = coverImagePath,
                     Tracks = tracks,
                     Price = albumPrice
                 };
@@ -177,7 +179,7 @@ namespace MusicSalesApp.Components.Pages
 
                 // Find and store track images (JPEGs with same base name as MP3, not album covers)
                 var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
-                var imageMetadata = albumMetadata.Where(m => !m.IsAlbumCover && (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg")).ToList();
+                var imageMetadata = albumMetadata.Where(m => !m.IsAlbumCover && (m.ImageBlobPath != null || m.FileExtension == ".jpg" || m.FileExtension == ".jpeg")).ToList();
                 
                 for (int i = 0; i < tracks.Count; i++)
                 {
@@ -189,7 +191,7 @@ namespace MusicSalesApp.Components.Pages
                     var trackImage = imageFiles.FirstOrDefault(img =>
                     {
                         // Check metadata to see if this is an album cover
-                        var imgMeta = albumMetadata.FirstOrDefault(m => m.BlobPath == img.Name);
+                        var imgMeta = albumMetadata.FirstOrDefault(m => m.ImageBlobPath == img.Name || m.BlobPath == img.Name);
                         if (imgMeta != null && imgMeta.IsAlbumCover)
                         {
                             return false; // Skip album covers

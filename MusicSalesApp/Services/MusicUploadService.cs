@@ -221,23 +221,16 @@ namespace MusicSalesApp.Services
                 albumArtStream.Position = 0;
                 await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg");
 
-                // Save metadata to database for MP3 file
+                // Save metadata to database - single record with both MP3 and image paths
                 await _metadataService.UpsertAsync(new Models.SongMetadata
                 {
-                    BlobPath = mp3Path,
+                    BlobPath = mp3Path, // Kept for backward compatibility
+                    Mp3BlobPath = mp3Path,
+                    ImageBlobPath = albumArtPath,
                     FileExtension = ".mp3",
                     AlbumName = albumName ?? string.Empty,
                     IsAlbumCover = false,
                     TrackLength = trackDuration
-                });
-
-                // Save metadata to database for album art file (standalone song cover)
-                await _metadataService.UpsertAsync(new Models.SongMetadata
-                {
-                    BlobPath = albumArtPath,
-                    FileExtension = ".jpeg",
-                    AlbumName = albumName ?? string.Empty,
-                    IsAlbumCover = false
                 });
 
                 _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
@@ -299,7 +292,9 @@ namespace MusicSalesApp.Services
             // Save metadata to database
             await _metadataService.UpsertAsync(new Models.SongMetadata
             {
-                BlobPath = albumCoverPath,
+                BlobPath = albumCoverPath, // Kept for backward compatibility
+                Mp3BlobPath = null, // No MP3 for album cover
+                ImageBlobPath = albumCoverPath,
                 FileExtension = ".jpeg",
                 AlbumName = albumName,
                 IsAlbumCover = true
