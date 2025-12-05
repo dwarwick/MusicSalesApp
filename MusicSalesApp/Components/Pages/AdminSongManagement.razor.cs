@@ -34,11 +34,7 @@ public class AdminSongManagementModel : ComponentBase
     protected string _currentSortColumn = string.Empty;
     protected bool _currentSortAscending = true;
 
-    // Filter fields
-    protected string _filterAlbumName = string.Empty;
-    protected string _filterSongTitle = string.Empty;
-    protected string _filterGenre = string.Empty;
-    protected string _filterType = string.Empty;
+    // Removed: Filter fields - now using Syncfusion's native filtering
 
     // Edit modal fields
     protected bool _showEditModal = false;
@@ -81,10 +77,6 @@ public class AdminSongManagementModel : ComponentBase
         {
             Skip = skip,
             Take = take,
-            FilterAlbumName = _filterAlbumName,
-            FilterSongTitle = _filterSongTitle,
-            FilterGenre = _filterGenre,
-            FilterType = _filterType,
             SortColumn = _currentSortColumn,
             SortAscending = _currentSortAscending
         };
@@ -117,19 +109,6 @@ public class AdminSongManagementModel : ComponentBase
         }).ToList();
     }
 
-    protected async Task ApplyFiltersAndSort()
-    {
-        // Reset to first page when filters change
-        _currentPage = 1;
-        await LoadPageAsync(0, 10);
-        
-        // Refresh the grid to display new data
-        if (_grid != null)
-        {
-            StateHasChanged();
-        }
-    }
-
     protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
     {
         if (args.RequestType == Syncfusion.Blazor.Grids.Action.Paging)
@@ -151,15 +130,6 @@ public class AdminSongManagementModel : ComponentBase
             args.Cancel = true; // Cancel default sorting behavior
             StateHasChanged();
         }
-    }
-
-    protected async Task ClearFilters()
-    {
-        _filterAlbumName = string.Empty;
-        _filterSongTitle = string.Empty;
-        _filterGenre = string.Empty;
-        _filterType = string.Empty;
-        await ApplyFiltersAndSort();
     }
 
     protected void EditSong(SongAdminViewModel song)

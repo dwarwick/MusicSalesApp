@@ -28,49 +28,16 @@ else if (!string.IsNullOrEmpty(_errorMessage))
 else
 {
     <div class="container-fluid">
-        <!-- Filters -->
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <label class="form-label">Filter by Album Name</label>
-                <input type="text" class="form-control" @bind="_filterAlbumName" @bind:after="ApplyFiltersAndSort" placeholder="Enter album name..." />
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Filter by Song Title</label>
-                <input type="text" class="form-control" @bind="_filterSongTitle" @bind:after="ApplyFiltersAndSort" placeholder="Enter song title..." />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Filter by Genre</label>
-                <select class="form-select" @bind="_filterGenre" @bind:after="ApplyFiltersAndSort">
-                    <option value="">All</option>
-                    <option value="Rock">Rock</option>
-                    <option value="Country">Country</option>
-                    <option value="Pop">Pop</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Filter by Type</label>
-                <select class="form-select" @bind="_filterType" @bind:after="ApplyFiltersAndSort">
-                    <option value="">All</option>
-                    <option value="album">Albums</option>
-                    <option value="song">Songs</option>
-                </select>
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-secondary w-100" @onclick="ClearFilters">
-                    <i class="bi bi-x-circle"></i> Clear Filters
-                </button>
-            </div>
-        </div>
-
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
                 TValue="SongAdminViewModel"
                 DataSource="@_currentPageSongs"
                 AllowPaging="true" 
                 AllowSorting="true" 
-                AllowFiltering="true">
+                AllowFiltering="true"
+                Height="600">
             <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
-            <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Menu"></GridFilterSettings>
+            <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridEvents TValue="SongAdminViewModel" OnActionBegin="OnActionBegin"></GridEvents>
             <GridColumns>
                 <GridColumn HeaderText="Action" Width="100" AllowFiltering="false" AllowSorting="false">
@@ -144,19 +111,34 @@ else
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.AlbumName)" HeaderText="Album Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.SongTitle)" HeaderText="Song Title" Width="150"></GridColumn>
-                <GridColumn HeaderText="MP3 Filename" Width="150" Field="@nameof(SongAdminViewModel.Mp3FileName)">
+                <GridColumn HeaderText="MP3 Blob Path" Width="200" Field="@nameof(SongAdminViewModel.Mp3FileName)">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            <small>@System.IO.Path.GetFileName(song.Mp3FileName)</small>
+                            if (!string.IsNullOrEmpty(song.Mp3FileName))
+                            {
+                                <small class="text-break">@song.Mp3FileName</small>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn HeaderText="JPEG Filename" Width="150" Field="@nameof(SongAdminViewModel.JpegFileName)">
+                <GridColumn HeaderText="Image Blob Path" Width="200" Field="@nameof(SongAdminViewModel.JpegFileName)">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            <small>@System.IO.Path.GetFileName(song.JpegFileName)</small>
+                            var imagePath = song.IsAlbum ? song.AlbumCoverBlobName : song.JpegFileName;
+                            if (!string.IsNullOrEmpty(imagePath))
+                            {
+                                <small class="text-break">@imagePath</small>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
                         }
                     </Template>
                 </GridColumn>

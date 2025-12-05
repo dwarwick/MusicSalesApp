@@ -12,16 +12,26 @@ public class SongMetadata
     public int Id { get; set; }
 
     /// <summary>
-    /// Full path to the blob file (folder/filename)
+    /// Full path to the blob file (folder/filename) - DEPRECATED: Use Mp3BlobPath or ImageBlobPath instead
     /// </summary>
-    [Required]
     [MaxLength(500)]
     public string BlobPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// File extension (.mp3, .jpg, .jpeg)
+    /// Full path to the MP3 blob file (folder/filename)
     /// </summary>
-    [Required]
+    [MaxLength(500)]
+    public string Mp3BlobPath { get; set; }
+
+    /// <summary>
+    /// Full path to the image blob file (folder/filename)
+    /// </summary>
+    [MaxLength(500)]
+    public string ImageBlobPath { get; set; }
+
+    /// <summary>
+    /// File extension (.mp3, .jpg, .jpeg) - DEPRECATED
+    /// </summary>
     [MaxLength(10)]
     public string FileExtension { get; set; } = string.Empty;
 
