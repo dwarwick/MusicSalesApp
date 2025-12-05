@@ -17,6 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Syncfusion.Blazor" Version="31.2.2" />
+    <PackageReference Include="Syncfusion.Blazor.Themes" Version="31.2.2" />
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />

@@ -11,6 +11,7 @@ using MusicSalesApp.Components;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using Syncfusion.Blazor;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,6 +116,8 @@ GlobalFFOptions.Configure(options =>
 {
     options.BinaryFolder = Path.Combine(AppContext.BaseDirectory);
 });
+
+builder.Services.AddSyncfusionBlazor();
 
 var app = builder.Build();
 
