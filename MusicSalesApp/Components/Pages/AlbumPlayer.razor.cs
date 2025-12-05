@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
+using MusicSalesApp.Common.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages
@@ -156,7 +157,7 @@ namespace MusicSalesApp.Components.Pages
                 }
 
                 // Get album price from database metadata
-                decimal albumPrice = albumCoverMeta.AlbumPrice ?? 9.99m; // Default price
+                decimal albumPrice = albumCoverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
                 // Build metadata lookup for track info
                 _metadataLookup = albumMetadata.ToDictionary(m => m.BlobPath, m => m);

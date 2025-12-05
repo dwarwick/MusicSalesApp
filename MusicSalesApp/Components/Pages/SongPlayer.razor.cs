@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
+using MusicSalesApp.Common.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
@@ -33,7 +34,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _ownsSong;
     protected bool _inCart;
     protected bool _cartAnimating;
-    protected decimal _songPrice = 2.99m; // Default song price
+    protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
     private Models.SongMetadata _songMetadata;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
