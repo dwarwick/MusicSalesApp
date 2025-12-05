@@ -313,7 +313,7 @@ public class AdminSongManagementModel : ComponentBase
             // Validate based on Album type
             if (_editingSong.IsAlbum)
             {
-                // Album validation
+                // Album validation (for album cover entries)
                 if (!_editingSong.HasAlbumCover && _albumImageFile == null)
                 {
                     _validationErrors.Add("All albums must have an album cover image.");
@@ -324,35 +324,40 @@ public class AdminSongManagementModel : ComponentBase
                     _validationErrors.Add("All albums must have a price.");
                 }
 
-                // Validate track number for album tracks
-                if (!_editTrackNumber.HasValue)
+                // Validate track number only for MP3 files that are part of an album
+                // Don't validate track number for album cover JPEGs
+                if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
                 {
-                    _validationErrors.Add("Track Number is required for album tracks.");
-                }
-                else if (_editTrackNumber.Value < 1)
-                {
-                    _validationErrors.Add("Track Number must be at least 1.");
-                }
-                else
-                {
-                    // Check track number uniqueness within the album
-                    // Get all other tracks in the same album (excluding the current track being edited)
-                    var albumTracks = _allSongs.Where(s => 
-                        s.IsAlbum && 
-                        s.AlbumName.Equals(_editingSong.AlbumName, StringComparison.OrdinalIgnoreCase) &&
-                        s.Id != _editingSong.Id).ToList();
-                    
-                    // Total tracks = other tracks + current track
-                    var totalTracksInAlbum = albumTracks.Count + 1;
-                    if (_editTrackNumber.Value > totalTracksInAlbum)
+                    if (!_editTrackNumber.HasValue)
                     {
-                        _validationErrors.Add($"Track Number cannot exceed {totalTracksInAlbum} (total tracks in album).");
+                        _validationErrors.Add("Track Number is required for album tracks.");
                     }
-
-                    // Check for duplicate track number among other tracks
-                    if (albumTracks.Any(t => t.TrackNumber == _editTrackNumber.Value))
+                    else if (_editTrackNumber.Value < 1)
                     {
-                        _validationErrors.Add($"Track Number {_editTrackNumber.Value} is already used by another track in this album.");
+                        _validationErrors.Add("Track Number must be at least 1.");
+                    }
+                    else
+                    {
+                        // Check track number uniqueness within the album
+                        // Get all other tracks in the same album (excluding the current track being edited)
+                        var albumTracks = _allSongs.Where(s => 
+                            s.IsAlbum && 
+                            !string.IsNullOrEmpty(s.Mp3FileName) &&
+                            s.AlbumName.Equals(_editingSong.AlbumName, StringComparison.OrdinalIgnoreCase) &&
+                            s.Id != _editingSong.Id).ToList();
+                        
+                        // Total tracks = other tracks + current track
+                        var totalTracksInAlbum = albumTracks.Count + 1;
+                        if (_editTrackNumber.Value > totalTracksInAlbum)
+                        {
+                            _validationErrors.Add($"Track Number cannot exceed {totalTracksInAlbum} (total tracks in album).");
+                        }
+
+                        // Check for duplicate track number among other tracks
+                        if (albumTracks.Any(t => t.TrackNumber == _editTrackNumber.Value))
+                        {
+                            _validationErrors.Add($"Track Number {_editTrackNumber.Value} is already used by another track in this album.");
+                        }
                     }
                 }
             }
