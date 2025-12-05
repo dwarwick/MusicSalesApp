@@ -172,6 +172,99 @@ public class SongPlayerTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("0:00"));
     }
 
+    [Test]
+    public void SongPlayer_DisplaysSongPriceFromIndexTag()
+    {
+        // Arrange
+        var files = new[]
+        {
+            new 
+            { 
+                Name = "TestSong.mp3", 
+                Length = 1024L, 
+                ContentType = "audio/mpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string> 
+                { 
+                    { "SongPrice", "1.99" } 
+                }
+            }
+        };
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+
+        // Act
+        var cut = TestContext.Render<SongPlayer>(
+            pb => pb.Add(p => p.SongTitle, "TestSong"));
+
+        // Assert - should display price from index tag
+        Assert.That(cut.Markup, Does.Contain("$1.99"));
+    }
+
+    [Test]
+    public void SongPlayer_DisplaysDefaultPriceWhenTagMissing()
+    {
+        // Arrange
+        var files = new[]
+        {
+            new 
+            { 
+                Name = "TestSong.mp3", 
+                Length = 1024L, 
+                ContentType = "audio/mpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string>()
+            }
+        };
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+
+        // Act
+        var cut = TestContext.Render<SongPlayer>(
+            pb => pb.Add(p => p.SongTitle, "TestSong"));
+
+        // Assert - should display default price
+        Assert.That(cut.Markup, Does.Contain("$0.99"));
+    }
+
+    [Test]
+    public void SongPlayer_DisplaysTrackLengthFromIndexTag()
+    {
+        // Arrange
+        var files = new[]
+        {
+            new 
+            { 
+                Name = "TestSong.mp3", 
+                Length = 1024L, 
+                ContentType = "audio/mpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string> 
+                { 
+                    { "TrackLength", "245.67" } 
+                }
+            }
+        };
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+
+        // Act
+        var cut = TestContext.Render<SongPlayer>(
+            pb => pb.Add(p => p.SongTitle, "TestSong"));
+
+        // Assert - should display track length (245.67 seconds = 4:05)
+        Assert.That(cut.Markup, Does.Contain("4:05"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

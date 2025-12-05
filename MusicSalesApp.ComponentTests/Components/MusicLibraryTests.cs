@@ -143,6 +143,81 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("/song/TestSong"));
     }
 
+    [Test]
+    public void MusicLibrary_DisplaysSongPriceFromIndexTag()
+    {
+        // Arrange
+        var files = new[]
+        {
+            new 
+            { 
+                Name = "TestSong.mp3", 
+                Length = 1024L, 
+                ContentType = "audio/mpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string> 
+                { 
+                    { "SongPrice", "2.49" } 
+                }
+            }
+        };
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+
+        // Act
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - should display price from index tag
+        Assert.That(cut.Markup, Does.Contain("$2.49"));
+    }
+
+    [Test]
+    public void MusicLibrary_DisplaysAlbumPriceFromIndexTag()
+    {
+        // Arrange
+        var files = new[]
+        {
+            new 
+            { 
+                Name = "AlbumCover.jpg", 
+                Length = 2048L, 
+                ContentType = "image/jpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string> 
+                { 
+                    { "IsAlbumCover", "true" },
+                    { "AlbumName", "TestAlbum" },
+                    { "AlbumPrice", "12.99" }
+                }
+            },
+            new 
+            { 
+                Name = "Track1.mp3", 
+                Length = 1024L, 
+                ContentType = "audio/mpeg", 
+                LastModified = DateTimeOffset.Now,
+                Tags = new Dictionary<string, string> 
+                { 
+                    { "AlbumName", "TestAlbum" }
+                }
+            }
+        };
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+
+        // Act
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - should display album price from index tag
+        Assert.That(cut.Markup, Does.Contain("$12.99"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

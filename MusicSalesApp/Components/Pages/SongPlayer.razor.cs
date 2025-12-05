@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
+using MusicSalesApp.Common.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
@@ -33,6 +34,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _ownsSong;
     protected bool _inCart;
     protected bool _cartAnimating;
+    protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -106,6 +108,14 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _error = $"Song '{decodedTitle}' not found.";
                 _loading = false;
                 return;
+            }
+
+            // Read song price from index tag, fallback to default if not found or invalid
+            if (_songInfo.Tags != null && 
+                _songInfo.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) &&
+                decimal.TryParse(songPriceStr, out var parsedPrice))
+            {
+                _songPrice = parsedPrice;
             }
 
             // Get SAS URL for direct streaming from blob storage
@@ -198,7 +208,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = 0.99m });
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = _songPrice });
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CartToggleResponseDto>();
@@ -317,6 +327,17 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         if (_songInfo == null) return SongTitle ?? "Unknown Song";
         // Get just the file name without folder path, then remove extension
         return Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
+    }
+
+    protected double? GetTrackLengthSeconds()
+    {
+        if (_songInfo?.Tags != null && 
+            _songInfo.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) &&
+            double.TryParse(trackLengthStr, out var trackLength))
+        {
+            return trackLength;
+        }
+        return null;
     }
 
     protected string FormatTime(double seconds)

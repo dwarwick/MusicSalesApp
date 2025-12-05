@@ -154,13 +154,22 @@ namespace MusicSalesApp.Components.Pages
                     return;
                 }
 
+                // Read album price from index tag, fallback to default if not found or invalid
+                decimal albumPrice = PriceDefaults.DefaultAlbumPrice;
+                if (albumCover.Tags != null && 
+                    albumCover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
+                    decimal.TryParse(albumPriceStr, out var parsedPrice))
+                {
+                    albumPrice = parsedPrice;
+                }
+
                 _albumInfo = new AlbumInfo
                 {
                     AlbumName = decodedAlbumName,
                     CoverArtUrl = $"api/music/{SafeEncodePath(albumCover.Name)}", // Cover art can still go through the controller
                     CoverArtFileName = albumCover.Name,
                     Tracks = tracks,
-                    Price = AlbumInfo.DEFAULT_ALBUM_PRICE
+                    Price = albumPrice
                 };
 
                 // Pre-fetch all track SAS URLs in parallel for better performance
