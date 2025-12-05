@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
+using Syncfusion.Blazor;
+using Syncfusion.Blazor.Data;
 using Syncfusion.Blazor.Grids;
 using System;
 using System.Collections.Generic;
@@ -17,13 +19,14 @@ public class AdminSongManagementModel : ComponentBase
     private const string PriceFormat = "F2";
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
+    [Inject] protected ISongAdminService SongAdminService { get; set; }
     [Inject] protected NavigationManager NavigationManager { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
-    protected IEnumerable<SongAdminViewModel> _filteredSongs = new List<SongAdminViewModel>();
     protected SfGrid<SongAdminViewModel> _grid;
+    protected int _totalCount = 0;
 
     // Filter fields
     protected string _filterAlbumName = string.Empty;
@@ -47,8 +50,13 @@ public class AdminSongManagementModel : ComponentBase
     {
         try
         {
+            // Pre-load the cache
+            await SongAdminService.RefreshCacheAsync();
+            var initialResult = await SongAdminService.GetSongsAsync(new SongQueryParameters { Skip = 0, Take = 1 });
+            _totalCount = initialResult.TotalCount;
+            
+            // Load all songs for validation purposes (used in Edit)
             await LoadSongsAsync();
-            ApplyFiltersAndSort();
         }
         catch (Exception ex)
         {
@@ -177,48 +185,28 @@ public class AdminSongManagementModel : ComponentBase
         _allSongs = songMap.Values.ToList();
     }
 
-    protected void ApplyFiltersAndSort()
+    protected async Task ApplyFiltersAndSort()
     {
-        var filtered = _allSongs.AsEnumerable();
+        // Update the static filter properties in the adaptor
+        SongAdminDataAdaptor.FilterAlbumName = _filterAlbumName;
+        SongAdminDataAdaptor.FilterSongTitle = _filterSongTitle;
+        SongAdminDataAdaptor.FilterGenre = _filterGenre;
+        SongAdminDataAdaptor.FilterType = _filterType;
 
-        // Apply filters
-        if (!string.IsNullOrWhiteSpace(_filterAlbumName))
+        // Refresh the grid to fetch new data
+        if (_grid != null)
         {
-            filtered = filtered.Where(s => s.AlbumName.Contains(_filterAlbumName, StringComparison.OrdinalIgnoreCase));
+            await _grid.Refresh();
         }
-
-        if (!string.IsNullOrWhiteSpace(_filterSongTitle))
-        {
-            filtered = filtered.Where(s => s.SongTitle.Contains(_filterSongTitle, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(_filterGenre))
-        {
-            filtered = filtered.Where(s => s.Genre.Equals(_filterGenre, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(_filterType))
-        {
-            if (_filterType == "album")
-            {
-                filtered = filtered.Where(s => s.IsAlbum);
-            }
-            else if (_filterType == "song")
-            {
-                filtered = filtered.Where(s => !s.IsAlbum);
-            }
-        }
-
-        _filteredSongs = filtered.ToList();
     }
 
-    protected void ClearFilters()
+    protected async Task ClearFilters()
     {
         _filterAlbumName = string.Empty;
         _filterSongTitle = string.Empty;
         _filterGenre = string.Empty;
         _filterType = string.Empty;
-        ApplyFiltersAndSort();
+        await ApplyFiltersAndSort();
     }
 
     protected void EditSong(SongAdminViewModel song)
@@ -474,8 +462,14 @@ public class AdminSongManagementModel : ComponentBase
 
             // Close modal and refresh
             _showEditModal = false;
+            
+            // Refresh the cache and grid
+            await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
-            ApplyFiltersAndSort();
+            if (_grid != null)
+            {
+                await _grid.Refresh();
+            }
             StateHasChanged();
         }
         catch (Exception ex)
@@ -496,5 +490,15 @@ public class AdminSongManagementModel : ComponentBase
     protected void HandleAlbumImageUpload(InputFileChangeEventArgs e)
     {
         _albumImageFile = e.File;
+    }
+
+    protected async Task OnDataBound()
+    {
+        // Update total count after data is bound
+        if (_grid != null && _grid.TotalItemCount > 0)
+        {
+            _totalCount = _grid.TotalItemCount;
+        }
+        await Task.CompletedTask;
     }
 }

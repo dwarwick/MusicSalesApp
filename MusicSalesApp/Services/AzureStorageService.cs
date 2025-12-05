@@ -161,6 +161,39 @@ namespace MusicSalesApp.Services
             return list.OrderBy(b => b.Name);
         }
 
+        public async Task<PaginatedResult<StorageFileInfo>> ListFilesPagedAsync(int skip, int take)
+        {
+            var list = new List<StorageFileInfo>();
+            try
+            {
+                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Tags))
+                {
+                    list.Add(new StorageFileInfo
+                    {
+                        Name = blobItem.Name,
+                        Length = blobItem.Properties.ContentLength ?? 0,
+                        ContentType = blobItem.Properties.ContentType ?? "application/octet-stream",
+                        LastModified = blobItem.Properties.LastModified,
+                        Tags = blobItem.Tags != null ? new Dictionary<string, string>(blobItem.Tags) : new Dictionary<string, string>()
+                    });
+                }
+            }
+            catch (RequestFailedException ex)
+            {
+                _logger.LogError(ex, "Azure request failed listing blobs");
+                throw;
+            }
+
+            var totalCount = list.Count;
+            var pagedItems = list.OrderBy(b => b.Name).Skip(skip).Take(take);
+
+            return new PaginatedResult<StorageFileInfo>
+            {
+                Items = pagedItems,
+                TotalCount = totalCount
+            };
+        }
+
         // New: List blobs for a specific album using index tags
         public async Task<IEnumerable<StorageFileInfo>> ListFilesByAlbumAsync(string albumName)
         {
