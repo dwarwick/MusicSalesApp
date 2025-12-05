@@ -300,7 +300,7 @@ else
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
-                            <input type="number" class="form-control" @bind="_editTrackNumber" disabled="@(!_editingSong.IsAlbum)" 
+                            <input type="number" class="form-control" @bind="_editTrackNumber" disabled="@(_editingSong.IsAlbum || string.IsNullOrEmpty(_editingSong.AlbumName))" 
                                    placeholder="@(_editingSong.IsAlbum ? "Required" : "N/A")" />
                         </div>
                     </div>
