@@ -69,6 +69,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // Map file names to album art URLs
     private Dictionary<string, string> _albumArtUrls = new Dictionary<string, string>();
+    
+    // Map file names to song prices
+    private Dictionary<string, decimal> _songPrices = new Dictionary<string, decimal>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -189,13 +192,21 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
                     if (albumTracks.Any())
                     {
+                        // Read album price from index tag, fallback to default if not found or invalid
+                        decimal albumPrice = AlbumInfo.DEFAULT_ALBUM_PRICE;
+                        if (cover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
+                            decimal.TryParse(albumPriceStr, out var parsedPrice))
+                        {
+                            albumPrice = parsedPrice;
+                        }
+
                         var album = new AlbumInfo
                         {
                             AlbumName = albumName,
                             CoverArtUrl = $"api/music/{SafeEncodePath(cover.Name)}",
                             CoverArtFileName = cover.Name,
                             Tracks = albumTracks,
-                            Price = AlbumInfo.DEFAULT_ALBUM_PRICE
+                            Price = albumPrice
                         };
                         _albums.Add(album);
 
@@ -221,7 +232,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 })
                 .ToLookup(x => (x.BaseName, x.Folder));
 
-            // Build album art URL map using pre-computed lookup for standalone tracks
+            // Build album art URL map and song prices for standalone tracks
             foreach (var audioFile in _files)
             {
                 var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
@@ -232,6 +243,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 {
                     _albumArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
                 }
+                
+                // Read song price from index tag, fallback to default if not found or invalid
+                decimal songPrice = 0.99m;
+                if (audioFile.Tags != null && 
+                    audioFile.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) &&
+                    decimal.TryParse(songPriceStr, out var parsedPrice))
+                {
+                    songPrice = parsedPrice;
+                }
+                _songPrices[audioFile.Name] = songPrice;
             }
         }
         catch (Exception ex)
@@ -294,11 +315,17 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _cartSongs.Contains(fileName);
     }
 
+    protected decimal GetSongPrice(string fileName)
+    {
+        return _songPrices.TryGetValue(fileName, out var price) ? price : 0.99m;
+    }
+
     protected async Task ToggleCartItem(string fileName)
     {
         try
         {
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = 0.99m });
+            var price = GetSongPrice(fileName);
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = price });
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
