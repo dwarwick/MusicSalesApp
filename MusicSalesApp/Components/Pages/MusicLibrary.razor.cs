@@ -230,7 +230,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 })
                 .ToLookup(x => (x.BaseName, x.Folder));
 
-            // Build album art URL map and song prices for standalone tracks
+            // Build album art URL mappings and extract song prices for standalone tracks
             foreach (var audioFile in _files)
             {
                 var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
