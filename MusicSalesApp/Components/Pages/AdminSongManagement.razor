@@ -8,6 +8,21 @@
 
 <PageTitle>Song Management</PageTitle>
 
+<style>
+    /* Hide accessibility helper text in grid headers */
+    .e-grid .e-headercelldiv .e-sortfilterdiv .e-icons::after,
+    .e-grid .e-headertext::after,
+    .e-grid .e-headercelldiv::after {
+        content: none !important;
+        display: none !important;
+    }
+    
+    /* Hide ARIA labels that appear as visible text */
+    .e-grid .e-headercell .e-aria-label {
+        display: none !important;
+    }
+</style>
+
 <h3>Song Management</h3>
 
 @if (_isLoading)
@@ -35,7 +50,9 @@ else
                 AllowPaging="true" 
                 AllowSorting="true" 
                 AllowFiltering="true"
-                Height="600">
+                Height="600"
+                EnableAdaptiveUI="false"
+                RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
             <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridEvents TValue="SongAdminViewModel" OnActionBegin="OnActionBegin"></GridEvents>
