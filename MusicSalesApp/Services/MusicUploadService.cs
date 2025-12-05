@@ -208,33 +208,28 @@ namespace MusicSalesApp.Services
             }
 
             // Build index tags for audio file
-            Dictionary<string, string> audioTags = null;
+            Dictionary<string, string> audioTags = new Dictionary<string, string>();
             
-            if (!string.IsNullOrWhiteSpace(albumName) || trackDuration.HasValue)
-            {
-                audioTags = new Dictionary<string, string>();
-                
-                if (!string.IsNullOrWhiteSpace(albumName))
-                {
-                    audioTags[IndexTagNames.AlbumName] = albumName;
-                }
-
-                // Add track length for all music files
-                if (trackDuration.HasValue)
-                {
-                    audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");
-                }
-            }
-
-            // Build index tags for album art file
-            Dictionary<string, string> albumArtTags = null;
             if (!string.IsNullOrWhiteSpace(albumName))
             {
-                albumArtTags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, albumName },
-                    { IndexTagNames.IsAlbumCover, "false" }
-                };
+                audioTags[IndexTagNames.AlbumName] = albumName;
+            }
+
+            // Add track length for all music files
+            if (trackDuration.HasValue)
+            {
+                audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");
+            }
+
+            // Build index tags for album art file (always set IsAlbumCover for standalone songs)
+            Dictionary<string, string> albumArtTags = new Dictionary<string, string>
+            {
+                { IndexTagNames.IsAlbumCover, "false" }
+            };
+            
+            if (!string.IsNullOrWhiteSpace(albumName))
+            {
+                albumArtTags[IndexTagNames.AlbumName] = albumName;
             }
 
             try
