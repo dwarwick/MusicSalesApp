@@ -25,8 +25,13 @@ public class AdminSongManagementModel : ComponentBase
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
+    protected List<SongAdminViewModel> _currentPageSongs = new();
     protected SfGrid<SongAdminViewModel> _grid;
     protected int _totalCount = 0;
+    protected int _totalPages = 1;
+    protected int _currentPage = 1;
+    protected string _currentSortColumn = string.Empty;
+    protected bool _currentSortAscending = true;
 
     // Filter fields
     protected string _filterAlbumName = string.Empty;
@@ -52,8 +57,9 @@ public class AdminSongManagementModel : ComponentBase
         {
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
-            var initialResult = await SongAdminService.GetSongsAsync(new SongQueryParameters { Skip = 0, Take = 1 });
-            _totalCount = initialResult.TotalCount;
+            
+            // Load first page
+            await LoadPageAsync(0, 10);
             
             // Load all songs for validation purposes (used in Edit)
             await LoadSongsAsync();
@@ -66,6 +72,26 @@ public class AdminSongManagementModel : ComponentBase
         {
             _isLoading = false;
         }
+    }
+
+    protected async Task LoadPageAsync(int skip, int take)
+    {
+        var parameters = new SongQueryParameters
+        {
+            Skip = skip,
+            Take = take,
+            FilterAlbumName = _filterAlbumName,
+            FilterSongTitle = _filterSongTitle,
+            FilterGenre = _filterGenre,
+            FilterType = _filterType,
+            SortColumn = _currentSortColumn,
+            SortAscending = _currentSortAscending
+        };
+
+        var result = await SongAdminService.GetSongsAsync(parameters);
+        _currentPageSongs = result.Items.ToList();
+        _totalCount = result.TotalCount;
+        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
     }
 
     protected async Task LoadSongsAsync()
@@ -187,16 +213,37 @@ public class AdminSongManagementModel : ComponentBase
 
     protected async Task ApplyFiltersAndSort()
     {
-        // Update the static filter properties in the adaptor
-        SongAdminDataAdaptor.FilterAlbumName = _filterAlbumName;
-        SongAdminDataAdaptor.FilterSongTitle = _filterSongTitle;
-        SongAdminDataAdaptor.FilterGenre = _filterGenre;
-        SongAdminDataAdaptor.FilterType = _filterType;
-
-        // Refresh the grid to fetch new data
+        // Reset to first page when filters change
+        _currentPage = 1;
+        await LoadPageAsync(0, 10);
+        
+        // Refresh the grid to display new data
         if (_grid != null)
         {
-            await _grid.Refresh();
+            StateHasChanged();
+        }
+    }
+
+    protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
+    {
+        if (args.RequestType == Syncfusion.Blazor.Grids.Action.Paging)
+        {
+            // Handle paging
+            var pageSize = 10;
+            var skip = (args.CurrentPage - 1) * pageSize;
+            _currentPage = args.CurrentPage;
+            await LoadPageAsync(skip, pageSize);
+            args.Cancel = true; // Cancel default paging behavior
+            StateHasChanged();
+        }
+        else if (args.RequestType == Syncfusion.Blazor.Grids.Action.Sorting && args.ColumnName != null)
+        {
+            // Handle sorting
+            _currentSortColumn = args.ColumnName;
+            _currentSortAscending = args.Direction == Syncfusion.Blazor.Grids.SortDirection.Ascending;
+            await LoadPageAsync((_currentPage - 1) * 10, 10);
+            args.Cancel = true; // Cancel default sorting behavior
+            StateHasChanged();
         }
     }
 
@@ -463,13 +510,10 @@ public class AdminSongManagementModel : ComponentBase
             // Close modal and refresh
             _showEditModal = false;
             
-            // Refresh the cache and grid
+            // Refresh the cache, all songs, and current page
             await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
-            if (_grid != null)
-            {
-                await _grid.Refresh();
-            }
+            await LoadPageAsync((_currentPage - 1) * 10, 10);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -490,15 +534,5 @@ public class AdminSongManagementModel : ComponentBase
     protected void HandleAlbumImageUpload(InputFileChangeEventArgs e)
     {
         _albumImageFile = e.File;
-    }
-
-    protected async Task OnDataBound()
-    {
-        // Update total count after data is bound
-        if (_grid != null && _grid.TotalItemCount > 0)
-        {
-            _totalCount = _grid.TotalItemCount;
-        }
-        await Task.CompletedTask;
     }
 }

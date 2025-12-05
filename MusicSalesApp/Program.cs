@@ -106,7 +106,7 @@ builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICartService, CartService>();
-builder.Services.AddScoped<ISongAdminService, SongAdminService>();
+builder.Services.AddSingleton<ISongAdminService, SongAdminService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();

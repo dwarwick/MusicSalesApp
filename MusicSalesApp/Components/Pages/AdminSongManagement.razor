@@ -65,13 +65,13 @@ else
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
                 TValue="SongAdminViewModel"
+                DataSource="@_currentPageSongs"
                 AllowPaging="true" 
                 AllowSorting="true" 
                 AllowFiltering="true">
-            <SfDataManager AdaptorInstance="@typeof(SongAdminDataAdaptor)" Adaptor="Adaptors.CustomAdaptor"></SfDataManager>
-            <GridPageSettings PageSize="10"></GridPageSettings>
+            <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Menu"></GridFilterSettings>
-            <GridEvents TValue="SongAdminViewModel" DataBound="OnDataBound"></GridEvents>
+            <GridEvents TValue="SongAdminViewModel" OnActionBegin="OnActionBegin"></GridEvents>
             <GridColumns>
                 <GridColumn HeaderText="Action" Width="100" AllowFiltering="false" AllowSorting="false">
                     <Template>
