@@ -3,7 +3,6 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
-using MusicSalesApp.Common.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
@@ -34,7 +33,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _ownsSong;
     protected bool _inCart;
     protected bool _cartAnimating;
-    protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
+    protected decimal _songPrice = 2.99m; // Default song price
+    private Models.SongMetadata _songMetadata;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -94,7 +94,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // URL decode the song title
             var decodedTitle = Uri.UnescapeDataString(SongTitle);
 
-            // Get list of files from blob storage and find the matching song (audio files only)
+            // Get list of files from blob storage
             var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
             
             // Match by file name (not folder path) - extract just the filename from the full path
@@ -110,12 +110,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Read song price from index tag, fallback to default if not found or invalid
-            if (_songInfo.Tags != null && 
-                _songInfo.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) &&
-                decimal.TryParse(songPriceStr, out var parsedPrice))
+            // Get song metadata from database
+            _songMetadata = await SongMetadataService.GetByBlobPathAsync(_songInfo.Name);
+            if (_songMetadata != null && _songMetadata.SongPrice.HasValue)
             {
-                _songPrice = parsedPrice;
+                _songPrice = _songMetadata.SongPrice.Value;
             }
 
             // Get SAS URL for direct streaming from blob storage
@@ -331,11 +330,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected double? GetTrackLengthSeconds()
     {
-        if (_songInfo?.Tags != null && 
-            _songInfo.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) &&
-            double.TryParse(trackLengthStr, out var trackLength))
+        if (_songMetadata != null && _songMetadata.TrackLength.HasValue)
         {
-            return trackLength;
+            return _songMetadata.TrackLength.Value;
         }
         return null;
     }

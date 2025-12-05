@@ -3,7 +3,6 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
-using MusicSalesApp.Common.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages
@@ -39,6 +38,7 @@ namespace MusicSalesApp.Components.Pages
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
         private List<string> _trackStreamUrls = new List<string>();
         private Dictionary<int, string> _trackImageUrls = new Dictionary<int, string>();
+        private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
@@ -106,46 +106,47 @@ namespace MusicSalesApp.Components.Pages
                 // URL decode the album name
                 var decodedAlbumName = Uri.UnescapeDataString(AlbumName);
 
-                // Get list of files for this specific album from blob storage
-                var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>(
-                    $"api/music?albumName={Uri.EscapeDataString(decodedAlbumName)}");
-
-                var allFiles = files?.ToList() ?? new List<StorageFileInfo>();
-
-                // Find album cover (image with IsAlbumCover=true and matching AlbumName)
-                var albumCover = allFiles.FirstOrDefault(f =>
-                    IsImageFile(f.Name) &&
-                    f.Tags != null &&
-                    f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) &&
-                    string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase) &&
-                    f.Tags.TryGetValue(IndexTagNames.AlbumName, out var albumName) &&
-                    string.Equals(albumName, decodedAlbumName, StringComparison.OrdinalIgnoreCase));
-
-                if (albumCover == null)
+                // Get metadata from database for this album
+                var albumMetadata = await SongMetadataService.GetByAlbumNameAsync(decodedAlbumName);
+                
+                if (albumMetadata == null || !albumMetadata.Any())
                 {
                     _error = $"Album '{decodedAlbumName}' not found.";
                     _loading = false;
                     return;
                 }
 
-                // Find all tracks with the same album name
-                var tracks = allFiles
-                    .Where(f => IsAudioFile(f.Name) &&
-                                f.Tags != null &&
-                                f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) &&
-                                string.Equals(trackAlbum, decodedAlbumName, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(f =>
-                    {
-                        // Sort by track number if available, otherwise by file name
-                        if (f.Tags != null && f.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumStr) &&
-                            int.TryParse(trackNumStr, out var trackNum))
-                        {
-                            return trackNum;
-                        }
-                        return 9999; // Put tracks without track number at the end
-                    })
-                    .ThenBy(f => Path.GetFileName(f.Name))
+                // Find album cover metadata
+                var albumCoverMeta = albumMetadata.FirstOrDefault(m => m.IsAlbumCover);
+                
+                if (albumCoverMeta == null)
+                {
+                    _error = $"Album cover not found for '{decodedAlbumName}'.";
+                    _loading = false;
+                    return;
+                }
+
+                // Get list of files from blob storage for StorageFileInfo compatibility
+                var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>(
+                    $"api/music?albumName={Uri.EscapeDataString(decodedAlbumName)}");
+                var allFiles = files?.ToList() ?? new List<StorageFileInfo>();
+
+                // Find track metadata and map to StorageFileInfo
+                var trackMetadata = albumMetadata
+                    .Where(m => m.FileExtension == ".mp3")
+                    .OrderBy(m => m.TrackNumber ?? 9999) // Sort by track number
+                    .ThenBy(m => Path.GetFileName(m.BlobPath))
                     .ToList();
+
+                var tracks = new List<StorageFileInfo>();
+                foreach (var trackMeta in trackMetadata)
+                {
+                    var fileInfo = allFiles.FirstOrDefault(f => f.Name == trackMeta.BlobPath);
+                    if (fileInfo != null)
+                    {
+                        tracks.Add(fileInfo);
+                    }
+                }
 
                 if (!tracks.Any())
                 {
@@ -154,20 +155,17 @@ namespace MusicSalesApp.Components.Pages
                     return;
                 }
 
-                // Read album price from index tag, fallback to default if not found or invalid
-                decimal albumPrice = PriceDefaults.DefaultAlbumPrice;
-                if (albumCover.Tags != null && 
-                    albumCover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
-                    decimal.TryParse(albumPriceStr, out var parsedPrice))
-                {
-                    albumPrice = parsedPrice;
-                }
+                // Get album price from database metadata
+                decimal albumPrice = albumCoverMeta.AlbumPrice ?? 9.99m; // Default price
+
+                // Build metadata lookup for track info
+                _metadataLookup = albumMetadata.ToDictionary(m => m.BlobPath, m => m);
 
                 _albumInfo = new AlbumInfo
                 {
                     AlbumName = decodedAlbumName,
-                    CoverArtUrl = $"api/music/{SafeEncodePath(albumCover.Name)}", // Cover art can still go through the controller
-                    CoverArtFileName = albumCover.Name,
+                    CoverArtUrl = $"api/music/{SafeEncodePath(albumCoverMeta.BlobPath)}", // Cover art from metadata
+                    CoverArtFileName = albumCoverMeta.BlobPath,
                     Tracks = tracks,
                     Price = albumPrice
                 };
@@ -178,6 +176,8 @@ namespace MusicSalesApp.Components.Pages
 
                 // Find and store track images (JPEGs with same base name as MP3, not album covers)
                 var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
+                var imageMetadata = albumMetadata.Where(m => !m.IsAlbumCover && (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg")).ToList();
+                
                 for (int i = 0; i < tracks.Count; i++)
                 {
                     var track = tracks[i];
@@ -187,8 +187,9 @@ namespace MusicSalesApp.Components.Pages
                     // Look for JPEG with same base name in same folder, but not an album cover
                     var trackImage = imageFiles.FirstOrDefault(img =>
                     {
-                        if (img.Tags != null && img.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) &&
-                            string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase))
+                        // Check metadata to see if this is an album cover
+                        var imgMeta = albumMetadata.FirstOrDefault(m => m.BlobPath == img.Name);
+                        if (imgMeta != null && imgMeta.IsAlbumCover)
                         {
                             return false; // Skip album covers
                         }
@@ -424,9 +425,9 @@ namespace MusicSalesApp.Components.Pages
             if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return (index + 1).ToString();
             
             var track = _albumInfo.Tracks[index];
-            if (track.Tags != null && track.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNum))
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.TrackNumber.HasValue)
             {
-                return trackNum;
+                return metadata.TrackNumber.Value.ToString();
             }
             
             return (index + 1).ToString(); // Fallback to 1-based index
@@ -442,10 +443,9 @@ namespace MusicSalesApp.Components.Pages
             if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return null;
             
             var track = _albumInfo.Tracks[index];
-            if (track.Tags != null && track.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) &&
-                double.TryParse(trackLengthStr, out var trackLength))
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.TrackLength.HasValue)
             {
-                return trackLength;
+                return metadata.TrackLength.Value;
             }
             
             return null;

@@ -156,8 +156,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _loading = true; _error = null;
         try
         {
+            // Load metadata from database
+            var allMetadata = await SongMetadataService.GetAllAsync();
+            
+            // Get all blob files (for StorageFileInfo compatibility)
             var result = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
             var allFiles = result?.ToList() ?? new List<StorageFileInfo>();
+            
+            // Create lookup dictionary for file metadata
+            var metadataLookup = allMetadata.ToDictionary(m => m.BlobPath, m => m);
             
             // Get all audio files
             var audioFiles = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
@@ -165,45 +172,46 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Get all image files
             var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
 
-            // Find album covers (images with IsAlbumCover=true IndexTag)
-            var albumCovers = imageFiles
-                .Where(f => f.Tags != null && 
-                            f.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var isAlbumCover) && 
-                            string.Equals(isAlbumCover, "true", StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            // Find album covers from database metadata
+            var albumCoverMetadata = allMetadata.Where(m => m.IsAlbumCover).ToList();
 
             // Build albums from album covers
             _albums.Clear();
             var tracksInAlbums = new HashSet<string>();
             
-            foreach (var cover in albumCovers)
+            foreach (var coverMeta in albumCoverMetadata)
             {
-                if (cover.Tags.TryGetValue(IndexTagNames.AlbumName, out var albumName) && !string.IsNullOrWhiteSpace(albumName))
+                if (!string.IsNullOrWhiteSpace(coverMeta.AlbumName))
                 {
-                    // Find all tracks with the same album name
-                    var albumTracks = audioFiles
-                        .Where(f => f.Tags != null && 
-                                    f.Tags.TryGetValue(IndexTagNames.AlbumName, out var trackAlbum) && 
-                                    string.Equals(trackAlbum, albumName, StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(f => Path.GetFileName(f.Name))
+                    // Find all tracks with the same album name from metadata
+                    var trackMetadata = allMetadata
+                        .Where(m => m.FileExtension == ".mp3" &&
+                                    !string.IsNullOrEmpty(m.AlbumName) &&
+                                    string.Equals(m.AlbumName, coverMeta.AlbumName, StringComparison.OrdinalIgnoreCase))
                         .ToList();
+
+                    // Map metadata to StorageFileInfo
+                    var albumTracks = new List<StorageFileInfo>();
+                    foreach (var trackMeta in trackMetadata)
+                    {
+                        var fileInfo = allFiles.FirstOrDefault(f => f.Name == trackMeta.BlobPath);
+                        if (fileInfo != null)
+                        {
+                            albumTracks.Add(fileInfo);
+                        }
+                    }
 
                     if (albumTracks.Any())
                     {
-                        // Read album price from index tag, fallback to default if not found or invalid
-                        decimal albumPrice = PriceDefaults.DefaultAlbumPrice;
-                        if (cover.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) &&
-                            decimal.TryParse(albumPriceStr, out var parsedPrice))
-                        {
-                            albumPrice = parsedPrice;
-                        }
+                        // Get album price from database metadata
+                        decimal albumPrice = coverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
                         var album = new AlbumInfo
                         {
-                            AlbumName = albumName,
-                            CoverArtUrl = $"api/music/{SafeEncodePath(cover.Name)}",
-                            CoverArtFileName = cover.Name,
-                            Tracks = albumTracks,
+                            AlbumName = coverMeta.AlbumName,
+                            CoverArtUrl = $"api/music/{SafeEncodePath(coverMeta.BlobPath)}",
+                            CoverArtFileName = coverMeta.BlobPath,
+                            Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
                             Price = albumPrice
                         };
                         _albums.Add(album);
@@ -242,13 +250,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _albumArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
                 }
                 
-                // Read song price from index tag, fallback to default if not found or invalid
+                // Read song price from database metadata
                 decimal songPrice = PriceDefaults.DefaultSongPrice;
-                if (audioFile.Tags != null && 
-                    audioFile.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) &&
-                    decimal.TryParse(songPriceStr, out var parsedPrice))
+                if (metadataLookup.TryGetValue(audioFile.Name, out var songMeta) && songMeta.SongPrice.HasValue)
                 {
-                    songPrice = parsedPrice;
+                    songPrice = songMeta.SongPrice.Value;
                 }
                 _songPrices[audioFile.Name] = songPrice;
             }
