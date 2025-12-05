@@ -194,25 +194,42 @@ namespace MusicSalesApp.Services
             string mp3Path = $"{folderPath}/{mp3FileName}";
             string albumArtPath = $"{folderPath}/{baseName}.jpeg";
 
-            // Build index tags for audio file
-            Dictionary<string, string> audioTags = null;
-            if (!string.IsNullOrWhiteSpace(albumName))
+            // Get track duration from the MP3 file (after conversion if needed)
+            double? trackDuration = null;
+            try
             {
-                audioTags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, albumName }
-                };
+                uploadAudioStream.Position = 0;
+                trackDuration = await _musicService.GetAudioDurationAsync(uploadAudioStream, mp3FileName);
+                uploadAudioStream.Position = 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
             }
 
-            // Build index tags for album art file
-            Dictionary<string, string> albumArtTags = null;
+            // Build index tags for audio file
+            Dictionary<string, string> audioTags = new Dictionary<string, string>();
+            
             if (!string.IsNullOrWhiteSpace(albumName))
             {
-                albumArtTags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, albumName },
-                    { IndexTagNames.IsAlbumCover, "false" }
-                };
+                audioTags[IndexTagNames.AlbumName] = albumName;
+            }
+
+            // Add track length for all music files
+            if (trackDuration.HasValue)
+            {
+                audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");
+            }
+
+            // Build index tags for album art file (always set IsAlbumCover for standalone songs)
+            Dictionary<string, string> albumArtTags = new Dictionary<string, string>
+            {
+                { IndexTagNames.IsAlbumCover, "false" }
+            };
+            
+            if (!string.IsNullOrWhiteSpace(albumName))
+            {
+                albumArtTags[IndexTagNames.AlbumName] = albumName;
             }
 
             try

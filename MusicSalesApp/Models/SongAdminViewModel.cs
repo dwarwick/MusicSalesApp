@@ -16,6 +16,8 @@ public class SongAdminViewModel
     public decimal? AlbumPrice { get; set; }
     public decimal? SongPrice { get; set; }
     public string Genre { get; set; } = string.Empty;
+    public int? TrackNumber { get; set; }
+    public double? TrackLength { get; set; }
 
     // Additional properties for internal use
     public bool HasAlbumCover { get; set; }

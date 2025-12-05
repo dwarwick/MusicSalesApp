@@ -110,5 +110,90 @@ namespace MusicSalesApp.Services
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
             return extension == ".mp3";
         }
+
+        public async Task<double?> GetAudioDurationAsync(Stream audioStream, string fileName)
+        {
+            if (audioStream == null || string.IsNullOrWhiteSpace(fileName))
+                return null;
+
+            string tempInputPath = null;
+            try
+            {
+                // Ensure the stream is at the beginning
+                if (audioStream.CanSeek)
+                {
+                    audioStream.Position = 0;
+                }
+
+                // Write the stream to a temporary file for analysis
+                tempInputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp3");
+                
+                await using (var fileStream = File.Create(tempInputPath))
+                {
+                    await audioStream.CopyToAsync(fileStream);
+                }
+
+                // Use FFMpeg to get duration by processing the file with null output
+                // This is more reliable than FFProbe as it uses the same binary
+                TimeSpan? duration = null;
+                var analysis = await FFMpegArguments
+                    .FromFileInput(tempInputPath)
+                    .OutputToFile("NUL", true, options => options
+                        .WithCustomArgument("-f null"))
+                    .NotifyOnProgress(progress =>
+                    {
+                        // Capture the duration from progress
+                        duration = progress;
+                    })
+                    .ProcessAsynchronously(throwOnError: false);
+
+                if (duration.HasValue && duration.Value.TotalSeconds > 0)
+                {
+                    return duration.Value.TotalSeconds;
+                }
+
+                // Fallback: Try using FFProbe if available
+                try
+                {
+                    var mediaInfo = await FFProbe.AnalyseAsync(tempInputPath);
+                    if (mediaInfo?.Duration != null)
+                    {
+                        return mediaInfo.Duration.TotalSeconds;
+                    }
+                }
+                catch
+                {
+                    // FFProbe not available, continue without it
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get duration for {FileName}", fileName);
+                return null;
+            }
+            finally
+            {
+                // Clean up temporary file
+                if (!string.IsNullOrEmpty(tempInputPath) && File.Exists(tempInputPath))
+                {
+                    try
+                    {
+                        File.Delete(tempInputPath);
+                    }
+                    catch
+                    {
+                        // Ignore cleanup errors
+                    }
+                }
+
+                // Reset stream position if seekable
+                if (audioStream.CanSeek)
+                {
+                    audioStream.Position = 0;
+                }
+            }
+        }
     }
 }

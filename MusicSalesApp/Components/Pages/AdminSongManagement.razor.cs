@@ -39,6 +39,7 @@ public class AdminSongManagementModel : ComponentBase
     protected decimal? _editAlbumPrice = null;
     protected decimal? _editSongPrice = null;
     protected string _editGenre = string.Empty;
+    protected int? _editTrackNumber = null;
     protected IBrowserFile _songImageFile = null;
     protected IBrowserFile _albumImageFile = null;
     protected List<string> _validationErrors = new();
@@ -120,6 +121,18 @@ public class AdminSongManagementModel : ComponentBase
             if (file.Tags.TryGetValue(IndexTagNames.Genre, out var genre))
             {
                 song.Genre = genre;
+            }
+
+            if (file.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumberStr) && 
+                int.TryParse(trackNumberStr, out var trackNumber))
+            {
+                song.TrackNumber = trackNumber;
+            }
+
+            if (file.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) && 
+                double.TryParse(trackLengthStr, out var trackLength))
+            {
+                song.TrackLength = trackLength;
             }
 
             if (isMp3)
@@ -221,6 +234,12 @@ public class AdminSongManagementModel : ComponentBase
                 nameof(SongAdminViewModel.Genre) => _sortAscending 
                     ? filtered.OrderBy(s => s.Genre) 
                     : filtered.OrderByDescending(s => s.Genre),
+                nameof(SongAdminViewModel.TrackNumber) => _sortAscending 
+                    ? filtered.OrderBy(s => s.TrackNumber ?? 0) 
+                    : filtered.OrderByDescending(s => s.TrackNumber ?? 0),
+                nameof(SongAdminViewModel.TrackLength) => _sortAscending 
+                    ? filtered.OrderBy(s => s.TrackLength ?? 0) 
+                    : filtered.OrderByDescending(s => s.TrackLength ?? 0),
                 _ => filtered
             };
         }
@@ -266,6 +285,7 @@ public class AdminSongManagementModel : ComponentBase
         _editAlbumPrice = song.AlbumPrice;
         _editSongPrice = song.SongPrice;
         _editGenre = song.Genre;
+        _editTrackNumber = song.TrackNumber;
         _songImageFile = null;
         _albumImageFile = null;
         _validationErrors.Clear();
@@ -290,10 +310,15 @@ public class AdminSongManagementModel : ComponentBase
 
         try
         {
-            // Validate based on Album type
-            if (_editingSong.IsAlbum)
+            // Determine what type of entry this is
+            var hasMP3 = !string.IsNullOrEmpty(_editingSong.Mp3FileName);
+            var isAlbumCoverEntry = _editingSong.IsAlbum && !hasMP3; // Album cover JPEG (no MP3)
+            var isAlbumTrack = hasMP3 && !string.IsNullOrEmpty(_editingSong.AlbumName); // MP3 with album name
+            var isStandaloneSong = hasMP3 && string.IsNullOrEmpty(_editingSong.AlbumName); // MP3 without album name
+
+            // Validate album cover entries (JPEG with IsAlbumCover = true)
+            if (isAlbumCoverEntry)
             {
-                // Album validation
                 if (!_editingSong.HasAlbumCover && _albumImageFile == null)
                 {
                     _validationErrors.Add("All albums must have an album cover image.");
@@ -304,22 +329,72 @@ public class AdminSongManagementModel : ComponentBase
                     _validationErrors.Add("All albums must have a price.");
                 }
             }
-            else
+
+            // Validate MP3 files that are part of an album
+            if (isAlbumTrack)
             {
-                // Song validation
+                // Track number is required for album tracks
+                if (!_editTrackNumber.HasValue)
+                {
+                    _validationErrors.Add("Track Number is required for album tracks.");
+                }
+                else if (_editTrackNumber.Value < 1)
+                {
+                    _validationErrors.Add("Track Number must be at least 1.");
+                }
+                else
+                {
+                    // Check track number uniqueness within the album
+                    // Get all other MP3 tracks in the same album (excluding the current track being edited)
+                    var albumTracks = _allSongs.Where(s => 
+                        !string.IsNullOrEmpty(s.Mp3FileName) &&
+                        !string.IsNullOrEmpty(s.AlbumName) &&
+                        s.AlbumName.Equals(_editingSong.AlbumName, StringComparison.OrdinalIgnoreCase) &&
+                        s.Id != _editingSong.Id).ToList();
+                    
+                    // Total tracks = other tracks + current track
+                    var totalTracksInAlbum = albumTracks.Count + 1;
+                    if (_editTrackNumber.Value > totalTracksInAlbum)
+                    {
+                        _validationErrors.Add($"Track Number cannot exceed {totalTracksInAlbum} (total tracks in album).");
+                    }
+
+                    // Check for duplicate track number among other tracks
+                    if (albumTracks.Any(t => t.TrackNumber == _editTrackNumber.Value))
+                    {
+                        _validationErrors.Add($"Track Number {_editTrackNumber.Value} is already used by another track in this album.");
+                    }
+                }
+
+                // All MP3s need a price (song price for album tracks)
+                if (!_editSongPrice.HasValue)
+                {
+                    _validationErrors.Add("All tracks must have a price.");
+                }
+
+                // All MP3s need a genre
+                if (string.IsNullOrWhiteSpace(_editGenre))
+                {
+                    _validationErrors.Add("All tracks must have a genre.");
+                }
+            }
+
+            // Validate standalone songs (MP3 without album)
+            if (isStandaloneSong)
+            {
                 if (string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
                 {
-                    _validationErrors.Add("All songs must have a cover image.");
+                    _validationErrors.Add("All standalone songs must have a cover image.");
                 }
 
                 if (!_editSongPrice.HasValue)
                 {
-                    _validationErrors.Add("All songs must have a price.");
+                    _validationErrors.Add("All standalone songs must have a price.");
                 }
 
                 if (string.IsNullOrWhiteSpace(_editGenre))
                 {
-                    _validationErrors.Add("All songs must have a genre.");
+                    _validationErrors.Add("All standalone songs must have a genre.");
                 }
             }
 
@@ -408,31 +483,42 @@ public class AdminSongManagementModel : ComponentBase
                 var existingTags = await StorageService.GetTagsAsync(fileName);
                 var isAlbumCover = existingTags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
                                   coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
+                var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
 
-                // Update tags based on whether it's an album or song
-                if (_editingSong.IsAlbum)
+                // Update album cover tags
+                if (isAlbumCover)
                 {
-                    // For albums, only update album price
                     if (_editAlbumPrice.HasValue)
                     {
                         existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
                     }
                 }
-                else
+                // Update MP3 tags (both album tracks and standalone songs)
+                else if (isMP3)
                 {
-                    // For songs, update genre and song price (but not on album cover images)
-                    if (!isAlbumCover)
+                    // Set genre for all MP3s
+                    if (!string.IsNullOrEmpty(_editGenre))
                     {
-                        if (!string.IsNullOrEmpty(_editGenre))
-                        {
-                            existingTags[IndexTagNames.Genre] = _editGenre;
-                        }
-
-                        if (_editSongPrice.HasValue)
-                        {
-                            existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
-                        }
+                        existingTags[IndexTagNames.Genre] = _editGenre;
                     }
+
+                    // Set song price for all MP3s
+                    if (_editSongPrice.HasValue)
+                    {
+                        existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
+                    }
+
+                    // Set track number only for MP3s that are part of an album
+                    if (!string.IsNullOrEmpty(_editingSong.AlbumName) && _editTrackNumber.HasValue)
+                    {
+                        existingTags[IndexTagNames.TrackNumber] = _editTrackNumber.Value.ToString();
+                    }
+                }
+                // Update standalone song JPEG tags
+                else if (!isAlbumCover)
+                {
+                    // Standalone song cover images don't need special tag updates
+                    // (they should already have IsAlbumCover: false set during upload)
                 }
 
                 await StorageService.SetTagsAsync(fileName, existingTags);
@@ -442,6 +528,7 @@ public class AdminSongManagementModel : ComponentBase
             _editingSong.AlbumPrice = _editAlbumPrice;
             _editingSong.SongPrice = _editSongPrice;
             _editingSong.Genre = _editGenre;
+            _editingSong.TrackNumber = _editTrackNumber;
 
             // Close modal and refresh
             _showEditModal = false;

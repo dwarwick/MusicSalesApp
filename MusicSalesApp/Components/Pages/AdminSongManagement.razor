@@ -93,13 +93,19 @@ else
                         <th style="cursor: pointer;" @onclick="() => SortBy(nameof(SongAdminViewModel.Genre))">
                             Genre @GetSortIcon(nameof(SongAdminViewModel.Genre))
                         </th>
+                        <th style="cursor: pointer;" @onclick="() => SortBy(nameof(SongAdminViewModel.TrackNumber))">
+                            Track # @GetSortIcon(nameof(SongAdminViewModel.TrackNumber))
+                        </th>
+                        <th style="cursor: pointer;" @onclick="() => SortBy(nameof(SongAdminViewModel.TrackLength))">
+                            Track Length @GetSortIcon(nameof(SongAdminViewModel.TrackLength))
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!_filteredSongs.Any())
                     {
                         <tr>
-                            <td colspan="11" class="text-center">No songs found matching the filters.</td>
+                            <td colspan="13" class="text-center">No songs found matching the filters.</td>
                         </tr>
                     }
                     else
@@ -181,6 +187,27 @@ else
                                     }
                                 </td>
                                 <td>@(string.IsNullOrEmpty(song.Genre) ? "-" : song.Genre)</td>
+                                <td>
+                                    @if (song.TrackNumber.HasValue)
+                                    {
+                                        <span>@song.TrackNumber.Value</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (song.TrackLength.HasValue)
+                                    {
+                                        var ts = TimeSpan.FromSeconds(song.TrackLength.Value);
+                                        <span>@(ts.Hours > 0 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss"))</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
                             </tr>
                         }
                     }
@@ -248,21 +275,21 @@ else
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Album Price</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
                                 <input type="number" step="0.01" class="form-control" @bind="_editAlbumPrice" disabled="@(!_editingSong.IsAlbum)" />
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Song Price</label>
                             <div class="input-group">
                                 <span class="input-group-text">$</span>
                                 <input type="number" step="0.01" class="form-control" @bind="_editSongPrice" disabled="@(_editingSong.IsAlbum)" />
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Genre <span class="text-danger">*</span></label>
                             <select class="form-select" @bind="_editGenre" disabled="@(_editingSong.IsAlbum)">
                                 <option value="">-- Select Genre --</option>
@@ -270,6 +297,26 @@ else
                                 <option value="Country">Country</option>
                                 <option value="Pop">Pop</option>
                             </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
+                            <input type="number" class="form-control" @bind="_editTrackNumber" disabled="@(_editingSong.IsAlbum || string.IsNullOrEmpty(_editingSong.AlbumName))" 
+                                   placeholder="@(_editingSong.IsAlbum ? "Required" : "N/A")" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Track Length (Read-only)</label>
+                            @if (_editingSong.TrackLength.HasValue)
+                            {
+                                var ts = TimeSpan.FromSeconds(_editingSong.TrackLength.Value);
+                                <input type="text" class="form-control" value="@(ts.Hours > 0 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss"))" disabled />
+                            }
+                            else
+                            {
+                                <input type="text" class="form-control" value="Not available" disabled />
+                            }
                         </div>
                     </div>
 
