@@ -20,6 +20,7 @@ public class AdminSongManagementModel : ComponentBase
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
     [Inject] protected ISongAdminService SongAdminService { get; set; }
+    [Inject] protected ISongMetadataService MetadataService { get; set; }
     [Inject] protected NavigationManager NavigationManager { get; set; }
 
     protected bool _isLoading = true;
@@ -96,119 +97,24 @@ public class AdminSongManagementModel : ComponentBase
 
     protected async Task LoadSongsAsync()
     {
-        var allFiles = await StorageService.ListFilesAsync();
-        var songMap = new Dictionary<string, SongAdminViewModel>();
-
-        // Group files by base name (song title)
-        foreach (var file in allFiles)
+        // Load all metadata from database for validation purposes
+        var allMetadata = await MetadataService.GetAllAsync();
+        _allSongs = allMetadata.Select(m => new SongAdminViewModel
         {
-            var fileName = file.Name;
-            var isImage = fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                         fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
-            var isMp3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-
-            if (!isImage && !isMp3) continue;
-
-            // Extract album name and song title from tags
-            var albumName = file.Tags.TryGetValue(IndexTagNames.AlbumName, out var album) ? album : string.Empty;
-            var isAlbumCover = file.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
-                              coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
-
-            // Get base name (remove extension and "_mastered" suffix)
-            var baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
-            if (baseName.EndsWith("_mastered", StringComparison.OrdinalIgnoreCase))
-            {
-                baseName = baseName.Substring(0, baseName.Length - "_mastered".Length);
-            }
-
-            // Create a unique key combining album name and base name
-            var key = string.IsNullOrEmpty(albumName) ? baseName : $"{albumName}|{baseName}";
-
-            if (!songMap.ContainsKey(key))
-            {
-                songMap[key] = new SongAdminViewModel
-                {
-                    Id = key,
-                    AlbumName = albumName,
-                    SongTitle = baseName,
-                    IsAlbum = false
-                };
-            }
-
-            var song = songMap[key];
-
-            // Parse prices and genre from tags
-            if (file.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) && 
-                decimal.TryParse(albumPriceStr, out var albumPrice))
-            {
-                song.AlbumPrice = albumPrice;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) && 
-                decimal.TryParse(songPriceStr, out var songPrice))
-            {
-                song.SongPrice = songPrice;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.Genre, out var genre))
-            {
-                song.Genre = genre;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumberStr) && 
-                int.TryParse(trackNumberStr, out var trackNumber))
-            {
-                song.TrackNumber = trackNumber;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) && 
-                double.TryParse(trackLengthStr, out var trackLength))
-            {
-                song.TrackLength = trackLength;
-            }
-
-            if (isMp3)
-            {
-                song.Mp3FileName = fileName;
-            }
-            else if (isImage)
-            {
-                if (isAlbumCover)
-                {
-                    // This is an album cover
-                    song.IsAlbum = true;
-                    song.AlbumCoverBlobName = fileName;
-                    song.AlbumCoverImageUrl = StorageService.GetReadSasUri(fileName, TimeSpan.FromHours(1)).ToString();
-                    song.HasAlbumCover = true;
-                }
-                else
-                {
-                    // This is a song cover
-                    song.JpegFileName = fileName;
-                    song.SongImageUrl = StorageService.GetReadSasUri(fileName, TimeSpan.FromHours(1)).ToString();
-                }
-            }
-        }
-
-        // Now handle album covers - find all songs with the same album name and link them
-        var albumCovers = songMap.Values.Where(s => s.IsAlbum && s.HasAlbumCover).ToList();
-        foreach (var albumCover in albumCovers)
-        {
-            var songsInAlbum = songMap.Values.Where(s => 
-                !s.IsAlbum && 
-                !string.IsNullOrEmpty(s.AlbumName) && 
-                s.AlbumName.Equals(albumCover.AlbumName, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (var song in songsInAlbum)
-            {
-                song.HasAlbumCover = true;
-                song.AlbumCoverBlobName = albumCover.AlbumCoverBlobName;
-                song.AlbumCoverImageUrl = albumCover.AlbumCoverImageUrl;
-            }
-        }
-
-        _allSongs = songMap.Values.ToList();
+            Id = m.Id.ToString(),
+            AlbumName = m.AlbumName ?? string.Empty,
+            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
+            Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
+            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+            AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+            IsAlbum = m.IsAlbumCover,
+            AlbumPrice = m.AlbumPrice,
+            SongPrice = m.SongPrice,
+            Genre = m.Genre ?? string.Empty,
+            TrackNumber = m.TrackNumber,
+            TrackLength = m.TrackLength,
+            HasAlbumCover = m.IsAlbumCover
+        }).ToList();
     }
 
     protected async Task ApplyFiltersAndSort()
@@ -381,7 +287,7 @@ public class AdminSongManagementModel : ComponentBase
                 return;
             }
 
-            // Upload new images if provided
+            // Upload new images if provided (no tags)
             if (_songImageFile != null && !_editingSong.IsAlbum)
             {
                 using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
@@ -391,25 +297,19 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = $"{_editingSong.SongTitle}.jpeg";
                 }
 
-                var tags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, _editingSong.AlbumName },
-                    { IndexTagNames.IsAlbumCover, "false" }
-                };
-
-                // Only add song-specific tags for songs
-                if (!string.IsNullOrEmpty(_editGenre))
-                {
-                    tags[IndexTagNames.Genre] = _editGenre;
-                }
-
-                if (_editSongPrice.HasValue)
-                {
-                    tags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
-                }
-
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
+                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
                 _editingSong.JpegFileName = newFileName;
+
+                // Create/update metadata in database
+                await MetadataService.UpsertAsync(new SongMetadata
+                {
+                    BlobPath = newFileName,
+                    FileExtension = ".jpeg",
+                    AlbumName = _editingSong.AlbumName ?? string.Empty,
+                    IsAlbumCover = false,
+                    Genre = _editGenre,
+                    SongPrice = _editSongPrice
+                });
             }
 
             if (_albumImageFile != null && _editingSong.IsAlbum)
@@ -421,23 +321,21 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = $"{_editingSong.AlbumName}_cover.jpeg";
                 }
 
-                var tags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, _editingSong.AlbumName },
-                    { IndexTagNames.IsAlbumCover, "true" }
-                };
-
-                // Only add album price for albums
-                if (_editAlbumPrice.HasValue)
-                {
-                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
-                }
-
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
+                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
                 _editingSong.AlbumCoverBlobName = newFileName;
+
+                // Create/update metadata in database
+                await MetadataService.UpsertAsync(new SongMetadata
+                {
+                    BlobPath = newFileName,
+                    FileExtension = ".jpeg",
+                    AlbumName = _editingSong.AlbumName,
+                    IsAlbumCover = true,
+                    AlbumPrice = _editAlbumPrice
+                });
             }
 
-            // Update tags on existing blobs
+            // Update metadata in database for existing files
             var filesToUpdate = new List<string>();
 
             if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
@@ -457,48 +355,43 @@ public class AdminSongManagementModel : ComponentBase
 
             foreach (var fileName in filesToUpdate)
             {
-                var existingTags = await StorageService.GetTagsAsync(fileName);
-                var isAlbumCover = existingTags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
-                                  coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
+                var metadata = await MetadataService.GetByBlobPathAsync(fileName);
+                if (metadata == null) continue;
+
+                var isAlbumCover = metadata.IsAlbumCover;
                 var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
 
-                // Update album cover tags
+                // Update album cover metadata
                 if (isAlbumCover)
                 {
                     if (_editAlbumPrice.HasValue)
                     {
-                        existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
+                        metadata.AlbumPrice = _editAlbumPrice.Value;
                     }
                 }
-                // Update MP3 tags (both album tracks and standalone songs)
+                // Update MP3 metadata (both album tracks and standalone songs)
                 else if (isMP3)
                 {
                     // Set genre for all MP3s
                     if (!string.IsNullOrEmpty(_editGenre))
                     {
-                        existingTags[IndexTagNames.Genre] = _editGenre;
+                        metadata.Genre = _editGenre;
                     }
 
                     // Set song price for all MP3s
                     if (_editSongPrice.HasValue)
                     {
-                        existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
+                        metadata.SongPrice = _editSongPrice.Value;
                     }
 
                     // Set track number only for MP3s that are part of an album
                     if (!string.IsNullOrEmpty(_editingSong.AlbumName) && _editTrackNumber.HasValue)
                     {
-                        existingTags[IndexTagNames.TrackNumber] = _editTrackNumber.Value.ToString();
+                        metadata.TrackNumber = _editTrackNumber.Value;
                     }
                 }
-                // Update standalone song JPEG tags
-                else if (!isAlbumCover)
-                {
-                    // Standalone song cover images don't need special tag updates
-                    // (they should already have IsAlbumCover: false set during upload)
-                }
 
-                await StorageService.SetTagsAsync(fileName, existingTags);
+                await MetadataService.UpsertAsync(metadata);
             }
 
             // Update local model
