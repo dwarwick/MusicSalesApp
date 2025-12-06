@@ -54,6 +54,17 @@ public partial class HomeModel : BlazorBase
 - Use `BUnitTestBase` for component tests which provides all necessary service mocks
 - Syncfusion components may require additional test setup or assertions
 
+## Responsive CSS Breakpoints
+- Do not place `@media` CSS rules inside component-scoped `.razor.css` files.
+- Use the global breakpoint files in `wwwroot` for responsive styles:
+  - `xl_app.css` (wide/desktop defaults)
+  - `lg_app.css` (`@media (max-width: 1200px)`)
+  - `md_app.css` (`@media (max-width: 992px)`)
+  - `sm_app.css` (`@media (max-width: 768px)`)
+  - `xs_app.css` (`@media (max-width: 576px)`)
+- Component styles should remain base-only; move responsive adjustments to the appropriate global file.
+- Ensure these files are linked in `Components/App.razor` via `<link rel="stylesheet" href="@Assets["<file>"]" />` so they apply app-wide.
+
 ## Index Tags and File Management
 
 This document provides comprehensive guidance for AI agents working with the MusicSalesApp codebase, specifically around index tags and file classification.

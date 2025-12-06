@@ -89,21 +89,6 @@
     display: block;
 }
 
-@media (min-width: 641px) {
-    .navbar-toggler {
-        display: none;
-    }
-
-    .nav-scrollable {
-        /* Never collapse the sidebar for wide screens */
-        display: block;
-
-        /* Allow sidebar to scroll for tall menus */
-        height: calc(100vh - 3.5rem);
-        overflow-y: auto;
-    }
-}
-
 /* Music note icons for nav menu */
 .bi-music-note-list-nav-menu {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M12 13c0 1.105-1.12 2-2.5 2S7 14.105 7 13s1.12-2 2.5-2 2.5.895 2.5 2z'/%3E%3Cpath fill-rule='evenodd' d='M12 3v10h-1V3h1z'/%3E%3Cpath d='M11 2.82a1 1 0 0 1 .804-.98l3-.6A1 1 0 0 1 16 2.22V4l-5 1V2.82z'/%3E%3Cpath fill-rule='evenodd' d='M0 11.5a.5.5 0 0 1 .5-.5H4a.5.5 0 0 1 0 1H.5a.5.5 0 0 1-.5-.5zm0-4A.5.5 0 0 1 .5 7H8a.5.5 0 0 1 0 1H.5a.5.5 0 0 1-.5-.5zm0-4A.5.5 0 0 1 .5 3H8a.5.5 0 0 1 0 1H.5a.5.5 0 0 1-.5-.5z'/%3E%3C/svg%3E");
@@ -137,6 +122,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    margin-right: 16px;
 }
 
 .cart-icon {
@@ -201,10 +187,4 @@
     font-size: 16px;
     pointer-events: none;
     animation: musicNoteEscape 0.8s ease-out forwards;
-}
-
-@media (max-width: 640px) {
-    .cart-link {
-        margin-right: 70px;
-    }
 }

@@ -1,0 +1,8 @@
+/* Large breakpoint styles (<1200px) */
+@media (max-width: 1200px) {
+    /* AdminSongManagement container */
+    #grid-container {
+        width: calc(100vw - 16rem);
+        height: calc(100vh - 9rem);
+    }
+}

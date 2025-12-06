@@ -22,6 +22,16 @@ Active Git repository:
   - Use `SfToast` or `SfMessage` for alerts/notifications
   - Use `SfAppBar` and `SfSidebar` for navigation
 
+## Responsive CSS Breakpoints
+- Do NOT place `@media` rules inside component-scoped `.razor.css` files.
+- Put breakpoint-specific CSS into the global files under `wwwroot`:
+  - `xl_app.css` (base/desktop-wide defaults)
+  - `lg_app.css` (`@media (max-width: 1200px)`)
+  - `md_app.css` (`@media (max-width: 992px)`)
+  - `sm_app.css` (`@media (max-width: 768px)`)
+  - `xs_app.css` (`@media (max-width: 576px)`)
+- Component `.razor.css` files should only contain base styles; move any responsive rules into the appropriate global file.
+
 ## Razor Component Conventions
 - Always create code-behind files for Razor components and pages.
 - Code-behind file naming: `[ComponentName].razor.cs` (e.g., `Home.razor` and `Home.razor.cs`).

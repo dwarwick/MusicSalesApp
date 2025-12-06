@@ -342,52 +342,7 @@
     display: none;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .music-cards-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 16px;
-    }
-
-    .music-card {
-        padding: 12px;
-    }
-
-    .card-song-title {
-        font-size: 13px;
-    }
-
-    .card-play-button,
-    .card-view-button {
-        width: 36px;
-        height: 36px;
-    }
-
-    .card-play-icon {
-        width: 18px;
-        height: 18px;
-    }
-
-    .card-view-icon {
-        width: 20px;
-        height: 20px;
-    }
-
-    .card-volume-bar-container {
-        width: 40px;
-    }
-}
-
-@media (max-width: 480px) {
-    .music-cards-grid {
-        grid-template-columns: 1fr;
-        gap: 12px;
-    }
-
-    .music-library-container {
-        padding: 16px;
-    }
-}
+/* Responsive rules moved to global breakpoint files in wwwroot */
 
 /* Filter Radio Button Group */
 .music-filter-group {
@@ -520,18 +475,9 @@
 }
 
 @keyframes musicNoteFloat {
-    0% {
-        opacity: 1;
-        transform: translate(0, 0) rotate(0deg) scale(1);
-    }
-    50% {
-        opacity: 1;
-        transform: translate(10px, -20px) rotate(15deg) scale(1.3);
-    }
-    100% {
-        opacity: 0;
-        transform: translate(20px, -50px) rotate(30deg) scale(0.5);
-    }
+    0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+    50% { opacity: 1; transform: translate(10px, -20px) rotate(15deg) scale(1.3); }
+    100% { opacity: 0; transform: translate(20px, -50px) rotate(30deg) scale(0.5); }
 }
 
 .card-cart-button.animating {
@@ -539,21 +485,13 @@
 }
 
 @keyframes cartPulse {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-    }
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
 }
 
 /* Album Card Styles */
-.album-card {
-    border: 1px solid rgba(29, 185, 84, 0.3);
-}
+.album-card { border: 1px solid rgba(29, 185, 84, 0.3); }
 
 .album-badge {
     position: absolute;
@@ -587,9 +525,7 @@
 }
 
 /* Progress Bar Restriction Styles for Card Player */
-.card-progress-bar-container.restricted {
-    position: relative;
-}
+.card-progress-bar-container.restricted { position: relative; }
 
 .card-progress-limit-marker {
     position: absolute;
