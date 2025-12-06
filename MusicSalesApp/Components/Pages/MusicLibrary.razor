@@ -2,395 +2,381 @@
 @inherits MusicSalesApp.Components.Pages.MusicLibraryModel
 @using MusicSalesApp.Services
 
-<div class="music-library-container">
-    <h3>Music Library</h3>
+<h3>Music Library</h3>
 
-    <AuthorizeView>
-        <Authorized>
-            <!-- Filter Radio Buttons -->
-            <div class="music-filter-group">
-                <label class="filter-option">
-                    <input type="radio" name="musicFilter" value="all" checked="@(_filterMode == FilterMode.All)" @onchange="@(() => SetFilter(FilterMode.All))" />
-                    <span>All Music</span>
-                </label>
-                <label class="filter-option">
-                    <input type="radio" name="musicFilter" value="owned" checked="@(_filterMode == FilterMode.Owned)" @onchange="@(() => SetFilter(FilterMode.Owned))" />
-                    <span>Owned</span>
-                </label>
-                <label class="filter-option">
-                    <input type="radio" name="musicFilter" value="notowned" checked="@(_filterMode == FilterMode.NotOwned)" @onchange="@(() => SetFilter(FilterMode.NotOwned))" />
-                    <span>Not Owned</span>
-                </label>
+<AuthorizeView>
+    <Authorized>
+        <SfRadioButton TChecked="string" Label="All Music" Name="musicFilter" Value="All" @bind-Checked="_filterModeString"></SfRadioButton>
+        <SfRadioButton TChecked="string" Label="Owned" Name="musicFilter" Value="Owned" @bind-Checked="_filterModeString"></SfRadioButton>
+        <SfRadioButton TChecked="string" Label="Not Owned" Name="musicFilter" Value="NotOwned" @bind-Checked="_filterModeString"></SfRadioButton>
+    </Authorized>
+</AuthorizeView>
+
+@if (_loading)
+{
+    <div class="loading-state">
+        <p>Loading...</p>
+    </div>
+}
+else if (_error != null)
+{
+    <div class="error-state">
+        <div class="alert alert-danger">@_error</div>
+    </div>
+}
+else
+{
+    <div class="music-cards-grid">
+        @* Album Cards *@
+        @foreach (var album in GetFilteredAlbums())
+        {
+            var cardId = GetAlbumCardId(album);
+            var isPlaying = IsCardPlaying(cardId);
+            var owned = IsAlbumOwned(album);
+            var inCart = IsAlbumInCart(album);
+
+            <div class="music-card album-card">
+                <!-- Album Art -->
+                <div class="card-album-art">
+                    @if (!string.IsNullOrEmpty(album.CoverArtUrl))
+                    {
+                        <img src="@album.CoverArtUrl" alt="Album Art" />
+                    }
+                    else
+                    {
+                        <div class="card-album-art-placeholder">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
+                            </svg>
+                        </div>
+                    }
+                    @if (owned)
+                    {
+                        <div class="owned-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                        </div>
+                    }
+                    <div class="album-badge">Album</div>
+                </div>
+
+                <!-- Album Title -->
+                <div class="card-song-title" title="@album.AlbumName">@album.AlbumName</div>
+                <div class="card-track-count">@album.Tracks.Count track@(album.Tracks.Count != 1 ? "s" : "")</div>
+
+                @if (isPlaying)
+                {
+                    <!-- Mini Player Controls for Album -->
+                    <div class="card-mini-player">
+                        <!-- Hidden Audio Element -->
+                        <audio @ref="_activeAudioElement"
+                               preload="auto"
+                               class="card-audio-hidden"></audio>
+
+                        <!-- Now Playing Track Name -->
+                        <div class="card-now-playing">@GetCurrentAlbumTrackName()</div>
+
+                        <!-- Controls Row: Play/Pause, Stop, Volume -->
+                        <div class="card-mini-controls-row">
+                            <div class="card-mini-controls">
+                                <!-- Play/Pause Button -->
+                                <button class="card-mini-button card-mini-play-button"
+                                        @onclick="() => ToggleCardPlay(cardId)"
+                                        title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
+                                    @if (IsCardCurrentlyPlaying(cardId))
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
+                                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                    }
+                                </button>
+
+                                <!-- Stop Button -->
+                                <button class="card-mini-button card-mini-stop-button"
+                                        @onclick="() => StopCard(cardId)"
+                                        title="Stop">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-stop-icon">
+                                        <path d="M6 6h12v12H6z" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Volume Controls -->
+                            <div class="card-volume-controls">
+                                <button class="card-volume-button" @onclick="() => ToggleCardMute(cardId)" title="@(IsCardMuted(cardId) ? "Unmute" : "Mute")">
+                                    @if (IsCardMuted(cardId) || GetCardVolume(cardId) == 0)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                        </svg>
+                                    }
+                                    else if (GetCardVolume(cardId) < 0.5)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                                        </svg>
+                                    }
+                                </button>
+                                <div @ref="_activeVolumeBarElement" class="card-volume-bar-container" @onclick="(e) => OnCardVolumeBarClick(e, cardId)">
+                                    <div class="card-volume-bar" style="width: @(GetCardVolume(cardId) * 100)%;">
+                                        <div class="card-volume-thumb"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar Row -->
+                        <div class="card-progress-container">
+                            <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
+                            <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCurrentPlayingTrackRestricted() ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
+                                <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
+                                    <div class="card-progress-thumb"></div>
+                                </div>
+                                @if (IsCurrentPlayingTrackRestricted())
+                                {
+                                    <div class="card-progress-limit-marker" style="left: @(GetCardPreviewLimitPercentage(cardId))%;"></div>
+                                }
+                            </div>
+                            <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- Card Actions (Play and View buttons) -->
+                    <div class="card-actions">
+                        <button class="card-play-button" @onclick="() => PlayAlbum(album)" title="Play Album">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-play-icon">
+                                <path d="M8 5v14l11-7z" />
+                            </svg>
+                        </button>
+                        <a class="card-view-button" href="@GetAlbumPlayerUrl(album)" title="View Album">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-view-icon">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                            </svg>
+                        </a>
+                    </div>
+                }
+
+                <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the album) -->
+                <AuthorizeView>
+                    <Authorized>
+                        @if (!owned)
+                        {
+                            <button class="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
+                                    @onclick="() => ToggleAlbumCartItem(album)"
+                                    @onclick:stopPropagation="true"
+                                    title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                @if (inCart)
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                    </svg>
+                                    <span>Added</span>
+                                }
+                                else
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                        <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z" />
+                                    </svg>
+                                    <span>$@album.Price.ToString("F2")</span>
+                                }
+                            </button>
+                            @if (_animatingCartButtons.Contains(album.AlbumName))
+                            {
+                                <div class="music-note-float">♪</div>
+                            }
+                        }
+                    </Authorized>
+                </AuthorizeView>
             </div>
-        </Authorized>
-    </AuthorizeView>
+        }
 
-    @if (_loading)
-    {
-        <div class="loading-state">
-            <p>Loading...</p>
-        </div>
-    }
-    else if (_error != null)
-    {
-        <div class="error-state">
-            <div class="alert alert-danger">@_error</div>
-        </div>
-    }
-    else
-    {
-        <div class="music-cards-grid">
-            @* Album Cards *@
-            @foreach (var album in GetFilteredAlbums())
-            {
-                var cardId = GetAlbumCardId(album);
-                var isPlaying = IsCardPlaying(cardId);
-                var owned = IsAlbumOwned(album);
-                var inCart = IsAlbumInCart(album);
+        @* Individual Song Cards *@
+        @foreach (var f in GetFilteredFiles())
+        {
+            var cardId = GetCardId(f.Name);
+            var isPlaying = IsCardPlaying(cardId);
+            var albumArtUrl = GetAlbumArtUrl(f.Name);
+            var owned = IsSongOwned(f.Name);
+            var inCart = IsSongInCart(f.Name);
 
-                <div class="music-card album-card">
-                    <!-- Album Art -->
-                    <div class="card-album-art">
-                        @if (!string.IsNullOrEmpty(album.CoverArtUrl))
-                        {
-                            <img src="@album.CoverArtUrl" alt="Album Art" />
-                        }
-                        else
-                        {
-                            <div class="card-album-art-placeholder">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/>
-                                </svg>
-                            </div>
-                        }
-                        @if (owned)
-                        {
-                            <div class="owned-badge">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                </svg>
-                            </div>
-                        }
-                        <div class="album-badge">Album</div>
-                    </div>
-
-                    <!-- Album Title -->
-                    <div class="card-song-title" title="@album.AlbumName">@album.AlbumName</div>
-                    <div class="card-track-count">@album.Tracks.Count track@(album.Tracks.Count != 1 ? "s" : "")</div>
-
-                    @if (isPlaying)
+            <div class="music-card">
+                <!-- Album Art -->
+                <div class="card-album-art">
+                    @if (!string.IsNullOrEmpty(albumArtUrl))
                     {
-                        <!-- Mini Player Controls for Album -->
-                        <div class="card-mini-player">
-                            <!-- Hidden Audio Element -->
-                            <audio @ref="_activeAudioElement"
-                                   preload="auto"
-                                   class="card-audio-hidden"></audio>
-
-                            <!-- Now Playing Track Name -->
-                            <div class="card-now-playing">@GetCurrentAlbumTrackName()</div>
-
-                            <!-- Controls Row: Play/Pause, Stop, Volume -->
-                            <div class="card-mini-controls-row">
-                                <div class="card-mini-controls">
-                                    <!-- Play/Pause Button -->
-                                    <button class="card-mini-button card-mini-play-button" 
-                                            @onclick="() => ToggleCardPlay(cardId)" 
-                                            title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
-                                        @if (IsCardCurrentlyPlaying(cardId))
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                                            </svg>
-                                        }
-                                        else
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                                <path d="M8 5v14l11-7z"/>
-                                            </svg>
-                                        }
-                                    </button>
-
-                                    <!-- Stop Button -->
-                                    <button class="card-mini-button card-mini-stop-button" 
-                                            @onclick="() => StopCard(cardId)" 
-                                            title="Stop">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-stop-icon">
-                                            <path d="M6 6h12v12H6z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <!-- Volume Controls -->
-                                <div class="card-volume-controls">
-                                    <button class="card-volume-button" @onclick="() => ToggleCardMute(cardId)" title="@(IsCardMuted(cardId) ? "Unmute" : "Mute")">
-                                        @if (IsCardMuted(cardId) || GetCardVolume(cardId) == 0)
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-                                            </svg>
-                                        }
-                                        else if (GetCardVolume(cardId) < 0.5)
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
-                                            </svg>
-                                        }
-                                        else
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                                            </svg>
-                                        }
-                                    </button>
-                                    <div @ref="_activeVolumeBarElement" class="card-volume-bar-container" @onclick="(e) => OnCardVolumeBarClick(e, cardId)">
-                                        <div class="card-volume-bar" style="width: @(GetCardVolume(cardId) * 100)%;">
-                                            <div class="card-volume-thumb"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Progress Bar Row -->
-                            <div class="card-progress-container">
-                                <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
-                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCurrentPlayingTrackRestricted() ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
-                                    <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
-                                        <div class="card-progress-thumb"></div>
-                                    </div>
-                                    @if (IsCurrentPlayingTrackRestricted())
-                                    {
-                                        <div class="card-progress-limit-marker" style="left: @(GetCardPreviewLimitPercentage(cardId))%;"></div>
-                                    }
-                                </div>
-                                <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
-                            </div>
-                        </div>
+                        <img src="@albumArtUrl" alt="Album Art" />
                     }
                     else
                     {
-                        <!-- Card Actions (Play and View buttons) -->
-                        <div class="card-actions">
-                            <button class="card-play-button" @onclick="() => PlayAlbum(album)" title="Play Album">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-play-icon">
-                                    <path d="M8 5v14l11-7z"/>
-                                </svg>
-                            </button>
-                            <a class="card-view-button" href="@GetAlbumPlayerUrl(album)" title="View Album">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-view-icon">
-                                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                                </svg>
-                            </a>
+                        <div class="card-album-art-placeholder">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                            </svg>
                         </div>
                     }
+                    @if (owned)
+                    {
+                        <div class="owned-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                        </div>
+                    }
+                </div>
 
-                    <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the album) -->
-                    <AuthorizeView>
-                        <Authorized>
-                            @if (!owned)
-                            {
-                                <button class="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")" 
-                                        @onclick="() => ToggleAlbumCartItem(album)"
-                                        @onclick:stopPropagation="true"
-                                        title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                    @if (inCart)
+                <!-- Song Title -->
+                <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>
+
+                @if (isPlaying)
+                {
+                    <!-- Mini Player Controls -->
+                    <div class="card-mini-player">
+                        <!-- Hidden Audio Element -->
+                        <audio @ref="_activeAudioElement"
+                               preload="auto"
+                               class="card-audio-hidden"></audio>
+
+                        <!-- Controls Row: Play/Pause, Stop, Volume -->
+                        <div class="card-mini-controls-row">
+                            <div class="card-mini-controls">
+                                <!-- Play/Pause Button -->
+                                <button class="card-mini-button card-mini-play-button"
+                                        @onclick="() => ToggleCardPlay(cardId)"
+                                        title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
+                                    @if (IsCardCurrentlyPlaying(cardId))
                                     {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
+                                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                                         </svg>
-                                        <span>Added</span>
                                     }
                                     else
                                     {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
-                                            <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z"/>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
+                                            <path d="M8 5v14l11-7z" />
                                         </svg>
-                                        <span>$@album.Price.ToString("F2")</span>
                                     }
                                 </button>
-                                @if (_animatingCartButtons.Contains(album.AlbumName))
+
+                                <!-- Stop Button -->
+                                <button class="card-mini-button card-mini-stop-button"
+                                        @onclick="() => StopCard(cardId)"
+                                        title="Stop">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-stop-icon">
+                                        <path d="M6 6h12v12H6z" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Volume Controls -->
+                            <div class="card-volume-controls">
+                                <button class="card-volume-button" @onclick="() => ToggleCardMute(cardId)" title="@(IsCardMuted(cardId) ? "Unmute" : "Mute")">
+                                    @if (IsCardMuted(cardId) || GetCardVolume(cardId) == 0)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                        </svg>
+                                    }
+                                    else if (GetCardVolume(cardId) < 0.5)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
+                                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                                        </svg>
+                                    }
+                                </button>
+                                <div @ref="_activeVolumeBarElement" class="card-volume-bar-container" @onclick="(e) => OnCardVolumeBarClick(e, cardId)">
+                                    <div class="card-volume-bar" style="width: @(GetCardVolume(cardId) * 100)%;">
+                                        <div class="card-volume-thumb"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar Row -->
+                        <div class="card-progress-container">
+                            <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
+                            <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCurrentPlayingTrackRestricted() ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
+                                <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
+                                    <div class="card-progress-thumb"></div>
+                                </div>
+                                @if (IsCurrentPlayingTrackRestricted())
                                 {
-                                    <div class="music-note-float">♪</div>
+                                    <div class="card-progress-limit-marker" style="left: @(GetCardPreviewLimitPercentage(cardId))%;"></div>
                                 }
-                            }
-                        </Authorized>
-                    </AuthorizeView>
-                </div>
-            }
-
-            @* Individual Song Cards *@
-            @foreach (var f in GetFilteredFiles())
-            {
-                var cardId = GetCardId(f.Name);
-                var isPlaying = IsCardPlaying(cardId);
-                var albumArtUrl = GetAlbumArtUrl(f.Name);
-                var owned = IsSongOwned(f.Name);
-                var inCart = IsSongInCart(f.Name);
-
-                <div class="music-card">
-                    <!-- Album Art -->
-                    <div class="card-album-art">
-                        @if (!string.IsNullOrEmpty(albumArtUrl))
-                        {
-                            <img src="@albumArtUrl" alt="Album Art" />
-                        }
-                        else
-                        {
-                            <div class="card-album-art-placeholder">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
-                                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                                </svg>
                             </div>
-                        }
-                        @if (owned)
-                        {
-                            <div class="owned-badge">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                </svg>
-                            </div>
-                        }
+                            <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
+                        </div>
                     </div>
+                }
+                else
+                {
+                    <!-- Card Actions (Play and View buttons) -->
+                    <div class="card-actions">
+                        <button class="card-play-button" @onclick="() => PlayCard(f.Name)" title="Play">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-play-icon">
+                                <path d="M8 5v14l11-7z" />
+                            </svg>
+                        </button>
+                        <a class="card-view-button" href="@GetSongPlayerUrl(f.Name)" title="View">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-view-icon">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                            </svg>
+                        </a>
+                    </div>
+                }
 
-                    <!-- Song Title -->
-                    <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>
-
-                    @if (isPlaying)
-                    {
-                        <!-- Mini Player Controls -->
-                        <div class="card-mini-player">
-                            <!-- Hidden Audio Element -->
-                            <audio @ref="_activeAudioElement"
-                                   preload="auto"
-                                   class="card-audio-hidden"></audio>
-
-                            <!-- Controls Row: Play/Pause, Stop, Volume -->
-                            <div class="card-mini-controls-row">
-                                <div class="card-mini-controls">
-                                    <!-- Play/Pause Button -->
-                                    <button class="card-mini-button card-mini-play-button" 
-                                            @onclick="() => ToggleCardPlay(cardId)" 
-                                            title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
-                                        @if (IsCardCurrentlyPlaying(cardId))
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                                            </svg>
-                                        }
-                                        else
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                                <path d="M8 5v14l11-7z"/>
-                                            </svg>
-                                        }
-                                    </button>
-
-                                    <!-- Stop Button -->
-                                    <button class="card-mini-button card-mini-stop-button" 
-                                            @onclick="() => StopCard(cardId)" 
-                                            title="Stop">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-stop-icon">
-                                            <path d="M6 6h12v12H6z"/>
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <!-- Volume Controls -->
-                                <div class="card-volume-controls">
-                                    <button class="card-volume-button" @onclick="() => ToggleCardMute(cardId)" title="@(IsCardMuted(cardId) ? "Unmute" : "Mute")">
-                                        @if (IsCardMuted(cardId) || GetCardVolume(cardId) == 0)
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-                                            </svg>
-                                        }
-                                        else if (GetCardVolume(cardId) < 0.5)
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
-                                            </svg>
-                                        }
-                                        else
-                                        {
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon">
-                                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                                            </svg>
-                                        }
-                                    </button>
-                                    <div @ref="_activeVolumeBarElement" class="card-volume-bar-container" @onclick="(e) => OnCardVolumeBarClick(e, cardId)">
-                                        <div class="card-volume-bar" style="width: @(GetCardVolume(cardId) * 100)%;">
-                                            <div class="card-volume-thumb"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Progress Bar Row -->
-                            <div class="card-progress-container">
-                                <span class="card-time-display">@FormatTime(GetCardCurrentTime(cardId))</span>
-                                <div @ref="_activeProgressBarElement" class="card-progress-bar-container @(IsCurrentPlayingTrackRestricted() ? "restricted" : "")" @onclick="(e) => OnCardProgressBarClick(e, cardId)">
-                                    <div class="card-progress-bar" style="width: @(GetCardProgressPercentage(cardId))%;">
-                                        <div class="card-progress-thumb"></div>
-                                    </div>
-                                    @if (IsCurrentPlayingTrackRestricted())
-                                    {
-                                        <div class="card-progress-limit-marker" style="left: @(GetCardPreviewLimitPercentage(cardId))%;"></div>
-                                    }
-                                </div>
-                                <span class="card-time-display">@FormatTime(GetCardDisplayDuration(cardId))</span>
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <!-- Card Actions (Play and View buttons) -->
-                        <div class="card-actions">
-                            <button class="card-play-button" @onclick="() => PlayCard(f.Name)" title="Play">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-play-icon">
-                                    <path d="M8 5v14l11-7z"/>
-                                </svg>
-                            </button>
-                            <a class="card-view-button" href="@GetSongPlayerUrl(f.Name)" title="View">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-view-icon">
-                                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                                </svg>
-                            </a>
-                        </div>
-                    }
-
-                    <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the song) -->
-                    <AuthorizeView>
-                        <Authorized>
-                            @if (!owned)
-                            {
-                                <button class="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")" 
-                                        @onclick="() => ToggleCartItem(f.Name)"
-                                        @onclick:stopPropagation="true"
-                                        title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                    @if (inCart)
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                        </svg>
-                                        <span>Added</span>
-                                    }
-                                    else
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
-                                            <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z"/>
-                                        </svg>
-                                        <span>$@GetSongPrice(f.Name).ToString("F2")</span>
-                                    }
-                                </button>
-                                @if (_animatingCartButtons.Contains(f.Name))
+                <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the song) -->
+                <AuthorizeView>
+                    <Authorized>
+                        @if (!owned)
+                        {
+                            <button class="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")"
+                                    @onclick="() => ToggleCartItem(f.Name)"
+                                    @onclick:stopPropagation="true"
+                                    title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                @if (inCart)
                                 {
-                                    <div class="music-note-float">♪</div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                    </svg>
+                                    <span>Added</span>
                                 }
+                                else
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="cart-button-icon">
+                                        <path d="M11 9h2V6h3V4h-3V1h-2v3H8v2h3v3zm-4 9c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zm-9.83-3.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25z" />
+                                    </svg>
+                                    <span>$@GetSongPrice(f.Name).ToString("F2")</span>
+                                }
+                            </button>
+                            @if (_animatingCartButtons.Contains(f.Name))
+                            {
+                                <div class="music-note-float">♪</div>
                             }
-                        </Authorized>
-                    </AuthorizeView>
-                </div>
-            }
-        </div>
-    }
-</div>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        }
+    </div>
+}
