@@ -30,10 +30,64 @@
             <div class="sidebar-header">
                 <h4>Menu</h4>
             </div>
-            <SfMenu Items="@_menuItems" CssClass="sidebar-menu">
-                <MenuFieldSettings IconCss="IconCss" Text="Text"></MenuFieldSettings>
-                <MenuEvents TValue="NavMenuItem" ItemSelected="@OnMenuItemSelected"></MenuEvents>
-            </SfMenu>
+            <nav class="sidebar-nav">
+                <NavLink class="nav-item" href="" Match="NavLinkMatch.All" @onclick="CloseMenu">
+                    <span class="e-icons e-home"></span>
+                    <span>Home</span>
+                </NavLink>
+
+                <NavLink class="nav-item" href="counter" @onclick="CloseMenu">
+                    <span class="e-icons e-add-icon"></span>
+                    <span>Counter</span>
+                </NavLink>
+
+                <NavLink class="nav-item" href="weather" @onclick="CloseMenu">
+                    <span class="e-icons e-list-unordered"></span>
+                    <span>Weather</span>
+                </NavLink>
+
+                <NavLink class="nav-item" href="music-library" @onclick="CloseMenu">
+                    <span class="e-icons e-music"></span>
+                    <span>Music Library</span>
+                </NavLink>
+
+                <AuthorizeView Policy="@Permissions.UploadFiles">
+                    <Authorized>
+                        <NavLink class="nav-item" href="upload-files" @onclick="CloseMenu">
+                            <span class="e-icons e-upload"></span>
+                            <span>Upload Files</span>
+                        </NavLink>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Policy="@Permissions.ManageUsers">
+                    <Authorized>
+                        <NavLink class="nav-item" href="admin/songs" @onclick="CloseMenu">
+                            <span class="e-icons e-settings"></span>
+                            <span>Song Management</span>
+                        </NavLink>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView>
+                    <Authorized>
+                        <NavLink class="nav-item" href="logout" @onclick="CloseMenu">
+                            <span class="e-icons e-log-out"></span>
+                            <span>Logout</span>
+                        </NavLink>
+                    </Authorized>
+                    <NotAuthorized>
+                        <NavLink class="nav-item" href="login" @onclick="CloseMenu">
+                            <span class="e-icons e-login"></span>
+                            <span>Login</span>
+                        </NavLink>
+                        <NavLink class="nav-item" href="register" @onclick="CloseMenu">
+                            <span class="e-icons e-user-add"></span>
+                            <span>Register</span>
+                        </NavLink>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </nav>
         </div>
     </ChildContent>
 </SfSidebar>
