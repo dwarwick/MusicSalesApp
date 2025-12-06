@@ -173,9 +173,16 @@ public class SongPlayerTests : BUnitTestBase
     }
 
     [Test]
-    public void SongPlayer_DisplaysSongPriceFromIndexTag()
+    public void SongPlayer_DisplaysSongPriceFromMetadata()
     {
         // Arrange
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        // Set up metadata with the expected song price
+        MockSongMetadataService.Setup(x => x.GetByBlobPathAsync("TestSong.mp3"))
+            .ReturnsAsync(new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3", SongPrice = 1.99m });
+
         var files = new[]
         {
             new 
@@ -184,10 +191,7 @@ public class SongPlayerTests : BUnitTestBase
                 Length = 1024L, 
                 ContentType = "audio/mpeg", 
                 LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string> 
-                { 
-                    { "SongPrice", "1.99" } 
-                }
+                Tags = new Dictionary<string, string>()
             }
         };
 
@@ -200,7 +204,7 @@ public class SongPlayerTests : BUnitTestBase
         var cut = TestContext.Render<SongPlayer>(
             pb => pb.Add(p => p.SongTitle, "TestSong"));
 
-        // Assert - should display price from index tag
+        // Assert - should display price from metadata
         Assert.That(cut.Markup, Does.Contain("$1.99"));
     }
 
@@ -208,6 +212,9 @@ public class SongPlayerTests : BUnitTestBase
     public void SongPlayer_DisplaysDefaultPriceWhenTagMissing()
     {
         // Arrange
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+
         var files = new[]
         {
             new 
@@ -234,9 +241,16 @@ public class SongPlayerTests : BUnitTestBase
     }
 
     [Test]
-    public void SongPlayer_DisplaysTrackLengthFromIndexTag()
+    public void SongPlayer_DisplaysTrackLengthFromMetadata()
     {
         // Arrange
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        // Set up metadata with the expected track length (245.67 seconds = 4:05)
+        MockSongMetadataService.Setup(x => x.GetByBlobPathAsync("TestSong.mp3"))
+            .ReturnsAsync(new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3", TrackLength = 245.67 });
+
         var files = new[]
         {
             new 
@@ -245,10 +259,7 @@ public class SongPlayerTests : BUnitTestBase
                 Length = 1024L, 
                 ContentType = "audio/mpeg", 
                 LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string> 
-                { 
-                    { "TrackLength", "245.67" } 
-                }
+                Tags = new Dictionary<string, string>()
             }
         };
 

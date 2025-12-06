@@ -144,9 +144,19 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_DisplaysSongPriceFromIndexTag()
+    public void MusicLibrary_DisplaysSongPriceFromMetadata()
     {
-        // Arrange
+        // Arrange - authorize user so cart button with price is visible
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        // Set up metadata with the expected song price
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
+            {
+                new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3", SongPrice = 2.49m }
+            });
+        
         var files = new[]
         {
             new 
@@ -155,10 +165,7 @@ public class MusicLibraryTests : BUnitTestBase
                 Length = 1024L, 
                 ContentType = "audio/mpeg", 
                 LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string> 
-                { 
-                    { "SongPrice", "2.49" } 
-                }
+                Tags = new Dictionary<string, string>()
             }
         };
 
@@ -170,14 +177,40 @@ public class MusicLibraryTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should display price from index tag
+        // Assert - should display price from metadata
         Assert.That(cut.Markup, Does.Contain("$2.49"));
     }
 
     [Test]
-    public void MusicLibrary_DisplaysAlbumPriceFromIndexTag()
+    public void MusicLibrary_DisplaysAlbumPriceFromMetadata()
     {
-        // Arrange
+        // Arrange - authorize user so cart button with price is visible
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        // Set up metadata with the expected album price
+        // The component looks for IsAlbumCover=true entries and then finds matching tracks by AlbumName
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
+            {
+                // Album cover entry with price
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    BlobPath = "AlbumCover.jpg", 
+                    ImageBlobPath = "AlbumCover.jpg",
+                    IsAlbumCover = true, 
+                    AlbumName = "TestAlbum",
+                    AlbumPrice = 12.99m 
+                },
+                // Track entry that belongs to the album
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    BlobPath = "Track1.mp3",
+                    Mp3BlobPath = "Track1.mp3", 
+                    AlbumName = "TestAlbum"
+                }
+            });
+        
         var files = new[]
         {
             new 
@@ -186,12 +219,7 @@ public class MusicLibraryTests : BUnitTestBase
                 Length = 2048L, 
                 ContentType = "image/jpeg", 
                 LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string> 
-                { 
-                    { "IsAlbumCover", "true" },
-                    { "AlbumName", "TestAlbum" },
-                    { "AlbumPrice", "12.99" }
-                }
+                Tags = new Dictionary<string, string>()
             },
             new 
             { 
@@ -199,10 +227,7 @@ public class MusicLibraryTests : BUnitTestBase
                 Length = 1024L, 
                 ContentType = "audio/mpeg", 
                 LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string> 
-                { 
-                    { "AlbumName", "TestAlbum" }
-                }
+                Tags = new Dictionary<string, string>()
             }
         };
 
@@ -214,7 +239,7 @@ public class MusicLibraryTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should display album price from index tag
+        // Assert - should display album price from metadata
         Assert.That(cut.Markup, Does.Contain("$12.99"));
     }
 

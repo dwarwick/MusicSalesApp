@@ -14,23 +14,25 @@ namespace MusicSalesApp.Services
     /// </summary>
     public class SongMetadataService : ISongMetadataService
     {
-        private readonly AppDbContext _context;
+        private readonly IDbContextFactory<AppDbContext> _contextFactory;
         private readonly ILogger<SongMetadataService> _logger;
 
-        public SongMetadataService(AppDbContext context, ILogger<SongMetadataService> logger)
+        public SongMetadataService(IDbContextFactory<AppDbContext> contextFactory, ILogger<SongMetadataService> logger)
         {
-            _context = context;
+            _contextFactory = contextFactory;
             _logger = logger;
         }
 
         public async Task<List<SongMetadata>> GetAllAsync()
         {
-            return await _context.SongMetadata.ToListAsync();
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata.ToListAsync();
         }
 
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
-            return await _context.SongMetadata
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata
                 .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
                                          s.Mp3BlobPath == blobPath || 
                                          s.ImageBlobPath == blobPath);
@@ -38,14 +40,19 @@ namespace MusicSalesApp.Services
 
         public async Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName)
         {
-            return await _context.SongMetadata
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata
                 .Where(s => s.AlbumName == albumName)
                 .ToListAsync();
         }
 
         public async Task<SongMetadata> UpsertAsync(SongMetadata metadata)
         {
-            var existing = await GetByBlobPathAsync(metadata.BlobPath);
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var existing = await context.SongMetadata
+                .FirstOrDefaultAsync(s => s.BlobPath == metadata.BlobPath || 
+                                         s.Mp3BlobPath == metadata.BlobPath || 
+                                         s.ImageBlobPath == metadata.BlobPath);
             
             if (existing != null)
             {
@@ -61,25 +68,29 @@ namespace MusicSalesApp.Services
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.UpdatedAt = DateTime.UtcNow;
                 
-                _context.SongMetadata.Update(existing);
+                context.SongMetadata.Update(existing);
             }
             else
             {
                 // Create new
-                _context.SongMetadata.Add(metadata);
+                context.SongMetadata.Add(metadata);
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
             return existing ?? metadata;
         }
 
         public async Task<bool> DeleteAsync(string blobPath)
         {
-            var metadata = await GetByBlobPathAsync(blobPath);
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var metadata = await context.SongMetadata
+                .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
+                                         s.Mp3BlobPath == blobPath || 
+                                         s.ImageBlobPath == blobPath);
             if (metadata != null)
             {
-                _context.SongMetadata.Remove(metadata);
-                await _context.SaveChangesAsync();
+                context.SongMetadata.Remove(metadata);
+                await context.SaveChangesAsync();
                 return true;
             }
             return false;
@@ -87,7 +98,8 @@ namespace MusicSalesApp.Services
 
         public async Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters)
         {
-            var query = _context.SongMetadata.AsQueryable();
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var query = context.SongMetadata.AsQueryable();
 
             // Apply filters
             if (!string.IsNullOrWhiteSpace(parameters.FilterAlbumName))
@@ -120,7 +132,7 @@ namespace MusicSalesApp.Services
                 }
             }
 
-            // Apply sorting
+            // Apply sorting - always have a default order for consistent pagination
             if (!string.IsNullOrEmpty(parameters.SortColumn))
             {
                 query = parameters.SortColumn switch
@@ -143,8 +155,13 @@ namespace MusicSalesApp.Services
                     "TrackLength" => parameters.SortAscending
                         ? query.OrderBy(s => s.TrackLength)
                         : query.OrderByDescending(s => s.TrackLength),
-                    _ => query
+                    _ => query.OrderBy(s => s.Id) // Default ordering
                 };
+            }
+            else
+            {
+                // Default ordering by Id for consistent pagination results
+                query = query.OrderBy(s => s.Id);
             }
 
             var totalCount = await query.CountAsync();

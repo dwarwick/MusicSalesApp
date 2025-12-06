@@ -9,12 +9,11 @@ using Syncfusion.Blazor.Grids;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace MusicSalesApp.Components.Pages;
 
-public class AdminSongManagementModel : ComponentBase, IDisposable
+public class AdminSongManagementModel : ComponentBase
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
     private const string PriceFormat = "F2";
@@ -34,9 +33,6 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
     protected int _currentPage = 1;
     protected string _currentSortColumn = string.Empty;
     protected bool _currentSortAscending = true;
-    
-    // Semaphore to prevent concurrent database operations
-    private readonly SemaphoreSlim _dbOperationLock = new SemaphoreSlim(1, 1);
 
     // Removed: Filter fields - now using Syncfusion's native filtering
 
@@ -54,19 +50,16 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        // Use semaphore to prevent concurrent initialization (e.g., during browser refresh)
-        await _dbOperationLock.WaitAsync();
         try
         {
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
-            // Load first page (no nested semaphore - we already have the lock)
-            await LoadPageAsyncInternal(0, 10);
+            // Load first page
+            await LoadPageAsync(0, 10);
             
             // Load all songs for validation purposes (used in Edit)
-            // Sequential execution to avoid concurrent DbContext access
-            await LoadSongsAsyncInternal();
+            await LoadSongsAsync();
         }
         catch (Exception ex)
         {
@@ -75,24 +68,10 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
         finally
         {
             _isLoading = false;
-            _dbOperationLock.Release();
         }
     }
 
     protected async Task LoadPageAsync(int skip, int take)
-    {
-        await _dbOperationLock.WaitAsync();
-        try
-        {
-            await LoadPageAsyncInternal(skip, take);
-        }
-        finally
-        {
-            _dbOperationLock.Release();
-        }
-    }
-
-    private async Task LoadPageAsyncInternal(int skip, int take)
     {
         var parameters = new SongQueryParameters
         {
@@ -109,19 +88,6 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
     }
 
     protected async Task LoadSongsAsync()
-    {
-        await _dbOperationLock.WaitAsync();
-        try
-        {
-            await LoadSongsAsyncInternal();
-        }
-        finally
-        {
-            _dbOperationLock.Release();
-        }
-    }
-
-    private async Task LoadSongsAsyncInternal()
     {
         // Load all metadata from database for validation purposes
         var allMetadata = await MetadataService.GetAllAsync();
@@ -195,7 +161,6 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
         _validationErrors.Clear();
         _isSaving = true;
 
-        await _dbOperationLock.WaitAsync();
         try
         {
             // Determine what type of entry this is
@@ -410,11 +375,10 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
             // Close modal and refresh
             _showEditModal = false;
             
-            // Refresh the cache, all songs, and current page sequentially
-            // Use internal methods since we already hold the semaphore
+            // Refresh the cache, all songs, and current page
             await SongAdminService.RefreshCacheAsync();
-            await LoadSongsAsyncInternal();
-            await LoadPageAsyncInternal((_currentPage - 1) * 10, 10);
+            await LoadSongsAsync();
+            await LoadPageAsync((_currentPage - 1) * 10, 10);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -424,7 +388,6 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
         finally
         {
             _isSaving = false;
-            _dbOperationLock.Release();
         }
     }
 
@@ -436,10 +399,5 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
     protected void HandleAlbumImageUpload(InputFileChangeEventArgs e)
     {
         _albumImageFile = e.File;
-    }
-
-    public void Dispose()
-    {
-        _dbOperationLock?.Dispose();
     }
 }

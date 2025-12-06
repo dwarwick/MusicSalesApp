@@ -387,7 +387,7 @@ public class MusicUploadServiceTests
         _mockMusicService.Setup(s => s.IsValidAudioFileAsync(It.IsAny<Stream>(), audioFileName))
             .ReturnsAsync(true);
         _mockMusicService.Setup(s => s.IsMp3File(audioFileName)).Returns(true);
-        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -399,13 +399,11 @@ public class MusicUploadServiceTests
         _mockStorageService.Verify(s => s.UploadAsync(
             "Lipstick and Leather/Lipstick and Leather.mp3", 
             It.IsAny<Stream>(), 
-            "audio/mpeg",
-            It.IsAny<IDictionary<string, string>>()), Times.Once);
+            "audio/mpeg"), Times.Once);
         _mockStorageService.Verify(s => s.UploadAsync(
             "Lipstick and Leather/Lipstick and Leather.jpeg", 
             It.IsAny<Stream>(), 
-            "image/jpeg",
-            It.IsAny<IDictionary<string, string>>()), Times.Once);
+            "image/jpeg"), Times.Once);
     }
 
     [Test]
@@ -422,7 +420,7 @@ public class MusicUploadServiceTests
         _mockMusicService.Setup(s => s.IsValidAudioFileAsync(It.IsAny<Stream>(), audioFileName))
             .ReturnsAsync(true);
         _mockMusicService.Setup(s => s.IsMp3File(audioFileName)).Returns(true);
-        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -432,23 +430,17 @@ public class MusicUploadServiceTests
         // Assert
         Assert.That(result, Is.EqualTo("Song"));
         
-        // Verify audio file upload has AlbumName index tag
+        // Verify audio file upload (index tags are stored in database, not blob tags)
         _mockStorageService.Verify(s => s.UploadAsync(
             "Song/Song.mp3", 
             It.IsAny<Stream>(), 
-            "audio/mpeg",
-            It.Is<IDictionary<string, string>>(m => 
-                m != null && m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album")), Times.Once);
+            "audio/mpeg"), Times.Once);
         
-        // Verify album art upload has AlbumName and IsAlbumCover=false index tags
+        // Verify album art upload
         _mockStorageService.Verify(s => s.UploadAsync(
             "Song/Song.jpeg", 
             It.IsAny<Stream>(), 
-            "image/jpeg",
-            It.Is<IDictionary<string, string>>(m => 
-                m != null && 
-                m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album" &&
-                m.ContainsKey("IsAlbumCover") && m["IsAlbumCover"] == "false")), Times.Once);
+            "image/jpeg"), Times.Once);
     }
 
     [Test]
@@ -539,22 +531,18 @@ public class MusicUploadServiceTests
         var albumName = "My Test Album";
 
         _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
-        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
             .Returns(Task.CompletedTask);
 
         // Act
         var result = await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName);
 
-        // Assert
+        // Assert (index tags are stored in database, not blob tags)
         Assert.That(result, Is.EqualTo("My Test Album/cover_cover.jpeg"));
         _mockStorageService.Verify(s => s.UploadAsync(
             "My Test Album/cover_cover.jpeg",
             It.IsAny<Stream>(),
-            "image/jpeg",
-            It.Is<IDictionary<string, string>>(m =>
-                m != null &&
-                m.ContainsKey("AlbumName") && m["AlbumName"] == "My Test Album" &&
-                m.ContainsKey("IsAlbumCover") && m["IsAlbumCover"] == "true")), Times.Once);
+            "image/jpeg"), Times.Once);
     }
 
     [Test]
