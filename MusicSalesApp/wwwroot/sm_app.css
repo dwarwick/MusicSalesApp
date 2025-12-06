@@ -1,0 +1,59 @@
+/* Small breakpoint styles (<768px) */
+@media (max-width: 768px) {
+    /* AdminSongManagement container */
+    #grid-container {
+        width: calc(100vw - 6rem);
+        height: calc(100vh - 7rem);
+    }
+
+    /* SongPlayer mobile adjustments */
+    .song-title {
+        font-size: 36px;
+    }
+
+    .album-art,
+    .album-art-placeholder {
+        width: 128px;
+        height: 128px;
+    }
+
+    .song-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .player-bar {
+        left: 2rem;
+        right: 2rem;
+        padding: 0 12px;
+    }
+
+    .time-spacer { min-width: 0; display: none; }
+    .controls-wrapper { gap: 2px; margin-bottom: 4px; }
+    .player-controls { gap: 4px; }
+    .player-controls-row { gap: 2px; }
+    .volume-bar-container { width: 60px; }
+    .volume-controls { gap: 4px; }
+    .control-button { width: 28px; height: 28px; }
+    .control-icon { width: 14px; height: 14px; }
+    .play-button-small { width: 28px; height: 28px; }
+    .play-icon-small { width: 14px; height: 14px; }
+    .progress-container { gap: 4px; }
+    .time-display { min-width: 28px; font-size: 10px; }
+    .action-controls { flex-wrap: wrap; gap: 16px; }
+    .cart-button-large { padding: 10px 20px; font-size: 13px; }
+    .cart-icon-large { width: 18px; height: 18px; }
+
+    /* MusicLibrary small adjustments */
+    .music-cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 16px;
+    }
+
+    .music-card { padding: 12px; }
+    .card-song-title { font-size: 13px; }
+    .card-play-button, .card-view-button { width: 36px; height: 36px; }
+    .card-play-icon { width: 18px; height: 18px; }
+    .card-view-icon { width: 20px; height: 20px; }
+    .card-volume-bar-container { width: 40px; }
+}

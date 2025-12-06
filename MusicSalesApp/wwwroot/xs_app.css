@@ -1,0 +1,24 @@
+/* Extra small breakpoint styles (<576px) */
+@media (max-width: 576px) {
+    /* AdminSongManagement container */
+    #grid-container {
+        width: calc(100vw - 2rem);
+        height: calc(100vh - 6rem);
+    }
+
+    /* SongPlayer extra small adjustments */
+    .song-title { font-size: 24px; }
+    .player-controls { gap: 2px; }
+    .volume-bar-container { width: 50px; }
+
+    /* MusicLibrary extra small adjustments */
+    .music-cards-grid { grid-template-columns: 1fr; gap: 12px; }
+    .music-library-container { padding: 16px; }
+
+    /* NavMenu */
+    .cart-link { margin-right: 70px; }
+
+    /* MainLayout top-row adjustments */
+    .top-row { justify-content: space-between; }
+    .top-row ::deep a, .top-row ::deep .btn-link { margin-left: 0; }
+}

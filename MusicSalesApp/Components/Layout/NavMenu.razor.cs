@@ -3,12 +3,15 @@ using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using Syncfusion.Blazor.Navigations;
 
 namespace MusicSalesApp.Components.Layout;
 
 public class NavMenuModel : BlazorBase, IDisposable
 {
     protected int _cartCount = 0;
+    protected bool _isMenuOpen = false;
+    protected SfSidebar _sidebar;
 
     private bool _disposed;
 
@@ -16,6 +19,21 @@ public class NavMenuModel : BlazorBase, IDisposable
     {
         CartService.OnCartUpdated += HandleCartUpdate;
         await LoadCartCount();
+    }
+
+    protected void ToggleMenu()
+    {
+        _isMenuOpen = !_isMenuOpen;
+    }
+
+    protected void CloseMenu()
+    {
+        _isMenuOpen = false;
+    }
+
+    protected void NavigateToCart()
+    {
+        NavigationManager.NavigateTo("/checkout");
     }
 
     private async void HandleCartUpdate()
@@ -34,7 +52,6 @@ public class NavMenuModel : BlazorBase, IDisposable
             var appUser = await UserManager.GetUserAsync(user);
             if (appUser != null)
             {
-                // Use the injected CartService instance to ensure the same event subscription instance is used
                 _cartCount = await CartService.GetCartItemCountAsync(appUser.Id);
             }
         }

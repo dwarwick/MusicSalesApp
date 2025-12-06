@@ -12,7 +12,8 @@ public class RegisterTests : BUnitTestBase
     public void Register_RendersForm()
     {
         var cut = TestContext.Render<Register>();
-        Assert.That(cut.Find("h3").TextContent, Is.EqualTo("Create Account"));
+        // SfCard renders the title in CardHeader
+        Assert.That(cut.Markup, Does.Contain("Create Account"));
         Assert.That(cut.Find("input#email"), Is.Not.Null);
     }
 
