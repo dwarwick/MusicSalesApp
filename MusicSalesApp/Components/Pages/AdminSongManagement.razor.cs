@@ -9,11 +9,12 @@ using Syncfusion.Blazor.Grids;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace MusicSalesApp.Components.Pages;
 
-public class AdminSongManagementModel : ComponentBase
+public class AdminSongManagementModel : ComponentBase, IDisposable
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
     private const string PriceFormat = "F2";
@@ -33,6 +34,9 @@ public class AdminSongManagementModel : ComponentBase
     protected int _currentPage = 1;
     protected string _currentSortColumn = string.Empty;
     protected bool _currentSortAscending = true;
+    
+    // Semaphore to prevent concurrent database operations
+    private readonly SemaphoreSlim _dbOperationLock = new SemaphoreSlim(1, 1);
 
     // Removed: Filter fields - now using Syncfusion's native filtering
 
@@ -50,6 +54,8 @@ public class AdminSongManagementModel : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
+        // Use semaphore to prevent concurrent initialization (e.g., during browser refresh)
+        await _dbOperationLock.WaitAsync();
         try
         {
             // Pre-load the cache
@@ -59,6 +65,7 @@ public class AdminSongManagementModel : ComponentBase
             await LoadPageAsync(0, 10);
             
             // Load all songs for validation purposes (used in Edit)
+            // Sequential execution to avoid concurrent DbContext access
             await LoadSongsAsync();
         }
         catch (Exception ex)
@@ -68,45 +75,62 @@ public class AdminSongManagementModel : ComponentBase
         finally
         {
             _isLoading = false;
+            _dbOperationLock.Release();
         }
     }
 
     protected async Task LoadPageAsync(int skip, int take)
     {
-        var parameters = new SongQueryParameters
+        await _dbOperationLock.WaitAsync();
+        try
         {
-            Skip = skip,
-            Take = take,
-            SortColumn = _currentSortColumn,
-            SortAscending = _currentSortAscending
-        };
+            var parameters = new SongQueryParameters
+            {
+                Skip = skip,
+                Take = take,
+                SortColumn = _currentSortColumn,
+                SortAscending = _currentSortAscending
+            };
 
-        var result = await SongAdminService.GetSongsAsync(parameters);
-        _currentPageSongs = result.Items.ToList();
-        _totalCount = result.TotalCount;
-        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
+            var result = await SongAdminService.GetSongsAsync(parameters);
+            _currentPageSongs = result.Items.ToList();
+            _totalCount = result.TotalCount;
+            _totalPages = (int)Math.Ceiling((double)_totalCount / take);
+        }
+        finally
+        {
+            _dbOperationLock.Release();
+        }
     }
 
     protected async Task LoadSongsAsync()
     {
-        // Load all metadata from database for validation purposes
-        var allMetadata = await MetadataService.GetAllAsync();
-        _allSongs = allMetadata.Select(m => new SongAdminViewModel
+        await _dbOperationLock.WaitAsync();
+        try
         {
-            Id = m.Id.ToString(),
-            AlbumName = m.AlbumName ?? string.Empty,
-            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
-            Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
-            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
-            AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
-            IsAlbum = m.IsAlbumCover,
-            AlbumPrice = m.AlbumPrice,
-            SongPrice = m.SongPrice,
-            Genre = m.Genre ?? string.Empty,
-            TrackNumber = m.TrackNumber,
-            TrackLength = m.TrackLength,
-            HasAlbumCover = m.IsAlbumCover
-        }).ToList();
+            // Load all metadata from database for validation purposes
+            var allMetadata = await MetadataService.GetAllAsync();
+            _allSongs = allMetadata.Select(m => new SongAdminViewModel
+            {
+                Id = m.Id.ToString(),
+                AlbumName = m.AlbumName ?? string.Empty,
+                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
+                Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
+                JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+                AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+                IsAlbum = m.IsAlbumCover,
+                AlbumPrice = m.AlbumPrice,
+                SongPrice = m.SongPrice,
+                Genre = m.Genre ?? string.Empty,
+                TrackNumber = m.TrackNumber,
+                TrackLength = m.TrackLength,
+                HasAlbumCover = m.IsAlbumCover
+            }).ToList();
+        }
+        finally
+        {
+            _dbOperationLock.Release();
+        }
     }
 
     protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
@@ -161,6 +185,7 @@ public class AdminSongManagementModel : ComponentBase
         _validationErrors.Clear();
         _isSaving = true;
 
+        await _dbOperationLock.WaitAsync();
         try
         {
             // Determine what type of entry this is
@@ -323,6 +348,7 @@ public class AdminSongManagementModel : ComponentBase
                 filesToUpdate.Add(_editingSong.AlbumCoverBlobName);
             }
 
+            // Process updates sequentially to avoid DbContext concurrency issues
             foreach (var fileName in filesToUpdate)
             {
                 var metadata = await MetadataService.GetByBlobPathAsync(fileName);
@@ -361,6 +387,7 @@ public class AdminSongManagementModel : ComponentBase
                     }
                 }
 
+                // Each upsert awaited sequentially
                 await MetadataService.UpsertAsync(metadata);
             }
 
@@ -373,7 +400,7 @@ public class AdminSongManagementModel : ComponentBase
             // Close modal and refresh
             _showEditModal = false;
             
-            // Refresh the cache, all songs, and current page
+            // Refresh the cache, all songs, and current page sequentially
             await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
             await LoadPageAsync((_currentPage - 1) * 10, 10);
@@ -386,6 +413,7 @@ public class AdminSongManagementModel : ComponentBase
         finally
         {
             _isSaving = false;
+            _dbOperationLock.Release();
         }
     }
 
@@ -397,5 +425,10 @@ public class AdminSongManagementModel : ComponentBase
     protected void HandleAlbumImageUpload(InputFileChangeEventArgs e)
     {
         _albumImageFile = e.File;
+    }
+
+    public void Dispose()
+    {
+        _dbOperationLock?.Dispose();
     }
 }
