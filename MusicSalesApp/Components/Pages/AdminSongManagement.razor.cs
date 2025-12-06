@@ -61,12 +61,12 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
-            // Load first page
-            await LoadPageAsync(0, 10);
+            // Load first page (no nested semaphore - we already have the lock)
+            await LoadPageAsyncInternal(0, 10);
             
             // Load all songs for validation purposes (used in Edit)
             // Sequential execution to avoid concurrent DbContext access
-            await LoadSongsAsync();
+            await LoadSongsAsyncInternal();
         }
         catch (Exception ex)
         {
@@ -84,18 +84,7 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
         await _dbOperationLock.WaitAsync();
         try
         {
-            var parameters = new SongQueryParameters
-            {
-                Skip = skip,
-                Take = take,
-                SortColumn = _currentSortColumn,
-                SortAscending = _currentSortAscending
-            };
-
-            var result = await SongAdminService.GetSongsAsync(parameters);
-            _currentPageSongs = result.Items.ToList();
-            _totalCount = result.TotalCount;
-            _totalPages = (int)Math.Ceiling((double)_totalCount / take);
+            await LoadPageAsyncInternal(skip, take);
         }
         finally
         {
@@ -103,34 +92,55 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
         }
     }
 
+    private async Task LoadPageAsyncInternal(int skip, int take)
+    {
+        var parameters = new SongQueryParameters
+        {
+            Skip = skip,
+            Take = take,
+            SortColumn = _currentSortColumn,
+            SortAscending = _currentSortAscending
+        };
+
+        var result = await SongAdminService.GetSongsAsync(parameters);
+        _currentPageSongs = result.Items.ToList();
+        _totalCount = result.TotalCount;
+        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
+    }
+
     protected async Task LoadSongsAsync()
     {
         await _dbOperationLock.WaitAsync();
         try
         {
-            // Load all metadata from database for validation purposes
-            var allMetadata = await MetadataService.GetAllAsync();
-            _allSongs = allMetadata.Select(m => new SongAdminViewModel
-            {
-                Id = m.Id.ToString(),
-                AlbumName = m.AlbumName ?? string.Empty,
-                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
-                Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
-                JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
-                AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
-                IsAlbum = m.IsAlbumCover,
-                AlbumPrice = m.AlbumPrice,
-                SongPrice = m.SongPrice,
-                Genre = m.Genre ?? string.Empty,
-                TrackNumber = m.TrackNumber,
-                TrackLength = m.TrackLength,
-                HasAlbumCover = m.IsAlbumCover
-            }).ToList();
+            await LoadSongsAsyncInternal();
         }
         finally
         {
             _dbOperationLock.Release();
         }
+    }
+
+    private async Task LoadSongsAsyncInternal()
+    {
+        // Load all metadata from database for validation purposes
+        var allMetadata = await MetadataService.GetAllAsync();
+        _allSongs = allMetadata.Select(m => new SongAdminViewModel
+        {
+            Id = m.Id.ToString(),
+            AlbumName = m.AlbumName ?? string.Empty,
+            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
+            Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
+            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+            AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+            IsAlbum = m.IsAlbumCover,
+            AlbumPrice = m.AlbumPrice,
+            SongPrice = m.SongPrice,
+            Genre = m.Genre ?? string.Empty,
+            TrackNumber = m.TrackNumber,
+            TrackLength = m.TrackLength,
+            HasAlbumCover = m.IsAlbumCover
+        }).ToList();
     }
 
     protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
@@ -401,9 +411,10 @@ public class AdminSongManagementModel : ComponentBase, IDisposable
             _showEditModal = false;
             
             // Refresh the cache, all songs, and current page sequentially
+            // Use internal methods since we already hold the semaphore
             await SongAdminService.RefreshCacheAsync();
-            await LoadSongsAsync();
-            await LoadPageAsync((_currentPage - 1) * 10, 10);
+            await LoadSongsAsyncInternal();
+            await LoadPageAsyncInternal((_currentPage - 1) * 10, 10);
             StateHasChanged();
         }
         catch (Exception ex)
