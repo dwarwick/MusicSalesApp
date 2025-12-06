@@ -1,5 +1,59 @@
 # Agent Instructions - MusicSalesApp
 
+## UI Framework and Component Conventions
+
+### Syncfusion Blazor Components
+This application uses Syncfusion Blazor components for all UI elements to provide a consistent, professional look and feel. When adding or modifying UI components:
+
+- **Always use Syncfusion components** instead of standard HTML or Bootstrap controls
+- Use light theme: `bootstrap5.css` from Syncfusion.Blazor.Themes
+- Common Syncfusion components used:
+  - `SfButton` instead of `<button>` or Bootstrap buttons
+  - `SfTextBox` instead of `<input type="text">`
+  - `SfDialog` instead of Bootstrap modals
+  - `SfGrid` for data tables
+  - `SfCard` for card layouts
+  - `SfToast` or `SfMessage` for alerts and notifications
+  - `SfAppBar` for navigation bar
+  - `SfSidebar` for side navigation
+
+### Component Code-Behind Pattern
+All Blazor components and pages must follow these conventions:
+
+- **Always create code-behind files** for Razor components (e.g., `Home.razor` with `Home.razor.cs`)
+- **Code-behind class naming**: Use `[ComponentName]Model` pattern (e.g., `HomeModel` for `Home.razor`)
+- **Inheritance**: Code-behind classes must inherit from `BlazorBase`
+- **Razor inheritance**: Components must use `@inherits [ComponentName]Model` directive
+- **No direct service injection**: Never use `@inject` in components or code-behind files
+- **Use services from BlazorBase**: All services are injected into `BlazorBase` and available to derived classes
+
+Example:
+```razor
+@* Home.razor *@
+@page "/"
+@inherits HomeModel
+
+<SfButton>Click Me</SfButton>
+```
+
+```csharp
+// Home.razor.cs
+using MusicSalesApp.Components.Base;
+
+namespace MusicSalesApp.Components.Pages;
+
+public partial class HomeModel : BlazorBase
+{
+    // Access services via properties inherited from BlazorBase
+    // e.g., NavigationManager, CartService, AuthenticationService
+}
+```
+
+### Testing Conventions
+- Tests must also follow the BlazorBase pattern
+- Use `BUnitTestBase` for component tests which provides all necessary service mocks
+- Syncfusion components may require additional test setup or assertions
+
 ## Index Tags and File Management
 
 This document provides comprehensive guidance for AI agents working with the MusicSalesApp codebase, specifically around index tags and file classification.

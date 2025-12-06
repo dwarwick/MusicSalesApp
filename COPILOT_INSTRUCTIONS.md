@@ -10,14 +10,27 @@ Active Git repository:
 - Path: C:\Users\bgmsd\source\repos\MusicSalesApp (branch: copilot/add-authorization-service)
 - Remote: https://github.com/dwarwick/MusicSalesApp
 
+## UI Framework
+- **Always use Syncfusion Blazor components** for all UI elements
+- Theme: Light theme using `bootstrap5.css` from Syncfusion.Blazor.Themes
+- Replace standard HTML controls with Syncfusion equivalents:
+  - Use `SfButton` instead of `<button>` or Bootstrap buttons
+  - Use `SfTextBox` instead of `<input type="text">`
+  - Use `SfDialog` instead of Bootstrap modals
+  - Use `SfGrid` for data tables
+  - Use `SfCard` for card layouts
+  - Use `SfToast` or `SfMessage` for alerts/notifications
+  - Use `SfAppBar` and `SfSidebar` for navigation
+
 ## Razor Component Conventions
 - Always create code-behind files for Razor components and pages.
 - Code-behind file naming: `[ComponentName].razor.cs` (e.g., `Home.razor` and `Home.razor.cs`).
 - Code-behind class naming: `[ComponentName]Model` (e.g., class `HomeModel` for `Home.razor`).
 - The Razor component must inherit from its code-behind class using `@inherits [ComponentName]Model`.
-- Code-behind classes must inherit from `BlazorBase`.
-- Never inject services in the component or code-behind; use services from `BlazorBase`.
-- For dialogs, use examples from `Pages/Admin/Dialogs` and `Pages/Common`.
+- **Code-behind classes must inherit from `BlazorBase`.**
+- **Never inject services in the component or code-behind; use services from `BlazorBase`.**
+- All services are available through properties inherited from `BlazorBase` (e.g., `NavigationManager`, `CartService`, `AuthenticationService`)
+- For dialogs, use Syncfusion `SfDialog` component instead of Bootstrap modals.
 
 ### Example
 ```razor
@@ -65,6 +78,8 @@ Follow the above conventions strictly when adding or modifying Razor components.
 - Demo functionality changes
 - UI interaction logic
 - Component state management
+- **Note**: Tests must inherit from `BUnitTestBase` which provides all necessary service mocks
+- **Note**: When testing Syncfusion components, use appropriate selectors and assertions for Syncfusion-rendered HTML
 
 #### When to Create Unit Tests
 - New API controllers or endpoints
@@ -72,6 +87,30 @@ Follow the above conventions strictly when adding or modifying Razor components.
 - Business logic in helpers or utilities
 - Data access layer changes
 - AutoMapper configurations
+
+#### Test Pattern for Components
+```csharp
+[TestFixture]
+public class MyComponentTests : BUnitTestBase
+{
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+        // Additional setup if needed
+    }
+
+    [Test]
+    public void MyComponent_RendersCorrectly()
+    {
+        // Arrange & Act
+        var cut = TestContext.Render<MyComponent>();
+        
+        // Assert - Syncfusion components may render with specific CSS classes
+        Assert.That(cut.Find(".e-btn"), Is.Not.Null); // SfButton renders with e-btn class
+    }
+}
+```
 
 ## Index Tags and File Classification
 
