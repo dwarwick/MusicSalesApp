@@ -3,15 +3,15 @@
 @using Syncfusion.Blazor.Navigations
 @inherits NavMenuModel
 
-<SfAppBar ColorMode="AppBarColor.Light" CssClass="music-appbar">
-    <SfButton OnClick="@ToggleMenu"><SfIcon Name="IconName.Menu"/></SfButton>
+<SfAppBar>
+    <SfButton OnClick="@ToggleMenu"><SfIcon Name="IconName.Menu" /></SfButton>
     <AppBarSpacer></AppBarSpacer>
     <div>MusicSalesApp</div>
     <AppBarSpacer></AppBarSpacer>
     <AuthorizeView>
         <Authorized>
             <SfButton OnClick="@NavigateToCart">
-                <SfIcon IconCss="fas fa-shopping-cart" />                
+                <SfIcon IconCss="fas fa-shopping-cart" />
                 @if (_cartCount > 0)
                 {
                     <span class="cart-badge">@_cartCount</span>
@@ -21,45 +21,46 @@
     </AuthorizeView>
 </SfAppBar>
 
-<SfSidebar @ref="_sidebar" 
-           @bind-IsOpen="_isMenuOpen" 
-           Width="280px" 
+<SfSidebar @ref="_sidebar"
+           @bind-IsOpen="_isMenuOpen"
+           Width="280px"
            Type="SidebarType.Over"
            Position="SidebarPosition.Left"
-           MediaQuery="(min-width: 600px)">
+           MediaQuery="(min-width: 600px)"
+           CloseOnDocumentClick="true">
     <ChildContent>
-       
-            
-                <SfMenu CssClass="e-inherit" TValue="MenuItem" Orientation="Orientation.Vertical" >
-                    <MenuItems>
-                        <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
-                        <MenuItem Url="/counter" Text="Counter" IconCss="fas fa-stopwatch-20"></MenuItem>
-                        <MenuItem Url="/weather" Text="Weather" IconCss="fas fa-cloud-sun"></MenuItem>
-                        <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
-                        <AuthorizeView Policy="@Permissions.UploadFiles">
-                            <Authorized>                                
-                                <MenuItem Url="/upload-files" Text="Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
 
-                        <AuthorizeView Policy="@Permissions.ManageUsers">
-                            <Authorized>                                
-                                <MenuItem Url="/admin/songs" Text="Upload Files" IconCss="fas fa-cloud-file-audio"></MenuItem>
-                            </Authorized>
-                        </AuthorizeView>
+        <SfMenu CssClass="e-inherit" TValue="MenuItem" Orientation="Orientation.Vertical">
+            <MenuItems>
+                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
+                <MenuItem Url="/counter" Text="Counter" IconCss="fas fa-stopwatch-20"></MenuItem>
+                <MenuItem Url="/weather" Text="Weather" IconCss="fas fa-cloud-sun"></MenuItem>
+                <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
-                        <AuthorizeView>
-                            <Authorized>
-                                <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
-                            </Authorized>
-                            <NotAuthorized>                                
-                                <MenuItem Url="/login" Text="Login" IconCss="fas fa-arrow-right-to-bracket"></MenuItem>
-                                <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>                                
-                            </NotAuthorized>
-                        </AuthorizeView>
-                    </MenuItems>                    
-                    <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
-                </SfMenu>       
+                <AuthorizeView Policy="@Permissions.UploadFiles">
+                    <Authorized>
+                        <MenuItem Url="/upload-files" Text="Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Policy="@Permissions.ManageUsers">
+                    <Authorized>
+                        <MenuItem Url="/admin/songs" Text="Upload Files" IconCss="fas fa-cloud-file-audio"></MenuItem>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView>
+                    <Authorized>
+                        <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MenuItem Url="/login" Text="Login" IconCss="fas fa-arrow-right-to-bracket"></MenuItem>
+                        <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </MenuItems>
+            <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
+        </SfMenu>
     </ChildContent>
 </SfSidebar>

@@ -1,0 +1,9 @@
+﻿.e-btn {
+    background: white;
+    color: black;
+}
+
+e-btn:hover {
+    background: black;
+    color: white;
+}
