@@ -14,6 +14,7 @@ namespace MusicSalesApp.Services
     {
         private readonly IAzureStorageService _storageService;
         private readonly IMusicService _musicService;
+        private readonly ISongMetadataService _metadataService;
         private readonly ILogger<MusicUploadService> _logger;
 
         private const string MasteredSuffix = "_mastered";
@@ -23,10 +24,12 @@ namespace MusicSalesApp.Services
         public MusicUploadService(
             IAzureStorageService storageService,
             IMusicService musicService,
+            ISongMetadataService metadataService,
             ILogger<MusicUploadService> logger)
         {
             _storageService = storageService;
             _musicService = musicService;
+            _metadataService = metadataService;
             _logger = logger;
         }
 
@@ -207,41 +210,28 @@ namespace MusicSalesApp.Services
                 _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
             }
 
-            // Build index tags for audio file
-            Dictionary<string, string> audioTags = new Dictionary<string, string>();
-            
-            if (!string.IsNullOrWhiteSpace(albumName))
-            {
-                audioTags[IndexTagNames.AlbumName] = albumName;
-            }
-
-            // Add track length for all music files
-            if (trackDuration.HasValue)
-            {
-                audioTags[IndexTagNames.TrackLength] = trackDuration.Value.ToString("F2");
-            }
-
-            // Build index tags for album art file (always set IsAlbumCover for standalone songs)
-            Dictionary<string, string> albumArtTags = new Dictionary<string, string>
-            {
-                { IndexTagNames.IsAlbumCover, "false" }
-            };
-            
-            if (!string.IsNullOrWhiteSpace(albumName))
-            {
-                albumArtTags[IndexTagNames.AlbumName] = albumName;
-            }
-
             try
             {
-                // Upload MP3 file
+                // Upload MP3 file (no tags)
                 _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg", audioTags);
+                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg");
 
-                // Upload album art
+                // Upload album art (no tags)
                 _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
                 albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg", albumArtTags);
+                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg");
+
+                // Save metadata to database - single record with both MP3 and image paths
+                await _metadataService.UpsertAsync(new Models.SongMetadata
+                {
+                    BlobPath = mp3Path, // Kept for backward compatibility
+                    Mp3BlobPath = mp3Path,
+                    ImageBlobPath = albumArtPath,
+                    FileExtension = ".mp3",
+                    AlbumName = albumName ?? string.Empty,
+                    IsAlbumCover = false,
+                    TrackLength = trackDuration
+                });
 
                 _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
             }
@@ -294,17 +284,21 @@ namespace MusicSalesApp.Services
             var baseName = GetNormalizedBaseName(albumArtFileName);
             string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover.jpeg";
 
-            // Build index tags for album cover
-            var tags = new Dictionary<string, string>
-            {
-                { IndexTagNames.AlbumName, albumName },
-                { IndexTagNames.IsAlbumCover, "true" }
-            };
-
-            // Upload album cover
+            // Upload album cover (no tags)
             _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
             albumArtStream.Position = 0;
-            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg", tags);
+            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg");
+
+            // Save metadata to database
+            await _metadataService.UpsertAsync(new Models.SongMetadata
+            {
+                BlobPath = albumCoverPath, // Kept for backward compatibility
+                Mp3BlobPath = null, // No MP3 for album cover
+                ImageBlobPath = albumCoverPath,
+                FileExtension = ".jpeg",
+                AlbumName = albumName,
+                IsAlbumCover = true
+            });
 
             _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
 

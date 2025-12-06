@@ -7,8 +7,9 @@
     <base href="/" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link href="_content/Syncfusion.Blazor.Themes/bootstrap5.css" rel="stylesheet" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
-    <link rel="stylesheet" href="@Assets["MusicSalesApp.styles.css"]" />
+    <link rel="stylesheet" href="@Assets["MusicSalesApp.styles.css"]" />    
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -16,8 +17,9 @@
 
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <ReconnectModal />
+    <ReconnectModal />   
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="_content/Syncfusion.Blazor/scripts/syncfusion-blazor.min.js" type="text/javascript"></script>
 </body>
 
 </html>

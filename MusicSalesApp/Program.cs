@@ -24,6 +24,10 @@ builder.Services.AddRazorPages();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Add DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Scoped);
+
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
@@ -106,6 +110,8 @@ builder.Services.AddScoped<IMusicService, MusicService>();
 builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
+builder.Services.AddScoped<ISongAdminService, SongAdminService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();

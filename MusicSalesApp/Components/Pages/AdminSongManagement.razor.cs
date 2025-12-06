@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
+using Syncfusion.Blazor;
+using Syncfusion.Blazor.Data;
+using Syncfusion.Blazor.Grids;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,22 +19,22 @@ public class AdminSongManagementModel : ComponentBase
     private const string PriceFormat = "F2";
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
+    [Inject] protected ISongAdminService SongAdminService { get; set; }
+    [Inject] protected ISongMetadataService MetadataService { get; set; }
     [Inject] protected NavigationManager NavigationManager { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
-    protected IEnumerable<SongAdminViewModel> _filteredSongs = new List<SongAdminViewModel>();
+    protected List<SongAdminViewModel> _currentPageSongs = new();
+    protected SfGrid<SongAdminViewModel> _grid;
+    protected int _totalCount = 0;
+    protected int _totalPages = 1;
+    protected int _currentPage = 1;
+    protected string _currentSortColumn = string.Empty;
+    protected bool _currentSortAscending = true;
 
-    // Filter fields
-    protected string _filterAlbumName = string.Empty;
-    protected string _filterSongTitle = string.Empty;
-    protected string _filterGenre = string.Empty;
-    protected string _filterType = string.Empty;
-
-    // Sort fields
-    protected string _sortColumn = string.Empty;
-    protected bool _sortAscending = true;
+    // Removed: Filter fields - now using Syncfusion's native filtering
 
     // Edit modal fields
     protected bool _showEditModal = false;
@@ -49,8 +52,14 @@ public class AdminSongManagementModel : ComponentBase
     {
         try
         {
+            // Pre-load the cache
+            await SongAdminService.RefreshCacheAsync();
+            
+            // Load first page
+            await LoadPageAsync(0, 10);
+            
+            // Load all songs for validation purposes (used in Edit)
             await LoadSongsAsync();
-            ApplyFiltersAndSort();
         }
         catch (Exception ex)
         {
@@ -62,221 +71,65 @@ public class AdminSongManagementModel : ComponentBase
         }
     }
 
+    protected async Task LoadPageAsync(int skip, int take)
+    {
+        var parameters = new SongQueryParameters
+        {
+            Skip = skip,
+            Take = take,
+            SortColumn = _currentSortColumn,
+            SortAscending = _currentSortAscending
+        };
+
+        var result = await SongAdminService.GetSongsAsync(parameters);
+        _currentPageSongs = result.Items.ToList();
+        _totalCount = result.TotalCount;
+        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
+    }
+
     protected async Task LoadSongsAsync()
     {
-        var allFiles = await StorageService.ListFilesAsync();
-        var songMap = new Dictionary<string, SongAdminViewModel>();
-
-        // Group files by base name (song title)
-        foreach (var file in allFiles)
+        // Load all metadata from database for validation purposes
+        var allMetadata = await MetadataService.GetAllAsync();
+        _allSongs = allMetadata.Select(m => new SongAdminViewModel
         {
-            var fileName = file.Name;
-            var isImage = fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                         fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
-            var isMp3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-
-            if (!isImage && !isMp3) continue;
-
-            // Extract album name and song title from tags
-            var albumName = file.Tags.TryGetValue(IndexTagNames.AlbumName, out var album) ? album : string.Empty;
-            var isAlbumCover = file.Tags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
-                              coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
-
-            // Get base name (remove extension and "_mastered" suffix)
-            var baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
-            if (baseName.EndsWith("_mastered", StringComparison.OrdinalIgnoreCase))
-            {
-                baseName = baseName.Substring(0, baseName.Length - "_mastered".Length);
-            }
-
-            // Create a unique key combining album name and base name
-            var key = string.IsNullOrEmpty(albumName) ? baseName : $"{albumName}|{baseName}";
-
-            if (!songMap.ContainsKey(key))
-            {
-                songMap[key] = new SongAdminViewModel
-                {
-                    Id = key,
-                    AlbumName = albumName,
-                    SongTitle = baseName,
-                    IsAlbum = false
-                };
-            }
-
-            var song = songMap[key];
-
-            // Parse prices and genre from tags
-            if (file.Tags.TryGetValue(IndexTagNames.AlbumPrice, out var albumPriceStr) && 
-                decimal.TryParse(albumPriceStr, out var albumPrice))
-            {
-                song.AlbumPrice = albumPrice;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.SongPrice, out var songPriceStr) && 
-                decimal.TryParse(songPriceStr, out var songPrice))
-            {
-                song.SongPrice = songPrice;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.Genre, out var genre))
-            {
-                song.Genre = genre;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.TrackNumber, out var trackNumberStr) && 
-                int.TryParse(trackNumberStr, out var trackNumber))
-            {
-                song.TrackNumber = trackNumber;
-            }
-
-            if (file.Tags.TryGetValue(IndexTagNames.TrackLength, out var trackLengthStr) && 
-                double.TryParse(trackLengthStr, out var trackLength))
-            {
-                song.TrackLength = trackLength;
-            }
-
-            if (isMp3)
-            {
-                song.Mp3FileName = fileName;
-            }
-            else if (isImage)
-            {
-                if (isAlbumCover)
-                {
-                    // This is an album cover
-                    song.IsAlbum = true;
-                    song.AlbumCoverBlobName = fileName;
-                    song.AlbumCoverImageUrl = StorageService.GetReadSasUri(fileName, TimeSpan.FromHours(1)).ToString();
-                    song.HasAlbumCover = true;
-                }
-                else
-                {
-                    // This is a song cover
-                    song.JpegFileName = fileName;
-                    song.SongImageUrl = StorageService.GetReadSasUri(fileName, TimeSpan.FromHours(1)).ToString();
-                }
-            }
-        }
-
-        // Now handle album covers - find all songs with the same album name and link them
-        var albumCovers = songMap.Values.Where(s => s.IsAlbum && s.HasAlbumCover).ToList();
-        foreach (var albumCover in albumCovers)
-        {
-            var songsInAlbum = songMap.Values.Where(s => 
-                !s.IsAlbum && 
-                !string.IsNullOrEmpty(s.AlbumName) && 
-                s.AlbumName.Equals(albumCover.AlbumName, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (var song in songsInAlbum)
-            {
-                song.HasAlbumCover = true;
-                song.AlbumCoverBlobName = albumCover.AlbumCoverBlobName;
-                song.AlbumCoverImageUrl = albumCover.AlbumCoverImageUrl;
-            }
-        }
-
-        _allSongs = songMap.Values.ToList();
+            Id = m.Id.ToString(),
+            AlbumName = m.AlbumName ?? string.Empty,
+            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
+            Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
+            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+            AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+            IsAlbum = m.IsAlbumCover,
+            AlbumPrice = m.AlbumPrice,
+            SongPrice = m.SongPrice,
+            Genre = m.Genre ?? string.Empty,
+            TrackNumber = m.TrackNumber,
+            TrackLength = m.TrackLength,
+            HasAlbumCover = m.IsAlbumCover
+        }).ToList();
     }
 
-    protected void ApplyFiltersAndSort()
+    protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
     {
-        var filtered = _allSongs.AsEnumerable();
-
-        // Apply filters
-        if (!string.IsNullOrWhiteSpace(_filterAlbumName))
+        if (args.RequestType == Syncfusion.Blazor.Grids.Action.Paging)
         {
-            filtered = filtered.Where(s => s.AlbumName.Contains(_filterAlbumName, StringComparison.OrdinalIgnoreCase));
+            // Handle paging
+            var pageSize = 10;
+            var skip = (args.CurrentPage - 1) * pageSize;
+            _currentPage = args.CurrentPage;
+            await LoadPageAsync(skip, pageSize);
+            args.Cancel = true; // Cancel default paging behavior
+            StateHasChanged();
         }
-
-        if (!string.IsNullOrWhiteSpace(_filterSongTitle))
+        else if (args.RequestType == Syncfusion.Blazor.Grids.Action.Sorting && args.ColumnName != null)
         {
-            filtered = filtered.Where(s => s.SongTitle.Contains(_filterSongTitle, StringComparison.OrdinalIgnoreCase));
+            // Handle sorting
+            _currentSortColumn = args.ColumnName;
+            _currentSortAscending = args.Direction == Syncfusion.Blazor.Grids.SortDirection.Ascending;
+            await LoadPageAsync((_currentPage - 1) * 10, 10);
+            args.Cancel = true; // Cancel default sorting behavior
+            StateHasChanged();
         }
-
-        if (!string.IsNullOrWhiteSpace(_filterGenre))
-        {
-            filtered = filtered.Where(s => s.Genre.Equals(_filterGenre, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(_filterType))
-        {
-            if (_filterType == "album")
-            {
-                filtered = filtered.Where(s => s.IsAlbum);
-            }
-            else if (_filterType == "song")
-            {
-                filtered = filtered.Where(s => !s.IsAlbum);
-            }
-        }
-
-        // Apply sorting
-        if (!string.IsNullOrEmpty(_sortColumn))
-        {
-            filtered = _sortColumn switch
-            {
-                nameof(SongAdminViewModel.AlbumName) => _sortAscending 
-                    ? filtered.OrderBy(s => s.AlbumName) 
-                    : filtered.OrderByDescending(s => s.AlbumName),
-                nameof(SongAdminViewModel.SongTitle) => _sortAscending 
-                    ? filtered.OrderBy(s => s.SongTitle) 
-                    : filtered.OrderByDescending(s => s.SongTitle),
-                nameof(SongAdminViewModel.IsAlbum) => _sortAscending 
-                    ? filtered.OrderBy(s => s.IsAlbum) 
-                    : filtered.OrderByDescending(s => s.IsAlbum),
-                nameof(SongAdminViewModel.AlbumPrice) => _sortAscending 
-                    ? filtered.OrderBy(s => s.AlbumPrice ?? 0) 
-                    : filtered.OrderByDescending(s => s.AlbumPrice ?? 0),
-                nameof(SongAdminViewModel.SongPrice) => _sortAscending 
-                    ? filtered.OrderBy(s => s.SongPrice ?? 0) 
-                    : filtered.OrderByDescending(s => s.SongPrice ?? 0),
-                nameof(SongAdminViewModel.Genre) => _sortAscending 
-                    ? filtered.OrderBy(s => s.Genre) 
-                    : filtered.OrderByDescending(s => s.Genre),
-                nameof(SongAdminViewModel.TrackNumber) => _sortAscending 
-                    ? filtered.OrderBy(s => s.TrackNumber ?? 0) 
-                    : filtered.OrderByDescending(s => s.TrackNumber ?? 0),
-                nameof(SongAdminViewModel.TrackLength) => _sortAscending 
-                    ? filtered.OrderBy(s => s.TrackLength ?? 0) 
-                    : filtered.OrderByDescending(s => s.TrackLength ?? 0),
-                _ => filtered
-            };
-        }
-
-        _filteredSongs = filtered.ToList();
-    }
-
-    protected void SortBy(string columnName)
-    {
-        if (_sortColumn == columnName)
-        {
-            _sortAscending = !_sortAscending;
-        }
-        else
-        {
-            _sortColumn = columnName;
-            _sortAscending = true;
-        }
-        ApplyFiltersAndSort();
-    }
-
-    protected string GetSortIcon(string columnName)
-    {
-        if (_sortColumn != columnName)
-        {
-            return string.Empty;
-        }
-        return _sortAscending ? "▲" : "▼";
-    }
-
-    protected void ClearFilters()
-    {
-        _filterAlbumName = string.Empty;
-        _filterSongTitle = string.Empty;
-        _filterGenre = string.Empty;
-        _filterType = string.Empty;
-        ApplyFiltersAndSort();
     }
 
     protected void EditSong(SongAdminViewModel song)
@@ -404,7 +257,7 @@ public class AdminSongManagementModel : ComponentBase
                 return;
             }
 
-            // Upload new images if provided
+            // Upload new images if provided (no tags)
             if (_songImageFile != null && !_editingSong.IsAlbum)
             {
                 using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
@@ -414,25 +267,19 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = $"{_editingSong.SongTitle}.jpeg";
                 }
 
-                var tags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, _editingSong.AlbumName },
-                    { IndexTagNames.IsAlbumCover, "false" }
-                };
-
-                // Only add song-specific tags for songs
-                if (!string.IsNullOrEmpty(_editGenre))
-                {
-                    tags[IndexTagNames.Genre] = _editGenre;
-                }
-
-                if (_editSongPrice.HasValue)
-                {
-                    tags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
-                }
-
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
+                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
                 _editingSong.JpegFileName = newFileName;
+
+                // Create/update metadata in database
+                await MetadataService.UpsertAsync(new SongMetadata
+                {
+                    BlobPath = newFileName,
+                    FileExtension = ".jpeg",
+                    AlbumName = _editingSong.AlbumName ?? string.Empty,
+                    IsAlbumCover = false,
+                    Genre = _editGenre,
+                    SongPrice = _editSongPrice
+                });
             }
 
             if (_albumImageFile != null && _editingSong.IsAlbum)
@@ -444,23 +291,21 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = $"{_editingSong.AlbumName}_cover.jpeg";
                 }
 
-                var tags = new Dictionary<string, string>
-                {
-                    { IndexTagNames.AlbumName, _editingSong.AlbumName },
-                    { IndexTagNames.IsAlbumCover, "true" }
-                };
-
-                // Only add album price for albums
-                if (_editAlbumPrice.HasValue)
-                {
-                    tags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
-                }
-
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg", tags);
+                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
                 _editingSong.AlbumCoverBlobName = newFileName;
+
+                // Create/update metadata in database
+                await MetadataService.UpsertAsync(new SongMetadata
+                {
+                    BlobPath = newFileName,
+                    FileExtension = ".jpeg",
+                    AlbumName = _editingSong.AlbumName,
+                    IsAlbumCover = true,
+                    AlbumPrice = _editAlbumPrice
+                });
             }
 
-            // Update tags on existing blobs
+            // Update metadata in database for existing files
             var filesToUpdate = new List<string>();
 
             if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
@@ -478,50 +323,47 @@ public class AdminSongManagementModel : ComponentBase
                 filesToUpdate.Add(_editingSong.AlbumCoverBlobName);
             }
 
+            // Process updates sequentially to avoid DbContext concurrency issues
             foreach (var fileName in filesToUpdate)
             {
-                var existingTags = await StorageService.GetTagsAsync(fileName);
-                var isAlbumCover = existingTags.TryGetValue(IndexTagNames.IsAlbumCover, out var coverFlag) && 
-                                  coverFlag.Equals("true", StringComparison.OrdinalIgnoreCase);
+                var metadata = await MetadataService.GetByBlobPathAsync(fileName);
+                if (metadata == null) continue;
+
+                var isAlbumCover = metadata.IsAlbumCover;
                 var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
 
-                // Update album cover tags
+                // Update album cover metadata
                 if (isAlbumCover)
                 {
                     if (_editAlbumPrice.HasValue)
                     {
-                        existingTags[IndexTagNames.AlbumPrice] = _editAlbumPrice.Value.ToString(PriceFormat);
+                        metadata.AlbumPrice = _editAlbumPrice.Value;
                     }
                 }
-                // Update MP3 tags (both album tracks and standalone songs)
+                // Update MP3 metadata (both album tracks and standalone songs)
                 else if (isMP3)
                 {
                     // Set genre for all MP3s
                     if (!string.IsNullOrEmpty(_editGenre))
                     {
-                        existingTags[IndexTagNames.Genre] = _editGenre;
+                        metadata.Genre = _editGenre;
                     }
 
                     // Set song price for all MP3s
                     if (_editSongPrice.HasValue)
                     {
-                        existingTags[IndexTagNames.SongPrice] = _editSongPrice.Value.ToString(PriceFormat);
+                        metadata.SongPrice = _editSongPrice.Value;
                     }
 
                     // Set track number only for MP3s that are part of an album
                     if (!string.IsNullOrEmpty(_editingSong.AlbumName) && _editTrackNumber.HasValue)
                     {
-                        existingTags[IndexTagNames.TrackNumber] = _editTrackNumber.Value.ToString();
+                        metadata.TrackNumber = _editTrackNumber.Value;
                     }
                 }
-                // Update standalone song JPEG tags
-                else if (!isAlbumCover)
-                {
-                    // Standalone song cover images don't need special tag updates
-                    // (they should already have IsAlbumCover: false set during upload)
-                }
 
-                await StorageService.SetTagsAsync(fileName, existingTags);
+                // Each upsert awaited sequentially
+                await MetadataService.UpsertAsync(metadata);
             }
 
             // Update local model
@@ -532,8 +374,11 @@ public class AdminSongManagementModel : ComponentBase
 
             // Close modal and refresh
             _showEditModal = false;
+            
+            // Refresh the cache, all songs, and current page
+            await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
-            ApplyFiltersAndSort();
+            await LoadPageAsync((_currentPage - 1) * 10, 10);
             StateHasChanged();
         }
         catch (Exception ex)

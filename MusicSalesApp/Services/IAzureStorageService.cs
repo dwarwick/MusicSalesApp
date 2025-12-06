@@ -12,6 +12,7 @@ namespace MusicSalesApp.Services
         Task<bool> DeleteAsync(string fileName);
         Task<bool> ExistsAsync(string fileName);
         Task<IEnumerable<StorageFileInfo>> ListFilesAsync();
+        Task<PaginatedResult<StorageFileInfo>> ListFilesPagedAsync(int skip, int take);
         Task<StorageFileInfo> GetFileInfoAsync(string fileName); // null if not found
         Task<Stream> DownloadRangeAsync(string fileName, long? offset, long? length); // legacy manual range
         Task<Stream> OpenReadAsync(string fileName); // optimized streaming seekable stream (empty if not found)
@@ -37,5 +38,11 @@ namespace MusicSalesApp.Services
         /// The blob index tags associated with this file.
         /// </summary>
         public IDictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
+    }
+
+    public class PaginatedResult<T>
+    {
+        public IEnumerable<T> Items { get; set; } = new List<T>();
+        public int TotalCount { get; set; }
     }
 }

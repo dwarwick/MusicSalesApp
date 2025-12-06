@@ -4,15 +4,19 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Net;
 using System.Net.Http;
 using System.Security.Claims;
 using System.Text.Json;
-using MusicSalesApp.Common; // <-- Add this line
+using MusicSalesApp.Common;
 
 namespace MusicSalesApp.ComponentTests.Testing;
 
@@ -29,6 +33,8 @@ public abstract class BUnitTestBase
     protected Mock<IAzureStorageService> MockAzureStorageService { get; private set; } = default!;
     protected Mock<ICartService> MockCartService { get; private set; } = default!;
     protected Mock<IWebHostEnvironment> MockWebHostEnvironment { get; private set; } = default!;
+    protected Mock<ISongMetadataService> MockSongMetadataService { get; private set; } = default!;
+    protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -44,6 +50,21 @@ public abstract class BUnitTestBase
         MockAzureStorageService = new Mock<IAzureStorageService>();
         MockCartService = new Mock<ICartService>();
         MockWebHostEnvironment = new Mock<IWebHostEnvironment>();
+        MockSongMetadataService = new Mock<ISongMetadataService>();
+        
+        // UserManager requires IUserStore in its constructor
+        var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
+        MockUserManager = new Mock<UserManager<ApplicationUser>>(
+            mockUserStore.Object,
+            null!, // IOptions<IdentityOptions>
+            null!, // IPasswordHasher<ApplicationUser>
+            null!, // IEnumerable<IUserValidator<ApplicationUser>>
+            null!, // IEnumerable<IPasswordValidator<ApplicationUser>>
+            null!, // ILookupNormalizer
+            null!, // IdentityErrorDescriber
+            null!, // IServiceProvider
+            null!  // ILogger<UserManager<ApplicationUser>>
+        );
 
         // Configure WebHostEnvironment mock
         MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Development");
@@ -74,6 +95,10 @@ public abstract class BUnitTestBase
         MockCartService.Setup(x => x.GetOwnedSongsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<string>());
 
+        // Setup default returns for ISongMetadataService methods
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -84,6 +109,8 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAzureStorageService>(MockAzureStorageService.Object);
         TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
         TestContext.Services.AddSingleton<IWebHostEnvironment>(MockWebHostEnvironment.Object);
+        TestContext.Services.AddSingleton<ISongMetadataService>(MockSongMetadataService.Object);
+        TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
