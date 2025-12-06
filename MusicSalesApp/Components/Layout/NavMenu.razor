@@ -1,96 +1,39 @@
 ﻿@using MusicSalesApp.Common.Helpers
 @inherits NavMenuModel
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">MusicSalesApp</a>
-        <AuthorizeView>
-            <Authorized>
-                <a class="cart-link" href="checkout">
-                    <span class="cart-icon-wrapper">
-                        <svg class="cart-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.49 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/>
-                        </svg>
-                        @if (_cartCount > 0)
-                        {
-                            <span class="cart-badge">@_cartCount</span>
-                        }
-                    </span>
-                </a>
-            </Authorized>
-        </AuthorizeView>
-    </div>
-</div>
+<SfAppBar ColorMode="AppBarColor.Light" CssClass="music-appbar">
+    <SfButton CssClass="e-inherit menu-icon" IconCss="e-icons e-menu" OnClick="@ToggleMenu"></SfButton>
+    <AppBarSpacer></AppBarSpacer>
+    <div class="brand-text">MusicSalesApp</div>
+    <AppBarSpacer></AppBarSpacer>
+    <AuthorizeView>
+        <Authorized>
+            <SfButton CssClass="e-inherit cart-button" OnClick="@NavigateToCart">
+                <span class="e-btn-icon e-icons e-shopping-cart"></span>
+                @if (_cartCount > 0)
+                {
+                    <span class="cart-badge">@_cartCount</span>
+                }
+            </SfButton>
+        </Authorized>
+    </AuthorizeView>
+</SfAppBar>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
+<SfSidebar @ref="_sidebar" 
+           @bind-IsOpen="_isMenuOpen" 
+           Width="280px" 
+           Type="SidebarType.Over"
+           Position="SidebarPosition.Left"
+           CssClass="music-sidebar">
+    <ChildContent>
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <h4>Menu</h4>
+            </div>
+            <SfMenu Items="@_menuItems" CssClass="sidebar-menu">
+                <MenuFieldSettings IconCss="IconCss" Text="Text"></MenuFieldSettings>
+                <MenuEvents TValue="NavMenuItem" ItemSelected="@OnMenuItemSelected"></MenuEvents>
+            </SfMenu>
         </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="music-library">
-                <span class="bi bi-music-note-list-nav-menu" aria-hidden="true"></span> Music Library
-            </NavLink>
-        </div>
-
-        <AuthorizeView Policy="@Permissions.UploadFiles">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="upload-files">
-                        <span class="bi bi-cloud-upload-nav-menu" aria-hidden="true"></span> Upload Files
-                    </NavLink>
-                </div>
-            </Authorized>
-        </AuthorizeView>
-
-        <AuthorizeView Policy="@Permissions.ManageUsers">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="admin/songs">
-                        <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Song Management
-                    </NavLink>
-                </div>
-            </Authorized>
-        </AuthorizeView>
-
-        <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="logout">
-                        <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
-                    </NavLink>
-                </div>
-            </Authorized>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="login">
-                        <span class="bi bi-box-arrow-in-right-nav-menu" aria-hidden="true"></span> Login
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="register">
-                        <span class="bi bi-person-plus" aria-hidden="true"></span> Register
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
-    </nav>
-</div>
-
+    </ChildContent>
+</SfSidebar>
