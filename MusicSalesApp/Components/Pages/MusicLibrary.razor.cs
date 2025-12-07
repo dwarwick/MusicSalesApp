@@ -496,10 +496,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _albumArtUrls.TryGetValue(fileName, out var url) ? url : null;
     }
 
-    protected string GetSongPlayerUrl(string fileName)
+    protected void GetSongPlayerUrl(string fileName)
     {
         var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
-        return $"/song/{Uri.EscapeDataString(songTitle)}";
+
+        NavigationManager.NavigateTo($"/song/{Uri.EscapeDataString(songTitle)}");        
     }
 
     protected bool IsCardPlaying(string cardId)
