@@ -45,6 +45,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected ISongMetadataService SongMetadataService { get; set; } = default!;
 
+    [Inject]
+    protected IThemeService ThemeService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

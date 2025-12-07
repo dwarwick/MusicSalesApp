@@ -1,0 +1,24 @@
+@using MusicSalesApp.Services
+@inject IThemeService ThemeService
+
+<HeadContent>
+    <link href="@ThemeService.SyncfusionCssUrl" rel="stylesheet" />
+    <link rel="stylesheet" href="@ThemeService.CustomCssFile" />
+</HeadContent>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += HandleThemeChanged;
+    }
+
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= HandleThemeChanged;
+    }
+}

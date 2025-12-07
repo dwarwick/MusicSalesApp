@@ -2,6 +2,20 @@
     font-size: 1.5rem;
 }
 
+/* Theme Switcher */
+.theme-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-right: 1rem;
+}
+
+.theme-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    min-width: 40px;
+}
+
 /* Cart Button with Badge */
 .cart-button {
     position: relative;

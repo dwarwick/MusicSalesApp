@@ -1,4 +1,15 @@
-﻿body {
-    background-color: #495057;
+﻿/* Dark theme customizations */
+body {
+    background-color: #212529;
     color: #e0e0e0;
+}
+
+.e-btn {
+    background: #343a40;
+    color: #e0e0e0;
+}
+
+.e-btn:hover {
+    background: #495057;
+    color: #ffffff;
 }
