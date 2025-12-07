@@ -1,5 +1,6 @@
 ﻿@using MusicSalesApp.Common.Helpers
 @using Syncfusion.Blazor
+@using Syncfusion.Blazor.Buttons
 @using Syncfusion.Blazor.Navigations
 @inherits NavMenuModel
 
@@ -8,6 +9,10 @@
     <AppBarSpacer></AppBarSpacer>
     <div>MusicSalesApp</div>
     <AppBarSpacer></AppBarSpacer>
+    <div class="theme-switcher">
+        <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
+        <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
+    </div>
     <AuthorizeView>
         <Authorized>
             <SfButton OnClick="@NavigateToCart">
