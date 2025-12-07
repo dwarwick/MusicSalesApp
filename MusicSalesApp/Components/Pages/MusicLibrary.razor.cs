@@ -39,6 +39,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
     protected List<AlbumInfo> _albums = new List<AlbumInfo>();
     protected FilterMode _filterMode = FilterMode.All;
+    
+    // String property for Syncfusion radio button binding
+    protected string _filterModeString
+    {
+        get => _filterMode.ToString();
+        set => _filterMode = Enum.Parse<FilterMode>(value);
+    }
+    
     protected HashSet<string> _ownedSongs = new HashSet<string>();
     protected HashSet<string> _cartSongs = new HashSet<string>();
     protected HashSet<string> _cartAlbums = new HashSet<string>();
@@ -488,10 +496,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _albumArtUrls.TryGetValue(fileName, out var url) ? url : null;
     }
 
-    protected string GetSongPlayerUrl(string fileName)
+    protected void GetSongPlayerUrl(string fileName)
     {
         var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
-        return $"/song/{Uri.EscapeDataString(songTitle)}";
+
+        NavigationManager.NavigateTo($"/song/{Uri.EscapeDataString(songTitle)}");        
     }
 
     protected bool IsCardPlaying(string cardId)

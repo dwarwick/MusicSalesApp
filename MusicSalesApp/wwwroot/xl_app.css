@@ -1,0 +1,6 @@
+/* Extra large breakpoint styles (>=1200px) */
+/* AdminSongManagement container */
+#grid-container {
+    width: calc(100vw - 20rem);
+    height: calc(100vh - 10rem);
+}

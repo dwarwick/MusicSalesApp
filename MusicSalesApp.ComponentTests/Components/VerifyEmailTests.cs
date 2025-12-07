@@ -75,9 +75,9 @@ public class VerifyEmailTests : BUnitTestBase
         await Task.Delay(50);
         cut.Render();
         
-        var loginLink = cut.Find("a[href='/login']");
-        Assert.That(loginLink, Is.Not.Null);
-        Assert.That(loginLink.TextContent, Does.Contain("Login"));
+        // SfButton renders with e-btn class and contains "Login"
+        Assert.That(cut.Markup, Does.Contain("Go to Login"));
+        Assert.That(cut.Markup, Does.Contain("e-btn"));
     }
 
     [Test]
@@ -95,7 +95,8 @@ public class VerifyEmailTests : BUnitTestBase
         await Task.Delay(50);
         cut.Render();
         
-        var registerLink = cut.Find("a[href='/register']");
-        Assert.That(registerLink, Is.Not.Null);
+        // SfButton renders with e-btn class and contains "Register"
+        Assert.That(cut.Markup, Does.Contain("Go to Register Page"));
+        Assert.That(cut.Markup, Does.Contain("e-btn"));
     }
 }

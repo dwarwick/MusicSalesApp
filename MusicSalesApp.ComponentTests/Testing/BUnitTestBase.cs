@@ -17,6 +17,7 @@ using System.Net.Http;
 using System.Security.Claims;
 using System.Text.Json;
 using MusicSalesApp.Common;
+using Syncfusion.Blazor;
 
 namespace MusicSalesApp.ComponentTests.Testing;
 
@@ -115,6 +116,9 @@ public abstract class BUnitTestBase
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
         TestContext.AddAuthorization();
+
+        // Add Syncfusion Blazor services for component testing
+        TestContext.Services.AddSyncfusionBlazor();
 
         // Provide a default HttpClient that returns empty list for api/music to prevent errors in components
         var handler = new StubHttpMessageHandler();

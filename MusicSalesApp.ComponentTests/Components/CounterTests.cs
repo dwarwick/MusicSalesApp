@@ -73,7 +73,7 @@ public class CounterTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Counter>();
 
-        // Assert
-        Assert.That(cut.Find("button").ClassList, Does.Contain("btn-primary"));
+        // Assert - SfButton renders with e-primary class instead of btn-primary
+        Assert.That(cut.Find("button").ClassList, Does.Contain("e-primary"));
     }
 }

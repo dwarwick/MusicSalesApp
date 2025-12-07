@@ -8,21 +8,6 @@
 
 <PageTitle>Song Management</PageTitle>
 
-<style>
-    /* Hide accessibility helper text in grid headers */
-    .e-grid .e-headercelldiv .e-sortfilterdiv .e-icons::after,
-    .e-grid .e-headertext::after,
-    .e-grid .e-headercelldiv::after {
-        content: none !important;
-        display: none !important;
-    }
-    
-    /* Hide ARIA labels that appear as visible text */
-    .e-grid .e-headercell .e-aria-label {
-        display: none !important;
-    }
-</style>
-
 <h3>Song Management</h3>
 
 @if (_isLoading)
@@ -42,7 +27,7 @@ else if (!string.IsNullOrEmpty(_errorMessage))
 }
 else
 {
-    <div class="container-fluid">
+    <div id="grid-container">
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
                 TValue="SongAdminViewModel"
@@ -50,7 +35,7 @@ else
                 AllowPaging="true" 
                 AllowSorting="true" 
                 AllowFiltering="true"
-                Height="600"
+                Height='100%' Width='100%'
                 EnableAdaptiveUI="false"
                 RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
             <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
@@ -61,9 +46,9 @@ else
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            <button class="btn btn-sm btn-primary" @onclick="() => EditSong(song)">
+                            <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
                                 <i class="bi bi-pencil"></i> Edit
-                            </button>
+                            </SfButton>
                         }
                     </Template>
                 </GridColumn>
@@ -237,20 +222,17 @@ else
     </div>
 }
 
-<!-- Edit Modal -->
-@if (_showEditModal && _editingSong != null)
-{
-    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Edit Song Details</h5>
-                    <button type="button" class="btn-close" @onclick="CancelEdit" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
+<!-- Edit Dialog -->
+<SfDialog @bind-Visible="_showEditModal" Width="800px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Edit Song Details</Header>
+        <Content>
+            @if (_editingSong != null)
+            {
+                <div class="dialog-content">
                     @if (_validationErrors.Any())
                     {
-                        <div class="alert alert-danger">
+                        <SfMessage Severity="MessageSeverity.Error">
                             <strong>Validation Errors:</strong>
                             <ul>
                                 @foreach (var error in _validationErrors)
@@ -258,80 +240,76 @@ else
                                     <li>@error</li>
                                 }
                             </ul>
-                        </div>
+                        </SfMessage>
                     }
 
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">MP3 Filename</label>
-                            <input type="text" class="form-control" value="@_editingSong.Mp3FileName" disabled />
+                            <label class="e-label">MP3 Filename</label>
+                            <SfTextBox Value="@_editingSong.Mp3FileName" Enabled="false" CssClass="e-outline" />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">JPEG Filename</label>
-                            <input type="text" class="form-control" value="@_editingSong.JpegFileName" disabled />
+                            <label class="e-label">JPEG Filename</label>
+                            <SfTextBox Value="@_editingSong.JpegFileName" Enabled="false" CssClass="e-outline" />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Album (True/False)</label>
-                            <input type="text" class="form-control" value="@(_editingSong.IsAlbum ? "True" : "False")" disabled />
+                            <label class="e-label">Album (True/False)</label>
+                            <SfTextBox Value="@(_editingSong.IsAlbum ? "True" : "False")" Enabled="false" CssClass="e-outline" />
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Album Name</label>
-                            <input type="text" class="form-control" value="@_editingSong.AlbumName" disabled />
+                            <label class="e-label">Album Name</label>
+                            <SfTextBox Value="@_editingSong.AlbumName" Enabled="false" CssClass="e-outline" />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-12">
-                            <label class="form-label">Song Title</label>
-                            <input type="text" class="form-control" value="@_editingSong.SongTitle" disabled />
+                            <label class="e-label">Song Title</label>
+                            <SfTextBox Value="@_editingSong.SongTitle" Enabled="false" CssClass="e-outline" />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-3">
-                            <label class="form-label">Album Price</label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" step="0.01" class="form-control" @bind="_editAlbumPrice" disabled="@(!_editingSong.IsAlbum)" />
-                            </div>
+                            <label class="e-label">Album Price</label>
+                            <SfNumericTextBox @bind-Value="_editAlbumPrice" Format="C2" Enabled="@_editingSong.IsAlbum" CssClass="e-outline" />
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Song Price</label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" step="0.01" class="form-control" @bind="_editSongPrice" disabled="@(_editingSong.IsAlbum)" />
-                            </div>
+                            <label class="e-label">Song Price</label>
+                            <SfNumericTextBox @bind-Value="_editSongPrice" Format="C2" Enabled="@(!_editingSong.IsAlbum)" CssClass="e-outline" />
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Genre <span class="text-danger">*</span></label>
-                            <select class="form-select" @bind="_editGenre" disabled="@(_editingSong.IsAlbum)">
-                                <option value="">-- Select Genre --</option>
-                                <option value="Rock">Rock</option>
-                                <option value="Country">Country</option>
-                                <option value="Pop">Pop</option>
-                            </select>
+                            <label class="e-label">Genre <span class="text-danger">*</span></label>
+                            <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
+                                          DataSource="@(new List<string> { "Rock", "Country", "Pop" })" 
+                                          Placeholder="-- Select Genre --"
+                                          Enabled="@(!_editingSong.IsAlbum)"
+                                          CssClass="e-outline">
+                            </SfDropDownList>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
-                            <input type="number" class="form-control" @bind="_editTrackNumber" disabled="@(_editingSong.IsAlbum || string.IsNullOrEmpty(_editingSong.AlbumName))" 
-                                   placeholder="@(_editingSong.IsAlbum ? "Required" : "N/A")" />
+                            <label class="e-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
+                            <SfNumericTextBox @bind-Value="_editTrackNumber" Format="N0" 
+                                            Enabled="@(!_editingSong.IsAlbum && !string.IsNullOrEmpty(_editingSong.AlbumName))"
+                                            Placeholder="@(_editingSong.IsAlbum ? "Required" : "N/A")"
+                                            CssClass="e-outline" />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-12">
-                            <label class="form-label">Track Length (Read-only)</label>
+                            <label class="e-label">Track Length (Read-only)</label>
                             @if (_editingSong.TrackLength.HasValue)
                             {
                                 var ts = TimeSpan.FromSeconds(_editingSong.TrackLength.Value);
-                                <input type="text" class="form-control" value="@(ts.Hours > 0 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss"))" disabled />
+                                <SfTextBox Value="@(ts.Hours > 0 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss"))" Enabled="false" CssClass="e-outline" />
                             }
                             else
                             {
-                                <input type="text" class="form-control" value="Not available" disabled />
+                                <SfTextBox Value="Not available" Enabled="false" CssClass="e-outline" />
                             }
                         </div>
                     </div>
@@ -391,17 +369,17 @@ else
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="SaveEdit" disabled="@_isSaving">
-                        @if (_isSaving)
-                        {
-                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                        }
-                        Save Changes
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="CancelEdit" Content="Cancel" CssClass="e-btn" />
+            <SfButton OnClick="SaveEdit" IsPrimary="true" Disabled="@_isSaving" CssClass="e-btn e-primary">
+                @if (_isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                }
+                Save Changes
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
