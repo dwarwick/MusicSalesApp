@@ -6,9 +6,17 @@
 
 <SfAppBar>
     <SfButton OnClick="@ToggleMenu"><SfIcon Name="IconName.Menu" /></SfButton>
-    <AppBarSpacer></AppBarSpacer>
-    <div>MusicSalesApp</div>
-    <AppBarSpacer></AppBarSpacer>
+
+    @if (_isDarkTheme)
+    {
+        <img src="images/logo-dark-small.png" alt="Website Logo" class="app-logo" />
+    }
+    else
+    {
+        <img src="images/logo-light-small.png" alt="Website Logo" class="app-logo" />
+    }
+    
+    <AppBarSpacer></AppBarSpacer>    
     <div class="theme-switcher">
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
@@ -38,9 +46,7 @@
 
         <SfMenu CssClass="e-inherit" TValue="MenuItem" Orientation="Orientation.Vertical">
             <MenuItems>
-                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
-                <MenuItem Url="/counter" Text="Counter" IconCss="fas fa-stopwatch-20"></MenuItem>
-                <MenuItem Url="/weather" Text="Weather" IconCss="fas fa-cloud-sun"></MenuItem>
+                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>                
                 <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
                 <AuthorizeView Policy="@Permissions.UploadFiles">

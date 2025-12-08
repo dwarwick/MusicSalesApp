@@ -1,4 +1,9 @@
 ﻿/* Dark theme customizations */
+
+:root {
+    --color-sf-appbar-bg-color-alt1: #181c1f;    
+}
+
 body {
     background-color: #212529;
     color: #e0e0e0;
