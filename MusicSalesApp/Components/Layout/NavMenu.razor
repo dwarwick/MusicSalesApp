@@ -5,7 +5,7 @@
 @inherits NavMenuModel
 
 <SfAppBar>
-    <SfButton OnClick="@ToggleMenu"><SfIcon Name="IconName.Menu" /></SfButton>
+    <SfButton OnClick="@ToggleMenu" IsToggle="true"><SfIcon Name="IconName.Menu" /></SfButton>
 
     @if (_isDarkTheme)
     {
@@ -36,7 +36,7 @@
 
 <SfSidebar @ref="_sidebar"
            @bind-IsOpen="_isMenuOpen"
-           Width="160px"
+           Width="180px"
            Type="SidebarType.Over"
            Position="SidebarPosition.Left"
            MediaQuery="(min-width: 600px)"
