@@ -6,7 +6,7 @@
         height: calc(100vh - 6rem);
     }
 
-    /* SongPlayer extra small adjustments */
+    /* SongPlayer/AlbumPlayer extra small adjustments */
     .song-title { font-size: 24px; }
     .player-controls { gap: 2px; }
     .volume-bar-container { width: 50px; }

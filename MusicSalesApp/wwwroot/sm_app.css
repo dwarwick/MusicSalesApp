@@ -56,4 +56,42 @@
     .card-play-icon { width: 18px; height: 18px; }
     .card-view-icon { width: 20px; height: 20px; }
     .card-volume-bar-container { width: 40px; }
+
+    /* Checkout small adjustments */
+    .checkout-container {
+        padding: 16px;
+    }
+
+    .cart-item {
+        flex-wrap: wrap;
+    }
+
+    .item-info {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .item-price {
+        margin-right: auto;
+    }
+
+    /* AlbumPlayer small adjustments */
+    .song-title {
+        font-size: 28px;
+    }
+
+    .album-art-large {
+        width: 160px;
+        height: 160px;
+    }
+
+    .song-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .track-list th,
+    .track-list td {
+        padding: 8px;
+    }
 }

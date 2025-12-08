@@ -18,3 +18,506 @@ body {
     background-color: rgb(13 110 253 / 80%);
     box-shadow: 0 2px 4px rgba(var(--color-sf-black), 0.075);
 }
+
+/* ===== MainLayout (Light) ===== */
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+}
+
+/* ===== ReconnectModal (Light) ===== */
+#components-reconnect-modal {
+    background-color: white;
+    box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
+}
+
+#components-reconnect-modal::backdrop {
+    background-color: rgba(0, 0, 0, 0.4);
+    animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
+    opacity: 1;
+}
+
+#components-reconnect-modal button {
+    background-color: #6b9ed2;
+    color: white;
+}
+
+#components-reconnect-modal button:hover {
+    background-color: #3b6ea2;
+}
+
+#components-reconnect-modal button:active {
+    background-color: #6b9ed2;
+}
+
+/* ===== NavMenu (Light) ===== */
+.sidebar-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-nav .nav-item.active {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.cart-badge {
+    background-color: #1db954;
+    color: white;
+}
+
+/* ===== MusicLibrary (Light) ===== */
+.music-library-container {
+    background: #121212;
+}
+
+.music-library-container h3 {
+    color: #fff;
+}
+
+.loading-state,
+.error-state {
+    color: #fff;
+}
+
+.music-card {
+    background: #181818;
+}
+
+.music-card:hover {
+    background: #282828;
+}
+
+.card-album-art-placeholder {
+    background: #282828;
+}
+
+.card-placeholder-icon {
+    color: #b3b3b3;
+}
+
+.card-song-title {
+    color: #fff;
+}
+
+.card-play-button {
+    background-color: #1db954;
+}
+
+.card-play-button:hover {
+    background-color: #1ed760;
+}
+
+.card-play-icon {
+    color: #000;
+}
+
+.card-view-button {
+    color: #b3b3b3;
+}
+
+.card-view-button:hover {
+    color: #fff;
+}
+
+.card-mini-play-button,
+.card-mini-stop-button {
+    background-color: #fff;
+}
+
+.card-mini-play-icon,
+.card-mini-stop-icon {
+    color: #000;
+}
+
+.card-volume-button {
+    color: #b3b3b3;
+}
+
+.card-volume-button:hover {
+    color: #fff;
+}
+
+.card-volume-bar-container {
+    background-color: #4d4d4d;
+}
+
+.card-volume-bar {
+    background-color: #b3b3b3;
+}
+
+.card-volume-bar-container:hover .card-volume-bar {
+    background-color: #1db954;
+}
+
+.card-volume-thumb {
+    background-color: #fff;
+}
+
+.card-time-display {
+    color: #a7a7a7;
+}
+
+.card-progress-bar-container {
+    background-color: #4d4d4d;
+}
+
+.card-progress-bar {
+    background-color: #b3b3b3;
+}
+
+.card-progress-bar-container:hover .card-progress-bar {
+    background-color: #1db954;
+}
+
+.card-progress-thumb {
+    background-color: #fff;
+}
+
+.filter-option {
+    color: #b3b3b3;
+}
+
+.filter-option:hover {
+    color: #fff;
+}
+
+.filter-option input[type="radio"] {
+    border: 2px solid #b3b3b3;
+}
+
+.filter-option input[type="radio"]:checked {
+    border-color: #1db954;
+}
+
+.filter-option input[type="radio"]:checked::after {
+    background-color: #1db954;
+}
+
+.owned-badge {
+    background-color: #1db954;
+}
+
+.owned-badge svg {
+    color: #fff;
+}
+
+.card-cart-button {
+    border: 1px solid #b3b3b3;
+    color: #b3b3b3;
+}
+
+.card-cart-button:hover {
+    border-color: #fff;
+    color: #fff;
+}
+
+.card-cart-button.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.card-cart-button.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+.music-note-float {
+    color: #1db954;
+}
+
+.album-badge {
+    background-color: rgba(29, 185, 84, 0.9);
+    color: #fff;
+}
+
+.card-track-count {
+    color: #a7a7a7;
+}
+
+.card-now-playing {
+    color: #1db954;
+}
+
+.card-progress-limit-marker {
+    background-color: #ffa500;
+}
+
+/* ===== Checkout (Light) ===== */
+.checkout-container {
+    background: #121212;
+    color: #fff;
+}
+
+.checkout-container h2 {
+    color: #fff;
+}
+
+.login-prompt {
+    color: #b3b3b3;
+}
+
+.login-prompt a {
+    color: #1db954;
+}
+
+.empty-cart-icon {
+    color: #b3b3b3;
+}
+
+.empty-cart p {
+    color: #b3b3b3;
+}
+
+.btn-browse {
+    background-color: #1db954;
+    color: #fff;
+}
+
+.btn-browse:hover {
+    background-color: #1ed760;
+}
+
+.cart-items {
+    background: #181818;
+}
+
+.cart-item {
+    border-bottom: 1px solid #282828;
+}
+
+.item-title {
+    color: #fff;
+}
+
+.item-price {
+    color: #b3b3b3;
+}
+
+.remove-button {
+    color: #b3b3b3;
+}
+
+.remove-button:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.cart-total {
+    border-top: 1px solid #282828;
+}
+
+.total-label {
+    color: #fff;
+}
+
+.total-amount {
+    color: #1db954;
+}
+
+.checkout-progress {
+    color: #b3b3b3;
+}
+
+.checkout-success {
+    background: #181818;
+}
+
+.success-icon {
+    color: #1db954;
+}
+
+.checkout-success h3 {
+    color: #fff;
+}
+
+.checkout-success p {
+    color: #b3b3b3;
+}
+
+/* ===== AlbumPlayer (Light) ===== */
+.spotify-container {
+    background: linear-gradient(to bottom, #1a4b30 0%, #121212 40%);
+    color: #fff;
+}
+
+.album-art-placeholder {
+    background: #282828;
+}
+
+.placeholder-icon {
+    color: #b3b3b3;
+}
+
+.album-track-info {
+    color: #b3b3b3;
+}
+
+.track-list {
+    color: #b3b3b3;
+}
+
+.track-list thead {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.track-row:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.track-row.current-track {
+    background-color: rgba(29, 185, 84, 0.2);
+}
+
+.track-play-btn {
+    color: #fff;
+}
+
+.playing-indicator span {
+    background-color: #1db954;
+}
+
+.track-thumbnail-placeholder {
+    background: #282828;
+}
+
+.track-thumbnail-placeholder svg {
+    fill: #b3b3b3;
+}
+
+.track-name {
+    color: #fff;
+}
+
+.track-name.playing {
+    color: #1db954;
+}
+
+.now-playing-info {
+    color: #b3b3b3;
+}
+
+.now-playing-track {
+    color: #1db954;
+}
+
+.play-button-large {
+    background-color: #1db954;
+}
+
+.play-button-large:hover {
+    background-color: #1ed760;
+}
+
+.play-icon {
+    color: #000;
+}
+
+.player-bar {
+    background-color: #181818;
+    border-top: 1px solid #282828;
+}
+
+.control-button {
+    color: #b3b3b3;
+}
+
+.control-button:hover {
+    color: #fff;
+}
+
+.control-button.active {
+    color: #1db954;
+}
+
+.play-button-small {
+    background-color: #fff;
+}
+
+.play-icon-small {
+    color: #000;
+}
+
+.time-display {
+    color: #a7a7a7;
+}
+
+.progress-bar-container {
+    background-color: #4d4d4d;
+}
+
+.progress-bar {
+    background-color: #b3b3b3;
+}
+
+.progress-bar-container:hover .progress-bar {
+    background-color: #1db954;
+}
+
+.progress-thumb {
+    background-color: #fff;
+}
+
+.volume-bar-container {
+    background-color: #4d4d4d;
+}
+
+.volume-bar {
+    background-color: #b3b3b3;
+}
+
+.volume-bar-container:hover .volume-bar {
+    background-color: #1db954;
+}
+
+.volume-thumb {
+    background-color: #fff;
+}
+
+.owned-badge {
+    background-color: #1db954;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.owned-badge svg {
+    color: #fff;
+}
+
+.preview-label {
+    color: #ffa500;
+}
+
+.cart-button-large {
+    border: 2px solid #b3b3b3;
+    color: #b3b3b3;
+}
+
+.cart-button-large:hover {
+    border-color: #fff;
+    color: #fff;
+}
+
+.cart-button-large.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.cart-button-large.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+.music-note-float-player {
+    color: #1db954;
+}
+
+.progress-limit-marker {
+    background-color: #ffa500;
+}
+
+/* ===== SongPlayer (Light) ===== */
+/* Note: SongPlayer shares color styles with AlbumPlayer via spotify-container, etc. */
+/* Only unique color differences for SongPlayer */
+.spotify-container {
+    background: linear-gradient(to bottom, #5c4b30 0%, #121212 40%);
+}

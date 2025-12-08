@@ -6,3 +6,11 @@
         height: calc(100vh - 8rem);
     }
 }
+
+/* Desktop layout for AlbumPlayer/SongPlayer - account for sidebar and article padding */
+@media (min-width: 641px) {
+    .player-bar {
+        left: calc(250px + 2rem);
+        right: 1.5rem;
+    }
+}
