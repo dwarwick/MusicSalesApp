@@ -36,7 +36,7 @@
 
 <SfSidebar @ref="_sidebar"
            @bind-IsOpen="_isMenuOpen"
-           Width="280px"
+           Width="160px"
            Type="SidebarType.Over"
            Position="SidebarPosition.Left"
            MediaQuery="(min-width: 600px)"
@@ -44,7 +44,7 @@
     <ChildContent>
 
 
-        <SfMenu CssClass="e-inherit" TValue="MenuItem" Orientation="Orientation.Vertical">
+        <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical" >
             <MenuItems>
                 <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>                
                 <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>

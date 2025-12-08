@@ -119,11 +119,6 @@ builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
 
 builder.Services.AddCascadingAuthenticationState();
 
-GlobalFFOptions.Configure(options =>
-{
-    options.BinaryFolder = Path.Combine(AppContext.BaseDirectory);
-});
-
 builder.Services.AddSyncfusionBlazor();
 
 var app = builder.Build();
@@ -178,5 +173,22 @@ app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery)
     });
 });
 
+// This is the folder where appsettings.json lives (and where you said ffmpeg.exe is)
+var ffRoot = app.Environment.ContentRootPath;
+
+// Optional: quick diagnostic log to confirm paths on the server
+var ffmpegPath = Path.Combine(ffRoot, "ffmpeg.exe");
+Console.WriteLine($"[FFMPEG] ContentRootPath: {ffRoot}");
+Console.WriteLine($"[FFMPEG] Expecting ffmpeg at: {ffmpegPath}");
+Console.WriteLine($"[FFMPEG] Exists? {File.Exists(ffmpegPath)}");
+
+GlobalFFOptions.Configure(options =>
+{
+    options.BinaryFolder = ffRoot;                                // look next to appsettings.json
+    options.TemporaryFilesFolder = Path.Combine(ffRoot, "fftemp"); // any writable folder
+});
+
+// Ensure temp directory exists
+Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
 
 app.Run();
