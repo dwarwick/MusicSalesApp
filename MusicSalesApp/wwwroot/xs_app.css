@@ -20,5 +20,5 @@
 
     /* MainLayout top-row adjustments */
     .top-row { justify-content: space-between; }
-    .top-row ::deep a, .top-row ::deep .btn-link { margin-left: 0; }
+    .top-row a, .top-row .btn-link { margin-left: 0; }
 }

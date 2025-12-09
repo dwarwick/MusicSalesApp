@@ -194,6 +194,7 @@ body {
 
 .owned-badge {
     background-color: #1db954;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .owned-badge svg {
@@ -336,8 +337,11 @@ body {
 
 /* ===== AlbumPlayer (Light) ===== */
 .spotify-container {
-    background: linear-gradient(to bottom, #1a4b30 0%, #121212 40%);
     color: #fff;
+}
+
+.album-player-container {
+    background: linear-gradient(to bottom, #1a4b30 0%, #121212 40%);
 }
 
 .album-art-placeholder {
@@ -473,15 +477,6 @@ body {
     background-color: #fff;
 }
 
-.owned-badge {
-    background-color: #1db954;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.owned-badge svg {
-    color: #fff;
-}
-
 .preview-label {
     color: #ffa500;
 }
@@ -516,8 +511,8 @@ body {
 }
 
 /* ===== SongPlayer (Light) ===== */
-/* Note: SongPlayer shares color styles with AlbumPlayer via spotify-container, etc. */
+/* Note: SongPlayer shares most color styles with AlbumPlayer via spotify-container, etc. */
 /* Only unique color differences for SongPlayer */
-.spotify-container {
+.song-player-container {
     background: linear-gradient(to bottom, #5c4b30 0%, #121212 40%);
 }
