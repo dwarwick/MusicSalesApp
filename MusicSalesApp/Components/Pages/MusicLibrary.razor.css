@@ -420,7 +420,7 @@
 }
 
 /* Add to Cart Button */
-.card-cart-button {
+::deep .card-cart-button {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -438,19 +438,19 @@
     transition: all 0.2s ease;
 }
 
-.card-cart-button:hover {
+::deep .card-cart-button:hover {
     border-color: #fff;
     color: #fff;
     transform: scale(1.02);
 }
 
-.card-cart-button.in-cart {
+::deep .card-cart-button.in-cart {
     background-color: #1db954;
     border-color: #1db954;
     color: #fff;
 }
 
-.card-cart-button.in-cart:hover {
+::deep .card-cart-button.in-cart:hover {
     background-color: #1ed760;
     border-color: #1ed760;
 }
@@ -460,6 +460,11 @@
     height: 16px;
 }
 
+.cart-button-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
 /* Music Note Float Animation */
 .music-card {
     position: relative;
@@ -467,8 +472,8 @@
 
 .music-note-float {
     position: absolute;
-    bottom: 40px;
-    right: 20px;
+    top: 0;
+    left: 50%;
     color: #1db954;
     font-size: 24px;
     pointer-events: none;

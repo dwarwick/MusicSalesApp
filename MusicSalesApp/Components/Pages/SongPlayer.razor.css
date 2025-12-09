@@ -75,7 +75,7 @@
 
 /* Bottom Player Bar */
 .player-bar {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 90px; background-color: #181818; border-top: 1px solid #282828;
+    position: fixed; bottom: 0; left: 1.5rem; right: 1.5rem; height: 90px; background-color: #181818; border-top: 1px solid #282828;
     display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 16px; z-index: 100;
 }
 
@@ -126,17 +126,91 @@
 
 /* Add to Cart Button on SongPlayer */
 .action-controls { position: relative; }
-.cart-button-large { display: flex; align-items: center; gap: 8px; padding: 12px 24px; background-color: transparent; border: 2px solid #b3b3b3; border-radius: 500px; color: #b3b3b3; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
-.cart-button-large:hover { border-color: #fff; color: #fff; transform: scale(1.02); }
-.cart-button-large.in-cart { background-color: #1db954; border-color: #1db954; color: #fff; }
-.cart-button-large.in-cart:hover { background-color: #1ed760; border-color: #1ed760; }
-.cart-icon-large { width: 20px; height: 20px; }
-.cart-button-large.animating { animation: cartPulseLarge 0.3s ease-out; }
-@keyframes cartPulseLarge { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+.cart-button-wrapper{ position:relative; display:inline-block; }
+.cart-button-large {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background-color: transparent;
+    border: 2px solid #b3b3b3;
+    border-radius: 500px;
+    color: #b3b3b3;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+    .cart-button-large:hover {
+        border-color: #fff;
+        color: #fff;
+        transform: scale(1.02);
+    }
+
+    .cart-button-large.in-cart {
+        background-color: #1db954;
+        border-color: #1db954;
+        color: #fff;
+    }
+
+        .cart-button-large.in-cart:hover {
+            background-color: #1ed760;
+            border-color: #1ed760;
+        }
+
+.cart-icon-large {
+    width: 20px;
+    height: 20px;
+}
+
+.cart-button-large.animating {
+    animation: cartPulseLarge 0.3s ease-out;
+}
+
+@keyframes cartPulseLarge {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
 
 /* Music Note Float Animation for Song Player */
-.music-note-float-player { position: absolute; right: 100px; top: 0; color: #1db954; font-size: 28px; pointer-events: none; animation: musicNoteFloatPlayer 0.8s ease-out forwards; z-index: 10; }
-@keyframes musicNoteFloatPlayer { 0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); } 50% { opacity: 1; transform: translate(20px, -30px) rotate(20deg) scale(1.5); } 100% { opacity: 0; transform: translate(40px, -60px) rotate(40deg) scale(0.5); } }
+.music-note-float-player {
+    position: absolute;
+    left: 50%; /* center horizontally over button */
+    top: 0; /* start at top edge of button */
+    color: #1db954;
+    font-size: 28px;
+    pointer-events: none;
+    z-index: 10;
+    animation: musicNoteFloatPlayer 0.8s ease-out forwards;
+}
+
+@keyframes musicNoteFloatPlayer {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, 0) rotate(0deg) scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -30px) rotate(20deg) scale(1.5);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -60px) rotate(40deg) scale(0.5);
+    }
+}
 
 /* Progress Bar Restriction Styles */
 .progress-bar-container.restricted { position: relative; }
