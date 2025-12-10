@@ -172,14 +172,40 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             var allFiles = new List<StorageFileInfo>();
             foreach (var meta in allMetadata)
             {
-                var blobPath = meta.Mp3BlobPath ?? meta.ImageBlobPath ?? meta.BlobPath;
-                if (!string.IsNullOrEmpty(blobPath))
+                // Add MP3 file if present
+                if (!string.IsNullOrEmpty(meta.Mp3BlobPath))
                 {
                     allFiles.Add(new StorageFileInfo
                     {
-                        Name = blobPath,
+                        Name = meta.Mp3BlobPath,
                         Length = 0, // Not needed for display
-                        ContentType = GetContentTypeFromPath(blobPath),
+                        ContentType = GetContentTypeFromPath(meta.Mp3BlobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+                
+                // Add image file if present (separate from MP3)
+                if (!string.IsNullOrEmpty(meta.ImageBlobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = meta.ImageBlobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(meta.ImageBlobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+                
+                // Add legacy BlobPath if neither Mp3BlobPath nor ImageBlobPath is set
+                if (string.IsNullOrEmpty(meta.Mp3BlobPath) && string.IsNullOrEmpty(meta.ImageBlobPath) && !string.IsNullOrEmpty(meta.BlobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = meta.BlobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(meta.BlobPath),
                         LastModified = meta.UpdatedAt,
                         Tags = new Dictionary<string, string>() // No longer using tags
                     });
