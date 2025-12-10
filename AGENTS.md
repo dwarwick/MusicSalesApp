@@ -65,15 +65,29 @@ public partial class HomeModel : BlazorBase
 - Component styles should remain base-only; move responsive adjustments to the appropriate global file.
 - Ensure these files are linked in `Components/App.razor` via `<link rel="stylesheet" href="@Assets["<file>"]" />` so they apply app-wide.
 
-## Index Tags and File Management
+## Metadata Storage and File Management
 
-This document provides comprehensive guidance for AI agents working with the MusicSalesApp codebase, specifically around index tags and file classification.
+This document provides comprehensive guidance for AI agents working with the MusicSalesApp codebase, specifically around metadata storage and file classification.
 
 ## Core Concepts
 
+### Metadata Storage
+
+**IMPORTANT:** The application uses SQL Server database (SongMetadata table) to store all music metadata. Azure Blob Storage is used ONLY for file storage, NOT for metadata via index tags.
+
+**DO NOT:**
+- Query or use Azure Blob Storage index tags for metadata
+- Store metadata in blob index tags
+- Use methods like `ListFilesByAlbumAsync()` that query index tags
+
+**DO:**
+- Use `SongMetadataService` for all metadata operations
+- Query the SQL Server `SongMetadata` table for album names, track numbers, prices, genres, etc.
+- Use `GetByAlbumNameAsync()`, `GetAllAsync()`, `GetByBlobPathAsync()` methods
+
 ### File Classification System
 
-The application uses Azure Blob Storage index tags to classify music files into three distinct types. Proper classification is essential for validation, display, and management.
+Music files are classified into three distinct types based on their metadata in the SQL database:
 
 ### File Type 1: Album Cover JPEG
 
@@ -81,15 +95,16 @@ The application uses Azure Blob Storage index tags to classify music files into 
 
 **Characteristics:**
 - File extension: `.jpeg` or `.jpg`
-- Has `IsAlbumCover: true` index tag
-- Has `AlbumName` index tag pointing to the album
+- Database field `IsAlbumCover: true`
+- Has `AlbumName` in database
 - Does NOT have an associated MP3 file (it's just the cover art)
 
-**Required Index Tags:**
+**Required Database Fields:**
 ```
 IsAlbumCover: true
 AlbumName: [album name]
 AlbumPrice: [price as decimal]
+ImageBlobPath: [path to image file]
 ```
 
 **Validation Requirements:**
@@ -111,17 +126,18 @@ var isAlbumCoverEntry = song.IsAlbum && string.IsNullOrEmpty(song.Mp3FileName);
 
 **Characteristics:**
 - File extension: `.mp3`
-- Has `AlbumName` index tag (associates it with an album)
+- Has `AlbumName` in database (associates it with an album)
 - Has sequential `TrackNumber` within the album
 - May have associated JPEG cover art in the same folder
 
-**Required Index Tags:**
+**Required Database Fields:**
 ```
 AlbumName: [album name]
 TrackNumber: [integer 1-N, unique within album]
-TrackLength: [duration in seconds, format "F2"]
+TrackLength: [duration in seconds]
 SongPrice: [price as decimal]
 Genre: [genre string]
+Mp3BlobPath: [path to MP3 file]
 ```
 
 **Validation Requirements:**
@@ -140,13 +156,12 @@ var isAlbumTrack = !string.IsNullOrEmpty(song.Mp3FileName) &&
                    !string.IsNullOrEmpty(song.AlbumName);
 
 // Validating track number uniqueness
-var albumTracks = allSongs.Where(s => 
-    !string.IsNullOrEmpty(s.Mp3FileName) &&
-    !string.IsNullOrEmpty(s.AlbumName) &&
-    s.AlbumName.Equals(song.AlbumName, StringComparison.OrdinalIgnoreCase) &&
-    s.Id != song.Id).ToList();
+var albumTracks = await _songMetadataService.GetByAlbumNameAsync(song.AlbumName);
+var duplicateTrackNumber = albumTracks.Any(t => 
+    t.TrackNumber == song.TrackNumber && 
+    t.Id != song.Id);
 
-if (albumTracks.Any(t => t.TrackNumber == song.TrackNumber))
+if (duplicateTrackNumber)
 {
     // Validation error: duplicate track number
 }
@@ -158,20 +173,22 @@ if (albumTracks.Any(t => t.TrackNumber == song.TrackNumber))
 
 **Characteristics:**
 - File extension: `.mp3`
-- Does NOT have `AlbumName` index tag
+- Does NOT have `AlbumName` in database
 - Has associated JPEG cover art with `IsAlbumCover: false`
 - Independent pricing and metadata
 
-**Required Index Tags (MP3):**
+**Required Database Fields (MP3):**
 ```
-TrackLength: [duration in seconds, format "F2"]
+TrackLength: [duration in seconds]
 SongPrice: [price as decimal]
 Genre: [genre string]
+Mp3BlobPath: [path to MP3 file]
 ```
 
-**Required Index Tags (Associated JPEG):**
+**Required Database Fields (Associated JPEG):**
 ```
 IsAlbumCover: false
+ImageBlobPath: [path to image file]
 ```
 
 **Validation Requirements:**
@@ -190,19 +207,22 @@ var isStandaloneSong = !string.IsNullOrEmpty(song.Mp3FileName) &&
                        string.IsNullOrEmpty(song.AlbumName);
 ```
 
-## Index Tag Constants
+## Database Metadata Fields
 
-All index tag names are defined in `MusicSalesApp.Common.Helpers.IndexTagNames`:
+All metadata fields are stored in the `SongMetadata` SQL table:
 
-| Constant | Description | Used For |
-|----------|-------------|----------|
+| Field | Description | Used For |
+|-------|-------------|----------|
 | `AlbumName` | Name of the album | Album covers, Album tracks |
-| `IsAlbumCover` | "true" or "false" | All JPEG files |
+| `IsAlbumCover` | Boolean flag | All image files |
 | `AlbumPrice` | Album purchase price | Album covers |
 | `SongPrice` | Individual track price | All MP3 files |
 | `Genre` | Music genre | All MP3 files |
 | `TrackNumber` | Sequential track position (1-based) | Album tracks only |
 | `TrackLength` | Duration in seconds | All MP3 files (auto-extracted) |
+| `Mp3BlobPath` | Path to MP3 file in blob storage | All MP3 files |
+| `ImageBlobPath` | Path to image file in blob storage | All image files |
+| `BlobPath` | Legacy field (deprecated) | Backward compatibility |
 
 ## Validation Logic Implementation
 
@@ -233,22 +253,17 @@ protected async Task SaveEdit()
         ValidateStandaloneSong();
     }
 
-    // Step 3: Update tags based on file type
-    foreach (var fileName in filesToUpdate)
+    // Step 3: Save to SQL database (NOT blob index tags)
+    await _songMetadataService.UpsertAsync(new SongMetadata
     {
-        var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-        var isAlbumCover = /* check IsAlbumCover tag */;
-
-        if (isAlbumCover)
-        {
-            // Update album price only
-        }
-        else if (isMP3)
-        {
-            // Update genre and song price for ALL MP3s
-            // Update track number ONLY if has album name
-        }
-    }
+        AlbumName = _editingSong.AlbumName,
+        IsAlbumCover = isAlbumCoverEntry,
+        AlbumPrice = _editingSong.AlbumPrice,
+        SongPrice = _editingSong.SongPrice,
+        Genre = _editingSong.Genre,
+        TrackNumber = _editingSong.TrackNumber,
+        // ... other fields
+    });
 }
 ```
 
@@ -260,7 +275,7 @@ Track length is automatically extracted during file upload using FFMpeg:
 
 1. **When:** During upload, after MP3 conversion (if needed)
 2. **How:** Uses `MusicService.GetAudioDurationAsync()`
-3. **Storage:** Saved as `TrackLength` index tag, formatted as `duration.ToString("F2")` (e.g., "245.67")
+3. **Storage:** Saved in SQL `SongMetadata.TrackLength` field as double (e.g., 245.67)
 4. **Scope:** ALL MP3 files (album tracks AND standalone songs)
 
 ### FFMpeg Approach
@@ -333,20 +348,21 @@ if (!string.IsNullOrEmpty(_editingSong.Mp3FileName) &&
 
 ## Testing Considerations
 
-When writing tests for index tag functionality:
+When writing tests for metadata functionality:
 
-1. **Mock GetAudioDurationAsync** to return predictable durations
+1. **Mock SongMetadataService** to return predictable data
 2. **Test all three file types** separately
-3. **Verify tag presence and values** after upload
+3. **Verify database values** after save operations
 4. **Test validation rules** for each file type
 5. **Test track number uniqueness** within albums
 6. **Test track number bounds** (>= 1, <= total tracks)
 
 ## References
 
-- `MusicSalesApp.Common.Helpers.IndexTagNames` - Tag name constants
-- `MusicSalesApp.Services.MusicUploadService` - Upload and tag setting logic
+- `MusicSalesApp.Models.SongMetadata` - Database model for metadata
+- `MusicSalesApp.Services.SongMetadataService` - Service for metadata operations
+- `MusicSalesApp.Services.MusicUploadService` - Upload and metadata saving logic
 - `MusicSalesApp.Services.MusicService` - Track length extraction
 - `MusicSalesApp.Components.Pages.AdminSongManagement.razor.cs` - Validation logic
-- `MusicSalesApp.Components.Pages.AlbumPlayer.razor.cs` - Track sorting by number
+- `MusicSalesApp.Components.Pages.AlbumPlayer.razor.cs` - Track display and playback
 - `MusicSalesApp.Components.Pages.MusicLibrary.razor.cs` - Album grouping logic

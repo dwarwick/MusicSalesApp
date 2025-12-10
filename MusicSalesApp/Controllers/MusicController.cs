@@ -26,21 +26,13 @@ namespace MusicSalesApp.Controllers
             _userManager = userManager;
         }
 
-        // List files, optionally restricted to a specific album (by index tag "AlbumName")
+        // List files - albumName parameter is deprecated, use SongMetadataService directly instead
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] string albumName = null)
         {
-            IEnumerable<StorageFileInfo> files;
-
-            if (!string.IsNullOrWhiteSpace(albumName))
-            {
-                files = await _storageService.ListFilesByAlbumAsync(albumName);
-            }
-            else
-            {
-                files = await _storageService.ListFilesAsync();
-            }
-
+            // Note: The albumName parameter is no longer used
+            // Components should call SongMetadataService.GetByAlbumNameAsync() directly instead
+            var files = await _storageService.ListFilesAsync();
             return Ok(files);
         }
 
