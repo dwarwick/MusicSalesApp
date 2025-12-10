@@ -20,5 +20,26 @@
 
     /* MainLayout top-row adjustments */
     .top-row { justify-content: space-between; }
-    .top-row ::deep a, .top-row ::deep .btn-link { margin-left: 0; }    
+    .top-row a, .top-row .btn-link { margin-left: 0; }
+
+    .album-art {
+        width: 180px;
+        object-fit: cover;
+        box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+        border-radius: 4px;
+    }
+
+    .title-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .song-title {
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1;
+        margin: 0 5px 0 5px;
+        padding: 0;
+    }
 }

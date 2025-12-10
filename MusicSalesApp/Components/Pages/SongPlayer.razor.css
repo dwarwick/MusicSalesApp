@@ -15,24 +15,7 @@
     min-height: 200px;
 }
 
-/* Song Header Section */
-.song-header {
-    display: flex;
-    align-items: flex-end;
-    gap: 24px;
-    padding: 24px 0;
-    margin-bottom: 24px;
-}
-
 .album-art-container { flex-shrink: 0; }
-
-.album-art {
-    width: 192px;
-    height: 192px;
-    object-fit: cover;
-    box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
-    border-radius: 4px;
-}
 
 .album-art-placeholder {
     width: 192px;
@@ -50,15 +33,6 @@
 .song-info { display: flex; flex-direction: column; gap: 8px; }
 
 .song-label { font-size: 14px; font-weight: 700; text-transform: uppercase; }
-
-.song-title {
-    font-size: 72px;
-    font-weight: 900;
-    line-height: 1;
-    margin: 0;
-    padding: 0;
-    letter-spacing: -0.04em;
-}
 
 /* Action Controls Section */
 .action-controls { display: flex; align-items: center; gap: 24px; padding: 24px 0; }

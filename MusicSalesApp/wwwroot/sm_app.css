@@ -11,15 +11,21 @@
         font-size: 36px;
     }
 
-    .album-art,
-    .album-art-placeholder {
-        width: 128px;
-        height: 128px;
+    .album-art {
+        width: 200px;
+        object-fit: cover;
+        box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+        border-radius: 4px;
     }
 
+    /* Song Header Section */
     .song-header {
+        display: flex;
         flex-direction: column;
         align-items: flex-start;
+        gap: 24px;
+        padding: 24px 0;
+        margin-bottom: 24px;
     }
 
     .player-bar {
@@ -56,4 +62,18 @@
     .card-play-icon { width: 18px; height: 18px; }
     .card-view-icon { width: 20px; height: 20px; }
     .card-volume-bar-container { width: 40px; }
+
+    .title-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .song-title {
+        font-size: 50px;
+        font-weight: 700;
+        line-height: 1;
+        margin: 0 10px 0 10px;
+        padding: 0;
+    }
 }

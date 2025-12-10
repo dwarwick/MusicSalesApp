@@ -5,4 +5,17 @@
         width: calc(100vw - 12rem);
         height: calc(100vh - 8rem);
     }
+
+    .title-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .album-art {
+        width: 225px;
+        object-fit: cover;
+        box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+        border-radius: 4px;
+    }
 }

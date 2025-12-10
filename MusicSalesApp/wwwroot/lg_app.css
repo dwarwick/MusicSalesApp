@@ -5,4 +5,35 @@
         width: calc(100vw - 16rem);
         height: calc(100vh - 9rem);
     }
+
+    /* Song Header Section */
+    .song-header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 24px;
+        padding: 24px 0;
+        margin-bottom: 24px;
+    }
+
+    .album-art {
+        width: 235px;
+        object-fit: cover;
+        box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
+        border-radius: 4px;
+    }
+
+    .title-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .song-title {
+        font-size: 70px;
+        font-weight: 800;
+        line-height: 1;
+        margin: 0 15px 0 15px;
+        padding: 0;
+    }
 }

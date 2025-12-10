@@ -15,15 +15,6 @@
     min-height: 200px;
 }
 
-/* Song Header Section */
-.song-header {
-    display: flex;
-    align-items: flex-end;
-    gap: 24px;
-    padding: 24px 0;
-    margin-bottom: 24px;
-}
-
 .album-art-container {
     flex-shrink: 0;
     position: relative;
@@ -554,12 +545,7 @@
         width: 160px;
         height: 160px;
     }
-
-    .song-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
+    
     .track-list th,
     .track-list td {
         padding: 8px;

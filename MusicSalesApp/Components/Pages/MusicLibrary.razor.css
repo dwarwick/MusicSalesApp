@@ -77,16 +77,7 @@
     color: #b3b3b3;
 }
 
-/* Song Title */
-.card-song-title {
-    color: #fff;
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+
 
 /* Card Actions (Play and View buttons) */
 .card-actions {
