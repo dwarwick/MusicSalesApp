@@ -42,26 +42,6 @@ public class MusicControllerTests
     }
     
     [Test]
-    public async Task List_ReturnsOkWithFiles()
-    {
-        // Arrange
-        var files = new List<StorageFileInfo>
-        {
-            new StorageFileInfo { Name = "test1.mp3", Length = 1000 },
-            new StorageFileInfo { Name = "test2.mp3", Length = 2000 }
-        };
-        _mockStorageService.Setup(s => s.ListFilesAsync()).ReturnsAsync(files);
-
-        // Act
-        var result = await _controller.List();
-
-        // Assert
-        Assert.That(result, Is.InstanceOf<OkObjectResult>());
-        var okResult = result as OkObjectResult;
-        Assert.That(okResult.Value, Is.EqualTo(files));
-    }
-
-    [Test]
     public async Task Stream_WithValidFile_ReturnsFileResult()
     {
         // Arrange

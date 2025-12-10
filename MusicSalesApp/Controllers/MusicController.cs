@@ -26,16 +26,6 @@ namespace MusicSalesApp.Controllers
             _userManager = userManager;
         }
 
-        // List files - albumName parameter is obsolete, use SongMetadataService directly instead
-        [HttpGet]
-        public async Task<IActionResult> List([FromQuery]string albumName = null)
-        {
-            // Note: The albumName parameter is ignored and no longer used
-            // Components should call SongMetadataService.GetByAlbumNameAsync() directly instead
-            var files = await _storageService.ListFilesAsync();
-            return Ok(files);
-        }
-
         // Legacy / fallback streaming endpoint (server proxy)
         [HttpGet("{*fileName}")]
         public async Task<IActionResult> Stream(string fileName)

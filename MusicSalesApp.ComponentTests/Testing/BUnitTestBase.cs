@@ -120,9 +120,8 @@ public abstract class BUnitTestBase
         // Add Syncfusion Blazor services for component testing
         TestContext.Services.AddSyncfusionBlazor();
 
-        // Provide a default HttpClient that returns empty list for api/music to prevent errors in components
+        // Provide a default HttpClient for components
         var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), Array.Empty<object>());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
         TestContext.Services.AddSingleton<HttpClient>(httpClient);
         // NavigationManager is provided by bUnit automatically.

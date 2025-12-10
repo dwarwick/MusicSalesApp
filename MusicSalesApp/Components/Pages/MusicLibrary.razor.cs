@@ -165,12 +165,26 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _loading = true; _error = null;
         try
         {
-            // Load metadata from database
+            // Load metadata from database - SQL is the source of truth
             var allMetadata = await SongMetadataService.GetAllAsync();
             
-            // Get all blob files (for StorageFileInfo compatibility)
-            var result = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
-            var allFiles = result?.ToList() ?? new List<StorageFileInfo>();
+            // Build StorageFileInfo list from metadata (no longer calling api/music List endpoint)
+            var allFiles = new List<StorageFileInfo>();
+            foreach (var meta in allMetadata)
+            {
+                var blobPath = meta.Mp3BlobPath ?? meta.ImageBlobPath ?? meta.BlobPath;
+                if (!string.IsNullOrEmpty(blobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = blobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(blobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+            }
             
             // Create lookup dictionary for file metadata (prefer Mp3BlobPath, fallback to BlobPath)
             var metadataLookup = allMetadata.ToDictionary(
@@ -427,6 +441,25 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
+    }
+
+    private static string GetContentTypeFromPath(string filePath)
+    {
+        var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
+        return ext switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".flac" => "audio/flac",
+            ".m4a" => "audio/mp4",
+            ".aac" => "audio/aac",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
     }
 
     /// <summary>
