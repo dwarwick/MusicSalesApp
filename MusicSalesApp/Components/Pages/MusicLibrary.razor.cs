@@ -454,6 +454,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             ".flac" => "audio/flac",
             ".m4a" => "audio/mp4",
             ".aac" => "audio/aac",
+            ".wma" => "audio/x-ms-wma",
             ".jpg" or ".jpeg" => "image/jpeg",
             ".png" => "image/png",
             ".gif" => "image/gif",
