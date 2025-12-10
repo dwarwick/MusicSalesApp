@@ -28,7 +28,7 @@ namespace MusicSalesApp.Controllers
 
         // List files - albumName parameter is obsolete, use SongMetadataService directly instead
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery][Obsolete("Use SongMetadataService.GetByAlbumNameAsync() instead")] string albumName = null)
+        public async Task<IActionResult> List([FromQuery]string albumName = null)
         {
             // Note: The albumName parameter is ignored and no longer used
             // Components should call SongMetadataService.GetByAlbumNameAsync() directly instead
