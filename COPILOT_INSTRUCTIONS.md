@@ -122,24 +122,27 @@ public class MyComponentTests : BUnitTestBase
 }
 ```
 
-## Index Tags and File Classification
+## Metadata Storage and File Classification
 
 ### Overview
-The application uses Azure Blob Storage index tags to classify and manage music files. Understanding the file classification is critical for proper validation and tag management.
+The application uses SQL Server database (SongMetadata table) to store all music metadata. Azure Blob Storage is used ONLY for file storage, NOT for metadata.
+
+**IMPORTANT:** DO NOT use Azure Blob Storage index tags for metadata. All metadata operations must use `SongMetadataService`.
 
 ### File Types and Classifications
 
 #### 1. Album Cover JPEG (IsAlbumCover = true)
 **Identification:**
 - JPEG/JPG file
-- Has `IsAlbumCover: true` index tag
-- Has `AlbumName` index tag
+- Database field `IsAlbumCover: true`
+- Has `AlbumName` in database
 - NO associated MP3 file in the song entry
 
-**Required Index Tags:**
+**Required Database Fields:**
 - `IsAlbumCover: true`
 - `AlbumName: [album name]`
 - `AlbumPrice: [price]`
+- `ImageBlobPath: [path to image file]`
 
 **Validation Rules:**
 - Album cover image must exist
@@ -150,15 +153,16 @@ The application uses Azure Blob Storage index tags to classify and manage music 
 #### 2. Album Track MP3 (MP3 with AlbumName)
 **Identification:**
 - MP3 file
-- Has `AlbumName` index tag
+- Has `AlbumName` in database
 - Part of an album (shares album name with album cover)
 
-**Required Index Tags:**
+**Required Database Fields:**
 - `AlbumName: [album name]`
 - `TrackNumber: [1-N]` (must be unique within album, >= 1, <= total tracks in album)
 - `TrackLength: [seconds]` (auto-extracted during upload)
 - `SongPrice: [price]`
 - `Genre: [genre]`
+- `Mp3BlobPath: [path to MP3 file]`
 
 **Validation Rules:**
 - Track number is REQUIRED
@@ -172,16 +176,18 @@ The application uses Azure Blob Storage index tags to classify and manage music 
 #### 3. Standalone Song MP3 (MP3 without AlbumName)
 **Identification:**
 - MP3 file
-- Does NOT have `AlbumName` index tag
+- Does NOT have `AlbumName` in database
 - Has associated JPEG cover image with `IsAlbumCover: false`
 
-**Required Index Tags:**
+**Required Database Fields:**
 - `TrackLength: [seconds]` (auto-extracted during upload)
 - `SongPrice: [price]`
 - `Genre: [genre]`
+- `Mp3BlobPath: [path to MP3 file]`
 
-**JPEG Cover Required Index Tags:**
+**JPEG Cover Required Database Fields:**
 - `IsAlbumCover: false`
+- `ImageBlobPath: [path to image file]`
 
 **Validation Rules:**
 - Song cover image (JPEG) must exist
@@ -190,18 +196,20 @@ The application uses Azure Blob Storage index tags to classify and manage music 
 - NO track number required
 - Track length should be present (read-only, extracted during upload)
 
-### Index Tag Reference
+### Database Metadata Fields
 
-All index tag names are defined in `MusicSalesApp.Common.Helpers.IndexTagNames`:
+All metadata fields are stored in the `SongMetadata` SQL table:
 
 ```csharp
 - AlbumName: Album name for tracks and album covers
-- IsAlbumCover: "true" for album cover JPEGs, "false" for song cover JPEGs
+- IsAlbumCover: Boolean flag for album cover images vs song cover images
 - AlbumPrice: Price for the entire album (set on album cover)
 - SongPrice: Price for individual tracks
 - Genre: Music genre (set on MP3 files)
 - TrackNumber: Track sequence number (1-based, only for album tracks)
 - TrackLength: Duration in seconds (auto-extracted, set on all MP3s)
+- Mp3BlobPath: Path to MP3 file in blob storage
+- ImageBlobPath: Path to image file in blob storage
 ```
 
 ### Validation Implementation
@@ -227,25 +235,30 @@ else if (isStandaloneSong) {
 }
 ```
 
-### Tag Update Logic
+### Metadata Save Logic
 
-When saving changes, apply tags based on file type:
+When saving changes, save to SQL database (NOT blob index tags):
 
 ```csharp
-if (isAlbumCover) {
-    // Update: AlbumPrice
-}
-else if (isMP3) {
-    // Update: Genre, SongPrice for all MP3s
-    // Additionally update: TrackNumber (only if has AlbumName)
-}
+await _songMetadataService.UpsertAsync(new SongMetadata
+{
+    AlbumName = song.AlbumName,
+    IsAlbumCover = isAlbumCover,
+    AlbumPrice = song.AlbumPrice,
+    SongPrice = song.SongPrice,
+    Genre = song.Genre,
+    TrackNumber = song.TrackNumber,
+    TrackLength = song.TrackLength,
+    Mp3BlobPath = song.Mp3FileName,
+    ImageBlobPath = song.JpegFileName
+});
 ```
 
 ### Track Length Extraction
 
 - Track length is automatically extracted during upload using FFMpeg
 - Extracted for ALL MP3 files (both album tracks and standalone songs)
-- Stored as `TrackLength` index tag in seconds (formatted as "F2")
+- Stored in SQL `SongMetadata.TrackLength` field as double (e.g., 245.67)
 - Read-only in UI - cannot be edited manually
 - Falls back to FFProbe if available, but primarily uses FFMpeg with null output
 

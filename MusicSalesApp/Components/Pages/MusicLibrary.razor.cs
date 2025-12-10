@@ -165,12 +165,52 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _loading = true; _error = null;
         try
         {
-            // Load metadata from database
+            // Load metadata from database - SQL is the source of truth
             var allMetadata = await SongMetadataService.GetAllAsync();
             
-            // Get all blob files (for StorageFileInfo compatibility)
-            var result = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
-            var allFiles = result?.ToList() ?? new List<StorageFileInfo>();
+            // Build StorageFileInfo list from metadata (no longer calling api/music List endpoint)
+            var allFiles = new List<StorageFileInfo>();
+            foreach (var meta in allMetadata)
+            {
+                // Add MP3 file if present
+                if (!string.IsNullOrEmpty(meta.Mp3BlobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = meta.Mp3BlobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(meta.Mp3BlobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+                
+                // Add image file if present (separate from MP3)
+                if (!string.IsNullOrEmpty(meta.ImageBlobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = meta.ImageBlobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(meta.ImageBlobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+                
+                // Add legacy BlobPath if neither Mp3BlobPath nor ImageBlobPath is set
+                if (string.IsNullOrEmpty(meta.Mp3BlobPath) && string.IsNullOrEmpty(meta.ImageBlobPath) && !string.IsNullOrEmpty(meta.BlobPath))
+                {
+                    allFiles.Add(new StorageFileInfo
+                    {
+                        Name = meta.BlobPath,
+                        Length = 0, // Not needed for display
+                        ContentType = GetContentTypeFromPath(meta.BlobPath),
+                        LastModified = meta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    });
+                }
+            }
             
             // Create lookup dictionary for file metadata (prefer Mp3BlobPath, fallback to BlobPath)
             var metadataLookup = allMetadata.ToDictionary(
@@ -427,6 +467,26 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
+    }
+
+    private static string GetContentTypeFromPath(string filePath)
+    {
+        var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
+        return ext switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".flac" => "audio/flac",
+            ".m4a" => "audio/mp4",
+            ".aac" => "audio/aac",
+            ".wma" => "audio/x-ms-wma",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
     }
 
     /// <summary>

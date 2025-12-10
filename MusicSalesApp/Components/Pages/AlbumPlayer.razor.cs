@@ -127,28 +127,26 @@ namespace MusicSalesApp.Components.Pages
                     return;
                 }
 
-                // Get list of files from blob storage for StorageFileInfo compatibility
-                var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>(
-                    $"api/music?albumName={Uri.EscapeDataString(decodedAlbumName)}");
-                var allFiles = files?.ToList() ?? new List<StorageFileInfo>();
-
-                // Find track metadata and map to StorageFileInfo
+                // Find track metadata - use SQL metadata directly, no need for controller call
                 var trackMetadata = albumMetadata
                     .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) || m.FileExtension == ".mp3")
                     .OrderBy(m => m.TrackNumber ?? 9999) // Sort by track number
                     .ThenBy(m => Path.GetFileName(m.Mp3BlobPath ?? m.BlobPath))
                     .ToList();
 
-                var tracks = new List<StorageFileInfo>();
-                foreach (var trackMeta in trackMetadata)
+                // Convert metadata to StorageFileInfo for compatibility with existing code
+                var tracks = trackMetadata.Select(trackMeta =>
                 {
                     var mp3Path = trackMeta.Mp3BlobPath ?? trackMeta.BlobPath;
-                    var fileInfo = allFiles.FirstOrDefault(f => f.Name == mp3Path);
-                    if (fileInfo != null)
+                    return new StorageFileInfo
                     {
-                        tracks.Add(fileInfo);
-                    }
-                }
+                        Name = mp3Path,
+                        Length = 0, // Not needed for playback
+                        ContentType = "audio/mpeg",
+                        LastModified = trackMeta.UpdatedAt,
+                        Tags = new Dictionary<string, string>() // No longer using tags
+                    };
+                }).ToList();
 
                 if (!tracks.Any())
                 {
@@ -177,9 +175,10 @@ namespace MusicSalesApp.Components.Pages
                 var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
                 _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
 
-                // Find and store track images (JPEGs with same base name as MP3, not album covers)
-                var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
-                var imageMetadata = albumMetadata.Where(m => !m.IsAlbumCover && (m.ImageBlobPath != null || m.FileExtension == ".jpg" || m.FileExtension == ".jpeg")).ToList();
+                // Find and store track images from metadata (JPEGs with same base name as MP3, not album covers)
+                var trackImageMetadata = albumMetadata
+                    .Where(m => !m.IsAlbumCover && !string.IsNullOrEmpty(m.ImageBlobPath))
+                    .ToList();
                 
                 for (int i = 0; i < tracks.Count; i++)
                 {
@@ -187,26 +186,20 @@ namespace MusicSalesApp.Components.Pages
                     var trackBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(track.Name));
                     var trackFolder = Path.GetDirectoryName(track.Name)?.Replace("\\", "/") ?? "";
                     
-                    // Look for JPEG with same base name in same folder, but not an album cover
-                    var trackImage = imageFiles.FirstOrDefault(img =>
+                    // Look for image metadata with same base name in same folder
+                    var trackImageMeta = trackImageMetadata.FirstOrDefault(imgMeta =>
                     {
-                        // Check metadata to see if this is an album cover
-                        var imgMeta = albumMetadata.FirstOrDefault(m => m.ImageBlobPath == img.Name || m.BlobPath == img.Name);
-                        if (imgMeta != null && imgMeta.IsAlbumCover)
-                        {
-                            return false; // Skip album covers
-                        }
-                        
-                        var imgBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(img.Name));
-                        var imgFolder = Path.GetDirectoryName(img.Name)?.Replace("\\", "/") ?? "";
+                        var imgPath = imgMeta.ImageBlobPath;
+                        var imgBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(imgPath));
+                        var imgFolder = Path.GetDirectoryName(imgPath)?.Replace("\\", "/") ?? "";
                         
                         return string.Equals(imgBaseName, trackBaseName, StringComparison.OrdinalIgnoreCase) &&
                                string.Equals(imgFolder, trackFolder, StringComparison.OrdinalIgnoreCase);
                     });
                     
-                    if (trackImage != null)
+                    if (trackImageMeta != null)
                     {
-                        _trackImageUrls[i] = $"api/music/{SafeEncodePath(trackImage.Name)}";
+                        _trackImageUrls[i] = $"api/music/{SafeEncodePath(trackImageMeta.ImageBlobPath)}";
                     }
                 }
 

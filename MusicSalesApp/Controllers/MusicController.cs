@@ -26,24 +26,6 @@ namespace MusicSalesApp.Controllers
             _userManager = userManager;
         }
 
-        // List files, optionally restricted to a specific album (by index tag "AlbumName")
-        [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string albumName = null)
-        {
-            IEnumerable<StorageFileInfo> files;
-
-            if (!string.IsNullOrWhiteSpace(albumName))
-            {
-                files = await _storageService.ListFilesByAlbumAsync(albumName);
-            }
-            else
-            {
-                files = await _storageService.ListFilesAsync();
-            }
-
-            return Ok(files);
-        }
-
         // Legacy / fallback streaming endpoint (server proxy)
         [HttpGet("{*fileName}")]
         public async Task<IActionResult> Stream(string fileName)

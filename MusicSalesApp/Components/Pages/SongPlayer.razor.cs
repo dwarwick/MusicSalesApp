@@ -95,25 +95,33 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // URL decode the song title
             var decodedTitle = Uri.UnescapeDataString(SongTitle);
 
-            // Get list of files from blob storage
-            var files = await Http.GetFromJsonAsync<IEnumerable<StorageFileInfo>>("api/music");
+            // Get all metadata from database - SQL is the source of truth
+            var allMetadata = await SongMetadataService.GetAllAsync();
             
-            // Match by file name (not folder path) - extract just the filename from the full path
-            _songInfo = files?.FirstOrDefault(f =>
-                IsAudioFile(f.Name) &&
-                (Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(f.Name).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
+            // Find matching song metadata by filename
+            _songMetadata = allMetadata.FirstOrDefault(m =>
+                !string.IsNullOrEmpty(m.Mp3BlobPath) &&
+                IsAudioFile(m.Mp3BlobPath) &&
+                (Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                 Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
 
-            if (_songInfo == null)
+            if (_songMetadata == null)
             {
                 _error = $"Song '{decodedTitle}' not found.";
                 _loading = false;
                 return;
             }
 
-            // Get song metadata from database
-            _songMetadata = await SongMetadataService.GetByBlobPathAsync(_songInfo.Name);
-            if (_songMetadata != null && _songMetadata.SongPrice.HasValue)
+            // Build StorageFileInfo from metadata (no longer calling api/music List endpoint)
+            _songInfo = new StorageFileInfo
+            {
+                Name = _songMetadata.Mp3BlobPath ?? _songMetadata.BlobPath,
+                Length = 0, // Not needed for playback
+                ContentType = "audio/mpeg",
+                LastModified = _songMetadata.UpdatedAt,
+                Tags = new Dictionary<string, string>() // No longer using tags
+            };
+            if (_songMetadata.SongPrice.HasValue)
             {
                 _songPrice = _songMetadata.SongPrice.Value;
             }
@@ -123,18 +131,19 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // Owners get longer-lived URLs for full access
             await LoadStreamUrl();
 
-            // Try to find album art (look for image files with matching name in the same folder)
+            // Try to find album art from metadata (look for image with matching name in the same folder)
             var songBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
             var songFolder = Path.GetDirectoryName(_songInfo.Name)?.Replace("\\", "/") ?? "";
             
-            var artFile = files?.FirstOrDefault(f =>
-                IsImageFile(f.Name) &&
-                Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).Equals(songBaseName, StringComparison.OrdinalIgnoreCase) &&
-                (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").Equals(songFolder, StringComparison.OrdinalIgnoreCase));
+            var artMetadata = allMetadata.FirstOrDefault(m =>
+                !string.IsNullOrEmpty(m.ImageBlobPath) &&
+                IsImageFile(m.ImageBlobPath) &&
+                Path.GetFileNameWithoutExtension(Path.GetFileName(m.ImageBlobPath)).Equals(songBaseName, StringComparison.OrdinalIgnoreCase) &&
+                (Path.GetDirectoryName(m.ImageBlobPath)?.Replace("\\", "/") ?? "").Equals(songFolder, StringComparison.OrdinalIgnoreCase));
 
-            if (artFile != null)
+            if (artMetadata != null)
             {
-                _albumArtUrl = $"api/music/{SafeEncodePath(artFile.Name)}";
+                _albumArtUrl = $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}";
             }
             else
             {
