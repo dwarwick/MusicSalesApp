@@ -22,3 +22,184 @@ body {
 .music-card {
     box-shadow: 2px 2px 8px rgba(255, 255, 255, 0.3);
 }
+
+/* Add to Cart Button Colors - Dark Theme */
+.card-cart-button {
+    background-color: transparent;
+    border: 1px solid #6c757d;
+    color: #e0e0e0;
+}
+
+    .card-cart-button:hover {        
+        color: #ffffff;
+        background-color: #495057;
+    }
+
+.card-cart-button.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.card-cart-button.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+/* MusicLibrary Colors - Dark Theme */
+.music-library-container {
+    background: #1a1a1a;
+}
+
+.music-library-container h3 {
+    color: #e0e0e0;
+}
+
+.loading-state,
+.error-state {
+    color: #e0e0e0;
+}
+
+.music-card {
+    background: #2a2a2a;
+}
+
+.music-card:hover {
+    background: #353535;
+}
+
+.card-album-art-placeholder {
+    background: #353535;
+}
+
+.card-placeholder-icon {
+    color: #8a8a8a;
+}
+
+.card-play-button {
+    background-color: #1db954;
+    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.5);
+}
+
+.card-play-button:hover {
+    background-color: #1ed760;
+}
+
+.card-play-icon {
+    color: #000;
+}
+
+.card-view-button {
+    color: #8a8a8a;
+}
+
+.card-view-button:hover {
+    color: #e0e0e0;
+}
+
+.card-mini-play-button,
+.card-mini-stop-button {
+    background-color: #e0e0e0;
+}
+
+.card-mini-play-icon,
+.card-mini-stop-icon {
+    color: #000;
+}
+
+.card-volume-button {
+    color: #8a8a8a;
+}
+
+.card-volume-button:hover {
+    color: #e0e0e0;
+}
+
+.card-volume-bar-container {
+    background-color: #555555;
+}
+
+.card-volume-bar {
+    background-color: #9a9a9a;
+}
+
+.card-volume-bar-container:hover .card-volume-bar {
+    background-color: #1db954;
+}
+
+.card-volume-thumb {
+    background-color: #e0e0e0;
+}
+
+.card-time-display {
+    color: #8a8a8a;
+}
+
+.card-progress-bar-container {
+    background-color: #555555;
+}
+
+.card-progress-bar {
+    background-color: #9a9a9a;
+}
+
+.card-progress-bar-container:hover .card-progress-bar {
+    background-color: #1db954;
+}
+
+.card-progress-thumb {
+    background-color: #e0e0e0;
+}
+
+.card-progress-limit-marker {
+    background-color: #ffa500;
+}
+
+.filter-option {
+    color: #8a8a8a;
+}
+
+.filter-option:hover {
+    color: #e0e0e0;
+}
+
+.filter-option input[type="radio"] {
+    border: 2px solid #8a8a8a;
+}
+
+.filter-option input[type="radio"]:checked {
+    border-color: #1db954;
+}
+
+.filter-option input[type="radio"]:checked::after {
+    background-color: #1db954;
+}
+
+.owned-badge {
+    background-color: #1db954;
+}
+
+.owned-badge svg {
+    color: #fff;
+}
+
+.music-note-float {
+    color: #1db954;
+}
+
+.album-badge {
+    background-color: rgba(29, 185, 84, 0.9);
+    color: #fff;
+}
+
+.card-track-count {
+    color: white;
+}
+
+.card-now-playing {
+    color: #1db954;
+}
+
+.card-song-title {
+    color: white;
+}
