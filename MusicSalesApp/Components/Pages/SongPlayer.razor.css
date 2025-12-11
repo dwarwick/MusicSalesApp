@@ -15,7 +15,7 @@
     min-height: 200px;
 }
 
-.album-art-container { flex-shrink: 0; }
+
 
 .album-art-placeholder {
     width: 192px;
@@ -47,11 +47,7 @@
 
 .play-icon { width: 28px; height: 28px; color: #000; margin-left: 2px; }
 
-/* Bottom Player Bar */
-.player-bar {
-    position: fixed; bottom: 0; left: 1.5rem; right: 1.5rem; height: 90px; background-color: #181818; border-top: 1px solid #282828;
-    display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 16px; z-index: 100;
-}
+
 
 /* Desktop layout - account for sidebar and article padding */
 /* Responsive rules moved to global breakpoint files in wwwroot */
@@ -91,7 +87,7 @@
 /* Responsive rules moved to global breakpoint files in wwwroot */
 
 /* Owned Badge */
-.album-art-container { position: relative; }
+
 .owned-badge { position: absolute; bottom: 8px; right: 8px; background-color: #1db954; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .owned-badge svg { width: 20px; height: 20px; color: #fff; }
 
