@@ -9,10 +9,10 @@ body {
     color: black;
 }
 
-.e-btn:hover {
-    background: #e9ecef;
-    color: black;
-}
+    .e-btn:hover {
+        background: #e9ecef;
+        color: black;
+    }
 
 .e-switch-wrapper .e-switch-handle, .e-css.e-switch-wrapper .e-switch-handle {
     background-color: rgb(13 110 253 / 80%);
@@ -21,4 +21,27 @@ body {
 
 .music-card {
     box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Add to Cart Button */
+.card-cart-button {
+    background-color: transparent;
+    border: 1px solid var(--color-sf-secondary-border-color);
+    color: black;
+}
+
+    .card-cart-button:hover {        
+        color: black;
+        background-color: #e9ecef;
+    }
+
+.card-cart-button.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.card-cart-button.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
 }

@@ -410,42 +410,6 @@
     color: #fff;
 }
 
-/* Add to Cart Button */
-::deep .card-cart-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-    padding: 8px 12px;
-    margin-top: 8px;
-    background-color: transparent;
-    border: 1px solid #b3b3b3;
-    border-radius: 500px;
-    color: #b3b3b3;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-::deep .card-cart-button:hover {
-    border-color: #fff;
-    color: #fff;
-    transform: scale(1.02);
-}
-
-::deep .card-cart-button.in-cart {
-    background-color: #1db954;
-    border-color: #1db954;
-    color: #fff;
-}
-
-::deep .card-cart-button.in-cart:hover {
-    background-color: #1ed760;
-    border-color: #1ed760;
-}
-
 .cart-button-icon {
     width: 16px;
     height: 16px;

@@ -67,3 +67,23 @@ h1:focus {
 .album-art-container {
     position: relative;
 }
+
+/* Add to Cart Button */
+.card-cart-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    margin-top: 8px;    
+    border-radius: 500px;   
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.card-cart-button:hover {        
+    transform: scale(1.02);
+}
