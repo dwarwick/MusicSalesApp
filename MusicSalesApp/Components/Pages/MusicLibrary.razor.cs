@@ -911,9 +911,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected string GetAlbumPlayerUrl(AlbumInfo album)
+    protected void GetAlbumPlayerUrl(AlbumInfo album)
     {
-        return $"/album/{Uri.EscapeDataString(album.AlbumName)}";
+        NavigationManager.NavigateTo($"/album/{Uri.EscapeDataString(album.AlbumName)}");
     }
 
     protected async Task ToggleAlbumCartItem(AlbumInfo album)

@@ -81,31 +81,21 @@ else
                         <div class="card-mini-controls-row">
                             <div class="card-mini-controls">
                                 <!-- Play/Pause Button -->
-                                <button class="card-mini-button card-mini-play-button"
-                                        @onclick="() => ToggleCardPlay(cardId)"
-                                        title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
+                                <SfButton OnClick=@(() => ToggleCardPlay(cardId)) title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
                                     @if (IsCardCurrentlyPlaying(cardId))
                                     {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                        </svg>
+                                        <SfIcon IconCss="fas fa-solid fa-pause" />
                                     }
                                     else
                                     {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-play-icon">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
+                                        <SfIcon IconCss="fas fa-solid fa-play" />
                                     }
-                                </button>
+                                </SfButton>
 
                                 <!-- Stop Button -->
-                                <button class="card-mini-button card-mini-stop-button"
-                                        @onclick="() => StopCard(cardId)"
-                                        title="Stop">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-mini-stop-icon">
-                                        <path d="M6 6h12v12H6z" />
-                                    </svg>
-                                </button>
+                                <SfButton OnClick=@(() => StopCard(cardId)) title="Stop">
+                                    <SfIcon IconCss="fas fa-solid fa-stop" />
+                                </SfButton>
                             </div>
 
                             <!-- Volume Controls -->
@@ -158,16 +148,8 @@ else
                 {
                     <!-- Card Actions (Play and View buttons) -->
                     <div class="card-actions">
-                        <button class="card-play-button" @onclick="() => PlayAlbum(album)" title="Play Album">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-play-icon">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
-                        </button>
-                        <a class="card-view-button" href="@GetAlbumPlayerUrl(album)" title="View Album">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-view-icon">
-                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-                            </svg>
-                        </a>
+                        <SfButton onclick=@(() => PlayAlbum(album)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
+                        <SfButton onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
 
@@ -176,24 +158,26 @@ else
                     <Authorized>
                         @if (!owned)
                         {
-                            <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
-                                      OnClick="@(args => ToggleAlbumCartItem(album))"
-                                      Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                @if (inCart)
+                            <div class="cart-button-wrapper">
+                                <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
+                                          OnClick="@(args => ToggleAlbumCartItem(album))"
+                                          Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                    @if (inCart)
+                                    {
+                                        <SfIcon IconCss="fas fa-regular fa-circle-check" />
+                                        <span>Added</span>
+                                    }
+                                    else
+                                    {
+                                        <SfIcon IconCss="fas fa-shopping-cart" />
+                                        <span>$@album.Price.ToString("F2")</span>
+                                    }
+                                </SfButton>
+                                @if (_animatingCartButtons.Contains(album.AlbumName))
                                 {
-                                    <SfIcon IconCss="fas fa-regular fa-circle-check" />
-                                    <span>Added</span>
+                                    <div class="music-note-float">♪</div>
                                 }
-                                else
-                                {
-                                    <SfIcon IconCss="fas fa-shopping-cart" />
-                                    <span>$@album.Price.ToString("F2")</span>
-                                }
-                            </SfButton>
-                            @if (_animatingCartButtons.Contains(album.AlbumName))
-                            {
-                                <div class="music-note-float">♪</div>
-                            }
+                            </div>
                         }
                     </Authorized>
                 </AuthorizeView>
@@ -318,7 +302,7 @@ else
                 {
                     <!-- Card Actions (Play and View buttons) -->
                     <div class="card-actions">
-                        <SfButton onclick=@(() => PlayCard(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
+                        <SfButton onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         <SfButton onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
