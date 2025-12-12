@@ -1,0 +1,319 @@
+using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.JSInterop;
+using Moq;
+using MusicSalesApp.Components.Pages;
+using MusicSalesApp.ComponentTests.Testing;
+using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+using System.Net;
+using System.Net.Http;
+using System.Security.Claims;
+
+namespace MusicSalesApp.ComponentTests.Components;
+
+[TestFixture]
+public class AlbumPlayerTests : BUnitTestBase
+{
+    private Mock<IJSRuntime> _mockJsRuntime;
+    private Mock<IJSObjectReference> _mockJsModule;
+    private StubHttpMessageHandler _httpHandler;
+    private HttpClient _httpClient;
+
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+
+        _mockJsRuntime = new Mock<IJSRuntime>();
+        _mockJsModule = new Mock<IJSObjectReference>();
+
+        // Mock JS module import
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<IJSObjectReference>(
+                "import",
+                It.IsAny<object[]>()))
+            .ReturnsAsync(_mockJsModule.Object);
+
+        TestContext.Services.AddSingleton<IJSRuntime>(_mockJsRuntime.Object);
+
+        // Setup HTTP client with stub handler
+        _httpHandler = new StubHttpMessageHandler();
+        _httpClient = new HttpClient(_httpHandler) { BaseAddress = new Uri("http://localhost/") };
+
+        // Setup default responses for API endpoints
+        _httpHandler.SetupJsonResponse(new Uri("http://localhost/api/cart/owned"), Array.Empty<string>());
+        _httpHandler.SetupJsonResponse(new Uri("http://localhost/api/cart"), new { Items = Array.Empty<object>(), Albums = Array.Empty<object>(), Total = 0 });
+
+        TestContext.Services.AddSingleton<HttpClient>(_httpClient);
+    }
+
+    [TearDown]
+    public override void BaseTearDown()
+    {
+        _httpClient?.Dispose();
+        _httpHandler?.Dispose();
+        base.BaseTearDown();
+    }
+
+    [Test]
+    public void AlbumPlayer_ShowsErrorState_WhenAlbumNotFound()
+    {
+        // Arrange - Set up empty metadata
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync(It.IsAny<string>()))
+            .ReturnsAsync(new List<SongMetadata>());
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "TestAlbum"));
+
+        // Wait for error state to appear
+        cut.WaitForState(() => cut.Markup.Contains("Album 'TestAlbum' not found"), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Album 'TestAlbum' not found"));
+    }
+
+    [Test]
+    public void AlbumPlayer_PlaylistMode_ShowsPlaylistName()
+    {
+        // Arrange - Setup authorized user
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+
+        var appUser = new ApplicationUser { Id = 1, Email = "testuser@test.com", UserName = "testuser@test.com" };
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(appUser);
+
+        // Setup playlist data
+        var playlist = new Playlist
+        {
+            Id = 1,
+            UserId = 1,
+            PlaylistName = "My Test Playlist"
+        };
+
+        var songMetadata = new SongMetadata
+        {
+            Id = 1,
+            Mp3BlobPath = "music/song1.mp3",
+            ImageBlobPath = "music/song1.jpg",
+            TrackLength = 180.0,
+            Genre = "Rock"
+        };
+
+        var ownedSong = new OwnedSong
+        {
+            Id = 1,
+            UserId = 1,
+            SongFileName = "music/song1.mp3",
+            SongMetadata = songMetadata,
+            SongMetadataId = 1
+        };
+
+        var userPlaylist = new UserPlaylist
+        {
+            Id = 1,
+            PlaylistId = 1,
+            UserId = 1,
+            OwnedSongId = 1,
+            OwnedSong = ownedSong,
+            Playlist = playlist
+        };
+
+        MockPlaylistService.Setup(x => x.GetPlaylistByIdAsync(1))
+            .ReturnsAsync(playlist);
+        MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(1))
+            .ReturnsAsync(new List<UserPlaylist> { userPlaylist });
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("My Test Playlist"));
+    }
+
+    [Test]
+    public void AlbumPlayer_PlaylistMode_DoesNotShowAddToCartButton()
+    {
+        // Arrange - Setup authorized user
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+
+        var appUser = new ApplicationUser { Id = 1, Email = "testuser@test.com", UserName = "testuser@test.com" };
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(appUser);
+
+        // Setup playlist data
+        var playlist = new Playlist
+        {
+            Id = 1,
+            UserId = 1,
+            PlaylistName = "My Test Playlist"
+        };
+
+        var songMetadata = new SongMetadata
+        {
+            Id = 1,
+            Mp3BlobPath = "music/song1.mp3",
+            ImageBlobPath = "music/song1.jpg",
+            TrackLength = 180.0,
+            Genre = "Rock"
+        };
+
+        var ownedSong = new OwnedSong
+        {
+            Id = 1,
+            UserId = 1,
+            SongFileName = "music/song1.mp3",
+            SongMetadata = songMetadata,
+            SongMetadataId = 1
+        };
+
+        var userPlaylist = new UserPlaylist
+        {
+            Id = 1,
+            PlaylistId = 1,
+            UserId = 1,
+            OwnedSongId = 1,
+            OwnedSong = ownedSong,
+            Playlist = playlist
+        };
+
+        MockPlaylistService.Setup(x => x.GetPlaylistByIdAsync(1))
+            .ReturnsAsync(playlist);
+        MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(1))
+            .ReturnsAsync(new List<UserPlaylist> { userPlaylist });
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert - Should not contain "Add to Cart" button
+        Assert.That(cut.Markup, Does.Not.Contain("Add to Cart"));
+    }
+
+    [Test]
+    public void AlbumPlayer_PlaylistMode_ShowsTrackCount()
+    {
+        // Arrange - Setup authorized user
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+
+        var appUser = new ApplicationUser { Id = 1, Email = "testuser@test.com", UserName = "testuser@test.com" };
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(appUser);
+
+        // Setup playlist with 3 songs
+        var playlist = new Playlist
+        {
+            Id = 1,
+            UserId = 1,
+            PlaylistName = "My Test Playlist"
+        };
+
+        var songs = new List<UserPlaylist>();
+        for (int i = 1; i <= 3; i++)
+        {
+            var songMetadata = new SongMetadata
+            {
+                Id = i,
+                Mp3BlobPath = $"music/song{i}.mp3",
+                ImageBlobPath = $"music/song{i}.jpg",
+                TrackLength = 180.0,
+                Genre = "Rock"
+            };
+
+            var ownedSong = new OwnedSong
+            {
+                Id = i,
+                UserId = 1,
+                SongFileName = $"music/song{i}.mp3",
+                SongMetadata = songMetadata,
+                SongMetadataId = i
+            };
+
+            songs.Add(new UserPlaylist
+            {
+                Id = i,
+                PlaylistId = 1,
+                UserId = 1,
+                OwnedSongId = i,
+                OwnedSong = ownedSong,
+                Playlist = playlist
+            });
+        }
+
+        MockPlaylistService.Setup(x => x.GetPlaylistByIdAsync(1))
+            .ReturnsAsync(playlist);
+        MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(1))
+            .ReturnsAsync(songs);
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("3 tracks"));
+    }
+
+    [Test]
+    public void AlbumPlayer_PlaylistMode_RequiresAuthentication()
+    {
+        // Arrange - Setup unauthenticated user (already set up in BaseSetup)
+        MockPlaylistService.Setup(x => x.GetPlaylistByIdAsync(1))
+            .ReturnsAsync((Playlist)null);
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("You must be logged in to view playlists"));
+    }
+
+    [Test]
+    public void AlbumPlayer_PlaylistMode_ShowsErrorForEmptyPlaylist()
+    {
+        // Arrange - Setup authorized user
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+
+        var appUser = new ApplicationUser { Id = 1, Email = "testuser@test.com", UserName = "testuser@test.com" };
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(appUser);
+
+        // Setup playlist with no songs
+        var playlist = new Playlist
+        {
+            Id = 1,
+            UserId = 1,
+            PlaylistName = "Empty Playlist"
+        };
+
+        MockPlaylistService.Setup(x => x.GetPlaylistByIdAsync(1))
+            .ReturnsAsync(playlist);
+        MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(1))
+            .ReturnsAsync(new List<UserPlaylist>());
+
+        // Act
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("This playlist is empty"));
+    }
+}
