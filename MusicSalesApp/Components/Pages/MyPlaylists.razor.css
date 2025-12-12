@@ -1,0 +1,142 @@
+.playlists-container {
+    padding: 20px;
+}
+
+.playlists-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.playlists-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.playlist-card {
+    height: 100%;
+}
+
+.playlist-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.playlist-card-header h5 {
+    margin: 0;
+}
+
+.playlist-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.playlist-info {
+    margin-bottom: 15px;
+}
+
+.playlist-info p {
+    margin: 5px 0;
+}
+
+.playlist-date {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.playlist-card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.playlist-songs-section {
+    margin-top: 30px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.playlist-songs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.playlist-songs-header > div {
+    display: flex;
+    gap: 10px;
+}
+
+.playlist-songs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.playlist-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+.song-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.song-title {
+    font-weight: 500;
+}
+
+.song-genre {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.add-song-list {
+    max-height: 400px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.add-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+}
+
+.dialog-content {
+    padding: 20px 0;
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+    text-align: center;
+    padding: 40px;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    border: 1px solid #f5c2c7;
+    color: #842029;
+}

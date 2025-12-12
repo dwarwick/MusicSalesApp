@@ -1,0 +1,182 @@
+@page "/my-playlists"
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Cards
+@using Syncfusion.Blazor.Inputs
+@using Syncfusion.Blazor.Popups
+@inherits MyPlaylistsModel
+@attribute [Authorize(Policy = Permissions.ValidatedUser)]
+
+<PageTitle>My Playlists</PageTitle>
+
+<div class="playlists-container">
+    <div class="playlists-header">
+        <h3>My Playlists</h3>
+        <SfButton OnClick="@ShowCreatePlaylistDialog" CssClass="e-success">
+            <span class="e-btn-icon fas fa-plus"></span>
+            Create Playlist
+        </SfButton>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <p>Loading playlists...</p>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="error-state">
+            <div class="alert alert-danger">@_error</div>
+        </div>
+    }
+    else if (_playlists == null || !_playlists.Any())
+    {
+        <div class="empty-state">
+            <p>You don't have any playlists yet. Create one to get started!</p>
+        </div>
+    }
+    else
+    {
+        <div class="playlists-grid">
+            @foreach (var playlist in _playlists)
+            {
+                <SfCard CssClass="playlist-card">
+                    <CardHeader>
+                        <div class="playlist-card-header">
+                            <h5>@playlist.PlaylistName</h5>
+                            <div class="playlist-actions">
+                                <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
+                                <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="playlist-info">
+                            <p>@_playlistSongCounts.GetValueOrDefault(playlist.Id, 0) song(s)</p>
+                            <p class="playlist-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
+                        </div>
+                        <div class="playlist-card-actions">
+                            <SfButton OnClick="@(() => ViewPlaylist(playlist))" CssClass="e-primary">
+                                View Songs
+                            </SfButton>
+                        </div>
+                    </CardContent>
+                </SfCard>
+            }
+        </div>
+    }
+
+    @if (_selectedPlaylist != null && _viewingSongs)
+    {
+        <div class="playlist-songs-section">
+            <div class="playlist-songs-header">
+                <h4>@_selectedPlaylist.PlaylistName</h4>
+                <div>
+                    <SfButton OnClick="@ShowAddSongDialog" CssClass="e-success">
+                        <span class="e-btn-icon fas fa-plus"></span>
+                        Add Song
+                    </SfButton>
+                    <SfButton OnClick="@ClosePlaylistView" CssClass="e-outline">
+                        Close
+                    </SfButton>
+                </div>
+            </div>
+
+            @if (_playlistSongs == null || !_playlistSongs.Any())
+            {
+                <p>This playlist is empty. Add some songs!</p>
+            }
+            else
+            {
+                <div class="playlist-songs-list">
+                    @foreach (var userPlaylist in _playlistSongs)
+                    {
+                        var songMetadata = userPlaylist.OwnedSong?.SongMetadata;
+                        if (songMetadata != null)
+                        {
+                            <div class="playlist-song-item">
+                                <div class="song-info">
+                                    <span class="song-title">@GetSongTitle(songMetadata)</span>
+                                    @if (!string.IsNullOrEmpty(songMetadata.Genre))
+                                    {
+                                        <span class="song-genre">@songMetadata.Genre</span>
+                                    }
+                                </div>
+                                <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))" 
+                                         CssClass="e-small e-danger" 
+                                         IconCss="fas fa-times" />
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Create/Edit Playlist Dialog -->
+<SfDialog @bind-Visible="_showPlaylistDialog" Width="400px" IsModal="true">
+    <DialogTemplates>
+        <Header>@(_editingPlaylist == null ? "Create Playlist" : "Edit Playlist")</Header>
+        <Content>
+            <div class="dialog-content">
+                <SfTextBox @bind-Value="_playlistName" Placeholder="Playlist Name" />
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="@SavePlaylist" IsPrimary="true">Save</SfButton>
+            <SfButton OnClick="@ClosePlaylistDialog">Cancel</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Delete Playlist Confirmation Dialog -->
+<SfDialog @bind-Visible="_showDeleteDialog" Width="400px" IsModal="true">
+    <DialogTemplates>
+        <Header>Delete Playlist</Header>
+        <Content>
+            <p>Are you sure you want to delete "@_playlistToDelete?.PlaylistName"?</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="@ConfirmDeletePlaylist" CssClass="e-danger">Delete</SfButton>
+            <SfButton OnClick="@CloseDeleteDialog">Cancel</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Add Song to Playlist Dialog -->
+<SfDialog @bind-Visible="_showAddSongDialog" Width="500px" IsModal="true">
+    <DialogTemplates>
+        <Header>Add Song to Playlist</Header>
+        <Content>
+            @if (_availableSongs == null || !_availableSongs.Any())
+            {
+                <p>You don't have any songs available to add to this playlist.</p>
+            }
+            else
+            {
+                <div class="add-song-list">
+                    @foreach (var ownedSong in _availableSongs)
+                    {
+                        var songMetadata = ownedSong.SongMetadata;
+                        if (songMetadata != null)
+                        {
+                            <div class="add-song-item">
+                                <span>@GetSongTitle(songMetadata)</span>
+                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))" 
+                                         CssClass="e-small e-success">
+                                    Add
+                                </SfButton>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="@CloseAddSongDialog">Close</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

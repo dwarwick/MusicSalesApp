@@ -48,6 +48,12 @@
                 <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>                
                 <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
+                <AuthorizeView Policy="@Permissions.ValidatedUser">
+                    <Authorized>
+                        <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="fas fa-list"></MenuItem>
+                    </Authorized>
+                </AuthorizeView>
+
                 <AuthorizeView Policy="@Permissions.UploadFiles">
                     <Authorized>
                         <MenuItem Url="/upload-files" Text="Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>

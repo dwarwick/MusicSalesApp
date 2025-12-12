@@ -17,6 +17,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<OwnedSong> OwnedSongs { get; set; }
     public DbSet<PayPalOrder> PayPalOrders { get; set; }
     public DbSet<SongMetadata> SongMetadata { get; set; }
+    public DbSet<Playlist> Playlists { get; set; }
+    public DbSet<UserPlaylist> UserPlaylists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -122,5 +124,18 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         });
 
         builder.Entity<IdentityRoleClaim<int>>().HasData(roleClaims);
+
+        // Configure UserPlaylist to ensure songs can only be added if owned
+        builder.Entity<UserPlaylist>()
+            .HasOne(up => up.OwnedSong)
+            .WithMany()
+            .HasForeignKey(up => up.OwnedSongId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<UserPlaylist>()
+            .HasOne(up => up.Playlist)
+            .WithMany(p => p.UserPlaylists)
+            .HasForeignKey(up => up.PlaylistId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

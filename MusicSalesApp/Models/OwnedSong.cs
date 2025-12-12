@@ -22,4 +22,10 @@ public class OwnedSong
 
     [MaxLength(100)]
     public string PayPalOrderId { get; set; }
+
+    // Foreign key to SongMetadata
+    public int? SongMetadataId { get; set; }
+
+    [ForeignKey("SongMetadataId")]
+    public SongMetadata SongMetadata { get; set; }
 }
