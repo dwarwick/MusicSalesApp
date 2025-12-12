@@ -4,6 +4,7 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Models;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;

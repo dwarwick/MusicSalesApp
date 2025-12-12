@@ -84,7 +84,11 @@ public class SubscriptionController : ControllerBase
         }
 
         // Save subscription to database
-        var monthlyPrice = decimal.Parse(_configuration["PayPal:SubscriptionPrice"] ?? "3.99");
+        var priceString = _configuration["PayPal:SubscriptionPrice"] ?? "3.99";
+        if (!decimal.TryParse(priceString, out var monthlyPrice))
+        {
+            monthlyPrice = 3.99m; // Default fallback
+        }
         var subscription = await _subscriptionService.CreateSubscriptionAsync(user.Id, subscriptionId, monthlyPrice);
 
         _logger.LogInformation("User {UserId} created subscription {SubscriptionId}", user.Id, subscription.Id);
@@ -262,6 +266,15 @@ public class SubscriptionController : ControllerBase
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             client.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
+            // Use configured base URL instead of Request headers to prevent Host Header Injection
+            var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"];
+            if (string.IsNullOrEmpty(returnBaseUrl))
+            {
+                // Fallback to request if not configured (for development)
+                returnBaseUrl = $"{Request.Scheme}://{Request.Host}";
+                _logger.LogWarning("PayPal:ReturnBaseUrl not configured, using request headers as fallback");
+            }
+
             var subscriptionData = new
             {
                 plan_id = planId,
@@ -272,8 +285,8 @@ public class SubscriptionController : ControllerBase
                     locale = "en-US",
                     shipping_preference = "NO_SHIPPING",
                     user_action = "SUBSCRIBE_NOW",
-                    return_url = $"{Request.Scheme}://{Request.Host}/manage-subscription?success=true",
-                    cancel_url = $"{Request.Scheme}://{Request.Host}/manage-subscription?success=false"
+                    return_url = $"{returnBaseUrl}/manage-subscription?success=true",
+                    cancel_url = $"{returnBaseUrl}/manage-subscription?success=false"
                 }
             };
 
