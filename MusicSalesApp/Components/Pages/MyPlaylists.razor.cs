@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 
@@ -178,26 +177,8 @@ public partial class MyPlaylistsModel : BlazorBase
     {
         try
         {
-            // Get all owned songs with their metadata using a service approach
-            // We'll need to query through the DbContext factory
-            var contextFactory = (Microsoft.EntityFrameworkCore.IDbContextFactory<Data.AppDbContext>)
-                HttpContextAccessor.HttpContext.RequestServices.GetService(
-                    typeof(Microsoft.EntityFrameworkCore.IDbContextFactory<Data.AppDbContext>));
-
-            await using var context = await contextFactory.CreateDbContextAsync();
-            
-            var query = context.OwnedSongs
-                .Where(os => os.UserId == _currentUserId)
-                .Include(os => os.SongMetadata);
-            
-            var ownedSongs = await query.ToListAsync();
-
-            // Filter to only songs that can be added (IsAlbumCover = false)
-            _availableSongs = ownedSongs
-                .Where(os => os.SongMetadata != null && !os.SongMetadata.IsAlbumCover)
-                .Where(os => _playlistSongs == null || !_playlistSongs.Any(ps => ps.OwnedSongId == os.Id))
-                .ToList();
-
+            // Use the service method to get available songs
+            _availableSongs = await PlaylistService.GetAvailableSongsForPlaylistAsync(_currentUserId, _selectedPlaylist.Id);
             _showAddSongDialog = true;
         }
         catch (Exception ex)

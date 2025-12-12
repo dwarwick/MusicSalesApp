@@ -51,4 +51,10 @@ public interface IPlaylistService
     /// Check if user owns a specific song and if it's valid for playlists (IsAlbumCover = false)
     /// </summary>
     Task<bool> CanAddSongToPlaylistAsync(int userId, int ownedSongId);
+
+    /// <summary>
+    /// Get all songs owned by a user that are available to add to a playlist
+    /// Filters out songs already in the playlist and album covers
+    /// </summary>
+    Task<List<OwnedSong>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId);
 }

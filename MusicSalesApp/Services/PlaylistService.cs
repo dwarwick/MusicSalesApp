@@ -275,4 +275,33 @@ public class PlaylistService : IPlaylistService
             throw;
         }
     }
+
+    public async Task<List<OwnedSong>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // Get all songs in the playlist
+            var playlistSongIds = await context.UserPlaylists
+                .Where(up => up.PlaylistId == playlistId)
+                .Select(up => up.OwnedSongId)
+                .ToListAsync();
+
+            // Get all owned songs by the user that are not album covers and not already in the playlist
+            var availableSongs = await context.OwnedSongs
+                .Include(os => os.SongMetadata)
+                .Where(os => os.UserId == userId)
+                .Where(os => os.SongMetadata != null && !os.SongMetadata.IsAlbumCover)
+                .Where(os => !playlistSongIds.Contains(os.Id))
+                .ToListAsync();
+
+            return availableSongs;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting available songs for playlist {PlaylistId} and user {UserId}", playlistId, userId);
+            throw;
+        }
+    }
 }

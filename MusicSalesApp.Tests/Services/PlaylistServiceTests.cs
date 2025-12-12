@@ -385,4 +385,37 @@ public class PlaylistServiceTests
         // Assert
         Assert.That(result, Is.False);
     }
+
+    [Test]
+    public async Task GetAvailableSongsForPlaylistAsync_ReturnsOnlyValidSongs()
+    {
+        // Arrange
+        var userId = 1;
+        var playlist = new Playlist { UserId = userId, PlaylistName = "Test Playlist" };
+        await _context.Playlists.AddAsync(playlist);
+
+        var song1Metadata = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
+        var song2Metadata = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
+        var albumCoverMetadata = new SongMetadata { ImageBlobPath = "cover.jpg", IsAlbumCover = true };
+        await _context.SongMetadata.AddRangeAsync(song1Metadata, song2Metadata, albumCoverMetadata);
+
+        var ownedSong1 = new OwnedSong { UserId = userId, SongFileName = "song1.mp3", SongMetadataId = song1Metadata.Id };
+        var ownedSong2 = new OwnedSong { UserId = userId, SongFileName = "song2.mp3", SongMetadataId = song2Metadata.Id };
+        var ownedAlbumCover = new OwnedSong { UserId = userId, SongFileName = "cover.jpg", SongMetadataId = albumCoverMetadata.Id };
+        await _context.OwnedSongs.AddRangeAsync(ownedSong1, ownedSong2, ownedAlbumCover);
+
+        // Add song1 to playlist
+        var userPlaylist = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, OwnedSongId = ownedSong1.Id };
+        await _context.UserPlaylists.AddAsync(userPlaylist);
+
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetAvailableSongsForPlaylistAsync(userId, playlist.Id);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1)); // Only song2 should be available
+        Assert.That(result[0].Id, Is.EqualTo(ownedSong2.Id));
+        Assert.That(result[0].SongMetadata.IsAlbumCover, Is.False);
+    }
 }
