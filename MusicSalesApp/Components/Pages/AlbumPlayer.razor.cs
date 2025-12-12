@@ -16,9 +16,14 @@ namespace MusicSalesApp.Components.Pages
         [Parameter]
         public string AlbumName { get; set; }
 
+        [Parameter]
+        public int? PlaylistId { get; set; }
+
         protected bool _loading = true;
         protected string _error;
         protected AlbumInfo _albumInfo;
+        protected string _playlistName;
+        protected bool _isPlaylistMode;
         protected string _streamUrl;
         protected bool _isPlaying;
         protected double _currentTime;
@@ -46,7 +51,16 @@ namespace MusicSalesApp.Components.Pages
 
         protected override async Task OnParametersSetAsync()
         {
-            await LoadAlbumInfo();
+            _isPlaylistMode = PlaylistId.HasValue;
+            
+            if (_isPlaylistMode)
+            {
+                await LoadPlaylistInfo();
+            }
+            else
+            {
+                await LoadAlbumInfo();
+            }
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -249,6 +263,151 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        private async Task LoadPlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            if (!PlaylistId.HasValue)
+            {
+                _error = "No playlist ID provided.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                // Check authentication status
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                if (!_isAuthenticated)
+                {
+                    _error = "You must be logged in to view playlists.";
+                    _loading = false;
+                    return;
+                }
+
+                // Get the current user
+                var user = authState.User;
+                var appUser = await UserManager.GetUserAsync(user);
+                if (appUser == null)
+                {
+                    _error = "User not found.";
+                    _loading = false;
+                    return;
+                }
+
+                // Get playlist from service
+                var playlist = await PlaylistService.GetPlaylistByIdAsync(PlaylistId.Value);
+                if (playlist == null)
+                {
+                    _error = "Playlist not found.";
+                    _loading = false;
+                    return;
+                }
+
+                // Verify user owns the playlist
+                if (playlist.UserId != appUser.Id)
+                {
+                    _error = "You do not have access to this playlist.";
+                    _loading = false;
+                    return;
+                }
+
+                _playlistName = playlist.PlaylistName;
+
+                // Get playlist songs
+                var playlistSongs = await PlaylistService.GetPlaylistSongsAsync(PlaylistId.Value);
+                if (playlistSongs == null || !playlistSongs.Any())
+                {
+                    _error = "This playlist is empty.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build list of tracks from playlist songs
+                var tracks = new List<StorageFileInfo>();
+                var allMetadata = new List<Models.SongMetadata>();
+                
+                foreach (var userPlaylist in playlistSongs)
+                {
+                    var songMetadata = userPlaylist.OwnedSong?.SongMetadata;
+                    if (songMetadata != null && !string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
+                    {
+                        tracks.Add(new StorageFileInfo
+                        {
+                            Name = songMetadata.Mp3BlobPath,
+                            Length = 0,
+                            ContentType = "audio/mpeg",
+                            LastModified = songMetadata.UpdatedAt,
+                            Tags = new Dictionary<string, string>()
+                        });
+                        allMetadata.Add(songMetadata);
+                    }
+                }
+
+                if (!tracks.Any())
+                {
+                    _error = "No playable tracks found in this playlist.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build metadata lookup for track info
+                _metadataLookup = allMetadata.ToDictionary(m => m.Mp3BlobPath, m => m);
+
+                // For playlist mode, we use the first track's image as the "cover"
+                var firstTrackMeta = allMetadata.First();
+                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
+                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
+                    : "";
+
+                _albumInfo = new AlbumInfo
+                {
+                    AlbumName = _playlistName,
+                    CoverArtUrl = coverImageUrl,
+                    CoverArtFileName = coverImagePath,
+                    Tracks = tracks,
+                    Price = 0 // Playlists don't have a price
+                };
+
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Store track images from metadata
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                        {
+                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                        }
+                    }
+                }
+
+                // Set up the first track
+                _currentTrackIndex = 0;
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+                // Since user owns all songs in playlist, mark as owned
+                _ownsAlbum = true;
+                _ownedSongs = new HashSet<string>(tracks.Select(t => t.Name));
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
         protected async Task ToggleCart()
         {
             if (_albumInfo == null) return;
@@ -418,6 +577,10 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetDisplayTitle()
         {
+            if (_isPlaylistMode)
+            {
+                return _playlistName ?? "Unknown Playlist";
+            }
             return _albumInfo?.AlbumName ?? AlbumName ?? "Unknown Album";
         }
 

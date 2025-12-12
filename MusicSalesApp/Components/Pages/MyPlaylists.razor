@@ -58,6 +58,9 @@
                             <p class="playlist-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
                         </div>
                         <div class="playlist-card-actions">
+                            <SfButton OnClick="@(() => PlayPlaylist(playlist))" CssClass="e-success" IconCss="fas fa-play">
+                                Play
+                            </SfButton>
                             <SfButton OnClick="@(() => ViewPlaylist(playlist))" CssClass="e-primary">
                                 View Songs
                             </SfButton>
