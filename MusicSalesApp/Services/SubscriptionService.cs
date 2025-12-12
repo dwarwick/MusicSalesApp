@@ -151,4 +151,32 @@ public class SubscriptionService : ISubscriptionService
 
         _logger.LogInformation("Updated subscription {SubscriptionId} status to {Status}", subscription.Id, status);
     }
+
+    public async Task UpdateSubscriptionDetailsAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.PayPalSubscriptionId == paypalSubscriptionId);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning("Subscription with PayPal ID {PayPalSubscriptionId} not found", paypalSubscriptionId);
+            return;
+        }
+
+        if (nextBillingDate.HasValue)
+        {
+            subscription.NextBillingDate = nextBillingDate.Value;
+        }
+
+        if (lastPaymentDate.HasValue)
+        {
+            subscription.LastPaymentDate = lastPaymentDate.Value;
+        }
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated subscription {SubscriptionId} billing details", subscription.Id);
+    }
 }

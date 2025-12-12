@@ -115,6 +115,84 @@ public class SubscriptionController : ControllerBase
         });
     }
 
+    [HttpPost("activate")]
+    public async Task<IActionResult> ActivateSubscription([FromBody] ActivateSubscriptionRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        if (string.IsNullOrEmpty(request.SubscriptionId))
+        {
+            return BadRequest("Subscription ID is required");
+        }
+
+        try
+        {
+            // Get subscription details from PayPal
+            var subscriptionDetails = await GetPayPalSubscriptionDetailsAsync(request.SubscriptionId);
+            if (subscriptionDetails == null)
+            {
+                return BadRequest("Failed to retrieve subscription details from PayPal");
+            }
+
+            // Update our database with the details
+            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+                request.SubscriptionId,
+                subscriptionDetails.NextBillingDate,
+                subscriptionDetails.LastPaymentDate
+            );
+
+            _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", request.SubscriptionId, user.Id);
+
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating subscription {SubscriptionId}", request.SubscriptionId);
+            return StatusCode(500, "Failed to activate subscription");
+        }
+    }
+
+    [HttpPost("activate-current")]
+    public async Task<IActionResult> ActivateCurrentUserSubscription()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        try
+        {
+            // Get the user's most recent subscription
+            var subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            if (subscription == null)
+            {
+                return BadRequest("No subscription found for user");
+            }
+
+            // Get subscription details from PayPal
+            var subscriptionDetails = await GetPayPalSubscriptionDetailsAsync(subscription.PayPalSubscriptionId);
+            if (subscriptionDetails == null)
+            {
+                return BadRequest("Failed to retrieve subscription details from PayPal");
+            }
+
+            // Update our database with the details
+            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+                subscription.PayPalSubscriptionId,
+                subscriptionDetails.NextBillingDate,
+                subscriptionDetails.LastPaymentDate
+            );
+
+            _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.PayPalSubscriptionId, user.Id);
+
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating subscription for user {UserId}", user.Id);
+            return StatusCode(500, "Failed to activate subscription");
+        }
+    }
+
     [HttpPost("cancel")]
     public async Task<IActionResult> CancelSubscription()
     {
@@ -528,9 +606,81 @@ public class SubscriptionController : ControllerBase
             return string.Empty;
         }
     }
+
+    private async Task<PayPalSubscriptionDetails> GetPayPalSubscriptionDetailsAsync(string subscriptionId)
+    {
+        try
+        {
+            var token = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                return null;
+            }
+
+            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var response = await client.GetAsync($"v1/billing/subscriptions/{subscriptionId}");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to get subscription details: {Status} {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            var details = new PayPalSubscriptionDetails();
+
+            // Get billing info
+            if (root.TryGetProperty("billing_info", out var billingInfo))
+            {
+                if (billingInfo.TryGetProperty("next_billing_time", out var nextBillingTime))
+                {
+                    if (DateTime.TryParse(nextBillingTime.GetString(), out var nextBilling))
+                    {
+                        details.NextBillingDate = nextBilling;
+                    }
+                }
+
+                if (billingInfo.TryGetProperty("last_payment", out var lastPayment))
+                {
+                    if (lastPayment.TryGetProperty("time", out var lastPaymentTime))
+                    {
+                        if (DateTime.TryParse(lastPaymentTime.GetString(), out var lastPaymentDate))
+                        {
+                            details.LastPaymentDate = lastPaymentDate;
+                        }
+                    }
+                }
+            }
+
+            return details;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting PayPal subscription details");
+            return null;
+        }
+    }
 }
 
 public class CreateSubscriptionRequest
 {
     public bool AgreeToTerms { get; set; }
+}
+
+public class ActivateSubscriptionRequest
+{
+    public string SubscriptionId { get; set; }
+}
+
+public class PayPalSubscriptionDetails
+{
+    public DateTime? NextBillingDate { get; set; }
+    public DateTime? LastPaymentDate { get; set; }
 }

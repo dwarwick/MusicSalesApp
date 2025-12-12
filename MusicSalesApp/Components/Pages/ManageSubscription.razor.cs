@@ -40,8 +40,26 @@ public class ManageSubscriptionModel : BlazorBase
             {
                 if (Success.Value)
                 {
-                    _successMessage = "Your subscription has been activated successfully!";
-                    await LoadSubscriptionStatus(); // Refresh status
+                    // Activate the subscription and fetch details from PayPal
+                    // The subscription is already in the database, we just need to update it with PayPal details
+                    try
+                    {
+                        var activateResponse = await Http.PostAsync("api/subscription/activate-current", null);
+                        if (activateResponse.IsSuccessStatusCode)
+                        {
+                            _successMessage = "Your subscription has been activated successfully!";
+                            await LoadSubscriptionStatus(); // Refresh status
+                        }
+                        else
+                        {
+                            _errorMessage = "Failed to activate subscription. Please contact support.";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error activating subscription: {ex.Message}");
+                        _errorMessage = "An error occurred while activating your subscription.";
+                    }
                 }
                 else
                 {
