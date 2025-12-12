@@ -17,6 +17,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<OwnedSong> OwnedSongs { get; set; }
     public DbSet<PayPalOrder> PayPalOrders { get; set; }
     public DbSet<SongMetadata> SongMetadata { get; set; }
+    public DbSet<Playlist> Playlists { get; set; }
+    public DbSet<UserPlaylist> UserPlaylists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -122,5 +124,29 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         });
 
         builder.Entity<IdentityRoleClaim<int>>().HasData(roleClaims);
+
+        // Configure UserPlaylist relationships to avoid multiple cascade paths
+        // When a User is deleted, their Playlists cascade delete, which then cascade delete UserPlaylists
+        // So we can use NoAction for the direct User FK to avoid circular cascade paths
+        builder.Entity<UserPlaylist>()
+            .HasOne(up => up.User)
+            .WithMany()
+            .HasForeignKey(up => up.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // When a Playlist is deleted, remove all songs from it
+        builder.Entity<UserPlaylist>()
+            .HasOne(up => up.Playlist)
+            .WithMany(p => p.UserPlaylists)
+            .HasForeignKey(up => up.PlaylistId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Use NoAction for OwnedSong to avoid multiple cascade paths
+        // (User->OwnedSongs->UserPlaylists and User->Playlists->UserPlaylists)
+        builder.Entity<UserPlaylist>()
+            .HasOne(up => up.OwnedSong)
+            .WithMany()
+            .HasForeignKey(up => up.OwnedSongId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

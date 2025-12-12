@@ -42,6 +42,15 @@ Active Git repository:
 - All services are available through properties inherited from `BlazorBase` (e.g., `NavigationManager`, `CartService`, `AuthenticationService`)
 - For dialogs, use Syncfusion `SfDialog` component instead of Bootstrap modals.
 
+### Blazor Server Component Lifecycle
+**IMPORTANT:** To avoid DbContext threading issues in Blazor Server:
+- **Use `OnAfterRenderAsync(bool firstRender)` for data loading**, not `OnInitializedAsync`
+- **Guard with `firstRender` check** and a `_hasLoadedData` flag
+- **Call `StateHasChanged()` after loading** to update the UI
+- **Use `InvokeAsync()` when updating UI from async context**
+
+`OnInitializedAsync()` can be called multiple times during circuit reconnections, causing "A second operation was started on this context instance" errors.
+
 ### Example
 ```razor
 @* Home.razor *@
@@ -59,7 +68,26 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class HomeModel : BlazorBase
 {
-    // Component logic here
+    protected bool _loading = true;
+    private bool _hasLoadedData = false;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                // Load data here
+                await LoadData();
+            }
+            finally
+            {
+                _loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
 }
 ```
 

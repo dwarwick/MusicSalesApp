@@ -79,6 +79,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     
     // Map file names to song prices
     private Dictionary<string, decimal> _songPrices = new Dictionary<string, decimal>();
+    
+    // Map file names to song metadata IDs for cart operations
+    private Dictionary<string, int> _songMetadataIds = new Dictionary<string, int>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -250,6 +253,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         if (fileInfo != null)
                         {
                             albumTracks.Add(fileInfo);
+                            // Store the metadata ID for cart operations
+                            _songMetadataIds[fileInfo.Name] = trackMeta.Id;
                         }
                     }
 
@@ -311,9 +316,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     // Try finding by Mp3BlobPath or BlobPath
                     songMeta = allMetadata.FirstOrDefault(m => m.Mp3BlobPath == audioFile.Name || m.BlobPath == audioFile.Name);
                 }
-                if (songMeta != null && songMeta.SongPrice.HasValue)
+                if (songMeta != null)
                 {
-                    songPrice = songMeta.SongPrice.Value;
+                    if (songMeta.SongPrice.HasValue)
+                    {
+                        songPrice = songMeta.SongPrice.Value;
+                    }
+                    // Store the metadata ID for cart operations
+                    _songMetadataIds[audioFile.Name] = songMeta.Id;
                 }
                 _songPrices[audioFile.Name] = songPrice;
             }
@@ -388,7 +398,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         try
         {
             var price = GetSongPrice(fileName);
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = price });
+            int? songMetadataId = _songMetadataIds.TryGetValue(fileName, out var id) ? id : (int?)null;
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = price, SongMetadataId = songMetadataId });
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
@@ -923,11 +934,22 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Get all track file names in the album
             var trackFileNames = album.Tracks.Select(t => t.Name).ToList();
             
+            // Build dictionary of track filenames to metadata IDs
+            var trackMetadataIds = new Dictionary<string, int>();
+            foreach (var track in album.Tracks)
+            {
+                if (_songMetadataIds.TryGetValue(track.Name, out var id))
+                {
+                    trackMetadataIds[track.Name] = id;
+                }
+            }
+            
             var response = await Http.PostAsJsonAsync("api/cart/toggle-album", new 
             { 
                 AlbumName = album.AlbumName,
                 TrackFileNames = trackFileNames,
-                Price = album.Price
+                Price = album.Price,
+                TrackMetadataIds = trackMetadataIds
             });
             
             if (response.IsSuccessStatusCode)

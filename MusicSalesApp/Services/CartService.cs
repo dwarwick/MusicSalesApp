@@ -37,7 +37,7 @@ public class CartService : ICartService
             .CountAsync(c => c.UserId == userId);
     }
 
-    public async Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price)
+    public async Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price, int? songMetadataId = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         var existingItem = await context.CartItems
@@ -53,7 +53,8 @@ public class CartService : ICartService
             UserId = userId,
             SongFileName = songFileName,
             Price = price,
-            AddedAt = DateTime.UtcNow
+            AddedAt = DateTime.UtcNow,
+            SongMetadataId = songMetadataId
         };
 
         context.CartItems.Add(cartItem);
@@ -141,16 +142,29 @@ public class CartService : ICartService
             .Select(o => o.SongFileName)
             .ToHashSetAsync();
 
+        // Get SongMetadataId from CartItems if available for better data integrity
+        var cartItemsWithMetadata = await context.CartItems
+            .Where(c => c.UserId == userId && songFileNamesList.Contains(c.SongFileName))
+            .ToDictionaryAsync(c => c.SongFileName, c => c.SongMetadataId);
+
         foreach (var songFileName in songFileNamesList)
         {
             if (!existingOwnedSongs.Contains(songFileName))
             {
+                // Use SongMetadataId from CartItem if available
+                int? songMetadataId = null;
+                if (cartItemsWithMetadata.TryGetValue(songFileName, out var metadataId))
+                {
+                    songMetadataId = metadataId;
+                }
+
                 var ownedSong = new OwnedSong
                 {
                     UserId = userId,
                     SongFileName = songFileName,
                     PurchasedAt = DateTime.UtcNow,
-                    PayPalOrderId = payPalOrderId
+                    PayPalOrderId = payPalOrderId,
+                    SongMetadataId = songMetadataId
                 };
 
                 context.OwnedSongs.Add(ownedSong);

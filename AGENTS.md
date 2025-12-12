@@ -478,3 +478,152 @@ When writing tests for metadata functionality:
 - `MusicSalesApp.Components.Pages.AdminSongManagement.razor.cs` - Validation logic
 - `MusicSalesApp.Components.Pages.AlbumPlayer.razor.cs` - Track display and playback
 - `MusicSalesApp.Components.Pages.MusicLibrary.razor.cs` - Album grouping logic
+
+## Blazor Server Component Lifecycle and DbContext Threading
+
+### Issue: "A second operation was started on this context instance before a previous operation completed"
+
+This error occurs in Blazor Server when multiple async operations try to use the same DbContext instance concurrently. This commonly happens during page refreshes or circuit reconnections.
+
+### Root Cause
+
+- `OnInitializedAsync()` can be called multiple times in Blazor Server (e.g., during circuit reconnection)
+- Multiple concurrent calls to services using the same DbContext can cause threading issues
+- Even with `IDbContextFactory`, rapid sequential calls during initialization can overlap
+
+### Solution: Use OnAfterRenderAsync with firstRender
+
+**❌ WRONG - Using OnInitializedAsync:**
+```csharp
+protected override async Task OnInitializedAsync()
+{
+    // This can be called multiple times, causing DbContext threading issues
+    await LoadData();
+}
+```
+
+**✅ CORRECT - Using OnAfterRenderAsync with firstRender:**
+```csharp
+private bool _hasLoadedData = false;
+
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (firstRender && !_hasLoadedData)
+    {
+        _hasLoadedData = true;
+        try
+        {
+            await LoadData();
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}
+```
+
+### Key Points
+
+1. **Use `OnAfterRenderAsync(bool firstRender)`** for data loading operations
+2. **Guard with `firstRender` check** to ensure it only runs once
+3. **Use a `_hasLoadedData` flag** to prevent multiple loads
+4. **Call `StateHasChanged()`** after data loads to update UI
+5. **Use `InvokeAsync()`** when updating UI from async context
+
+### When to Use Each Lifecycle Method
+
+- **OnInitializedAsync**: Only for setting up event handlers or initializing non-data fields
+- **OnAfterRenderAsync(firstRender)**: For data loading, API calls, and DbContext operations
+- **OnParametersSetAsync**: For reacting to parameter changes
+
+### Example Pattern
+
+```csharp
+public partial class MyPageModel : BlazorBase
+{
+    protected bool _loading = true;
+    private bool _hasLoadedData = false;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var appUser = await UserManager.GetUserAsync(user);
+                    if (appUser != null)
+                    {
+                        await LoadUserData(appUser.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _error = $"Error loading data: {ex.Message}";
+            }
+            finally
+            {
+                _loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+}
+```
+
+## Handling Optional Foreign Keys and Navigation Properties
+
+### Issue: Filtering by navigation properties when foreign key may be null
+
+When querying entities with optional foreign keys, the navigation property may be null even with `.Include()`. Always handle this case gracefully.
+
+### Example: OwnedSong with optional SongMetadataId
+
+**❌ WRONG - Assuming navigation property is always populated:**
+```csharp
+var songs = await context.OwnedSongs
+    .Include(os => os.SongMetadata)
+    .Where(os => os.SongMetadata != null && !os.SongMetadata.IsAlbumCover)
+    .ToListAsync();
+// This filters out songs where SongMetadataId is null
+```
+
+**✅ CORRECT - Handling null navigation property with fallback:**
+```csharp
+var ownedSongs = await context.OwnedSongs
+    .Include(os => os.SongMetadata)
+    .Where(os => os.UserId == userId)
+    .ToListAsync();
+
+var filteredSongs = ownedSongs
+    .Where(os => 
+    {
+        // If we have metadata, use it
+        if (os.SongMetadata != null)
+        {
+            return !os.SongMetadata.IsAlbumCover;
+        }
+        
+        // Fallback: check filename extension
+        var fileName = os.SongFileName.ToLowerInvariant();
+        return fileName.EndsWith(".mp3");
+    })
+    .ToList();
+```
+
+### Key Points
+
+1. **Load all data first**, then filter in memory when navigation properties might be null
+2. **Always provide a fallback** when navigation property is null
+3. **Use filename patterns** as fallback for file type detection
+4. **Document the fallback logic** so it's clear why it exists
+
+## References
