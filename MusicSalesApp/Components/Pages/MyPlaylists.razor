@@ -42,22 +42,19 @@
         <div class="playlists-page-grid">
             @foreach (var playlist in _playlists)
             {
-                <SfCard CssClass="playlists-page-card">
-                    <CardHeader>
-                        <div class="playlists-page-card-header">
-                            <h5>@playlist.PlaylistName</h5>
-                            <div class="playlists-page-actions">
-                                <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
-                                <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
-                            </div>
-                        </div>
+                <SfCard CssClass="playlists-page-card music-card">
+                    <CardHeader Title="@playlist.PlaylistName">
+                        <div class="playlists-page-actions">
+                            <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
+                            <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                        </div>                       
                     </CardHeader>
                     <CardContent>
                         <div class="playlists-page-info">
                             <p>@_playlistSongCounts.GetValueOrDefault(playlist.Id, 0) song(s)</p>
                             <p class="playlists-page-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
                         </div>
-                        <div class="card-mini-controls">
+                        <div class="card-actions">
                             <SfButton OnClick="@(() => PlayPlaylist(playlist))">
                                 <SfIcon IconCss="fas fa-solid fa-play" />
                             </SfButton>
@@ -107,9 +104,9 @@
                                         <span class="playlists-page-song-genre">@songMetadata.Genre</span>
                                     }
                                 </div>
-                                <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))" 
-                                         CssClass="e-small e-danger" 
-                                         IconCss="fas fa-times" />
+                                <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))"
+                                          CssClass="e-small e-danger"
+                                          IconCss="fas fa-times" />
                             </div>
                         }
                     }
@@ -168,8 +165,8 @@
                         {
                             <div class="playlists-page-add-song-item">
                                 <span>@GetSongTitle(songMetadata)</span>
-                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))" 
-                                         CssClass="e-small e-success">
+                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))"
+                                          CssClass="e-small e-success">
                                     Add
                                 </SfButton>
                             </div>

@@ -443,6 +443,12 @@ h1:focus {
     display: grid;
 }
 
+.playlists-page-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+}
+
 .playlists-page-card-header {
     display: flex;
     justify-content: space-between;
@@ -451,10 +457,6 @@ h1:focus {
 
 .playlists-page-card-header h5 {
     margin: 0;
-}
-
-.playlists-page-actions {
-    display: flex;
 }
 
 .playlists-page-info p {
