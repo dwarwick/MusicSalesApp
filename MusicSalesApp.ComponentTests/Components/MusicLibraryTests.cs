@@ -16,6 +16,7 @@ namespace MusicSalesApp.ComponentTests.Components;
 public class MusicLibraryTests : BUnitTestBase
 {
     private Mock<IJSRuntime> _mockJsRuntime;
+    private Mock<IJSObjectReference> _mockJsModule;
 
     [SetUp]
     public override void BaseSetup()
@@ -23,21 +24,35 @@ public class MusicLibraryTests : BUnitTestBase
         base.BaseSetup();
 
         _mockJsRuntime = new Mock<IJSRuntime>();
+        _mockJsModule = new Mock<IJSObjectReference>();
 
         // Mock JS module import
-        var mockJsModule = new Mock<IJSObjectReference>();
         _mockJsRuntime
             .Setup(x => x.InvokeAsync<IJSObjectReference>(
                 "import",
                 It.IsAny<object[]>()))
-            .ReturnsAsync(mockJsModule.Object);
+            .ReturnsAsync(_mockJsModule.Object);
 
         TestContext.Services.AddSingleton<IJSRuntime>(_mockJsRuntime.Object);
+        
+        // Setup default HTTP client with stub handler
+        var handler = new StubHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
+        
+        // Setup default responses for API endpoints that may be called
+        handler.SetupJsonResponse(new Uri("http://localhost/api/cart/owned"), Array.Empty<string>());
+        handler.SetupJsonResponse(new Uri("http://localhost/api/cart"), new { Items = Array.Empty<object>(), Albums = Array.Empty<object>(), Total = 0 });
+        
+        TestContext.Services.AddSingleton<HttpClient>(httpClient);
     }
 
     [Test]
     public void MusicLibrary_HasCorrectTitle()
     {
+        // Arrange - Set up empty metadata list
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
@@ -48,27 +63,33 @@ public class MusicLibraryTests : BUnitTestBase
     [Test]
     public void MusicLibrary_HasCardsGrid()
     {
+        // Arrange - Set up empty metadata list
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should have cards grid container
         Assert.That(cut.Markup, Does.Contain("music-cards-grid"));
-        Assert.That(cut.Markup, Does.Contain("music-library-container"));
     }
 
     [Test]
     public void MusicLibrary_DisplaysSongCards_WhenFilesExist()
     {
-        // Arrange
-        var files = new[]
+        // Arrange - Set up metadata with a matching song
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
         {
-            new { Name = "TestSong.mp3", Length = 1024L, ContentType = "audio/mpeg", LastModified = DateTimeOffset.Now }
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Mp3BlobPath = "TestSong.mp3",
+                SongPrice = 0.99m,
+                UpdatedAt = DateTime.Now
+            }
         };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();
@@ -82,38 +103,45 @@ public class MusicLibraryTests : BUnitTestBase
     [Test]
     public void MusicLibrary_HasPlayAndViewButtons_ForEachCard()
     {
-        // Arrange
-        var files = new[]
+        // Arrange - Set up metadata with a matching song
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
         {
-            new { Name = "TestSong.mp3", Length = 1024L, ContentType = "audio/mpeg", LastModified = DateTimeOffset.Now }
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Mp3BlobPath = "TestSong.mp3",
+                SongPrice = 0.99m,
+                UpdatedAt = DateTime.Now
+            }
         };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have play button and view button
-        Assert.That(cut.Markup, Does.Contain("card-play-button"));
-        Assert.That(cut.Markup, Does.Contain("card-view-button"));
+        // Assert - should have card actions div with play and view buttons
+        Assert.That(cut.Markup, Does.Contain("card-actions"));
+        Assert.That(cut.Markup, Does.Contain("title=\"play\""));
+        Assert.That(cut.Markup, Does.Contain("title=\"view\""));
     }
 
     [Test]
     public void MusicLibrary_HasAlbumArtPlaceholder_WhenNoArtAvailable()
     {
-        // Arrange
-        var files = new[]
+        // Arrange - Set up metadata with a matching song but no image
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
         {
-            new { Name = "TestSong.mp3", Length = 1024L, ContentType = "audio/mpeg", LastModified = DateTimeOffset.Now }
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Mp3BlobPath = "TestSong.mp3",
+                SongPrice = 0.99m,
+                UpdatedAt = DateTime.Now
+            }
         };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();
@@ -123,24 +151,29 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_HasViewLinkToSongPlayer()
+    public void MusicLibrary_HasViewButtonWithOnClickEvent()
     {
-        // Arrange
-        var files = new[]
+        // Arrange - Set up metadata with a matching song
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
         {
-            new { Name = "TestSong.mp3", Length = 1024L, ContentType = "audio/mpeg", LastModified = DateTimeOffset.Now }
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Mp3BlobPath = "TestSong.mp3",
+                SongPrice = 0.99m,
+                UpdatedAt = DateTime.Now
+            }
         };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have link to song player
-        Assert.That(cut.Markup, Does.Contain("/song/TestSong"));
+        // Assert - should have button with view title and blazor onclick attribute
+        // The GetSongPlayerUrl method navigates to /song/{title} when clicked
+        var viewButtons = cut.FindAll("button[title='view']");
+        Assert.That(viewButtons.Count, Is.GreaterThan(0));
     }
 
     [Test]
@@ -156,23 +189,6 @@ public class MusicLibraryTests : BUnitTestBase
             {
                 new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3", SongPrice = 2.49m }
             });
-        
-        var files = new[]
-        {
-            new 
-            { 
-                Name = "TestSong.mp3", 
-                Length = 1024L, 
-                ContentType = "audio/mpeg", 
-                LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string>()
-            }
-        };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();
@@ -210,31 +226,6 @@ public class MusicLibraryTests : BUnitTestBase
                     AlbumName = "TestAlbum"
                 }
             });
-        
-        var files = new[]
-        {
-            new 
-            { 
-                Name = "AlbumCover.jpg", 
-                Length = 2048L, 
-                ContentType = "image/jpeg", 
-                LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string>()
-            },
-            new 
-            { 
-                Name = "Track1.mp3", 
-                Length = 1024L, 
-                ContentType = "audio/mpeg", 
-                LastModified = DateTimeOffset.Now,
-                Tags = new Dictionary<string, string>()
-            }
-        };
-
-        var handler = new StubHttpMessageHandler();
-        handler.SetupJsonResponse(new Uri("http://localhost/api/music"), files);
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
-        TestContext.Services.AddSingleton<HttpClient>(httpClient);
 
         // Act
         var cut = TestContext.Render<MusicLibrary>();

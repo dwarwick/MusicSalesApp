@@ -35,6 +35,7 @@ public abstract class BUnitTestBase
     protected Mock<ICartService> MockCartService { get; private set; } = default!;
     protected Mock<IWebHostEnvironment> MockWebHostEnvironment { get; private set; } = default!;
     protected Mock<ISongMetadataService> MockSongMetadataService { get; private set; } = default!;
+    protected Mock<IThemeService> MockThemeService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
 
     [SetUp]
@@ -52,6 +53,7 @@ public abstract class BUnitTestBase
         MockCartService = new Mock<ICartService>();
         MockWebHostEnvironment = new Mock<IWebHostEnvironment>();
         MockSongMetadataService = new Mock<ISongMetadataService>();
+        MockThemeService = new Mock<IThemeService>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -100,6 +102,16 @@ public abstract class BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
 
+        // Setup default returns for IThemeService methods
+        MockThemeService.Setup(x => x.CurrentTheme).Returns("Light");
+        MockThemeService.Setup(x => x.IsDarkTheme).Returns(false);
+        MockThemeService.Setup(x => x.SyncfusionCssUrl).Returns("https://cdn.syncfusion.com/blazor/31.2.2/styles/bootstrap5.3.css");
+        MockThemeService.Setup(x => x.CustomCssFile).Returns("light.css");
+        MockThemeService.Setup(x => x.SetThemeAsync(It.IsAny<string>(), It.IsAny<bool>()))
+            .Returns(Task.CompletedTask);
+        MockThemeService.Setup(x => x.InitializeThemeAsync())
+            .Returns(Task.CompletedTask);
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -111,6 +123,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
         TestContext.Services.AddSingleton<IWebHostEnvironment>(MockWebHostEnvironment.Object);
         TestContext.Services.AddSingleton<ISongMetadataService>(MockSongMetadataService.Object);
+        TestContext.Services.AddSingleton<IThemeService>(MockThemeService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
 
         // Authorization for components using [Authorize] and AuthorizeView
