@@ -256,12 +256,23 @@ namespace MusicSalesApp.Components.Pages
             try
             {
                 var trackFileNames = _albumInfo.Tracks.Select(t => t.Name).ToList();
+                
+                // Build dictionary of track filenames to metadata IDs
+                var trackMetadataIds = new Dictionary<string, int>();
+                foreach (var track in _albumInfo.Tracks)
+                {
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        trackMetadataIds[track.Name] = metadata.Id;
+                    }
+                }
 
                 var response = await Http.PostAsJsonAsync("api/cart/toggle-album", new
                 {
                     AlbumName = _albumInfo.AlbumName,
                     TrackFileNames = trackFileNames,
-                    Price = _albumInfo.Price
+                    Price = _albumInfo.Price,
+                    TrackMetadataIds = trackMetadataIds
                 });
 
                 if (response.IsSuccessStatusCode)

@@ -217,7 +217,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = _songPrice });
+            int? songMetadataId = _songMetadata?.Id;
+            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = _songPrice, SongMetadataId = songMetadataId });
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CartToggleResponseDto>();

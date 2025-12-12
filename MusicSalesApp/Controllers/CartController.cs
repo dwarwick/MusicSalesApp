@@ -80,7 +80,7 @@ public class CartController : ControllerBase
         if (owns)
             return BadRequest("You already own this song");
 
-        var item = await _cartService.AddToCartAsync(user.Id, request.SongFileName, request.Price);
+        var item = await _cartService.AddToCartAsync(user.Id, request.SongFileName, request.Price, request.SongMetadataId);
         var count = await _cartService.GetCartItemCountAsync(user.Id);
 
         return Ok(new { success = true, count });
@@ -122,7 +122,7 @@ public class CartController : ControllerBase
         }
         else
         {
-            await _cartService.AddToCartAsync(user.Id, request.SongFileName, request.Price);
+            await _cartService.AddToCartAsync(user.Id, request.SongFileName, request.Price, request.SongMetadataId);
         }
 
         var count = await _cartService.GetCartItemCountAsync(user.Id);
@@ -171,7 +171,12 @@ public class CartController : ControllerBase
             {
                 if (!ownedSet.Contains(trackFileName) && !cartItemSet.Contains(trackFileName))
                 {
-                    await _cartService.AddToCartAsync(user.Id, trackFileName, pricePerTrack);
+                    int? metadataId = null;
+                    if (request.TrackMetadataIds != null && request.TrackMetadataIds.TryGetValue(trackFileName, out var id))
+                    {
+                        metadataId = id;
+                    }
+                    await _cartService.AddToCartAsync(user.Id, trackFileName, pricePerTrack, metadataId);
                 }
             }
         }
@@ -373,6 +378,7 @@ public class AddToCartRequest
 {
     public string SongFileName { get; set; }
     public decimal Price { get; set; } = 0.99m;
+    public int? SongMetadataId { get; set; }
 }
 
 public class RemoveFromCartRequest
@@ -385,6 +391,7 @@ public class ToggleAlbumRequest
     public string AlbumName { get; set; }
     public IEnumerable<string> TrackFileNames { get; set; }
     public decimal Price { get; set; } = 9.99m;
+    public Dictionary<string, int> TrackMetadataIds { get; set; }
 }
 
 public class CaptureOrderRequest
