@@ -354,10 +354,19 @@ namespace MusicSalesApp.Components.Pages
                     return;
                 }
 
-                // Build metadata lookup for track info
-                _metadataLookup = allMetadata.ToDictionary(m => m.Mp3BlobPath, m => m);
+                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+                _metadataLookup = allMetadata
+                    .GroupBy(m => m.Mp3BlobPath)
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 // For playlist mode, we use the first track's image as the "cover"
+                if (allMetadata.Count == 0)
+                {
+                    _error = "No playable tracks found in this playlist.";
+                    _loading = false;
+                    return;
+                }
+                
                 var firstTrackMeta = allMetadata.First();
                 var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
                 var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 

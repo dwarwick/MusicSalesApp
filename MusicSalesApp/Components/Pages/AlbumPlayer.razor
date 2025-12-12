@@ -25,7 +25,7 @@
             <div class="album-art-container">
                 <div class="title-container">
                     @{
-                        var displayImageUrl = _isPlaylistMode ? GetTrackImageUrl(_currentTrackIndex) : _albumInfo.CoverArtUrl;
+                        var displayImageUrl = _isPlaylistMode ? GetTrackImageUrl(_currentTrackIndex) : _albumInfo?.CoverArtUrl;
                     }
                     @if (!string.IsNullOrEmpty(displayImageUrl))
                     {
