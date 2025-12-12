@@ -141,16 +141,36 @@ public class CartService : ICartService
             .Select(o => o.SongFileName)
             .ToHashSetAsync();
 
+        // Fetch SongMetadata for all songs being purchased to populate SongMetadataId
+        // We need to match by filename, which could be in Mp3BlobPath or BlobPath
+        var songMetadataLookup = await context.SongMetadata
+            .Where(sm => songFileNamesList.Any(sfn => 
+                (sm.Mp3BlobPath != null && sm.Mp3BlobPath.Contains(sfn)) ||
+                (sm.BlobPath != null && sm.BlobPath.Contains(sfn))))
+            .ToDictionaryAsync(
+                sm => sm.Mp3BlobPath ?? sm.BlobPath,
+                sm => sm.Id);
+
         foreach (var songFileName in songFileNamesList)
         {
             if (!existingOwnedSongs.Contains(songFileName))
             {
+                // Try to find the SongMetadataId for this song
+                int? songMetadataId = null;
+                var matchingMetadata = songMetadataLookup.FirstOrDefault(kvp => 
+                    kvp.Key != null && kvp.Key.Contains(songFileName));
+                if (matchingMetadata.Key != null)
+                {
+                    songMetadataId = matchingMetadata.Value;
+                }
+
                 var ownedSong = new OwnedSong
                 {
                     UserId = userId,
                     SongFileName = songFileName,
                     PurchasedAt = DateTime.UtcNow,
-                    PayPalOrderId = payPalOrderId
+                    PayPalOrderId = payPalOrderId,
+                    SongMetadataId = songMetadataId
                 };
 
                 context.OwnedSongs.Add(ownedSong);
