@@ -432,3 +432,87 @@ h1:focus {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Playlists Page Layout */
+.playlists-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.playlists-page-grid {
+    display: grid;
+}
+
+.playlists-page-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.playlists-page-card-header h5 {
+    margin: 0;
+}
+
+.playlists-page-actions {
+    display: flex;
+}
+
+.playlists-page-info p {
+    margin: 5px 0;
+}
+
+.playlists-page-card-actions {
+    display: flex;
+}
+
+.playlists-page-songs-section {
+    border-radius: 4px;
+}
+
+.playlists-page-songs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.playlists-page-songs-header > div {
+    display: flex;
+}
+
+.playlists-page-songs-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.playlists-page-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.playlists-page-song-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.playlists-page-song-title {
+    font-weight: 500;
+}
+
+.playlists-page-add-song-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.playlists-page-add-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.playlists-page-dialog-content {
+    text-align: center;
+}
