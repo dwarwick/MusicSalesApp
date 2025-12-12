@@ -48,6 +48,7 @@ namespace MusicSalesApp.Components.Pages
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
+        protected bool _hasActiveSubscription;
 
         protected override async Task OnParametersSetAsync()
         {
@@ -243,6 +244,10 @@ namespace MusicSalesApp.Components.Pages
 
             try
             {
+                // Check subscription status
+                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
                 // Check if user owns tracks in the album
                 var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
                 _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
@@ -486,15 +491,23 @@ namespace MusicSalesApp.Components.Pages
 
         /// <summary>
         /// Checks if the current track should be restricted (60 second preview).
-        /// Restricted for non-authenticated users OR authenticated users who don't own the current track.
+        /// Restricted for non-authenticated users OR authenticated users who don't own the current track and don't have an active subscription.
         /// </summary>
         protected bool IsCurrentTrackRestricted()
         {
+            // If user has an active subscription, they can listen to everything
+            if (_hasActiveSubscription)
+                return false;
+
             return !_isAuthenticated || !OwnsTrack(_currentTrackIndex);
         }
 
         protected bool IsProgressBarRestricted()
         {
+            // If user has an active subscription, they can listen to everything
+            if (_hasActiveSubscription)
+                return false;
+
             // Restrict preview for non-authenticated users OR authenticated users who don't own the current track
             return IsCurrentTrackRestricted();
         }
@@ -894,5 +907,10 @@ namespace MusicSalesApp.Components.Pages
                 await PlayTrack(_currentTrackIndex + 1);
             }
         }
+    }
+
+    public class SubscriptionStatusDto
+    {
+        public bool HasSubscription { get; set; }
     }
 }

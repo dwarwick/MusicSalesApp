@@ -39,6 +39,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
+    protected bool _hasActiveSubscription;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -52,8 +53,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, !_ownsSong, PREVIEW_DURATION_SECONDS);
-            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, !_ownsSong, PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
         }
     }
@@ -173,6 +174,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         
         try
         {
+            // Check subscription status
+            var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+            _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
             var response = await Http.GetFromJsonAsync<SongStatusResponse>($"api/cart/status/{SafeEncodePath(_songInfo.Name)}");
             if (response != null)
             {
@@ -252,6 +257,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected bool IsProgressBarRestricted()
     {
+        // If user has an active subscription, they can listen to everything
+        if (_hasActiveSubscription)
+            return false;
+
         // Restrict for non-authenticated users OR authenticated users who don't own the song
         return !_isAuthenticated || !_ownsSong;
     }

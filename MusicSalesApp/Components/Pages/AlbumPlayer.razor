@@ -116,7 +116,16 @@
                 </div>
 
                 <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>
-                @if (!_ownsAlbum)
+                @if (_hasActiveSubscription)
+                {
+                    <span class="subscription-badge">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                        </svg>
+                        Unlimited Access (Subscribed)
+                    </span>
+                }
+                else if (!_ownsAlbum)
                 {
                     <span class="preview-label">Preview Only (60 seconds per track)</span>
                 }
