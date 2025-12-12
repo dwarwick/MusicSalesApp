@@ -39,7 +39,7 @@
                             </svg>
                         </div>
                     }
-                    @if (_ownsAlbum)
+                    @if (_ownsAlbum && !_isPlaylistMode)
                     {
                         <div class="owned-badge">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -102,6 +102,16 @@
                                 </Authorized>
                             </AuthorizeView>
                         }
+
+                        <!-- Now Playing Track Info -->
+                        @if (_isPlaying || _currentTime > 0)
+                        {
+                            <div class="now-playing-info">
+                                <span class="now-playing-label">Now Playing:</span>
+                                <span class="now-playing-track">@GetTrackTitle(_currentTrackIndex)</span>
+                            </div>
+                        }
+
                     </div>
                 </div>
 
@@ -187,14 +197,7 @@
                preload="auto"
                style="display:none;"></audio>
 
-        <!-- Now Playing Track Info -->
-        @if (_isPlaying || _currentTime > 0)
-        {
-            <div class="now-playing-info">
-                <span class="now-playing-label">Now Playing:</span>
-                <span class="now-playing-track">@GetTrackTitle(_currentTrackIndex)</span>
-            </div>
-        }
+        
 
         <!-- Bottom Player Bar -->
         <div class="player-bar">

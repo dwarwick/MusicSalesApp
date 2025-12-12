@@ -57,12 +57,12 @@
                             <p>@_playlistSongCounts.GetValueOrDefault(playlist.Id, 0) song(s)</p>
                             <p class="playlist-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
                         </div>
-                        <div class="playlist-card-actions">
-                            <SfButton OnClick="@(() => PlayPlaylist(playlist))" CssClass="e-success" IconCss="fas fa-play">
-                                Play
+                        <div class="card-mini-controls">
+                            <SfButton OnClick="@(() => PlayPlaylist(playlist))">
+                                <SfIcon IconCss="fas fa-solid fa-play" />
                             </SfButton>
-                            <SfButton OnClick="@(() => ViewPlaylist(playlist))" CssClass="e-primary">
-                                View Songs
+                            <SfButton OnClick="@(() => ViewPlaylist(playlist))">
+                                <SfIcon IconCss="fas fa-solid fa-eye" />
                             </SfButton>
                         </div>
                     </CardContent>

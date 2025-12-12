@@ -1,6 +1,10 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="AGENTS.md" />
+    <File Path="COPILOT_INSTRUCTIONS.md" />
+  </Folder>
   <Project Path="MusicSalesApp.Common/MusicSalesApp.Common.csproj" />
-  <Project Path="MusicSalesApp/MusicSalesApp.csproj" />
-  <Project Path="MusicSalesApp.Tests/MusicSalesApp.Tests.csproj" />
   <Project Path="MusicSalesApp.ComponentTests/MusicSalesApp.ComponentTests.csproj" />
+  <Project Path="MusicSalesApp.Tests/MusicSalesApp.Tests.csproj" />
+  <Project Path="MusicSalesApp/MusicSalesApp.csproj" />
 </Solution>
