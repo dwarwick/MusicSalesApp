@@ -1,4 +1,4 @@
-# Copilot Instructions
+﻿# Copilot Instructions
 
 ## Workspace Context
 The current workspace includes the following specific characteristics:
@@ -23,14 +23,104 @@ Active Git repository:
   - Use `SfAppBar` and `SfSidebar` for navigation
 
 ## Responsive CSS Breakpoints
-- Do NOT place `@media` rules inside component-scoped `.razor.css` files.
+- Do NOT use component-scoped `.razor.css` files.
 - Put breakpoint-specific CSS into the global files under `wwwroot`:
   - `xl_app.css` (base/desktop-wide defaults)
   - `lg_app.css` (`@media (max-width: 1200px)`)
   - `md_app.css` (`@media (max-width: 992px)`)
   - `sm_app.css` (`@media (max-width: 768px)`)
   - `xs_app.css` (`@media (max-width: 576px)`)
-- Component `.razor.css` files should only contain base styles; move any responsive rules into the appropriate global file.
+-  move any responsive rules into the appropriate global file.
+
+## CSS Organization and DRY Principles
+
+**IMPORTANT:** This project follows DRY (Don't Repeat Yourself) principles for CSS to minimize code duplication and improve maintainability.
+
+### DO NOT Use Component-Scoped .razor.css Files for Shared Styles
+
+- **Avoid creating CSS rules in `.razor.css` files** when those styles may be reused across components
+- Component-scoped CSS leads to significant code duplication across the application
+- When the same styles are needed in multiple components, they must be duplicated in each `.razor.css` file
+- Changes to shared styles require updating multiple files, increasing maintenance burden
+
+### DO Use Global CSS Files for Shared and Responsive Styles
+
+**For shared/reusable styles:**
+- Place in `wwwroot/app.css` or create theme-specific files like `light.css` or `dark.css`
+- This allows styles to be defined once and reused everywhere
+
+**For responsive/breakpoint styles:**
+- Do not place `@media` CSS rules inside component-scoped `.razor.css` files
+- Use the global breakpoint files in `wwwroot` for responsive styles:
+  - `xl_app.css` (wide/desktop defaults)
+  - `lg_app.css` (`@media (max-width: 1200px)`)
+  - `md_app.css` (`@media (max-width: 992px)`)
+  - `sm_app.css` (`@media (max-width: 768px)`)
+  - `xs_app.css` (`@media (max-width: 576px)`)
+
+**Benefits of this approach:**
+- Single source of truth for each style
+- Changes propagate automatically across all components
+- Easier to maintain consistency across the application
+- Reduces CSS bundle size
+- Follows industry best practices for responsive design
+
+### CSS Property Organization Rules
+
+When adding or modifying CSS rules, organize properties by type into the appropriate files:
+
+**Color Properties → Theme Files (`light.css` / `dark.css`)**
+```css
+/* Properties that go in theme files */
+- color
+- background-color
+- fill
+- border-color
+- box-shadow (when it involves color)
+```
+**Rule**: Light colors → `light.css`, Dark colors → `dark.css`
+
+**Layout/Position/Animation Properties → `app.css`**
+```css
+/* Properties that go in app.css */
+- position
+- display (flex, grid, etc.)
+- flex / grid properties
+- animation
+- transition
+- transform
+- z-index
+- Non-responsive structural properties
+```
+
+**Responsive/Spacing/Size Properties → Breakpoint Files**
+```css
+/* Properties that go in breakpoint files */
+- width / height
+- padding / margin
+- gap
+- font-size
+- max-width / min-width / max-height / min-height
+- Any property that changes based on screen size
+```
+
+### CSS File Organization
+
+Ensure these files are linked in `Components/App.razor` via `<link rel="stylesheet" href="@Assets["<file>"]" />` so they apply app-wide.
+
+Example structure:
+```
+wwwroot/
+├── app.css           # Global base styles (layout, position, animation)
+├── light.css         # Light theme color overrides
+├── dark.css          # Dark theme color overrides
+├── xs_app.css        # Extra small breakpoint (<576px)
+├── sm_app.css        # Small breakpoint (<768px)
+├── md_app.css        # Medium breakpoint (<992px)
+├── lg_app.css        # Large breakpoint (<1200px)
+└── xl_app.css        # Extra large breakpoint (≥1200px)
+```
+
 
 ## Razor Component Conventions
 - Always create code-behind files for Razor components and pages.

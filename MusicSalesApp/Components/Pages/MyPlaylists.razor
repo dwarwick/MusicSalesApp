@@ -10,8 +10,8 @@
 
 <PageTitle>My Playlists</PageTitle>
 
-<div class="playlists-container">
-    <div class="playlists-header">
+<div class="playlists-page-container">
+    <div class="playlists-page-header">
         <h3>My Playlists</h3>
         <SfButton OnClick="@ShowCreatePlaylistDialog" CssClass="e-success">
             <span class="e-btn-icon fas fa-plus"></span>
@@ -28,7 +28,7 @@
     else if (_error != null)
     {
         <div class="error-state">
-            <div class="alert alert-danger">@_error</div>
+            <div class="e-alert e-alert-danger">@_error</div>
         </div>
     }
     else if (_playlists == null || !_playlists.Any())
@@ -39,27 +39,27 @@
     }
     else
     {
-        <div class="playlists-grid">
+        <div class="playlists-page-grid">
             @foreach (var playlist in _playlists)
             {
-                <SfCard CssClass="playlist-card">
-                    <CardHeader>
-                        <div class="playlist-card-header">
-                            <h5>@playlist.PlaylistName</h5>
-                            <div class="playlist-actions">
-                                <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
-                                <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
-                            </div>
-                        </div>
+                <SfCard CssClass="playlists-page-card music-card">
+                    <CardHeader Title="@playlist.PlaylistName">
+                        <div class="playlists-page-actions">
+                            <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
+                            <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                        </div>                       
                     </CardHeader>
                     <CardContent>
-                        <div class="playlist-info">
+                        <div class="playlists-page-info">
                             <p>@_playlistSongCounts.GetValueOrDefault(playlist.Id, 0) song(s)</p>
-                            <p class="playlist-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
+                            <p class="playlists-page-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
                         </div>
-                        <div class="playlist-card-actions">
-                            <SfButton OnClick="@(() => ViewPlaylist(playlist))" CssClass="e-primary">
-                                View Songs
+                        <div class="card-actions">
+                            <SfButton OnClick="@(() => PlayPlaylist(playlist))">
+                                <SfIcon IconCss="fas fa-solid fa-play" />
+                            </SfButton>
+                            <SfButton OnClick="@(() => ViewPlaylist(playlist))">
+                                <SfIcon IconCss="fas fa-solid fa-eye" />
                             </SfButton>
                         </div>
                     </CardContent>
@@ -70,8 +70,8 @@
 
     @if (_selectedPlaylist != null && _viewingSongs)
     {
-        <div class="playlist-songs-section">
-            <div class="playlist-songs-header">
+        <div class="playlists-page-songs-section">
+            <div class="playlists-page-songs-header">
                 <h4>@_selectedPlaylist.PlaylistName</h4>
                 <div>
                     <SfButton OnClick="@ShowAddSongDialog" CssClass="e-success">
@@ -90,23 +90,23 @@
             }
             else
             {
-                <div class="playlist-songs-list">
+                <div class="playlists-page-songs-list">
                     @foreach (var userPlaylist in _playlistSongs)
                     {
                         var songMetadata = userPlaylist.OwnedSong?.SongMetadata;
                         if (songMetadata != null)
                         {
-                            <div class="playlist-song-item">
-                                <div class="song-info">
-                                    <span class="song-title">@GetSongTitle(songMetadata)</span>
+                            <div class="playlists-page-song-item">
+                                <div class="playlists-page-song-info">
+                                    <span class="playlists-page-song-title">@GetSongTitle(songMetadata)</span>
                                     @if (!string.IsNullOrEmpty(songMetadata.Genre))
                                     {
-                                        <span class="song-genre">@songMetadata.Genre</span>
+                                        <span class="playlists-page-song-genre">@songMetadata.Genre</span>
                                     }
                                 </div>
-                                <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))" 
-                                         CssClass="e-small e-danger" 
-                                         IconCss="fas fa-times" />
+                                <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))"
+                                          CssClass="e-small e-danger"
+                                          IconCss="fas fa-times" />
                             </div>
                         }
                     }
@@ -121,7 +121,7 @@
     <DialogTemplates>
         <Header>@(_editingPlaylist == null ? "Create Playlist" : "Edit Playlist")</Header>
         <Content>
-            <div class="dialog-content">
+            <div class="playlists-page-dialog-content">
                 <SfTextBox @bind-Value="_playlistName" Placeholder="Playlist Name" />
             </div>
         </Content>
@@ -157,16 +157,16 @@
             }
             else
             {
-                <div class="add-song-list">
+                <div class="playlists-page-add-song-list">
                     @foreach (var ownedSong in _availableSongs)
                     {
                         var songMetadata = ownedSong.SongMetadata;
                         if (songMetadata != null)
                         {
-                            <div class="add-song-item">
+                            <div class="playlists-page-add-song-item">
                                 <span>@GetSongTitle(songMetadata)</span>
-                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))" 
-                                         CssClass="e-small e-success">
+                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))"
+                                          CssClass="e-small e-success">
                                     Add
                                 </SfButton>
                             </div>

@@ -271,4 +271,9 @@ public partial class MyPlaylistsModel : BlazorBase
         }
         return "Unknown Song";
     }
+
+    protected void PlayPlaylist(Playlist playlist)
+    {
+        NavigationManager.NavigateTo($"/playlist/{playlist.Id}");
+    }
 }

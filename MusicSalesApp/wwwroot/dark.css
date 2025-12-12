@@ -203,3 +203,23 @@ body {
 .card-song-title {
     color: white;
 }
+/* Playlists Page Colors - Dark Theme */
+.playlists-page-date {
+    opacity: 0.7;
+}
+
+.playlists-page-songs-section {
+    border: 1px solid #444;
+}
+
+.playlists-page-song-item {
+    border: 1px solid #333;
+}
+
+.playlists-page-song-genre {
+    opacity: 0.7;
+}
+
+.playlists-page-add-song-item {
+    border: 1px solid #333;
+}
