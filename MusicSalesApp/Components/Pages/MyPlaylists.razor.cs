@@ -21,31 +21,37 @@ public partial class MyPlaylistsModel : BlazorBase
     protected bool _showAddSongDialog = false;
     protected bool _viewingSongs = false;
     protected int _currentUserId;
+    private bool _hasLoadedData = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
+        if (firstRender && !_hasLoadedData)
         {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-
-            if (user.Identity?.IsAuthenticated == true)
+            _hasLoadedData = true;
+            try
             {
-                var appUser = await UserManager.GetUserAsync(user);
-                if (appUser != null)
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
                 {
-                    _currentUserId = appUser.Id;
-                    await LoadPlaylists();
+                    var appUser = await UserManager.GetUserAsync(user);
+                    if (appUser != null)
+                    {
+                        _currentUserId = appUser.Id;
+                        await LoadPlaylists();
+                    }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _error = $"Error loading playlists: {ex.Message}";
-        }
-        finally
-        {
-            _loading = false;
+            catch (Exception ex)
+            {
+                _error = $"Error loading playlists: {ex.Message}";
+            }
+            finally
+            {
+                _loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 

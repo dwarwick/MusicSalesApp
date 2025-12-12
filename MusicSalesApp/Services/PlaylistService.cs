@@ -261,13 +261,17 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
-            // Check if SongMetadata exists and IsAlbumCover is false
-            if (ownedSong.SongMetadata == null || ownedSong.SongMetadata.IsAlbumCover)
+            // Check if this is a valid song (not an album cover)
+            // If we have metadata, check IsAlbumCover
+            if (ownedSong.SongMetadata != null)
             {
-                return false;
+                return !ownedSong.SongMetadata.IsAlbumCover;
             }
-
-            return true;
+            
+            // If no metadata, fall back to filename check
+            // Album covers are typically .jpg or .jpeg, songs are .mp3
+            var fileName = ownedSong.SongFileName.ToLowerInvariant();
+            return fileName.EndsWith(".mp3");
         }
         catch (Exception ex)
         {
@@ -288,13 +292,31 @@ public class PlaylistService : IPlaylistService
                 .Select(up => up.OwnedSongId)
                 .ToListAsync();
 
-            // Get all owned songs by the user that are not album covers and not already in the playlist
-            var availableSongs = await context.OwnedSongs
+            // Get all owned songs by the user
+            var ownedSongs = await context.OwnedSongs
                 .Include(os => os.SongMetadata)
                 .Where(os => os.UserId == userId)
-                .Where(os => os.SongMetadata != null && !os.SongMetadata.IsAlbumCover)
                 .Where(os => !playlistSongIds.Contains(os.Id))
                 .ToListAsync();
+
+            // Filter to exclude album covers
+            // If SongMetadata is linked, check IsAlbumCover
+            // If SongMetadata is not linked, check filename (if it's .mp3, it's not an album cover)
+            var availableSongs = ownedSongs
+                .Where(os => 
+                {
+                    // If we have metadata, use it to check
+                    if (os.SongMetadata != null)
+                    {
+                        return !os.SongMetadata.IsAlbumCover;
+                    }
+                    
+                    // If no metadata, fall back to filename check
+                    // Album covers are typically .jpg or .jpeg, songs are .mp3
+                    var fileName = os.SongFileName.ToLowerInvariant();
+                    return fileName.EndsWith(".mp3");
+                })
+                .ToList();
 
             return availableSongs;
         }
