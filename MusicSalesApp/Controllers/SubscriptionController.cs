@@ -9,6 +9,9 @@ using System.Text.Json;
 
 namespace MusicSalesApp.Controllers;
 
+/// <summary>
+/// API controller for managing user subscriptions and PayPal integration.
+/// </summary>
 [Route("api/[controller]")]
 [ApiController]
 [Authorize(Roles = "Admin,User")]
@@ -18,8 +21,19 @@ public class SubscriptionController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SubscriptionController> _logger;
+    /// <summary>
+    /// HTTP client factory for making PayPal API requests.
+    /// </summary>
     private readonly IHttpClientFactory _httpClientFactory;
 
+    /// <summary>
+    /// Initializes a new instance of the SubscriptionController.
+    /// </summary>
+    /// <param name="subscriptionService">Service for managing subscription business logic.</param>
+    /// <param name="userManager">ASP.NET Identity user manager.</param>
+    /// <param name="configuration">Application configuration for accessing PayPal settings.</param>
+    /// <param name="logger">Logger for tracking subscription operations.</param>
+    /// <param name="httpClientFactory">Factory for creating HTTP clients for PayPal API calls.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
         UserManager<ApplicationUser> userManager,
