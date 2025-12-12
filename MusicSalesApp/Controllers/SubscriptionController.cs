@@ -284,7 +284,7 @@ public class SubscriptionController : ControllerBase
                 name = "Music Streaming Subscription",
                 description = "Unlimited music streaming subscription service",
                 type = "SERVICE",
-                category = "MUSIC_AND_ENTERTAINMENT"
+                category = "SOFTWARE"
             };
 
             var productContent = new StringContent(JsonSerializer.Serialize(productData), Encoding.UTF8, "application/json");
