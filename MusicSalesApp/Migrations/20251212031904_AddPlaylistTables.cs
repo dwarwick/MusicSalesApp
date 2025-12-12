@@ -57,14 +57,12 @@ namespace MusicSalesApp.Migrations
                         name: "FK_UserPlaylists_AspNetUsers_UserId",
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_UserPlaylists_OwnedSongs_OwnedSongId",
                         column: x => x.OwnedSongId,
                         principalTable: "OwnedSongs",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_UserPlaylists_Playlists_PlaylistId",
                         column: x => x.PlaylistId,

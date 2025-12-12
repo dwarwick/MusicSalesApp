@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251212025217_AddPlaylistTables")]
+    [Migration("20251212031904_AddPlaylistTables")]
     partial class AddPlaylistTables
     {
         /// <inheritdoc />
@@ -651,7 +651,7 @@ namespace MusicSalesApp.Migrations
                     b.HasOne("MusicSalesApp.Models.OwnedSong", "OwnedSong")
                         .WithMany()
                         .HasForeignKey("OwnedSongId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("MusicSalesApp.Models.Playlist", "Playlist")
@@ -663,7 +663,7 @@ namespace MusicSalesApp.Migrations
                     b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("OwnedSong");

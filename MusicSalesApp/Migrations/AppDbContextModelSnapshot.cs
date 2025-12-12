@@ -648,7 +648,7 @@ namespace MusicSalesApp.Migrations
                     b.HasOne("MusicSalesApp.Models.OwnedSong", "OwnedSong")
                         .WithMany()
                         .HasForeignKey("OwnedSongId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("MusicSalesApp.Models.Playlist", "Playlist")
@@ -660,7 +660,7 @@ namespace MusicSalesApp.Migrations
                     b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("OwnedSong");
