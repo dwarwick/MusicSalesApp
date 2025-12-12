@@ -162,6 +162,24 @@ public class SubscriptionController : ControllerBase
             }
 
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            
+            // First, try to find an existing plan
+            var existingPlan = await FindExistingPlanAsync(token, baseUrl);
+            if (!string.IsNullOrEmpty(existingPlan))
+            {
+                _logger.LogInformation("Using existing PayPal plan: {PlanId}", existingPlan);
+                return existingPlan;
+            }
+
+            // If no plan exists, create product first, then plan
+            var productId = await GetOrCreateProductAsync(token, baseUrl);
+            if (string.IsNullOrEmpty(productId))
+            {
+                _logger.LogError("Failed to create or find product");
+                return null;
+            }
+
+            // Now create the plan with the product ID
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -171,7 +189,7 @@ public class SubscriptionController : ControllerBase
 
             var planData = new
             {
-                product_id = "PROD-MUSIC-SUBSCRIPTION",
+                product_id = productId,
                 name = "Music Streaming Monthly Subscription",
                 description = "Unlimited music streaming for $" + monthlyPrice + " per month",
                 status = "ACTIVE",
@@ -212,19 +230,83 @@ public class SubscriptionController : ControllerBase
             if (response.IsSuccessStatusCode)
             {
                 using var doc = JsonDocument.Parse(body);
-                return doc.RootElement.GetProperty("id").GetString();
+                var planId = doc.RootElement.GetProperty("id").GetString();
+                _logger.LogInformation("Created new PayPal plan: {PlanId}", planId);
+                return planId;
             }
             else
             {
-                _logger.LogWarning("Failed to create subscription plan: {Status} {Body}", response.StatusCode, body);
-                
-                // Try to find an existing plan instead
-                return await FindExistingPlanAsync(token, baseUrl);
+                _logger.LogError("Failed to create subscription plan: {Status} {Body}", response.StatusCode, body);
+                return null;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating subscription plan");
+            return null;
+        }
+    }
+
+    private async Task<string> GetOrCreateProductAsync(string token, string baseUrl)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
+
+            // Try to find existing product first
+            var response = await client.GetAsync("v1/catalogs/products?page_size=20");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("products", out var products))
+                {
+                    foreach (var product in products.EnumerateArray())
+                    {
+                        if (product.TryGetProperty("name", out var name) && 
+                            name.GetString().Contains("Music Streaming"))
+                        {
+                            var productId = product.GetProperty("id").GetString();
+                            _logger.LogInformation("Found existing PayPal product: {ProductId}", productId);
+                            return productId;
+                        }
+                    }
+                }
+            }
+
+            // Create new product if not found
+            var productData = new
+            {
+                name = "Music Streaming Subscription",
+                description = "Unlimited music streaming subscription service",
+                type = "SERVICE",
+                category = "MUSIC_AND_ENTERTAINMENT"
+            };
+
+            var productContent = new StringContent(JsonSerializer.Serialize(productData), Encoding.UTF8, "application/json");
+            var createResponse = await client.PostAsync("v1/catalogs/products", productContent);
+            var createBody = await createResponse.Content.ReadAsStringAsync();
+
+            if (createResponse.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(createBody);
+                var productId = doc.RootElement.GetProperty("id").GetString();
+                _logger.LogInformation("Created new PayPal product: {ProductId}", productId);
+                return productId;
+            }
+            else
+            {
+                _logger.LogError("Failed to create product: {Status} {Body}", createResponse.StatusCode, createBody);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting or creating product");
             return null;
         }
     }
