@@ -10,7 +10,7 @@ public interface ICartService
 
     Task<IEnumerable<CartItem>> GetCartItemsAsync(int userId);
     Task<int> GetCartItemCountAsync(int userId);
-    Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price);
+    Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price, int? songMetadataId = null);
     Task<bool> RemoveFromCartAsync(int userId, string songFileName);
     Task<bool> IsInCartAsync(int userId, string songFileName);
     Task ClearCartAsync(int userId);

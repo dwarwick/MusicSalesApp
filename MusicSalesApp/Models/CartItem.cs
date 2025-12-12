@@ -22,4 +22,10 @@ public class CartItem
     public decimal Price { get; set; }
 
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+
+    // Optional foreign key to SongMetadata for better data integrity
+    public int? SongMetadataId { get; set; }
+
+    [ForeignKey("SongMetadataId")]
+    public SongMetadata SongMetadata { get; set; }
 }

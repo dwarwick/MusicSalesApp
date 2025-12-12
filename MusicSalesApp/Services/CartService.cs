@@ -37,7 +37,7 @@ public class CartService : ICartService
             .CountAsync(c => c.UserId == userId);
     }
 
-    public async Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price)
+    public async Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price, int? songMetadataId = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         var existingItem = await context.CartItems
@@ -53,7 +53,8 @@ public class CartService : ICartService
             UserId = userId,
             SongFileName = songFileName,
             Price = price,
-            AddedAt = DateTime.UtcNow
+            AddedAt = DateTime.UtcNow,
+            SongMetadataId = songMetadataId
         };
 
         context.CartItems.Add(cartItem);
@@ -141,27 +142,20 @@ public class CartService : ICartService
             .Select(o => o.SongFileName)
             .ToHashSetAsync();
 
-        // Fetch SongMetadata for all songs being purchased to populate SongMetadataId
-        // We need to match by filename, which could be in Mp3BlobPath or BlobPath
-        var songMetadataLookup = await context.SongMetadata
-            .Where(sm => songFileNamesList.Any(sfn => 
-                (sm.Mp3BlobPath != null && sm.Mp3BlobPath.Contains(sfn)) ||
-                (sm.BlobPath != null && sm.BlobPath.Contains(sfn))))
-            .ToDictionaryAsync(
-                sm => sm.Mp3BlobPath ?? sm.BlobPath,
-                sm => sm.Id);
+        // Get SongMetadataId from CartItems if available for better data integrity
+        var cartItemsWithMetadata = await context.CartItems
+            .Where(c => c.UserId == userId && songFileNamesList.Contains(c.SongFileName))
+            .ToDictionaryAsync(c => c.SongFileName, c => c.SongMetadataId);
 
         foreach (var songFileName in songFileNamesList)
         {
             if (!existingOwnedSongs.Contains(songFileName))
             {
-                // Try to find the SongMetadataId for this song
+                // Use SongMetadataId from CartItem if available
                 int? songMetadataId = null;
-                var matchingMetadata = songMetadataLookup.FirstOrDefault(kvp => 
-                    kvp.Key != null && kvp.Key.Contains(songFileName));
-                if (matchingMetadata.Key != null)
+                if (cartItemsWithMetadata.TryGetValue(songFileName, out var metadataId))
                 {
-                    songMetadataId = matchingMetadata.Value;
+                    songMetadataId = metadataId;
                 }
 
                 var ownedSong = new OwnedSong
