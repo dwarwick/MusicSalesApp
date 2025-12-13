@@ -22,6 +22,7 @@ public partial class MyPlaylistsModel : BlazorBase
     protected bool _viewingSongs = false;
     protected int _currentUserId;
     protected bool _hasActiveSubscription = false;
+    protected bool _hasOwnedSongs = false;
     private bool _hasLoadedData = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -43,6 +44,10 @@ public partial class MyPlaylistsModel : BlazorBase
                         
                         // Check if user has active subscription
                         _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId);
+                        
+                        // Check if user owns any songs (needed for creating playlists)
+                        var ownedSongs = await CartService.GetOwnedSongsAsync(_currentUserId);
+                        _hasOwnedSongs = ownedSongs.Any();
                         
                         await LoadPlaylists();
                     }
@@ -75,10 +80,10 @@ public partial class MyPlaylistsModel : BlazorBase
 
     protected void ShowCreatePlaylistDialog()
     {
-        // Check if user has active subscription
-        if (!_hasActiveSubscription)
+        // Users can create playlists if they have a subscription OR own at least one song
+        if (!_hasActiveSubscription && !_hasOwnedSongs)
         {
-            _error = "You need an active subscription to create playlists. Please subscribe to continue.";
+            _error = "To create playlists, you need to either have an active subscription or own at least one song. Subscribe for unlimited access or purchase songs to get started.";
             return;
         }
         

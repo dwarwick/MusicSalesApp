@@ -20,8 +20,8 @@ public class PlaylistCleanupService : IPlaylistCleanupService
     }
 
     /// <summary>
-    /// Removes songs from playlists for users whose subscriptions have lapsed
-    /// and they don't own the songs outright.
+    /// Removes songs from playlists and deletes OwnedSong records for users whose subscriptions have lapsed
+    /// and they don't own the songs outright (PayPalOrderId is null).
     /// Uses a 48-hour grace period to account for potential job execution delays.
     /// </summary>
     /// <returns>Number of songs removed</returns>
@@ -80,13 +80,33 @@ public class PlaylistCleanupService : IPlaylistCleanupService
 
                 if (nonOwnedSongs.Any())
                 {
+                    var ownedSongIdsToDelete = nonOwnedSongs.Select(up => up.OwnedSongId).Distinct().ToList();
+                    
                     _logger.LogInformation(
                         "Removing {Count} non-owned songs from playlists for user {UserId}",
                         nonOwnedSongs.Count,
                         userId);
 
+                    // Remove from playlists first
                     context.UserPlaylists.RemoveRange(nonOwnedSongs);
                     totalRemoved += nonOwnedSongs.Count;
+                    
+                    // Now delete the OwnedSong records where PayPalOrderId is null (subscription-only access)
+                    var ownedSongsToDelete = await context.OwnedSongs
+                        .Where(os => ownedSongIdsToDelete.Contains(os.Id) && 
+                                    os.UserId == userId &&
+                                    string.IsNullOrEmpty(os.PayPalOrderId))
+                        .ToListAsync();
+                    
+                    if (ownedSongsToDelete.Any())
+                    {
+                        _logger.LogInformation(
+                            "Deleting {Count} subscription-only OwnedSong records for user {UserId}",
+                            ownedSongsToDelete.Count,
+                            userId);
+                        
+                        context.OwnedSongs.RemoveRange(ownedSongsToDelete);
+                    }
                 }
             }
 

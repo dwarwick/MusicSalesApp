@@ -626,4 +626,69 @@ var filteredSongs = ownedSongs
 3. **Use filename patterns** as fallback for file type detection
 4. **Document the fallback logic** so it's clear why it exists
 
+## Playlists and Subscription Logic
+
+### Playlist Access Rules
+
+Users can create and manage playlists under these conditions:
+- **With Active Subscription**: Can add ANY song from the catalog to playlists
+- **Without Subscription**: Can only add songs they own (purchased) to playlists
+- **Requirement to Create Playlists**: Must have either an active subscription OR own at least one song
+
+### Song Ownership Types
+
+The application distinguishes between two types of song ownership using the `PayPalOrderId` field in the `OwnedSong` table:
+
+1. **Purchased Songs** (`PayPalOrderId` is set):
+   - User paid for the song via PayPal
+   - Permanent ownership - remains available even after subscription ends
+   - Can be added to playlists at any time
+   - Example: `PayPalOrderId = "ORDER-XYZ123"`
+
+2. **Subscription-Based Songs** (`PayPalOrderId` is null):
+   - "Virtual" ownership granted during active subscription
+   - Temporary access - removed when subscription lapses
+   - Created automatically when subscriber adds non-owned song to playlist
+   - Example: `PayPalOrderId = null`
+
+### Playlist Cleanup Service
+
+The `PlaylistCleanupService` runs as a background job to clean up subscription-based access:
+
+**What it does:**
+1. Finds users with lapsed subscriptions (CANCELLED or EXPIRED status, 48-hour grace period)
+2. Identifies subscription-based songs (where `PayPalOrderId` is null)
+3. Removes these songs from user's playlists (`UserPlaylists` table)
+4. **Deletes the `OwnedSong` records** where `PayPalOrderId` is null (subscription-only access)
+5. Preserves purchased songs (with PayPal order ID) in playlists
+
+**Grace Period:** 48 hours after subscription end date to account for job execution delays
+
+**Example:**
+```csharp
+// Find subscription-based songs to clean up
+var nonOwnedSongs = userPlaylistSongs
+    .Where(up => string.IsNullOrEmpty(up.OwnedSong.PayPalOrderId))
+    .ToList();
+
+// Remove from playlists
+context.UserPlaylists.RemoveRange(nonOwnedSongs);
+
+// Delete OwnedSong records (subscription-only)
+var ownedSongsToDelete = await context.OwnedSongs
+    .Where(os => ownedSongIdsToDelete.Contains(os.Id) && 
+                os.UserId == userId &&
+                string.IsNullOrEmpty(os.PayPalOrderId))
+    .ToListAsync();
+context.OwnedSongs.RemoveRange(ownedSongsToDelete);
+```
+
+### Implementation Notes
+
+- `PlaylistService.GetAvailableSongsForPlaylistAsync` checks subscription status
+- For subscribers: returns all non-album-cover songs from catalog
+- Creates `OwnedSong` records on-demand with `PayPalOrderId = null`
+- These records enable playlist functionality without schema changes
+- Cleanup is automatic via `PlaylistCleanupService` background job
+
 ## References

@@ -397,4 +397,44 @@ dotnet run --project JwtIdentity
 ### Database
 - SQL Server LocalDB database managed by EF Core migrations
 - Connection string is in appsettings.Development.json: `Server=(localdb)\\mssqllocaldb;Database=MusicAppDb;Trusted_Connection=True;MultipleActiveResultSets=true`
+
+## Playlists and Subscription Business Logic
+
+### Important: Always Read AGENTS.md and COPILOT_INSTRUCTIONS.md
+
+**At the start of each session, review both AGENTS.md and COPILOT_INSTRUCTIONS.md** to understand:
+- Current codebase conventions and patterns
+- Business logic rules (like playlists and subscriptions)
+- Architecture decisions and constraints
+
+### Playlist Access Rules
+
+Users can create and manage playlists under these conditions:
+- **With Active Subscription**: Can add ANY song from the catalog to playlists (unlimited access)
+- **Without Subscription**: Can only add songs they own (purchased songs) to playlists
+- **To Create Playlists**: User must have EITHER an active subscription OR own at least one song
+
+**Error Message:** If user tries to create a playlist without meeting requirements, show:
+> "To create playlists, you need to either have an active subscription or own at least one song. Subscribe for unlimited access or purchase songs to get started."
+
+### Song Ownership in Database
+
+The `OwnedSong` table uses `PayPalOrderId` to distinguish ownership types:
+
+1. **Purchased Songs**: `PayPalOrderId = "ORDER-123"` (has PayPal order ID)
+   - Permanent ownership
+   - Remains in playlists after subscription ends
+   
+2. **Subscription Songs**: `PayPalOrderId = null` (no PayPal order ID)
+   - Temporary access during active subscription
+   - Automatically removed by `PlaylistCleanupService` when subscription lapses
+
+### Cleanup After Subscription Ends
+
+`PlaylistCleanupService` background job (48-hour grace period):
+1. Removes subscription-based songs from playlists (`UserPlaylists` table)
+2. **Deletes `OwnedSong` records** where `PayPalOrderId` is null
+3. Keeps purchased songs (with PayPal order ID) in database and playlists
+
+**Key Implementation Detail:** When subscribers add non-owned songs to playlists, the system creates "virtual" `OwnedSong` records with `PayPalOrderId = null`. These are cleaned up when subscription ends.
 - Database created automatically on first run with seed data
