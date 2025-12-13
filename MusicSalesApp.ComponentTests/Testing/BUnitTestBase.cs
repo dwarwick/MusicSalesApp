@@ -37,6 +37,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongMetadataService> MockSongMetadataService { get; private set; } = default!;
     protected Mock<IThemeService> MockThemeService { get; private set; } = default!;
     protected Mock<IPlaylistService> MockPlaylistService { get; private set; } = default!;
+    protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
 
     [SetUp]
@@ -56,6 +57,7 @@ public abstract class BUnitTestBase
         MockSongMetadataService = new Mock<ISongMetadataService>();
         MockThemeService = new Mock<IThemeService>();
         MockPlaylistService = new Mock<IPlaylistService>();
+        MockSubscriptionService = new Mock<ISubscriptionService>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -120,6 +122,12 @@ public abstract class BUnitTestBase
         MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<UserPlaylist>());
 
+        // Setup default returns for ISubscriptionService methods
+        MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+        MockSubscriptionService.Setup(x => x.GetActiveSubscriptionAsync(It.IsAny<int>()))
+            .ReturnsAsync((Subscription)null);
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -133,6 +141,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongMetadataService>(MockSongMetadataService.Object);
         TestContext.Services.AddSingleton<IThemeService>(MockThemeService.Object);
         TestContext.Services.AddSingleton<IPlaylistService>(MockPlaylistService.Object);
+        TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
 
         // Authorization for components using [Authorize] and AuthorizeView
