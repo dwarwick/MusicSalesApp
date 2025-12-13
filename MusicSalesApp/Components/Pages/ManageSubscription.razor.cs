@@ -57,7 +57,7 @@ public class ManageSubscriptionModel : BlazorBase
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error activating subscription: {ex.Message}");
+                        Logger.LogError(ex, "Error activating subscription");
                         _errorMessage = "An error occurred while activating your subscription.";
                     }
                 }
@@ -80,7 +80,7 @@ public class ManageSubscriptionModel : BlazorBase
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error deleting pending subscription: {ex.Message}");
+                        Logger.LogError(ex, "Error deleting pending subscription");
                         _errorMessage = "Subscription setup was cancelled.";
                     }
                 }
@@ -109,7 +109,8 @@ public class ManageSubscriptionModel : BlazorBase
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading subscription status: {ex.Message}");
+            Logger.LogError(ex, "Error loading subscription status");
+            _errorMessage = "Failed to load subscription status.";
         }
     }
 
@@ -153,6 +154,7 @@ public class ManageSubscriptionModel : BlazorBase
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error creating subscription");
             _errorMessage = $"Error creating subscription: {ex.Message}";
             _subscribing = false;
         }
@@ -197,6 +199,7 @@ public class ManageSubscriptionModel : BlazorBase
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error cancelling subscription");
             _errorMessage = $"Error cancelling subscription: {ex.Message}";
         }
         finally

@@ -16,253 +16,295 @@ using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor;
+using Serilog;
+using Serilog.Events;
 
-var builder = WebApplication.CreateBuilder(args);
+var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDirectory);
 
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine(logDirectory, "app-log-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        shared: true)
+    .CreateBootstrapLogger();
 
-builder.Services.AddRazorPages();
-
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// Add DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
-builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Scoped);
-
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
-{
-    options.SignIn.RequireConfirmedAccount = false;
-    options.Password.RequireDigit = true;
-    options.Password.RequireLowercase = true;
-    options.Password.RequireUppercase = true;
-    options.Password.RequireNonAlphanumeric = true;
-    options.Password.RequiredLength = 8;
-    // Token expiration settings
-    options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;
-})
-.AddEntityFrameworkStores<AppDbContext>()
-.AddDefaultTokenProviders();
-
-// Configure email confirmation token lifespan to 10 minutes
-builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
-{
-    options.TokenLifespan = TimeSpan.FromMinutes(10);
-});
-
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.LoginPath = "/login";
-    options.LogoutPath = "/logout";
-    options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<int>("Auth:ExpireMinutes", 300));
-    options.SlidingExpiration = true;
-});
-
-builder.Services.AddControllers();
-
-// Provide HttpClient with base address and cookies configured.
-// For Blazor Server, we need to forward the authentication cookies from the HttpContext.
-builder.Services.AddScoped(sp =>
-{
-    var nav = sp.GetRequiredService<NavigationManager>();
-    var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
-    
-    var handler = new HttpClientHandler();
-    var httpClient = new HttpClient(handler) { BaseAddress = new Uri(nav.BaseUri) };
-    
-    // Forward the authentication cookie from the current request to API calls
-    var httpContext = httpContextAccessor.HttpContext;
-    if (httpContext != null)
-    {
-        var cookies = httpContext.Request.Headers["Cookie"].ToString();
-        if (!string.IsNullOrEmpty(cookies))
-        {
-            httpClient.DefaultRequestHeaders.Add("Cookie", cookies);
-        }
-    }
-    
-    return httpClient;
-});
-
-// Register factory for external HTTP calls (PayPal)
-builder.Services.AddHttpClient();
-
-builder.Services.AddHttpContextAccessor();
-
-// Register Antiforgery services for DI
-builder.Services.AddAntiforgery();
-
-builder.Services.AddAuthorizationCore(options =>
-{
-    var type = typeof(Permissions);
-    var permissionNames = type.GetFields().Select(permission => permission.Name);
-    foreach (var name in permissionNames)
-    {
-        options.AddPolicy(
-            name,
-            policyBuilder => policyBuilder.RequireAssertion(
-                context => context.User.HasClaim(claim => claim.Type == CustomClaimTypes.Permission && claim.Value == name)));
-    }
-});
-
-builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
-builder.Services.AddScoped<ServerAuthenticationStateProvider>();
-builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
-builder.Services.AddScoped<IMusicService, MusicService>();
-builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<ICartService, CartService>();
-builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
-builder.Services.AddScoped<ISongAdminService, SongAdminService>();
-builder.Services.AddScoped<IThemeService, ThemeService>();
-builder.Services.AddScoped<IPlaylistService, PlaylistService>();
-builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
-builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
-builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
-
-// Add Hangfire services with SQL Server storage
 try
 {
-    builder.Services.AddHangfire(config => config
-        .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
-        .UseSimpleAssemblyNameTypeSerializer()
-        .UseRecommendedSerializerSettings()
-        .UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection"), new SqlServerStorageOptions
-        {
-            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
-            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
-            QueuePollInterval = TimeSpan.FromSeconds(15),
-            UseRecommendedIsolationLevel = true,
-            DisableGlobalLocks = true
-        }));
-    
-    // Add the Hangfire background job processing server as a service
-    builder.Services.AddHangfireServer();
-}
-catch (Exception ex)
-{
-    // If SQL Server is unreachable, log an error and continue without Hangfire
-    var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger("Program");
-    logger.LogError(ex, "Hangfire database unavailable; skipping background job setup");
-}
+    Log.Information("Application starting...");
 
-builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
-builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
+    var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCascadingAuthenticationState();
+    // Apply Serilog file logging configuration
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .WriteTo.Console()
+        .WriteTo.File(
+            Path.Combine(logDirectory, "app-log-.log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 30,
+            shared: true));
 
-builder.Services.AddSyncfusionBlazor();
+    // Add services to the container.
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
 
-var app = builder.Build();
+    builder.Services.AddRazorPages();
 
-// Apply pending migrations automatically at startup
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var migrationLogger = services.GetRequiredService<ILogger<Program>>();
-    try
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+    // Add DbContextFactory for Blazor Server to avoid concurrent DbContext access issues
+    builder.Services.AddDbContextFactory<AppDbContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Scoped);
+
+    builder.Services.AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
     {
-        migrationLogger.LogInformation("Starting database migration...");
-        var db = services.GetRequiredService<AppDbContext>();
+        options.SignIn.RequireConfirmedAccount = false;
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Password.RequiredLength = 8;
+        // Token expiration settings
+        options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultEmailProvider;
+    })
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
+    // Configure email confirmation token lifespan to 10 minutes
+    builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+    {
+        options.TokenLifespan = TimeSpan.FromMinutes(10);
+    });
+
+    builder.Services.ConfigureApplicationCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.LogoutPath = "/logout";
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<int>("Auth:ExpireMinutes", 300));
+        options.SlidingExpiration = true;
+    });
+
+    builder.Services.AddControllers();
+
+    // Provide HttpClient with base address and cookies configured.
+    // For Blazor Server, we need to forward the authentication cookies from the HttpContext.
+    builder.Services.AddScoped(sp =>
+    {
+        var nav = sp.GetRequiredService<NavigationManager>();
+        var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
         
-        // Test database connection first
-        if (!db.Database.CanConnect())
+        var handler = new HttpClientHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri(nav.BaseUri) };
+        
+        // Forward the authentication cookie from the current request to API calls
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext != null)
         {
-            migrationLogger.LogError("Cannot connect to database. Check your connection string.");
-            throw new InvalidOperationException("Database connection failed. Please verify your connection string in appsettings.json or environment variables.");
+            var cookies = httpContext.Request.Headers["Cookie"].ToString();
+            if (!string.IsNullOrEmpty(cookies))
+            {
+                httpClient.DefaultRequestHeaders.Add("Cookie", cookies);
+            }
         }
         
-        db.Database.Migrate();
-        migrationLogger.LogInformation("Database migration completed successfully.");
+        return httpClient;
+    });
+
+    // Register factory for external HTTP calls (PayPal)
+    builder.Services.AddHttpClient();
+
+    builder.Services.AddHttpContextAccessor();
+
+    // Register Antiforgery services for DI
+    builder.Services.AddAntiforgery();
+
+    builder.Services.AddAuthorizationCore(options =>
+    {
+        var type = typeof(Permissions);
+        var permissionNames = type.GetFields().Select(permission => permission.Name);
+        foreach (var name in permissionNames)
+        {
+            options.AddPolicy(
+                name,
+                policyBuilder => policyBuilder.RequireAssertion(
+                    context => context.User.HasClaim(claim => claim.Type == CustomClaimTypes.Permission && claim.Value == name)));
+        }
+    });
+
+    builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+    builder.Services.AddScoped<ServerAuthenticationStateProvider>();
+    builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
+    builder.Services.AddScoped<IMusicService, MusicService>();
+    builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
+    builder.Services.AddScoped<IEmailService, EmailService>();
+    builder.Services.AddScoped<ICartService, CartService>();
+    builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
+    builder.Services.AddScoped<ISongAdminService, SongAdminService>();
+    builder.Services.AddScoped<IThemeService, ThemeService>();
+    builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+    builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+    builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
+    builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
+
+    // Add Hangfire services with SQL Server storage
+    try
+    {
+        builder.Services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection"), new SqlServerStorageOptions
+            {
+                CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                QueuePollInterval = TimeSpan.FromSeconds(15),
+                UseRecommendedIsolationLevel = true,
+                DisableGlobalLocks = true
+            }));
+        
+        // Add the Hangfire background job processing server as a service
+        builder.Services.AddHangfireServer();
     }
     catch (Exception ex)
     {
-        migrationLogger.LogError(ex, "CRITICAL ERROR: An error occurred while applying database migrations. Application cannot start.");
-        migrationLogger.LogError("Connection String (masked): {ConnectionString}", 
-            builder.Configuration.GetConnectionString("DefaultConnection")?.Substring(0, Math.Min(50, builder.Configuration.GetConnectionString("DefaultConnection")?.Length ?? 0)) + "...");
-        throw; // rethrow to fail fast if migrations cannot be applied
+        Log.Error(ex, "Hangfire database unavailable; skipping background job setup");
     }
-}
 
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
-}
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+    builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
+    builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
 
-app.UseAuthentication();
-app.UseAuthorization();
+    builder.Services.AddCascadingAuthenticationState();
 
-app.UseAntiforgery();
+    builder.Services.AddSyncfusionBlazor();
 
-// Configure Hangfire Dashboard with custom authorization
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
-{
-    Authorization = new[] { new HangfireAuthorizationFilter() },
-    DashboardTitle = "Music Sales App - Background Jobs",
-    DisplayStorageConnectionString = false
-});
+    var app = builder.Build();
 
-app.MapStaticAssets();
-app.MapControllers();
-app.MapRazorPages(); // Add Razor Pages routing
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
-{
-    var tokens = antiforgery.GetAndStoreTokens(context);
-
-    // Use the framework's own field name instead of hard-coding
-    return Results.Json(new
-    {
-        token = tokens.RequestToken,
-        fieldName = tokens.FormFieldName
-    });
-});
-
-// This is the folder where appsettings.json lives (and where you said ffmpeg.exe is)
-var ffRoot = app.Environment.ContentRootPath;
-var ffmpegLogger = app.Services.GetRequiredService<ILogger<Program>>();
-
-// Optional: quick diagnostic log to confirm paths on the server
-var ffmpegPath = Path.Combine(ffRoot, "ffmpeg.exe");
-ffmpegLogger.LogInformation("[FFMPEG] ContentRootPath: {ContentRootPath}", ffRoot);
-ffmpegLogger.LogInformation("[FFMPEG] Expecting ffmpeg at: {FFmpegPath}", ffmpegPath);
-ffmpegLogger.LogInformation("[FFMPEG] Exists? {Exists}", File.Exists(ffmpegPath));
-
-GlobalFFOptions.Configure(options =>
-{
-    options.BinaryFolder = ffRoot;                                // look next to appsettings.json
-    options.TemporaryFilesFolder = Path.Combine(ffRoot, "fftemp"); // any writable folder
-});
-
-// Ensure temp directory exists
-Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
-
-// Initialize recurring Hangfire jobs
-var hangfireLogger = app.Services.GetRequiredService<ILogger<Program>>();
-try
-{
-    hangfireLogger.LogInformation("Initializing Hangfire recurring jobs...");
-    
+    // Apply pending migrations automatically at startup
     using (var scope = app.Services.CreateScope())
     {
-        var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
-        backgroundJobService.InitializeRecurringJobs();
+        var services = scope.ServiceProvider;
+        var migrationLogger = services.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            migrationLogger.LogInformation("Starting database migration...");
+            var db = services.GetRequiredService<AppDbContext>();
+            
+            // Test database connection first
+            if (!db.Database.CanConnect())
+            {
+                migrationLogger.LogError("Cannot connect to database. Check your connection string.");
+                throw new InvalidOperationException("Database connection failed. Please verify your connection string in appsettings.json or environment variables.");
+            }
+            
+            db.Database.Migrate();
+            migrationLogger.LogInformation("Database migration completed successfully.");
+        }
+        catch (Exception ex)
+        {
+            migrationLogger.LogError(ex, "CRITICAL ERROR: An error occurred while applying database migrations. Application cannot start.");
+            migrationLogger.LogError("Connection String (masked): {ConnectionString}", 
+                builder.Configuration.GetConnectionString("DefaultConnection")?.Substring(0, Math.Min(50, builder.Configuration.GetConnectionString("DefaultConnection")?.Length ?? 0)) + "...");
+            throw; // rethrow to fail fast if migrations cannot be applied
+        }
     }
-    
-    hangfireLogger.LogInformation("Hangfire recurring jobs initialized successfully.");
+
+    // Configure the HTTP request pipeline.
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+        app.UseHsts();
+    }
+    app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    app.UseHttpsRedirection();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.UseAntiforgery();
+
+    // Configure Hangfire Dashboard with custom authorization
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new HangfireAuthorizationFilter() },
+        DashboardTitle = "Music Sales App - Background Jobs",
+        DisplayStorageConnectionString = false
+    });
+
+    app.MapStaticAssets();
+    app.MapControllers();
+    app.MapRazorPages(); // Add Razor Pages routing
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
+    {
+        var tokens = antiforgery.GetAndStoreTokens(context);
+
+        // Use the framework's own field name instead of hard-coding
+        return Results.Json(new
+        {
+            token = tokens.RequestToken,
+            fieldName = tokens.FormFieldName
+        });
+    });
+
+    // This is the folder where appsettings.json lives (and where you said ffmpeg.exe is)
+    var ffRoot = app.Environment.ContentRootPath;
+    var ffmpegLogger = app.Services.GetRequiredService<ILogger<Program>>();
+
+    // Optional: quick diagnostic log to confirm paths on the server
+    var ffmpegPath = Path.Combine(ffRoot, "ffmpeg.exe");
+    ffmpegLogger.LogInformation("[FFMPEG] ContentRootPath: {ContentRootPath}", ffRoot);
+    ffmpegLogger.LogInformation("[FFMPEG] Expecting ffmpeg at: {FFmpegPath}", ffmpegPath);
+    ffmpegLogger.LogInformation("[FFMPEG] Exists? {Exists}", File.Exists(ffmpegPath));
+
+    GlobalFFOptions.Configure(options =>
+    {
+        options.BinaryFolder = ffRoot;                                // look next to appsettings.json
+        options.TemporaryFilesFolder = Path.Combine(ffRoot, "fftemp"); // any writable folder
+    });
+
+    // Ensure temp directory exists
+    Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
+
+    // Initialize recurring Hangfire jobs
+    var hangfireLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        hangfireLogger.LogInformation("Initializing Hangfire recurring jobs...");
+        
+        using (var scope = app.Services.CreateScope())
+        {
+            var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
+            backgroundJobService.InitializeRecurringJobs();
+        }
+        
+        hangfireLogger.LogInformation("Hangfire recurring jobs initialized successfully.");
+    }
+    catch (Exception ex)
+    {
+        hangfireLogger.LogWarning(ex, "Failed to initialize Hangfire recurring jobs. Hangfire may not be configured.");
+    }
+
+    app.Run();
 }
 catch (Exception ex)
 {
-    hangfireLogger.LogWarning(ex, "Failed to initialize Hangfire recurring jobs. Hangfire may not be configured.");
+    Log.Fatal(ex, "Application terminated unexpectedly");
+    throw;
 }
-
-app.Run();
+finally
+{
+    Log.CloseAndFlush();
+}

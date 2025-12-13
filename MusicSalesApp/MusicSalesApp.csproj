@@ -27,6 +27,9 @@
     </PackageReference>
     <!-- Azure Blob Storage SDK -->
     <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,5 +39,9 @@
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
+
+  <Target Name="PruneLogsFromPublish" AfterTargets="Publish">
+    <RemoveDir Directories="$(PublishDir)logs" Condition="Exists('$(PublishDir)logs')" />
+  </Target>
 
 </Project>

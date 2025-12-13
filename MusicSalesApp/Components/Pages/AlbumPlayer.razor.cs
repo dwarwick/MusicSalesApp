@@ -94,9 +94,9 @@ namespace MusicSalesApp.Components.Pages
                     await _jsModule.DisposeAsync();
                 }
             }
-            catch (JSDisconnectedException)
+            catch (JSDisconnectedException ex)
             {
-                // Circuit is already disconnected, safe to ignore
+                Logger.LogDebug(ex, "Album player JS runtime disconnected during disposal");
             }
 
             _dotNetRef?.Dispose();
@@ -232,6 +232,7 @@ namespace MusicSalesApp.Components.Pages
             catch (Exception ex)
             {
                 _error = ex.Message;
+                Logger.LogError(ex, "Error loading album info for {AlbumName}", AlbumName);
             }
             finally
             {
@@ -263,9 +264,9 @@ namespace MusicSalesApp.Components.Pages
                     _inCart = _albumInfo.Tracks.All(t => cartSongs.Contains(t.Name));
                 }
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException ex)
             {
-                // Not authenticated or error, ignore
+                Logger.LogDebug(ex, "Unable to load album status; user may not be authenticated");
             }
         }
 
@@ -416,6 +417,7 @@ namespace MusicSalesApp.Components.Pages
             catch (Exception ex)
             {
                 _error = ex.Message;
+                Logger.LogError(ex, "Error loading playlist info for playlist {PlaylistId}", PlaylistId);
             }
             finally
             {
@@ -474,9 +476,9 @@ namespace MusicSalesApp.Components.Pages
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Error toggling cart
+                Logger.LogError(ex, "Error toggling album cart for {AlbumName}", _albumInfo?.AlbumName);
             }
         }
 
@@ -668,7 +670,6 @@ namespace MusicSalesApp.Components.Pages
         {
             var safePath = SafeEncodePath(fileName);
 
-            // Preferred: direct SAS URL from Blob Storage via API
             try
             {
                 var result = await Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{safePath}");
@@ -677,12 +678,11 @@ namespace MusicSalesApp.Components.Pages
                     return result.Url;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Fall back to server streaming if SAS is unavailable
+                Logger.LogWarning(ex, "Failed to get SAS URL for track {FileName}; using fallback", fileName);
             }
 
-            // Fallback: stream through the MusicController
             return $"api/music/{safePath}";
         }
 

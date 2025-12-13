@@ -57,7 +57,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading cart: {ex.Message}");
+            Logger.LogError(ex, "Error loading cart");
         }
     }
 
@@ -70,7 +70,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
             if (string.IsNullOrEmpty(clientId) || clientId == "__REPLACE_WITH_PAYPAL_CLIENT_ID__")
             {
-                // PayPal not configured, skip initialization
+                Logger.LogWarning("PayPal client ID is not configured; skipping PayPal initialization.");
                 return;
             }
 
@@ -80,7 +80,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error initializing PayPal: {ex.Message}");
+            Logger.LogError(ex, "Error initializing PayPal");
         }
     }
 
@@ -105,46 +105,43 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error removing item: {ex.Message}");
+            Logger.LogError(ex, "Error removing cart item {SongFileName}", songFileName);
         }
     }
 
     [JSInvokable]
     public async Task<string> CreateOrder()
     {
-        // Don't set _checkoutInProgress here - the PayPal popup needs to open first
-        // We'll set it when the user approves the payment
-
         try
         {
-            Console.WriteLine("CreateOrder called from JavaScript");
+            Logger.LogInformation("CreateOrder invoked via JavaScript");
             var response = await Http.PostAsync("api/cart/create-order", null);
-            Console.WriteLine($"CreateOrder response status: {response.StatusCode}");
+            Logger.LogInformation("CreateOrder response status: {StatusCode}", response.StatusCode);
             
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
-                Console.WriteLine($"Created order ID: {result?.OrderId}");
-                return result?.OrderId ?? "";
+                Logger.LogInformation("Created PayPal order {OrderId}", result?.OrderId);
+                return result?.OrderId ?? string.Empty;
             }
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"CreateOrder error: {errorContent}");
+                Logger.LogWarning("CreateOrder failed with status {StatusCode}: {Content}", response.StatusCode, errorContent);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating order: {ex.Message}");
+            Logger.LogError(ex, "Error creating PayPal order");
         }
 
-        return "";
+        return string.Empty;
     }
 
     [JSInvokable]
     public async Task SetProcessing(bool processing)
     {
-        Console.WriteLine($"SetProcessing called: {processing}");
+        Logger.LogInformation("SetProcessing called with value {Processing}", processing);
         _checkoutInProgress = processing;
         await InvokeAsync(StateHasChanged);
     }
@@ -167,19 +164,22 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 orderId = payload.GetString();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Unable to parse PayPal approval payload");
+        }
 
-        Console.WriteLine($"OnApprove called with orderId: {orderId}, payPalOrderId: {payPalOrderId}");
+        Logger.LogInformation("OnApprove invoked for orderId {OrderId} / PayPal order {PayPalOrderId}", orderId, payPalOrderId);
         
         try
         {
             var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { OrderId = orderId, PayPalOrderId = payPalOrderId });
-            Console.WriteLine($"capture-order response status: {response.StatusCode}");
+            Logger.LogInformation("capture-order response status: {StatusCode}", response.StatusCode);
             
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CaptureOrderResponse>();
-                Console.WriteLine($"Purchase completed, count: {result?.PurchasedCount}");
+                Logger.LogInformation("Purchase completed, {Count} songs bought", result?.PurchasedCount);
                 _purchasedCount = result?.PurchasedCount ?? 0;
                 _checkoutComplete = true;
                 _cartItems.Clear();
@@ -189,12 +189,12 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"capture-order error: {errorContent}");
+                Logger.LogWarning("capture-order error: {Content}", errorContent);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error capturing order: {ex.Message}");
+            Logger.LogError(ex, "Error capturing order");
         }
         finally
         {
@@ -206,7 +206,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnCancel()
     {
-        Console.WriteLine("OnCancel called - payment was cancelled");
+        Logger.LogInformation("OnCancel called - payment was cancelled");
         _checkoutInProgress = false;
         await InvokeAsync(StateHasChanged);
     }
@@ -214,7 +214,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnError(string error)
     {
-        Console.WriteLine($"OnError called - PayPal error: {error}");
+        Logger.LogError("OnError called - PayPal error: {Error}", error);
         _checkoutInProgress = false;
         await InvokeAsync(StateHasChanged);
     }
@@ -228,9 +228,9 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 await _jsModule.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit is already disconnected, safe to ignore
+            Logger.LogDebug(ex, "JS runtime disconnected while disposing checkout module");
         }
         _dotNetRef?.Dispose();
     }

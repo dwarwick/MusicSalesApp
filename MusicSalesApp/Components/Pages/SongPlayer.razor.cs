@@ -69,9 +69,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 await _jsModule.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit is already disconnected, safe to ignore
+            Logger.LogDebug(ex, "Song player JS runtime disconnected during disposal");
         }
         _dotNetRef?.Dispose();
     }
@@ -162,6 +162,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         catch (Exception ex)
         {
             _error = ex.Message;
+            Logger.LogError(ex, "Error loading song info for {SongTitle}", SongTitle);
         }
         finally
         {
@@ -186,9 +187,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _inCart = response.InCart;
             }
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            // Not authenticated or error, ignore
+            Logger.LogDebug(ex, "Unable to load song status; user may be unauthenticated");
         }
     }
 
@@ -210,9 +211,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Fallback to server proxy on error
+            Logger.LogWarning(ex, "Failed to retrieve SAS URL for {SongFile}", _songInfo?.Name);
             _streamUrl = $"api/music/{SafeEncodePath(_songInfo.Name)}";
         }
     }
@@ -252,7 +253,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error toggling cart: {ex.Message}");
+            Logger.LogError(ex, "Error toggling cart item {SongFile}", _songInfo?.Name);
         }
     }
 

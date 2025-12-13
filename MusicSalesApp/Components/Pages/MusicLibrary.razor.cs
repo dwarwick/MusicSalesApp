@@ -156,9 +156,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _jsModule = null;
             }
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit is already disconnected, safe to ignore
+            Logger.LogDebug(ex, "Music library JS runtime disconnected during disposal");
         }
         _dotNetRef?.Dispose();
         _dotNetRef = null;
@@ -332,6 +332,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         catch (Exception ex)
         {
             _error = ex.Message;
+            Logger.LogError(ex, "Error loading files for music library");
         }
         finally
         {
@@ -362,9 +363,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 _cartAlbums = new HashSet<string>(cartResponse.Albums.Select(a => a.AlbumName));
             }
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            // User not authenticated or other error, ignore
+            Logger.LogDebug(ex, "Unable to load cart or owned songs; user may not be authenticated");
         }
     }
 
@@ -437,7 +438,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error toggling cart: {ex.Message}");
+            Logger.LogError(ex, "Error toggling cart item {FileName}", fileName);
         }
     }
 
@@ -559,8 +560,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // Log and fall back to server streaming if SAS is unavailable
-            Console.WriteLine($"Failed to get SAS URL for {fileName}: {ex.Message}");
+            Logger.LogWarning(ex, "Failed to get SAS URL for {FileName}; using fallback", fileName);
         }
 
         // Fallback: stream through the MusicController
@@ -1003,7 +1003,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error toggling album cart: {ex.Message}");
+            Logger.LogError(ex, "Error toggling album cart for {AlbumName}", album.AlbumName);
         }
     }
 }
