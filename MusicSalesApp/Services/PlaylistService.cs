@@ -318,8 +318,7 @@ public class PlaylistService : IPlaylistService
                     }
                     
                     // If no metadata, fall back to filename check
-                    var fileName = os.SongFileName.ToLowerInvariant();
-                    return fileName.EndsWith(".mp3");
+                    return os.SongFileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
                 })
                 .ToList();
 
@@ -384,6 +383,11 @@ public class PlaylistService : IPlaylistService
                         // - Purchased songs: PayPalOrderId is set to the PayPal order ID
                         // - Subscription songs: PayPalOrderId is null
                         // When subscription lapses, PlaylistCleanupService removes songs where PayPalOrderId is null
+                        
+                        // Defensive check (Mp3BlobPath is filtered at query level but extra safety here)
+                        if (string.IsNullOrEmpty(metadata.Mp3BlobPath))
+                            continue;
+                            
                         var fileName = Path.GetFileName(metadata.Mp3BlobPath);
                         var newOwnedSong = new OwnedSong
                         {
