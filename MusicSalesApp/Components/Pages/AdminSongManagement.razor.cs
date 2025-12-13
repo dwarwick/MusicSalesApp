@@ -97,7 +97,7 @@ public class AdminSongManagementModel : ComponentBase
             AlbumName = m.AlbumName ?? string.Empty,
             SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
             Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
-            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
+            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
             AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
             IsAlbum = m.IsAlbumCover,
             AlbumPrice = m.AlbumPrice,

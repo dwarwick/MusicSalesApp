@@ -589,7 +589,7 @@ public class MusicUploadServiceTests
     {
         // Arrange
         var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
-        var albumArtFileName = "cover.png";
+        var albumArtFileName = "cover.bmp";
         var albumName = "My Test Album";
 
         // Act & Assert
@@ -630,6 +630,91 @@ public class MusicUploadServiceTests
 
         // Assert
         Assert.That(result.IsValid, Is.False);
+    }
+
+    #endregion
+
+    #region PNG Support Tests
+
+    [Test]
+    public void ValidateFilePairing_PngAlbumArt_ReturnsTrue()
+    {
+        // Arrange
+        var audioFileName = "Song.mp3";
+        var albumArtFileName = "Song.png";
+
+        // Act
+        var result = _service.ValidateFilePairing(audioFileName, albumArtFileName);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ValidateAllFilePairings_PngFiles_ReturnsValid()
+    {
+        // Arrange
+        var fileNames = new List<string>
+        {
+            "Song One.mp3",
+            "Song One.png",
+            "Song Two.mp3",
+            "Song Two.png"
+        };
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames);
+
+        // Assert
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.UnmatchedMp3Files, Is.Empty);
+        Assert.That(result.UnmatchedAlbumArtFiles, Is.Empty);
+    }
+
+    [Test]
+    public void ValidateAllFilePairings_MixedImageFormats_ReturnsValid()
+    {
+        // Arrange
+        var fileNames = new List<string>
+        {
+            "Song One.mp3",
+            "Song One.jpeg",
+            "Song Two.mp3",
+            "Song Two.png",
+            "Song Three.mp3",
+            "Song Three.jpg"
+        };
+
+        // Act
+        var result = _service.ValidateAllFilePairings(fileNames);
+
+        // Assert
+        Assert.That(result.IsValid, Is.True);
+        Assert.That(result.UnmatchedMp3Files, Is.Empty);
+        Assert.That(result.UnmatchedAlbumArtFiles, Is.Empty);
+    }
+
+    [Test]
+    public async Task UploadAlbumCoverAsync_PngFile_UploadsSuccessfully()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = "cover.png";
+        var albumName = "My Test Album";
+
+        _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName);
+
+        // Assert
+        Assert.That(result, Is.EqualTo("My Test Album/cover_cover.png"));
+        _mockStorageService.Verify(s => s.UploadAsync(
+            "My Test Album/cover_cover.png",
+            It.IsAny<Stream>(),
+            "image/png"), Times.Once);
     }
 
     #endregion

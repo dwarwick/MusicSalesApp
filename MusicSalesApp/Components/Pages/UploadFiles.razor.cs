@@ -34,7 +34,7 @@ public class UploadFilesModel : BlazorBase
     protected string _pendingAlbumName = string.Empty;
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
-    private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg" };
+    private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg", ".png" };
 
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {

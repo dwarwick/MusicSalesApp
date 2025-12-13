@@ -201,12 +201,12 @@ This document provides comprehensive guidance for AI agents working with the Mus
 
 Music files are classified into three distinct types based on their metadata in the SQL database:
 
-### File Type 1: Album Cover JPEG
+### File Type 1: Album Cover Image
 
 **Purpose:** Represents the album artwork for a collection of tracks.
 
 **Characteristics:**
-- File extension: `.jpeg` or `.jpg`
+- File extension: `.jpeg`, `.jpg`, or `.png`
 - Database field `IsAlbumCover: true`
 - Has `AlbumName` in database
 - Does NOT have an associated MP3 file (it's just the cover art)
@@ -240,7 +240,7 @@ var isAlbumCoverEntry = song.IsAlbum && string.IsNullOrEmpty(song.Mp3FileName);
 - File extension: `.mp3`
 - Has `AlbumName` in database (associates it with an album)
 - Has sequential `TrackNumber` within the album
-- May have associated JPEG cover art in the same folder
+- May have associated album art (JPEG or PNG) in the same folder
 
 **Required Database Fields:**
 ```
@@ -286,7 +286,7 @@ if (duplicateTrackNumber)
 **Characteristics:**
 - File extension: `.mp3`
 - Does NOT have `AlbumName` in database
-- Has associated JPEG cover art with `IsAlbumCover: false`
+- Has associated album art (JPEG or PNG) with `IsAlbumCover: false`
 - Independent pricing and metadata
 
 **Required Database Fields (MP3):**
@@ -297,14 +297,14 @@ Genre: [genre string]
 Mp3BlobPath: [path to MP3 file]
 ```
 
-**Required Database Fields (Associated JPEG):**
+**Required Database Fields (Associated Image):**
 ```
 IsAlbumCover: false
 ImageBlobPath: [path to image file]
 ```
 
 **Validation Requirements:**
-- ✅ Song cover image (JPEG) must exist
+- ✅ Song cover image (JPEG or PNG) must exist
 - ✅ Song price is REQUIRED
 - ✅ Genre is REQUIRED
 - ✅ Track length must be present (auto-extracted, read-only)

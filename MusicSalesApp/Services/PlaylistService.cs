@@ -274,7 +274,7 @@ public class PlaylistService : IPlaylistService
             }
             
             // If no metadata, fall back to filename check
-            // Album covers are typically .jpg or .jpeg, songs are .mp3
+            // Album covers are typically .jpg, .jpeg, or .png, songs are .mp3
             var fileName = ownedSong.SongFileName.ToLowerInvariant();
             return fileName.EndsWith(".mp3");
         }
