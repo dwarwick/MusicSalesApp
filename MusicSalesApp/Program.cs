@@ -1,4 +1,7 @@
 using FFMpegCore;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
@@ -6,6 +9,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
 using MusicSalesApp.Data;
@@ -115,6 +119,34 @@ builder.Services.AddScoped<ISongAdminService, SongAdminService>();
 builder.Services.AddScoped<IThemeService, ThemeService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
+builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
+
+// Add Hangfire services with SQL Server storage
+try
+{
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection"), new SqlServerStorageOptions
+        {
+            CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+            SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+            QueuePollInterval = TimeSpan.FromSeconds(15),
+            UseRecommendedIsolationLevel = true,
+            DisableGlobalLocks = true
+        }));
+    
+    // Add the Hangfire background job processing server as a service
+    builder.Services.AddHangfireServer();
+}
+catch (Exception ex)
+{
+    // If SQL Server is unreachable, log an error and continue without Hangfire
+    var logger = LoggerFactory.Create(config => config.AddConsole()).CreateLogger("Program");
+    logger.LogError(ex, "Hangfire database unavailable; skipping background job setup");
+}
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
@@ -157,6 +189,14 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
+// Configure Hangfire Dashboard with custom authorization
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireAuthorizationFilter() },
+    DashboardTitle = "Music Sales App - Background Jobs",
+    DisplayStorageConnectionString = false
+});
+
 app.MapStaticAssets();
 app.MapControllers();
 app.MapRazorPages(); // Add Razor Pages routing
@@ -192,5 +232,20 @@ GlobalFFOptions.Configure(options =>
 
 // Ensure temp directory exists
 Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
+
+// Initialize recurring Hangfire jobs
+try
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
+        backgroundJobService.InitializeRecurringJobs();
+    }
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning(ex, "Failed to initialize Hangfire recurring jobs. Hangfire may not be configured.");
+}
 
 app.Run();
