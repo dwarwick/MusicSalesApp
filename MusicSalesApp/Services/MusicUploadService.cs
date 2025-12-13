@@ -19,7 +19,7 @@ namespace MusicSalesApp.Services
 
         private const string MasteredSuffix = "_mastered";
         private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
-        private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg" };
+        private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg", ".png" };
 
         public MusicUploadService(
             IAzureStorageService storageService,
@@ -195,7 +195,13 @@ namespace MusicSalesApp.Services
             // Create folder path and file paths
             string folderPath = baseName;
             string mp3Path = $"{folderPath}/{mp3FileName}";
-            string albumArtPath = $"{folderPath}/{baseName}.jpeg";
+            
+            // Preserve original image file extension
+            var albumArtExtension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
+            string albumArtPath = $"{folderPath}/{baseName}{albumArtExtension}";
+            
+            // Determine content type based on extension
+            string imageContentType = GetImageContentType(albumArtExtension);
 
             // Get track duration from the MP3 file (after conversion if needed)
             double? trackDuration = null;
@@ -219,7 +225,7 @@ namespace MusicSalesApp.Services
                 // Upload album art (no tags)
                 _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
                 albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumArtPath, albumArtStream, "image/jpeg");
+                await _storageService.UploadAsync(albumArtPath, albumArtStream, imageContentType);
 
                 // Save metadata to database - single record with both MP3 and image paths
                 await _metadataService.UpsertAsync(new Models.SongMetadata
@@ -264,7 +270,7 @@ namespace MusicSalesApp.Services
             // Validate file extension
             if (!IsAlbumArtFile(albumArtFileName))
             {
-                throw new InvalidDataException($"File {albumArtFileName} is not a valid album art file. Accepted formats: JPEG, JPG.");
+                throw new InvalidDataException($"File {albumArtFileName} is not a valid album art file. Accepted formats: JPEG, JPG, PNG.");
             }
 
             // Buffer stream if needed
@@ -282,12 +288,18 @@ namespace MusicSalesApp.Services
             // Create a sanitized album name for the folder/file path
             var sanitizedAlbumName = SanitizeForPath(albumName);
             var baseName = GetNormalizedBaseName(albumArtFileName);
-            string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover.jpeg";
+            
+            // Preserve original image file extension
+            var albumArtExtension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
+            string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover{albumArtExtension}";
+            
+            // Determine content type based on extension
+            string imageContentType = GetImageContentType(albumArtExtension);
 
             // Upload album cover (no tags)
             _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
             albumArtStream.Position = 0;
-            await _storageService.UploadAsync(albumCoverPath, albumArtStream, "image/jpeg");
+            await _storageService.UploadAsync(albumCoverPath, albumArtStream, imageContentType);
 
             // Save metadata to database
             await _metadataService.UpsertAsync(new Models.SongMetadata
@@ -295,7 +307,7 @@ namespace MusicSalesApp.Services
                 BlobPath = albumCoverPath, // Kept for backward compatibility
                 Mp3BlobPath = null, // No MP3 for album cover
                 ImageBlobPath = albumCoverPath,
-                FileExtension = ".jpeg",
+                FileExtension = albumArtExtension,
                 AlbumName = albumName,
                 IsAlbumCover = true
             });
@@ -440,6 +452,17 @@ namespace MusicSalesApp.Services
 
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
             return ValidAlbumArtExtensions.Contains(extension);
+        }
+
+        private static string GetImageContentType(string extension)
+        {
+            return extension.ToLowerInvariant() switch
+            {
+                ".jpg" => "image/jpeg",
+                ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                _ => "image/jpeg" // Default fallback
+            };
         }
     }
 }

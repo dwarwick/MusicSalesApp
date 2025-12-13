@@ -30,7 +30,7 @@ public class SongMetadata
     public string ImageBlobPath { get; set; }
 
     /// <summary>
-    /// File extension (.mp3, .jpg, .jpeg) - DEPRECATED
+    /// File extension (.mp3, .jpg, .jpeg, .png) - DEPRECATED
     /// </summary>
     [MaxLength(10)]
     public string FileExtension { get; set; } = string.Empty;

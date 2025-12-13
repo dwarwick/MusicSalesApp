@@ -34,7 +34,7 @@ namespace MusicSalesApp.Services
         /// </summary>
         /// <param name="audioStream">The MP3 audio file stream.</param>
         /// <param name="audioFileName">Original filename of the MP3 file.</param>
-        /// <param name="albumArtStream">The JPEG album art file stream.</param>
+        /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
         /// <param name="albumArtFileName">Original filename of the album art file.</param>
         /// <param name="albumName">Optional album name to store as metadata.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -50,7 +50,7 @@ namespace MusicSalesApp.Services
         /// <summary>
         /// Uploads an album cover image file to storage with metadata indicating it is the album cover.
         /// </summary>
-        /// <param name="albumArtStream">The JPEG album art file stream.</param>
+        /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
         /// <param name="albumArtFileName">Original filename of the album art file.</param>
         /// <param name="albumName">The album name to store as metadata.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -79,7 +79,7 @@ namespace MusicSalesApp.Services
         string GetNormalizedBaseName(string fileName);
 
         /// <summary>
-        /// Validates that all provided files have matching pairs (MP3 with JPEG).
+        /// Validates that all provided files have matching pairs (MP3 with JPEG/PNG).
         /// </summary>
         /// <param name="fileNames">List of filenames to validate.</param>
         /// <param name="requireAudioFile">If true, requires at least one audio file. Defaults to true.</param>

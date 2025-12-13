@@ -46,6 +46,7 @@ public class UploadFilesTests : BUnitTestBase
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("JPEG"));
+        Assert.That(cut.Markup, Does.Contain("PNG"));
     }
 
     [Test]
