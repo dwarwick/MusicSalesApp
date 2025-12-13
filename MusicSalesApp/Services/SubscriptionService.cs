@@ -186,7 +186,7 @@ public class SubscriptionService : ISubscriptionService
         using var context = await _contextFactory.CreateDbContextAsync();
         
         // Find the most recent subscription for this user that hasn't been paid for yet
-        // (no LastPaymentDate and created recently)
+        // (no LastPaymentDate)
         var pendingSubscription = await context.Subscriptions
             .Where(s => s.UserId == userId && 
                        s.Status == "ACTIVE" && 
