@@ -87,6 +87,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
     private bool _isAuthenticated;
+    protected bool _hasActiveSubscription;
 
     protected override async Task OnInitializedAsync()
     {
@@ -342,6 +343,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         try
         {
+            // Check subscription status
+            var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+            _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
             // Load owned songs
             var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
             _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
@@ -590,6 +595,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected bool IsCurrentPlayingTrackRestricted()
     {
+        // If user has an active subscription, they can listen to everything
+        if (_hasActiveSubscription)
+            return false;
+
         // Non-authenticated users are always restricted
         if (!_isAuthenticated)
             return true;

@@ -51,6 +51,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IPlaylistService PlaylistService { get; set; } = default!;
 
+    [Inject]
+    protected ISubscriptionService SubscriptionService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

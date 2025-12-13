@@ -1,0 +1,116 @@
+@page "/manage-subscription"
+@inherits ManageSubscriptionModel
+
+<PageTitle>Manage Subscription</PageTitle>
+
+<div class="subscription-container">
+    <h2>Manage Your Subscription</h2>
+
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <p>Loading...</p>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <div class="login-prompt">
+            <p>Please <a href="/login">log in</a> to manage your subscription.</p>
+        </div>
+    }
+    else if (_successMessage != null)
+    {
+        <div class="success-message">
+            <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
+        </div>
+    }
+    else if (_errorMessage != null)
+    {
+        <div class="error-message">
+            <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
+        </div>
+    }
+
+    @if (_isAuthenticated && !_loading)
+    {
+        @if (_hasSubscription)
+        {
+            <div class="subscription-info">
+                <SfCard>
+                    <CardHeader Title="Your Active Subscription" />
+                    <CardContent>
+                        <div class="subscription-details">
+                            <p><strong>Status:</strong> @_subscriptionStatus</p>
+                            <p><strong>Monthly Price:</strong> $@_monthlyPrice</p>
+                            @if (_startDate.HasValue)
+                            {
+                                <p><strong>Started:</strong> @_startDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                            }
+                            @if (_nextBillingDate.HasValue)
+                            {
+                                <p><strong>Next Billing Date:</strong> @_nextBillingDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                            }
+                            @if (_endDate.HasValue)
+                            {
+                                <p><strong>Access Until:</strong> @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")</p>
+                                <p class="subscription-note">Your subscription has been cancelled. You can continue to enjoy unlimited music streaming until @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt").</p>
+                            }
+                            else
+                            {
+                                <p class="subscription-note">You have unlimited access to all music on our platform.</p>
+                            }
+                        </div>
+                    </CardContent>
+                    <CardFooter>
+                        @if (!_endDate.HasValue && !_cancelling)
+                        {
+                            <SfButton OnClick="@CancelSubscription" CssClass="e-btn e-danger">Cancel Subscription</SfButton>
+                        }
+                        else if (_cancelling)
+                        {
+                            <p>Processing...</p>
+                        }
+                    </CardFooter>
+                </SfCard>
+            </div>
+        }
+        else
+        {
+            <div class="subscription-signup">
+                <SfCard>
+                    <CardHeader Title="Unlimited Music Streaming" />
+                    <CardContent>
+                        <div class="subscription-description">
+                            <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
+                            <p>Enjoy unlimited streaming of all music on our platform.</p>
+                            
+                            <div class="subscription-terms">
+                                <h4>Subscription Terms:</h4>
+                                <ul>
+                                    <li>Monthly fee of <strong>${@_subscriptionPrice}</strong> will continue until cancelled by the user.</li>
+                                    <li>The charge will occur on or about the same day each month, subject to PayPal's policy.</li>
+                                    <li>Once cancelled, the subscription will be in effect until the end of the paid month.</li>
+                                    <li>You can cancel at any time from this page.</li>
+                                </ul>
+                            </div>
+
+                            <div class="terms-agreement">
+                                <SfCheckBox @bind-Checked="_agreeToTerms" Label="I agree to the subscription terms and conditions" TChecked="bool" />
+                            </div>
+                        </div>
+                    </CardContent>
+                    <CardFooter>
+                        @if (!_subscribing)
+                        {
+                            <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="e-btn e-primary">Sign Up for Monthly Subscription</SfButton>
+                        }
+                        else
+                        {
+                            <p>Processing your subscription...</p>
+                        }
+                    </CardFooter>
+                </SfCard>
+            </div>
+        }
+    }
+</div>
