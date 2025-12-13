@@ -11,4 +11,5 @@ public interface ISubscriptionService
     Task<Subscription> GetSubscriptionByPayPalIdAsync(string paypalSubscriptionId);
     Task UpdateSubscriptionStatusAsync(string paypalSubscriptionId, string status, DateTime? nextBillingDate = null);
     Task UpdateSubscriptionDetailsAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate);
+    Task<bool> DeletePendingSubscriptionAsync(int userId);
 }

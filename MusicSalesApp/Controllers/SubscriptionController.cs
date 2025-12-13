@@ -228,6 +228,24 @@ public class SubscriptionController : ControllerBase
         });
     }
 
+    [HttpPost("delete-pending")]
+    public async Task<IActionResult> DeletePendingSubscription()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var deleted = await _subscriptionService.DeletePendingSubscriptionAsync(user.Id);
+
+        if (deleted)
+        {
+            _logger.LogInformation("User {UserId} deleted pending subscription after PayPal cancellation", user.Id);
+            return Ok(new { success = true });
+        }
+        
+        return Ok(new { success = false, message = "No pending subscription found" });
+    }
+
+
     private async Task<string> GetOrCreateSubscriptionPlanAsync()
     {
         try
