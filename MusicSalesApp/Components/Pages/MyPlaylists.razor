@@ -19,12 +19,12 @@
         </SfButton>
     </div>
 
-    @if (!_hasActiveSubscription && !_loading)
+    @if (!_hasActiveSubscription && !_hasOwnedSongs && !_loading)
     {
         <div class="subscription-warning">
             <div class="e-alert e-alert-warning">
-                <strong>Subscription Required:</strong> You need an active subscription to create and manage playlists. 
-                <a href="/subscription">Subscribe now</a> to unlock this feature.
+                <strong>Limited Access:</strong> To create playlists, you need to either have an active subscription or own at least one song. 
+                <a href="/subscription">Subscribe now</a> for unlimited access or <a href="/music-library">browse the library</a> to purchase songs.
             </div>
         </div>
     }

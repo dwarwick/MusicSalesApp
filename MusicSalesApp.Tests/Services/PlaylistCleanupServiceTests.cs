@@ -145,6 +145,12 @@ public class PlaylistCleanupServiceTests
         var remainingSongs = await _context.UserPlaylists.ToListAsync();
         Assert.That(remainingSongs.Count, Is.EqualTo(1));
         Assert.That(remainingSongs[0].OwnedSongId, Is.EqualTo(purchasedSong.Id));
+        
+        // Verify the subscription-based OwnedSong record was deleted
+        var remainingOwnedSongs = await _context.OwnedSongs.ToListAsync();
+        Assert.That(remainingOwnedSongs.Count, Is.EqualTo(1));
+        Assert.That(remainingOwnedSongs[0].Id, Is.EqualTo(purchasedSong.Id));
+        Assert.That(remainingOwnedSongs[0].PayPalOrderId, Is.EqualTo("ORDER-123"));
     }
 
     [Test]
