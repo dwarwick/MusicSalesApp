@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -9,9 +10,14 @@ public partial class HomeModel : BlazorBase
     protected IConfiguration Configuration { get; set; }
 
     protected string _subscriptionPrice;
+    protected bool _hasActiveSubscription = false;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Check subscription status
+        var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+        _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
         _subscriptionPrice = Configuration["PayPal:SubscriptionPrice"] ?? "3.99";
     }
 }

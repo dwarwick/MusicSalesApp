@@ -7,24 +7,26 @@
     <h1>Welcome to Stream Tunes!</h1>
 
     <p>Discover and enjoy unlimited music streaming!</p>
-
-    <div class="subscription-offer">
-        <SfCard>
-            <CardHeader Title="Unlimited Music Streaming" />
-            <CardContent>
-                <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
-                <p>Get unlimited access to all music on our platform.</p>
-                <ul>
-                    <li>Stream any song, anytime</li>
-                    <li>No ads or interruptions</li>
-                    <li>Cancel anytime</li>
-                </ul>
-            </CardContent>
-            <CardFooter>
-                <SfButton OnClick="@(() => NavigationManager.NavigateTo("/manage-subscription"))" CssClass="e-btn e-primary">
-                    Sign Up for Monthly Subscription
-                </SfButton>
-            </CardFooter>
-        </SfCard>
-    </div>
+    @if (!_hasActiveSubscription)
+    {
+        <div class="subscription-offer">
+            <SfCard>
+                <CardHeader Title="Unlimited Music Streaming" />
+                <CardContent>
+                    <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
+                    <p>Get unlimited access to all music on our platform.</p>
+                    <ul>
+                        <li>Stream any song, anytime</li>
+                        <li>No ads or interruptions</li>
+                        <li>Cancel anytime</li>
+                    </ul>
+                </CardContent>
+                <CardFooter>
+                    <SfButton OnClick="@(() => NavigationManager.NavigateTo("/manage-subscription"))" CssClass="e-btn e-primary">
+                        Sign Up for Monthly Subscription
+                    </SfButton>
+                </CardFooter>
+            </SfCard>
+        </div>
+    }
 </div>
