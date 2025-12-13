@@ -161,15 +161,27 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var migrationLogger = services.GetRequiredService<ILogger<Program>>();
     try
     {
+        migrationLogger.LogInformation("Starting database migration...");
         var db = services.GetRequiredService<AppDbContext>();
+        
+        // Test database connection first
+        if (!db.Database.CanConnect())
+        {
+            migrationLogger.LogError("Cannot connect to database. Check your connection string.");
+            throw new InvalidOperationException("Database connection failed. Please verify your connection string in appsettings.json or environment variables.");
+        }
+        
         db.Database.Migrate();
+        migrationLogger.LogInformation("Database migration completed successfully.");
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while applying database migrations.");
+        migrationLogger.LogError(ex, "CRITICAL ERROR: An error occurred while applying database migrations. Application cannot start.");
+        migrationLogger.LogError("Connection String (masked): {ConnectionString}", 
+            builder.Configuration.GetConnectionString("DefaultConnection")?.Substring(0, Math.Min(50, builder.Configuration.GetConnectionString("DefaultConnection")?.Length ?? 0)) + "...");
         throw; // rethrow to fail fast if migrations cannot be applied
     }
 }
@@ -207,7 +219,7 @@ app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery)
 {
     var tokens = antiforgery.GetAndStoreTokens(context);
 
-    // Use the framework�s own field name instead of hard-coding
+    // Use the framework's own field name instead of hard-coding
     return Results.Json(new
     {
         token = tokens.RequestToken,
@@ -217,12 +229,13 @@ app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery)
 
 // This is the folder where appsettings.json lives (and where you said ffmpeg.exe is)
 var ffRoot = app.Environment.ContentRootPath;
+var ffmpegLogger = app.Services.GetRequiredService<ILogger<Program>>();
 
 // Optional: quick diagnostic log to confirm paths on the server
 var ffmpegPath = Path.Combine(ffRoot, "ffmpeg.exe");
-Console.WriteLine($"[FFMPEG] ContentRootPath: {ffRoot}");
-Console.WriteLine($"[FFMPEG] Expecting ffmpeg at: {ffmpegPath}");
-Console.WriteLine($"[FFMPEG] Exists? {File.Exists(ffmpegPath)}");
+ffmpegLogger.LogInformation("[FFMPEG] ContentRootPath: {ContentRootPath}", ffRoot);
+ffmpegLogger.LogInformation("[FFMPEG] Expecting ffmpeg at: {FFmpegPath}", ffmpegPath);
+ffmpegLogger.LogInformation("[FFMPEG] Exists? {Exists}", File.Exists(ffmpegPath));
 
 GlobalFFOptions.Configure(options =>
 {
@@ -234,18 +247,22 @@ GlobalFFOptions.Configure(options =>
 Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
 
 // Initialize recurring Hangfire jobs
+var hangfireLogger = app.Services.GetRequiredService<ILogger<Program>>();
 try
 {
+    hangfireLogger.LogInformation("Initializing Hangfire recurring jobs...");
+    
     using (var scope = app.Services.CreateScope())
     {
         var backgroundJobService = scope.ServiceProvider.GetRequiredService<IBackgroundJobService>();
         backgroundJobService.InitializeRecurringJobs();
     }
+    
+    hangfireLogger.LogInformation("Hangfire recurring jobs initialized successfully.");
 }
 catch (Exception ex)
 {
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogWarning(ex, "Failed to initialize Hangfire recurring jobs. Hangfire may not be configured.");
+    hangfireLogger.LogWarning(ex, "Failed to initialize Hangfire recurring jobs. Hangfire may not be configured.");
 }
 
 app.Run();

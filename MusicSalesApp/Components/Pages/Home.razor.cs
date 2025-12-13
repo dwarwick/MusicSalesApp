@@ -12,12 +12,18 @@ public partial class HomeModel : BlazorBase
     protected string _subscriptionPrice;
     protected bool _hasActiveSubscription = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Check subscription status
-        var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-        _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
         _subscriptionPrice = Configuration["PayPal:SubscriptionPrice"] ?? "3.99";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check subscription status
+            var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+            _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+        }
     }
 }
