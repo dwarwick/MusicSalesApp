@@ -325,8 +325,8 @@ else
                                         <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
                                     </div>
                                 }
-                                <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg" class="form-control" />
-                                <small class="text-muted">Upload a new song cover image (JPEG only)</small>
+                                <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
+                                <small class="text-muted">Upload a new song cover image (JPEG or PNG)</small>
                                 @if (_songImageFile != null)
                                 {
                                     <div class="mt-2 text-success">
@@ -353,8 +353,8 @@ else
                                 {
                                     <div class="alert alert-warning mb-2">No album cover found</div>
                                 }
-                                <InputFile OnChange="HandleAlbumImageUpload" accept=".jpeg,.jpg" class="form-control" />
-                                <small class="text-muted">Upload a new album cover image (JPEG only)</small>
+                                <InputFile OnChange="HandleAlbumImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
+                                <small class="text-muted">Upload a new album cover image (JPEG or PNG)</small>
                                 @if (_albumImageFile != null)
                                 {
                                     <div class="mt-2 text-success">

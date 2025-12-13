@@ -261,20 +261,30 @@ public class AdminSongManagementModel : ComponentBase
             if (_songImageFile != null && !_editingSong.IsAlbum)
             {
                 using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                
+                // Get the file extension from the uploaded file
+                var fileExtension = Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
+                var contentType = GetImageContentType(fileExtension);
+                
                 var newFileName = _editingSong.JpegFileName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
-                    newFileName = $"{_editingSong.SongTitle}.jpeg";
+                    newFileName = $"{_editingSong.SongTitle}{fileExtension}";
+                }
+                else
+                {
+                    // Replace the old extension with the new one
+                    newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
+                await StorageService.UploadAsync(newFileName, stream, contentType);
                 _editingSong.JpegFileName = newFileName;
 
                 // Create/update metadata in database
                 await MetadataService.UpsertAsync(new SongMetadata
                 {
                     BlobPath = newFileName,
-                    FileExtension = ".jpeg",
+                    FileExtension = fileExtension,
                     AlbumName = _editingSong.AlbumName ?? string.Empty,
                     IsAlbumCover = false,
                     Genre = _editGenre,
@@ -285,20 +295,30 @@ public class AdminSongManagementModel : ComponentBase
             if (_albumImageFile != null && _editingSong.IsAlbum)
             {
                 using var stream = _albumImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                
+                // Get the file extension from the uploaded file
+                var fileExtension = Path.GetExtension(_albumImageFile.Name).ToLowerInvariant();
+                var contentType = GetImageContentType(fileExtension);
+                
                 var newFileName = _editingSong.AlbumCoverBlobName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
-                    newFileName = $"{_editingSong.AlbumName}_cover.jpeg";
+                    newFileName = $"{_editingSong.AlbumName}_cover{fileExtension}";
+                }
+                else
+                {
+                    // Replace the old extension with the new one
+                    newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
-                await StorageService.UploadAsync(newFileName, stream, "image/jpeg");
+                await StorageService.UploadAsync(newFileName, stream, contentType);
                 _editingSong.AlbumCoverBlobName = newFileName;
 
                 // Create/update metadata in database
                 await MetadataService.UpsertAsync(new SongMetadata
                 {
                     BlobPath = newFileName,
-                    FileExtension = ".jpeg",
+                    FileExtension = fileExtension,
                     AlbumName = _editingSong.AlbumName,
                     IsAlbumCover = true,
                     AlbumPrice = _editAlbumPrice
@@ -399,5 +419,16 @@ public class AdminSongManagementModel : ComponentBase
     protected void HandleAlbumImageUpload(InputFileChangeEventArgs e)
     {
         _albumImageFile = e.File;
+    }
+
+    private static string GetImageContentType(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => "image/jpeg" // Default fallback
+        };
     }
 }
