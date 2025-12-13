@@ -63,7 +63,26 @@ public class ManageSubscriptionModel : BlazorBase
                 }
                 else
                 {
-                    _errorMessage = "Subscription setup was cancelled.";
+                    // User cancelled the subscription setup on PayPal
+                    // Delete the pending subscription that was created
+                    try
+                    {
+                        var deleteResponse = await Http.PostAsync("api/subscription/delete-pending", null);
+                        if (deleteResponse.IsSuccessStatusCode)
+                        {
+                            _errorMessage = "Subscription setup was cancelled.";
+                        }
+                        else
+                        {
+                            _errorMessage = "Subscription setup was cancelled. Please try again if you wish to subscribe.";
+                        }
+                        await LoadSubscriptionStatus(); // Refresh status to show no subscription
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error deleting pending subscription: {ex.Message}");
+                        _errorMessage = "Subscription setup was cancelled.";
+                    }
                 }
             }
         }

@@ -162,4 +162,64 @@ public class SubscriptionServiceTests
         Assert.That(subscription.Status, Is.EqualTo(newStatus));
         Assert.That(subscription.NextBillingDate, Is.Not.Null);
     }
+
+    [Test]
+    public async Task DeletePendingSubscriptionAsync_DeletesUnpaidSubscription()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-123456789";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Act - Delete pending subscription (no payment made yet)
+        var result = await _service.DeletePendingSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.True);
+        
+        // Verify subscription is deleted
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        Assert.That(subscription, Is.Null);
+    }
+
+    [Test]
+    public async Task DeletePendingSubscriptionAsync_DoesNotDeletePaidSubscription()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-123456789";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+        
+        // Simulate payment by setting LastPaymentDate
+        await _service.UpdateSubscriptionDetailsAsync(
+            paypalSubscriptionId, 
+            DateTime.UtcNow.AddMonths(1), 
+            DateTime.UtcNow);
+
+        // Act - Try to delete but it has payment so should not delete
+        var result = await _service.DeletePendingSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.False);
+        
+        // Verify subscription still exists
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        Assert.That(subscription, Is.Not.Null);
+        Assert.That(subscription.Status, Is.EqualTo("ACTIVE"));
+    }
+
+    [Test]
+    public async Task DeletePendingSubscriptionAsync_ReturnsFalseWhenNoSubscription()
+    {
+        // Arrange
+        var userId = 1;
+
+        // Act
+        var result = await _service.DeletePendingSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
 }

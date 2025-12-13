@@ -180,4 +180,30 @@ public class SubscriptionService : ISubscriptionService
 
         _logger.LogInformation("Updated subscription {SubscriptionId} billing details", subscription.Id);
     }
+
+    public async Task<bool> DeletePendingSubscriptionAsync(int userId)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        // Find the most recent subscription for this user that hasn't been paid for yet
+        // (no LastPaymentDate and created recently)
+        var pendingSubscription = await context.Subscriptions
+            .Where(s => s.UserId == userId && 
+                       s.Status == "ACTIVE" && 
+                       s.LastPaymentDate == null)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (pendingSubscription == null)
+            return false;
+
+        // Delete the pending subscription
+        context.Subscriptions.Remove(pendingSubscription);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Deleted pending subscription {SubscriptionId} for user {UserId}", 
+            pendingSubscription.Id, userId);
+        
+        return true;
+    }
 }
