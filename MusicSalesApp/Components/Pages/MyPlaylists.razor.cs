@@ -155,16 +155,18 @@ public partial class MyPlaylistsModel : BlazorBase
         {
             try
             {
-                await PlaylistService.DeletePlaylistAsync(_playlistToDelete.Id, _currentUserId);
+                var deletedPlaylistId = _playlistToDelete.Id;
+                
+                await PlaylistService.DeletePlaylistAsync(deletedPlaylistId, _currentUserId);
                 await LoadPlaylists();
-                CloseDeleteDialog();
                 
                 // If we were viewing this playlist, close the view
-                if (_selectedPlaylist?.Id == _playlistToDelete.Id)
+                if (_selectedPlaylist?.Id == deletedPlaylistId)
                 {
                     ClosePlaylistView();
                 }
                 
+                CloseDeleteDialog();
                 _error = null;
             }
             catch (Exception ex)
