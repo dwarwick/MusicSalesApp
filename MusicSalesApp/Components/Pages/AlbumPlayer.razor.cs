@@ -474,9 +474,9 @@ namespace MusicSalesApp.Components.Pages
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error toggling cart: {ex.Message}");
+                // Error toggling cart
             }
         }
 
@@ -677,10 +677,9 @@ namespace MusicSalesApp.Components.Pages
                     return result.Url;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log and fall back to server streaming if SAS is unavailable
-                Console.WriteLine($"Failed to get SAS URL for {fileName}: {ex.Message}");
+                // Fall back to server streaming if SAS is unavailable
             }
 
             // Fallback: stream through the MusicController
