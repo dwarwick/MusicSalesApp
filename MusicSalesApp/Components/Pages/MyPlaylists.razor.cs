@@ -21,6 +21,7 @@ public partial class MyPlaylistsModel : BlazorBase
     protected bool _showAddSongDialog = false;
     protected bool _viewingSongs = false;
     protected int _currentUserId;
+    protected bool _hasActiveSubscription = false;
     private bool _hasLoadedData = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -39,6 +40,10 @@ public partial class MyPlaylistsModel : BlazorBase
                     if (appUser != null)
                     {
                         _currentUserId = appUser.Id;
+                        
+                        // Check if user has active subscription
+                        _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId);
+                        
                         await LoadPlaylists();
                     }
                 }
@@ -70,6 +75,13 @@ public partial class MyPlaylistsModel : BlazorBase
 
     protected void ShowCreatePlaylistDialog()
     {
+        // Check if user has active subscription
+        if (!_hasActiveSubscription)
+        {
+            _error = "You need an active subscription to create playlists. Please subscribe to continue.";
+            return;
+        }
+        
         _editingPlaylist = null;
         _playlistName = string.Empty;
         _showPlaylistDialog = true;
