@@ -24,6 +24,8 @@ public partial class HomeModel : BlazorBase
             // Check subscription status
             var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
             _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
+            StateHasChanged();
         }
     }
 }
