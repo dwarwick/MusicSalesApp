@@ -94,6 +94,22 @@
 /* Preview Label */
 .preview-label { color: #ffa500; font-size: 14px; font-weight: 500; margin-top: 8px; }
 
+/* Subscription Badge */
+.subscription-badge {
+    color: #1ed760;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.subscription-badge svg {
+    width: 16px;
+    height: 16px;
+}
+
 /* Add to Cart Button on SongPlayer */
 .action-controls { position: relative; }
 

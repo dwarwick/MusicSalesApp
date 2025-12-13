@@ -19,6 +19,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongMetadata> SongMetadata { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<UserPlaylist> UserPlaylists { get; set; }
+    public DbSet<Subscription> Subscriptions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

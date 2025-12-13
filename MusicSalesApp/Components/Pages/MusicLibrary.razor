@@ -4,13 +4,16 @@
 
 <h3>Music Library</h3>
 
-<AuthorizeView>
-    <Authorized>
-        <SfRadioButton TChecked="string" Label="All Music" Name="musicFilter" Value="All" @bind-Checked="_filterModeString"></SfRadioButton>
-        <SfRadioButton TChecked="string" Label="Owned" Name="musicFilter" Value="Owned" @bind-Checked="_filterModeString"></SfRadioButton>
-        <SfRadioButton TChecked="string" Label="Not Owned" Name="musicFilter" Value="NotOwned" @bind-Checked="_filterModeString"></SfRadioButton>
-    </Authorized>
-</AuthorizeView>
+@if (!_hasActiveSubscription)
+{
+    <AuthorizeView>
+        <Authorized>
+            <SfRadioButton TChecked="string" Label="All Music" Name="musicFilter" Value="All" @bind-Checked="_filterModeString"></SfRadioButton>
+            <SfRadioButton TChecked="string" Label="Owned" Name="musicFilter" Value="Owned" @bind-Checked="_filterModeString"></SfRadioButton>
+            <SfRadioButton TChecked="string" Label="Not Owned" Name="musicFilter" Value="NotOwned" @bind-Checked="_filterModeString"></SfRadioButton>
+        </Authorized>
+    </AuthorizeView>
+}
 
 @if (_loading)
 {
@@ -156,7 +159,7 @@ else
                 <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the album) -->
                 <AuthorizeView>
                     <Authorized>
-                        @if (!owned)
+                        @if (!owned && !_hasActiveSubscription)
                         {
                             <div class="cart-button-wrapper">
                                 <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
@@ -310,7 +313,7 @@ else
                 <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the song) -->
                 <AuthorizeView>
                     <Authorized>
-                        @if (!owned)
+                        @if (!owned && !_hasActiveSubscription)
                         {
                             <div class="cart-button-wrapper">
                                 <SfButton CssClass="@($"card-cart-button mt-2 {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")"

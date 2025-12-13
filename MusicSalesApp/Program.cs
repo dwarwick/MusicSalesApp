@@ -114,6 +114,7 @@ builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
 builder.Services.AddScoped<ISongAdminService, SongAdminService>();
 builder.Services.AddScoped<IThemeService, ThemeService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 
 builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
 builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();

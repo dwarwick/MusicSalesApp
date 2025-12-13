@@ -320,6 +320,21 @@
     margin-top: 8px;
 }
 
+.subscription-badge {
+    color: #1ed760;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.subscription-badge svg {
+    width: 16px;
+    height: 16px;
+}
+
 /* Add to Cart Button on AlbumPlayer */
 .cart-button-large {
     display: flex;
