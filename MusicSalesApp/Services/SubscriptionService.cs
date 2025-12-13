@@ -24,7 +24,8 @@ public class SubscriptionService : ISubscriptionService
         var now = DateTime.UtcNow;
         return await context.Subscriptions
             .Where(s => s.UserId == userId)
-            .Where(s => s.Status == "ACTIVE" && (s.EndDate == null || s.EndDate > now))
+            .Where(s => (s.Status == "ACTIVE" && (s.EndDate == null || s.EndDate > now)) ||
+                                 (s.Status == "CANCELLED" && s.EndDate > now))
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
     }

@@ -68,7 +68,7 @@
                     <!-- Add to Cart Button -->
                     <AuthorizeView>
                         <Authorized>
-                            @if (!_ownsSong)
+                            @if (!_ownsSong && !_hasActiveSubscription)
                             {
                                 <div class="cart-button-wrapper">
                                     <button class="@($"cart-button-large {(_inCart ? "in-cart" : "")} {(_cartAnimating ? "animating" : "")}")"

@@ -74,7 +74,7 @@
                         {
                             <AuthorizeView>
                                 <Authorized>
-                                    @if (!_ownsAlbum)
+                                    @if (!_ownsAlbum && !_hasActiveSubscription)
                                     {
                                         <button class="@($"cart-button-large {(_inCart ? "in-cart" : "")} {(_cartAnimating ? "animating" : "")}")"
                                                 @onclick="ToggleCart"
