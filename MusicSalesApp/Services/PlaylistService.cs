@@ -347,6 +347,19 @@ public class PlaylistService : IPlaylistService
 
                 var playlistMetadataIdSet = new HashSet<int>(playlistMetadataIds);
 
+                // Load all existing OwnedSong records for this user upfront to avoid N+1 queries
+                var existingUserOwnedSongs = await context.OwnedSongs
+                    .Include(os => os.SongMetadata)
+                    .Where(os => os.UserId == userId && os.SongMetadataId != null)
+                    .ToListAsync();
+
+                var existingOwnedSongsByMetadata = existingUserOwnedSongs
+                    .Where(os => os.SongMetadataId.HasValue)
+                    .ToDictionary(os => os.SongMetadataId.Value, os => os);
+
+                // Collect new OwnedSong records to add in batch
+                var newOwnedSongs = new List<OwnedSong>();
+
                 // For each song metadata not already owned or in playlist, create/find an OwnedSong reference
                 foreach (var metadata in allSongMetadata)
                 {
@@ -359,30 +372,39 @@ public class PlaylistService : IPlaylistService
                         continue;
 
                     // Check if we already have an OwnedSong record for this user and metadata
-                    var userOwnedSong = await context.OwnedSongs
-                        .Include(os => os.SongMetadata)
-                        .FirstOrDefaultAsync(os => os.UserId == userId && os.SongMetadataId == metadata.Id);
-
-                    if (userOwnedSong == null)
+                    if (existingOwnedSongsByMetadata.TryGetValue(metadata.Id, out var userOwnedSong))
+                    {
+                        // Reuse existing OwnedSong record
+                        availableOwnedSongs.Add(userOwnedSong);
+                    }
+                    else
                     {
                         // Create a "virtual" OwnedSong record for subscription access
-                        // No PayPalOrderId indicates this is subscription-based access
+                        // IMPORTANT: PayPalOrderId = null distinguishes subscription access from purchases
+                        // - Purchased songs: PayPalOrderId is set to the PayPal order ID
+                        // - Subscription songs: PayPalOrderId is null
+                        // When subscription lapses, PlaylistCleanupService removes songs where PayPalOrderId is null
                         var fileName = Path.GetFileName(metadata.Mp3BlobPath);
-                        userOwnedSong = new OwnedSong
+                        var newOwnedSong = new OwnedSong
                         {
                             UserId = userId,
                             SongFileName = fileName,
                             SongMetadataId = metadata.Id,
                             SongMetadata = metadata,
                             PurchasedAt = DateTime.UtcNow,
-                            PayPalOrderId = null // Null indicates subscription access, not a purchase
+                            PayPalOrderId = null // Null = subscription access (cleaned up when subscription lapses)
                         };
 
-                        context.OwnedSongs.Add(userOwnedSong);
-                        await context.SaveChangesAsync(); // Save immediately to get the ID
+                        newOwnedSongs.Add(newOwnedSong);
+                        availableOwnedSongs.Add(newOwnedSong);
                     }
+                }
 
-                    availableOwnedSongs.Add(userOwnedSong);
+                // Save all new OwnedSong records in a single batch operation
+                if (newOwnedSongs.Any())
+                {
+                    context.OwnedSongs.AddRange(newOwnedSongs);
+                    await context.SaveChangesAsync();
                 }
             }
 
