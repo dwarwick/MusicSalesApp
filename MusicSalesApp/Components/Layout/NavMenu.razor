@@ -67,6 +67,12 @@
                     </Authorized>
                 </AuthorizeView>
 
+                <AuthorizeView Policy="@Permissions.UseHangfire">
+                    <Authorized>
+                        <MenuItem Url="/hangfire" Text="Hangfire Dashboard" IconCss="fas fa-solid fa-gauge-high"></MenuItem>
+                    </Authorized>
+                </AuthorizeView>
+
                 <AuthorizeView>
                     <Authorized>
                         <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
