@@ -691,4 +691,88 @@ context.OwnedSongs.RemoveRange(ownedSongsToDelete);
 - These records enable playlist functionality without schema changes
 - Cleanup is automatic via `PlaylistCleanupService` background job
 
+## Passkey Authentication
+
+### Overview
+
+This application implements WebAuthn/FIDO2 passkey authentication using the Fido2 library. Passkeys provide a secure, passwordless authentication method using biometric authentication or security keys.
+
+### Implementation Details
+
+**Database Model:**
+- `Passkey` table stores user passkeys with credentials and metadata
+- Links to `ApplicationUser` via `UserId` foreign key
+- Unique index on `CredentialId` to prevent duplicate passkeys
+- Fields: `Name`, `CredentialId`, `PublicKey`, `AttestationObject`, `ClientDataJSON`, `SignCount`, `AAGUID`, `CreatedAt`, `LastUsedAt`
+
+**Services:**
+- `IPasskeyService` / `PasskeyService` - Core passkey operations
+  - `BeginRegistrationAsync()` - Start passkey registration flow
+  - `CompleteRegistrationAsync()` - Complete passkey registration
+  - `BeginLoginAsync()` - Start passkey login flow
+  - `CompleteLoginAsync()` - Complete passkey login
+  - `GetUserPasskeysAsync()` - Get user's passkeys
+  - `DeletePasskeyAsync()` - Delete a passkey
+  - `RenamePasskeyAsync()` - Rename a passkey
+
+**Controllers:**
+- `PasskeyController` - API endpoints for passkey operations
+  - POST `/api/passkey/register/begin` - Begin registration
+  - POST `/api/passkey/register/complete` - Complete registration
+  - POST `/api/passkey/login/begin` - Begin login
+  - POST `/api/passkey/login/complete` - Complete login
+  - GET `/api/passkey/list` - List user passkeys
+  - DELETE `/api/passkey/{passkeyId}` - Delete passkey
+  - PUT `/api/passkey/{passkeyId}/rename` - Rename passkey
+
+**Pages:**
+- `ManageAccount.razor` - Passkey management UI
+  - Add new passkeys with custom names
+  - View list of registered passkeys with creation/last use dates
+  - Rename existing passkeys
+  - Delete passkeys
+  - Also includes password change and account deletion
+- `Login.razor` - Updated with passkey login option
+  - Shows "Login with Passkey" button
+  - Requires username/email first to identify user
+
+**JavaScript Integration:**
+- `ManageAccount.razor.js` - JavaScript helper for WebAuthn API calls
+  - `passkeyHelper.registerPasskey()` - Handles credential creation
+  - `passkeyHelper.loginWithPasskey()` - Handles credential assertion
+  - Base64 encoding/decoding helpers for binary data
+
+**Configuration:**
+- `appsettings.json` includes Fido2 configuration:
+  ```json
+  "Fido2": {
+    "ServerDomain": "localhost",
+    "Origins": ["https://localhost:5001", "http://localhost:5000"],
+    "TimestampDriftTolerance": 300000
+  }
+  ```
+
+**Testing:**
+- `BUnitTestBase` includes `MockPasskeyService` for component testing
+- `ManageAccountTests` - Tests for passkey management UI
+- Updated `LoginTests` - Tests for passkey login button
+
+### Important Notes
+
+1. **Session Storage**: Current implementation uses in-memory dictionary for storing options during registration/login flow. In production, use distributed cache (Redis) with user session.
+
+2. **Browser Support**: Passkeys require browser support for WebAuthn API. Modern browsers (Chrome, Edge, Firefox, Safari) all support this.
+
+3. **User Experience**: 
+   - Users must enter username/email before clicking "Login with Passkey"
+   - Passkey names help users identify which device/authenticator they used
+   - Users can have multiple passkeys (e.g., laptop, phone, security key)
+
+4. **Security**: 
+   - Passkeys use public key cryptography - private keys never leave the device
+   - SignCount prevents replay attacks
+   - User verification (biometric or PIN) required by default
+
+5. **Fallback**: Password authentication remains available alongside passkeys
+
 ## References

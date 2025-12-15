@@ -103,4 +103,24 @@ public class LoginTests : BUnitTestBase
         Assert.That(form.GetAttribute("action"), Is.EqualTo("/account/login"));
         Assert.That(form.GetAttribute("method"), Is.EqualTo("post"));
     }
+
+    [Test]
+    public void Login_HasPasskeyLoginButton()
+    {
+        // Act
+        var cut = TestContext.Render<Login>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Login with Passkey"));
+    }
+
+    [Test]
+    public void Login_HasPasswordLoginButton()
+    {
+        // Act
+        var cut = TestContext.Render<Login>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Login with Password"));
+    }
 }
