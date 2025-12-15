@@ -39,6 +39,7 @@ public abstract class BUnitTestBase
     protected Mock<IPlaylistService> MockPlaylistService { get; private set; } = default!;
     protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
+    protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -58,6 +59,7 @@ public abstract class BUnitTestBase
         MockThemeService = new Mock<IThemeService>();
         MockPlaylistService = new Mock<IPlaylistService>();
         MockSubscriptionService = new Mock<ISubscriptionService>();
+        MockPasskeyService = new Mock<IPasskeyService>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -128,6 +130,10 @@ public abstract class BUnitTestBase
         MockSubscriptionService.Setup(x => x.GetActiveSubscriptionAsync(It.IsAny<int>()))
             .ReturnsAsync((Subscription)null);
 
+        // Setup default returns for IPasskeyService methods
+        MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<Passkey>());
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -143,6 +149,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IPlaylistService>(MockPlaylistService.Object);
         TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
+        TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing

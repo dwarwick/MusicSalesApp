@@ -1,0 +1,176 @@
+@page "/manage-account"
+@using MusicSalesApp.Models
+@inherits ManageAccountModel
+
+<PageTitle>Manage Account</PageTitle>
+
+<div class="container mt-4">
+    <h2>Manage Account</h2>
+
+    @if (_loading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <SfMessage Severity="MessageSeverity.Warning">You must be logged in to manage your account.</SfMessage>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
+        }
+
+        <!-- Password Change Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Change Password" />
+            <CardContent>
+                <div class="mb-3">
+                    <label for="currentPassword" class="e-label">Current Password</label>
+                    <SfTextBox @bind-Value="_currentPassword" ID="currentPassword" Type="InputType.Password" Placeholder="Enter current password" CssClass="e-outline" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="newPassword" class="e-label">New Password</label>
+                    <SfTextBox @bind-Value="_newPassword" ID="newPassword" Type="InputType.Password" Placeholder="Enter new password" CssClass="e-outline" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="confirmPassword" class="e-label">Confirm New Password</label>
+                    <SfTextBox @bind-Value="_confirmPassword" ID="confirmPassword" Type="InputType.Password" Placeholder="Confirm new password" CssClass="e-outline" />
+                </div>
+
+                <SfButton IsPrimary="true" Content="Change Password" OnClick="ChangePassword" />
+            </CardContent>
+        </SfCard>
+
+        <!-- Passkey Management Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Passkeys" />
+            <CardContent>
+                <p>Passkeys provide a secure and convenient way to sign in without a password.</p>
+                
+                @if (_passkeys.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Created</th>
+                                    <th>Last Used</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var passkey in _passkeys)
+                                {
+                                    <tr>
+                                        <td>@passkey.Name</td>
+                                        <td>@passkey.CreatedAt.ToLocalTime().ToString("g")</td>
+                                        <td>@passkey.LastUsedAt.ToLocalTime().ToString("g")</td>
+                                        <td>
+                                            <SfButton CssClass="e-small" Content="Rename" OnClick="() => ShowRenameDialog(passkey)" />
+                                            <SfButton CssClass="e-small e-danger" Content="Delete" OnClick="() => ShowDeleteConfirmDialog(passkey)" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p>You don't have any passkeys yet.</p>
+                }
+
+                <SfButton IsPrimary="true" Content="Add Passkey" OnClick="ShowAddPasskeyDialog" CssClass="mt-2" />
+            </CardContent>
+        </SfCard>
+
+        <!-- Account Deletion Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Delete Account" />
+            <CardContent>
+                <p class="text-danger">Warning: This action cannot be undone. All your data will be permanently deleted.</p>
+                <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="ShowDeleteAccountDialog" />
+            </CardContent>
+        </SfCard>
+    }
+</div>
+
+<!-- Add Passkey Dialog -->
+<SfDialog @ref="_addPasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Add Passkey</Header>
+        <Content>
+            <div class="mb-3">
+                <label for="passkeyName" class="e-label">Passkey Name</label>
+                <SfTextBox @bind-Value="_newPasskeyName" ID="passkeyName" Placeholder="e.g., My Laptop, iPhone" CssClass="e-outline" />
+                <small class="form-text text-muted">Choose a name to help you identify this passkey.</small>
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Create" OnClick="AddPasskey" />
+            <SfButton Content="Cancel" OnClick="CloseAddPasskeyDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Rename Passkey Dialog -->
+<SfDialog @ref="_renamePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Rename Passkey</Header>
+        <Content>
+            <div class="mb-3">
+                <label for="renamePasskeyName" class="e-label">New Name</label>
+                <SfTextBox @bind-Value="_renamePasskeyName" ID="renamePasskeyName" Placeholder="Enter new name" CssClass="e-outline" />
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Save" OnClick="RenamePasskey" />
+            <SfButton Content="Cancel" OnClick="CloseRenameDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Delete Passkey Confirm Dialog -->
+<SfDialog @ref="_deletePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Delete Passkey</Header>
+        <Content>
+            <p>Are you sure you want to delete the passkey "@_selectedPasskey?.Name"?</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Delete" OnClick="DeletePasskey" />
+            <SfButton Content="Cancel" OnClick="CloseDeletePasskeyDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Delete Account Confirm Dialog -->
+<SfDialog @ref="_deleteAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Delete Account</Header>
+        <Content>
+            <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+            <p>All your data including purchases, playlists, and subscriptions will be permanently deleted.</p>
+            <p>Type your email address to confirm:</p>
+            <SfTextBox @bind-Value="_deleteAccountConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="DeleteAccount" />
+            <SfButton Content="Cancel" OnClick="CloseDeleteAccountDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

@@ -20,7 +20,7 @@
                         
                         <div class="mb-3">
                             <label for="username" class="e-label">Username or Email</label>
-                            <SfTextBox ID="username" Name="username" Placeholder="Enter username or email" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
+                            <SfTextBox @bind-Value="@usernameValue" ID="username" Name="username" Placeholder="Enter username or email" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
                         </div>
 
                         <div class="mb-3">
@@ -30,10 +30,21 @@
 
                         <input type="hidden" name="returnUrl" value="/" />
 
-                        <div class="d-grid">
-                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Content="Login" CssClass="e-btn e-primary" />
+                        <div class="d-grid mb-3">
+                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Content="Login with Password" CssClass="e-btn e-primary" />
                         </div>
                     </form>
+
+                    <!-- Passkey Login Section -->
+                    <div class="text-center mb-3">
+                        <hr />
+                        <span class="text-muted">OR</span>
+                        <hr />
+                    </div>
+
+                    <div class="d-grid">
+                        <SfButton IsPrimary="false" Content="Login with Passkey" CssClass="e-btn e-outline" OnClick="LoginWithPasskey" />
+                    </div>
                 </CardContent>
             </SfCard>
             @if (isDevelopment)
