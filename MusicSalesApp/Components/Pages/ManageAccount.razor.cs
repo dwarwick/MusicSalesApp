@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Popups;
 
@@ -26,16 +28,22 @@ public partial class ManageAccountModel : BlazorBase
     protected string _renamePasskeyName = string.Empty;
     protected Passkey _selectedPasskey;
     
-    // Account deletion
-    protected string _deleteAccountConfirmEmail = string.Empty;
+    // Account closure
+    protected bool _hasPurchasedMusic = false;
+    protected string _accountActionConfirmEmail = string.Empty;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
     protected SfDialog _renamePasskeyDialog;
     protected SfDialog _deletePasskeyDialog;
+    protected SfDialog _accountClosureDialog;
+    protected SfDialog _suspendAccountDialog;
     protected SfDialog _deleteAccountDialog;
     
     private ApplicationUser _currentUser;
+
+    [Inject]
+    private IDbContextFactory<AppDbContext> DbContextFactory { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -54,6 +62,7 @@ public partial class ManageAccountModel : BlazorBase
                     if (_currentUser != null)
                     {
                         await LoadPasskeys();
+                        await CheckPurchasedMusic();
                     }
                 }
             }
@@ -79,6 +88,20 @@ public partial class ManageAccountModel : BlazorBase
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading passkeys");
+        }
+    }
+
+    protected async Task CheckPurchasedMusic()
+    {
+        try
+        {
+            using var context = await DbContextFactory.CreateDbContextAsync();
+            _hasPurchasedMusic = await context.OwnedSongs
+                .AnyAsync(os => os.UserId == _currentUser.Id && !string.IsNullOrEmpty(os.PayPalOrderId));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking purchased music");
         }
     }
 
@@ -239,9 +262,65 @@ public partial class ManageAccountModel : BlazorBase
         }
     }
 
-    protected async Task ShowDeleteAccountDialog()
+    protected async Task ShowAccountClosureDialog()
     {
-        _deleteAccountConfirmEmail = string.Empty;
+        _accountActionConfirmEmail = string.Empty;
+        await _accountClosureDialog.ShowAsync();
+    }
+
+    protected async Task CloseAccountClosureDialog()
+    {
+        await _accountClosureDialog.HideAsync();
+    }
+
+    protected async Task ShowSuspendConfirmDialog()
+    {
+        await _accountClosureDialog.HideAsync();
+        await _suspendAccountDialog.ShowAsync();
+    }
+
+    protected async Task CloseSuspendAccountDialog()
+    {
+        await _suspendAccountDialog.HideAsync();
+    }
+
+    protected async Task SuspendAccount()
+    {
+        _errorMessage = string.Empty;
+
+        if (_accountActionConfirmEmail != _currentUser.Email)
+        {
+            _errorMessage = "Email does not match. Please enter your exact email address to confirm.";
+            return;
+        }
+
+        try
+        {
+            _currentUser.IsSuspended = true;
+            _currentUser.SuspendedAt = DateTime.UtcNow;
+            
+            var result = await UserManager.UpdateAsync(_currentUser);
+            
+            if (result.Succeeded)
+            {
+                await CloseSuspendAccountDialog();
+                NavigationManager.NavigateTo("/logout", forceLoad: true);
+            }
+            else
+            {
+                _errorMessage = "Failed to suspend account: " + string.Join(", ", result.Errors.Select(e => e.Description));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error suspending account");
+            _errorMessage = "An error occurred while suspending your account.";
+        }
+    }
+
+    protected async Task ShowDeleteConfirmDialog()
+    {
+        await _accountClosureDialog.HideAsync();
         await _deleteAccountDialog.ShowAsync();
     }
 
@@ -254,7 +333,7 @@ public partial class ManageAccountModel : BlazorBase
     {
         _errorMessage = string.Empty;
 
-        if (_deleteAccountConfirmEmail != _currentUser.Email)
+        if (_accountActionConfirmEmail != _currentUser.Email)
         {
             _errorMessage = "Email does not match. Please enter your exact email address to confirm.";
             return;

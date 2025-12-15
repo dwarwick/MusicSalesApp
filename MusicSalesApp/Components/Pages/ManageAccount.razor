@@ -98,19 +98,19 @@
             </CardContent>
         </SfCard>
 
-        <!-- Account Deletion Section -->
+        <!-- Account Closure Section -->
         <SfCard CssClass="mb-4">
-            <CardHeader Title="Delete Account" />
+            <CardHeader Title="Close Account" />
             <CardContent>
-                <p class="text-danger">Warning: This action cannot be undone. All your data will be permanently deleted.</p>
-                <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="ShowDeleteAccountDialog" />
+                <p class="text-danger">Warning: Closing your account will prevent you from logging in.</p>
+                <SfButton CssClass="e-danger" Content="Close My Account" OnClick="ShowAccountClosureDialog" />
             </CardContent>
         </SfCard>
     }
 </div>
 
 <!-- Add Passkey Dialog -->
-<SfDialog @ref="_addPasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+<SfDialog @ref="_addPasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
     <DialogTemplates>
         <Header>Add Passkey</Header>
         <Content>
@@ -128,7 +128,7 @@
 </SfDialog>
 
 <!-- Rename Passkey Dialog -->
-<SfDialog @ref="_renamePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+<SfDialog @ref="_renamePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
     <DialogTemplates>
         <Header>Rename Passkey</Header>
         <Content>
@@ -145,7 +145,7 @@
 </SfDialog>
 
 <!-- Delete Passkey Confirm Dialog -->
-<SfDialog @ref="_deletePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+<SfDialog @ref="_deletePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
     <DialogTemplates>
         <Header>Delete Passkey</Header>
         <Content>
@@ -158,15 +158,79 @@
     </DialogTemplates>
 </SfDialog>
 
+<!-- Account Closure Options Dialog -->
+<SfDialog @ref="_accountClosureDialog" Width="600px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Close Account</Header>
+        <Content>
+            @if (_hasPurchasedMusic)
+            {
+                <div class="mb-3">
+                    <p><strong>You have purchased music on this website.</strong></p>
+                    <p>Please choose how you would like to close your account:</p>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <h6>Suspend Account</h6>
+                        <p>You will not be able to log in, and you will not receive any communications from us. If you decide to re-enable your account in the future, you will still have access to your owned songs.</p>
+                    </div>
+                    
+                    <div class="alert alert-danger mt-3">
+                        <h6>Delete Account Permanently</h6>
+                        <p>All your data including purchases, playlists, and subscriptions will be permanently deleted. You will no longer have access to your music if you create a new account in the future. <strong>This action cannot be undone!</strong></p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+                    <p>All your data including playlists and subscriptions will be permanently deleted.</p>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            @if (_hasPurchasedMusic)
+            {
+                <SfButton IsPrimary="true" Content="Suspend Account" OnClick="ShowSuspendConfirmDialog" />
+                <SfButton CssClass="e-danger" Content="Delete Permanently" OnClick="ShowDeleteConfirmDialog" />
+                <SfButton Content="Cancel" OnClick="CloseAccountClosureDialog" />
+            }
+            else
+            {
+                <SfButton CssClass="e-danger" Content="Delete Account" OnClick="ShowDeleteConfirmDialog" />
+                <SfButton Content="Cancel" OnClick="CloseAccountClosureDialog" />
+            }
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Suspend Account Confirm Dialog -->
+<SfDialog @ref="_suspendAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Suspend Account</Header>
+        <Content>
+            <p>Type your email address to confirm account suspension:</p>
+            <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+            <div class="mt-3">
+                <small class="text-muted">You can re-enable your account by contacting support.</small>
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Suspend My Account" OnClick="SuspendAccount" />
+            <SfButton Content="Cancel" OnClick="CloseSuspendAccountDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
 <!-- Delete Account Confirm Dialog -->
-<SfDialog @ref="_deleteAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true">
+<SfDialog @ref="_deleteAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false">
     <DialogTemplates>
         <Header>Delete Account</Header>
         <Content>
             <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
             <p>All your data including purchases, playlists, and subscriptions will be permanently deleted.</p>
             <p>Type your email address to confirm:</p>
-            <SfTextBox @bind-Value="_deleteAccountConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+            <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
         </Content>
         <FooterTemplate>
             <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="DeleteAccount" />

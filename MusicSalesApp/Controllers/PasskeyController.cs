@@ -129,6 +129,12 @@ public class PasskeyController : ControllerBase
             
             if (user != null)
             {
+                // Check if account is suspended
+                if (user.IsSuspended)
+                {
+                    return Unauthorized(new { message = "Your account has been suspended. Please contact support to reactivate your account." });
+                }
+
                 // Sign in the user
                 await _signInManager.SignInAsync(user, isPersistent: true);
                 return Ok(new { message = "Login successful" });

@@ -42,6 +42,12 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
+        // Check if account is suspended
+        if (user.IsSuspended)
+        {
+            return Unauthorized(new { message = "Your account has been suspended. Please contact support to reactivate your account." });
+        }
+
         // Validate password and trigger lockout protection
         var signInResult = await _signInManager.PasswordSignInAsync(
             user.UserName,
