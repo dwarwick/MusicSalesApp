@@ -32,7 +32,7 @@ window.passkeyHelper = {
             const credential = await navigator.credentials.create({ publicKey: options });
 
             if (!credential) {
-                throw new Error('Failed to create credential');
+                throw new Error('Credential creation was cancelled or failed');
             }
 
             // Prepare attestation response
@@ -66,7 +66,27 @@ window.passkeyHelper = {
             window.location.reload();
         } catch (error) {
             console.error('Error registering passkey:', error);
-            alert('Failed to register passkey: ' + error.message);
+            
+            // Provide more helpful error messages
+            let userMessage = 'Failed to register passkey: ';
+            
+            if (error.name === 'NotAllowedError') {
+                userMessage += 'The operation was cancelled or not allowed. Please try again.';
+            } else if (error.name === 'AbortError') {
+                userMessage += 'The operation was aborted. This may happen if your browser cannot reach the password manager service. Please check your internet connection and try again.';
+            } else if (error.name === 'NetworkError') {
+                userMessage += 'Network error. Please check your internet connection and try again.';
+            } else if (error.name === 'InvalidStateError') {
+                userMessage += 'This passkey may already be registered. Please try with a different authenticator.';
+            } else if (error.name === 'NotSupportedError') {
+                userMessage += 'Passkeys are not supported by your browser or device.';
+            } else if (error.message.includes('complete registration')) {
+                userMessage += 'Registration could not be completed on the server. Please try again.';
+            } else {
+                userMessage += error.message || 'An unknown error occurred. Please try again.';
+            }
+            
+            alert(userMessage);
         }
     },
 
@@ -135,7 +155,25 @@ window.passkeyHelper = {
             window.location.href = '/';
         } catch (error) {
             console.error('Error logging in with passkey:', error);
-            alert('Failed to login with passkey: ' + error.message);
+            
+            // Provide more helpful error messages
+            let userMessage = 'Failed to login with passkey: ';
+            
+            if (error.name === 'NotAllowedError') {
+                userMessage += 'The operation was cancelled or not allowed. Please try again.';
+            } else if (error.name === 'AbortError') {
+                userMessage += 'The operation was aborted. This may happen if your browser cannot reach the password manager service. Please check your internet connection and try again.';
+            } else if (error.name === 'NetworkError') {
+                userMessage += 'Network error. Please check your internet connection and try again.';
+            } else if (error.name === 'InvalidStateError') {
+                userMessage += 'No matching passkey found. Please try a different authentication method.';
+            } else if (error.name === 'NotSupportedError') {
+                userMessage += 'Passkeys are not supported by your browser or device.';
+            } else {
+                userMessage += error.message || 'An unknown error occurred. Please try again.';
+            }
+            
+            alert(userMessage);
         }
     },
 
