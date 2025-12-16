@@ -15,6 +15,7 @@ public partial class LoginModel : BlazorBase
     protected bool isDevelopment = false;
     protected string usernameValue = string.Empty;
     protected bool reactivateAccount = false;
+    protected bool showReactivateCheckbox = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -41,6 +42,9 @@ public partial class LoginModel : BlazorBase
         if (!string.IsNullOrEmpty(Error))
         {
             errorMessage = Error;
+            // Show reactivate checkbox only if the error message indicates account suspension
+            showReactivateCheckbox = Error.Contains("suspended", StringComparison.OrdinalIgnoreCase) || 
+                                     Error.Contains("reactivate", StringComparison.OrdinalIgnoreCase);
         }
     }
 

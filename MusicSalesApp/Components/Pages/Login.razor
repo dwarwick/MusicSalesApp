@@ -28,10 +28,13 @@
                             <SfTextBox ID="password" Name="password" Type="InputType.Password" Placeholder="Enter password" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
                         </div>
 
-                        <div class="mb-3">
-                            <SfCheckBox @bind-Checked="@reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
-                            <input type="hidden" name="reactivateAccount" value="@reactivateAccount.ToString().ToLower()" />
-                        </div>
+                        @if (showReactivateCheckbox)
+                        {
+                            <div class="mb-3">
+                                <SfCheckBox @bind-Checked="@reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
+                                <input type="hidden" name="reactivateAccount" value="@reactivateAccount.ToString().ToLower()" />
+                            </div>
+                        }
 
                         <input type="hidden" name="returnUrl" value="/" />
 
