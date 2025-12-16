@@ -62,32 +62,38 @@
                 
                 @if (_passkeys.Any())
                 {
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Created</th>
-                                    <th>Last Used</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var passkey in _passkeys)
-                                {
-                                    <tr>
-                                        <td>@passkey.Name</td>
-                                        <td>@passkey.CreatedAt.ToLocalTime().ToString("g")</td>
-                                        <td>@passkey.LastUsedAt.ToLocalTime().ToString("g")</td>
-                                        <td>
+                    <SfGrid DataSource="@_passkeys" AllowPaging="false" CssClass="mt-3">
+                        <GridColumns>
+                            <GridColumn Field="@nameof(Passkey.Name)" HeaderText="Name" Width="200"></GridColumn>
+                            <GridColumn Field="@nameof(Passkey.CreatedAt)" HeaderText="Created" Width="180">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <span>@passkey.CreatedAt.ToLocalTime().ToString("g")</span>
+                                    }
+                                </Template>
+                            </GridColumn>
+                            <GridColumn Field="@nameof(Passkey.LastUsedAt)" HeaderText="Last Used" Width="180">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <span>@passkey.LastUsedAt.ToLocalTime().ToString("g")</span>
+                                    }
+                                </Template>
+                            </GridColumn>
+                            <GridColumn HeaderText="Actions" Width="200">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <div>
                                             <SfButton CssClass="e-small" Content="Rename" OnClick="() => ShowRenameDialog(passkey)" />
                                             <SfButton CssClass="e-small e-danger" Content="Delete" OnClick="() => ShowDeleteConfirmDialog(passkey)" />
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                                        </div>
+                                    }
+                                </Template>
+                            </GridColumn>
+                        </GridColumns>
+                    </SfGrid>
                 }
                 else
                 {
