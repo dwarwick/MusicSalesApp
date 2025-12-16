@@ -71,7 +71,7 @@ public class PasskeyService : IPasskeyService
         return options;
     }
 
-    public async Task<bool> CompleteRegistrationAsync(int userId, string passkeyName, AuthenticatorAttestationRawResponse attestationResponse)
+    public async Task<bool> CompleteRegistrationAsync(int userId, string passkeyName, AuthenticatorAttestationRawResponse attestationResponse, CredentialCreateOptions originalOptions)
     {
         try
         {
@@ -81,44 +81,13 @@ public class PasskeyService : IPasskeyService
                 return false;
             }
 
-            // Get the options that were used to start the registration
-            // In a real-world scenario, these would be stored in a cache or session
-            // For simplicity, we'll recreate them
-            var existingKeys = await _context.Passkeys
-                .Where(p => p.UserId == userId)
-                .Select(p => new PublicKeyCredentialDescriptor(p.CredentialId))
-                .ToListAsync();
-
-            var fido2User = new Fido2User
-            {
-                DisplayName = user.UserName,
-                Name = user.UserName,
-                Id = BitConverter.GetBytes(userId)
-            };
-
-            var authenticatorSelection = new AuthenticatorSelection
-            {
-                RequireResidentKey = false,
-                UserVerification = UserVerificationRequirement.Preferred
-            };
-
-            var exts = new AuthenticationExtensionsClientInputs
-            {
-                Extensions = true,
-                UserVerificationMethod = true
-            };
-
-            var options = _fido2.RequestNewCredential(
-                fido2User,
-                existingKeys,
-                authenticatorSelection,
-                AttestationConveyancePreference.None,
-                exts);
-
+            // Use the original options that were created during BeginRegistrationAsync
+            // This is critical - the challenge must match!
+            
             // Verify and make the credential
             var success = await _fido2.MakeNewCredentialAsync(
                 attestationResponse,
-                options,
+                originalOptions,
                 async (args, cancellationToken) =>
                 {
                     // Check if credential ID already exists
@@ -198,7 +167,7 @@ public class PasskeyService : IPasskeyService
         return options;
     }
 
-    public async Task<ApplicationUser> CompleteLoginAsync(AuthenticatorAssertionRawResponse assertionResponse)
+    public async Task<ApplicationUser> CompleteLoginAsync(AuthenticatorAssertionRawResponse assertionResponse, AssertionOptions originalOptions)
     {
         try
         {
@@ -212,26 +181,13 @@ public class PasskeyService : IPasskeyService
                 throw new InvalidOperationException("Passkey not found");
             }
 
-            // Get assertion options (in production, retrieve from cache/session)
-            var existingCredentials = new List<PublicKeyCredentialDescriptor>
-            {
-                new PublicKeyCredentialDescriptor(passkey.CredentialId)
-            };
-
-            var exts = new AuthenticationExtensionsClientInputs
-            {
-                UserVerificationMethod = true
-            };
-
-            var options = _fido2.GetAssertionOptions(
-                existingCredentials,
-                UserVerificationRequirement.Preferred,
-                exts);
+            // Use the original options that were created during BeginLoginAsync
+            // This is critical - the challenge must match!
 
             // Verify the assertion
             var res = await _fido2.MakeAssertionAsync(
                 assertionResponse,
-                options,
+                originalOptions,
                 passkey.PublicKey,
                 (uint)passkey.SignCount,
                 async (args, cancellationToken) =>

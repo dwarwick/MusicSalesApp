@@ -7,10 +7,10 @@ namespace MusicSalesApp.Services;
 public interface IPasskeyService
 {
     Task<CredentialCreateOptions> BeginRegistrationAsync(int userId, string passkeyName);
-    Task<bool> CompleteRegistrationAsync(int userId, string passkeyName, AuthenticatorAttestationRawResponse attestationResponse);
+    Task<bool> CompleteRegistrationAsync(int userId, string passkeyName, AuthenticatorAttestationRawResponse attestationResponse, CredentialCreateOptions originalOptions);
     
     Task<AssertionOptions> BeginLoginAsync(string username);
-    Task<ApplicationUser> CompleteLoginAsync(AuthenticatorAssertionRawResponse assertionResponse);
+    Task<ApplicationUser> CompleteLoginAsync(AuthenticatorAssertionRawResponse assertionResponse, AssertionOptions originalOptions);
     
     Task<List<Passkey>> GetUserPasskeysAsync(int userId);
     Task<bool> DeletePasskeyAsync(int userId, int passkeyId);

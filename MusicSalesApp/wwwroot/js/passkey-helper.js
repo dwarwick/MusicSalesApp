@@ -141,7 +141,12 @@ window.passkeyHelper = {
 
     // Helper functions for base64 encoding/decoding
     base64ToArrayBuffer: function (base64) {
-        const binaryString = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+        // Add padding if necessary
+        base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4) {
+            base64 += '=';
+        }
+        const binaryString = atob(base64);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);

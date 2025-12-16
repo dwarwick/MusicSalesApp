@@ -72,10 +72,21 @@ public class PasskeyController : ControllerBase
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             
+            // Retrieve the stored options from cache
+            var sessionId = HttpContext.Request.Cookies["passkey_session"];
+            if (string.IsNullOrEmpty(sessionId) || !_credentialCreateOptionsCache.TryGetValue(sessionId, out var originalOptions))
+            {
+                return BadRequest(new { message = "Session expired. Please try again." });
+            }
+
             var success = await _passkeyService.CompleteRegistrationAsync(
                 userId, 
                 request.PasskeyName, 
-                request.AttestationResponse);
+                request.AttestationResponse,
+                originalOptions);
+
+            // Clear the cache after use
+            _credentialCreateOptionsCache.Remove(sessionId);
 
             if (success)
             {
@@ -125,8 +136,18 @@ public class PasskeyController : ControllerBase
     {
         try
         {
-            var user = await _passkeyService.CompleteLoginAsync(assertionResponse);
+            // Retrieve the stored options from cache
+            var sessionId = HttpContext.Request.Cookies["passkey_login_session"];
+            if (string.IsNullOrEmpty(sessionId) || !_assertionOptionsCache.TryGetValue(sessionId, out var originalOptions))
+            {
+                return BadRequest(new { message = "Session expired. Please try again." });
+            }
+
+            var user = await _passkeyService.CompleteLoginAsync(assertionResponse, originalOptions);
             
+            // Clear the cache after use
+            _assertionOptionsCache.Remove(sessionId);
+
             if (user != null)
             {
                 // Check if account is suspended
