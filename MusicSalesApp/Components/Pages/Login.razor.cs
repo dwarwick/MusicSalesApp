@@ -58,7 +58,15 @@ public partial class LoginModel : BlazorBase
 
         try
         {
-            await JS.InvokeVoidAsync("passkeyHelper.loginWithPasskey", usernameValue);
+            // Call JavaScript to initiate passkey login with extended timeout (2 minutes)
+            // Google Password Manager may take longer than Windows Hello
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await JS.InvokeVoidAsync("passkeyHelper.loginWithPasskey", cts.Token, usernameValue);
+        }
+        catch (TaskCanceledException)
+        {
+            Logger.LogWarning("Passkey login timed out after 2 minutes");
+            errorMessage = "Passkey login timed out. Please try again and complete the process more quickly.";
         }
         catch (Exception ex)
         {
