@@ -49,10 +49,16 @@ public class PasskeyService : IPasskeyService
         };
 
         // Options for authenticator selection
+        // Note: Not setting AuthenticatorAttachment allows both platform (Windows Hello, Touch ID)
+        // and cross-platform (security keys, phone passkeys, cloud password managers) authenticators
         var authenticatorSelection = new AuthenticatorSelection
         {
+            // RequireResidentKey = false allows both discoverable and non-discoverable credentials
+            // This enables cloud password managers like Google Password Manager while still supporting
+            // traditional authenticators
             RequireResidentKey = false,
             UserVerification = UserVerificationRequirement.Preferred
+            // AuthenticatorAttachment is intentionally not set to allow all authenticator types
         };
 
         var exts = new AuthenticationExtensionsClientInputs
@@ -67,6 +73,10 @@ public class PasskeyService : IPasskeyService
             authenticatorSelection,
             AttestationConveyancePreference.None,
             exts);
+
+        // Set a longer timeout (3 minutes) to accommodate cloud password managers
+        // which may need extra time to sync/communicate with their servers
+        options.Timeout = 180000; // 180 seconds in milliseconds
 
         return options;
     }

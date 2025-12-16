@@ -235,16 +235,18 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
-            // Call JavaScript to initiate passkey creation with extended timeout (2 minutes)
-            // Google Password Manager may take longer than Windows Hello
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            // Call JavaScript to initiate passkey creation with extended timeout (3 minutes)
+            // Cloud password managers like Google Password Manager may need extra time
+            // Note: If using Google Password Manager, ensure you have a stable internet connection
+            // and that Google's services are accessible
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
             await JS.InvokeVoidAsync("passkeyHelper.registerPasskey", cts.Token, _newPasskeyName, _currentUser.Id);
             await CloseAddPasskeyDialog();
         }
         catch (TaskCanceledException)
         {
-            Logger.LogWarning("Passkey registration timed out after 2 minutes");
-            _errorMessage = "Passkey registration timed out. Please try again and complete the process more quickly.";
+            Logger.LogWarning("Passkey registration timed out after 3 minutes");
+            _errorMessage = "Passkey registration timed out. If using a cloud password manager (e.g., Google Password Manager), please check your internet connection and try again. Alternatively, try Windows Hello or a security key.";
         }
         catch (Exception ex)
         {
