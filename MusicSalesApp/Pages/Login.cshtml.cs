@@ -39,6 +39,13 @@ public class LoginPageModel : PageModel
             return Redirect($"/login?error=Invalid username or password");
         }
 
+        // Check if account is suspended
+        if (user.IsSuspended)
+        {
+            _logger.LogWarning("Login failed: Account suspended for username: {Username}", username);
+            return Redirect($"/login?error=Your account has been suspended. Please contact support to reactivate your account.");
+        }
+
         // Validate password and sign in with lockout protection
         var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: true);
 
