@@ -29,7 +29,8 @@
                         </div>
 
                         <div class="mb-3">
-                            <SfCheckBox @bind-Checked="@reactivateAccount" Name="reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
+                            <SfCheckBox @bind-Checked="@reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
+                            <input type="hidden" name="reactivateAccount" value="@reactivateAccount.ToString().ToLower()" />
                         </div>
 
                         <input type="hidden" name="returnUrl" value="/" />
