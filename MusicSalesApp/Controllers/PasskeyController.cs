@@ -153,7 +153,7 @@ public class PasskeyController : ControllerBase
                 // Check if account is suspended
                 if (user.IsSuspended)
                 {
-                    return Unauthorized(new { message = "Your account has been suspended. Please contact support to reactivate your account." });
+                    return Unauthorized(new { message = "Your account has been suspended. To reactivate, use password login and check the 'Reactivate my suspended account' box." });
                 }
 
                 // Sign in the user

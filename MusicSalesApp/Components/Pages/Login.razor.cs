@@ -14,6 +14,7 @@ public partial class LoginModel : BlazorBase
     protected string antiForgeryToken = string.Empty;
     protected bool isDevelopment = false;
     protected string usernameValue = string.Empty;
+    protected bool reactivateAccount = false;
 
     protected override async Task OnInitializedAsync()
     {
