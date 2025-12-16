@@ -5,6 +5,7 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Popups;
+using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -28,6 +29,19 @@ public partial class ManageAccountModel : BlazorBase
     protected string _renamePasskeyName = string.Empty;
     protected Passkey _selectedPasskey;
     
+    // Subscription fields
+    protected bool _hasSubscription;
+    protected string _subscriptionStatus;
+    protected decimal _monthlyPrice;
+    protected DateTime? _startDate;
+    protected DateTime? _endDate;
+    protected DateTime? _nextBillingDate;
+    protected string _paypalSubscriptionId;
+    protected string _subscriptionPrice = "3.99";
+    protected bool _agreeToTerms = false;
+    protected bool _subscribing = false;
+    protected bool _cancelling = false;
+    
     // Account closure
     protected bool _hasPurchasedMusic = false;
     protected string _accountActionConfirmEmail = string.Empty;
@@ -44,6 +58,9 @@ public partial class ManageAccountModel : BlazorBase
 
     [Inject]
     private IDbContextFactory<AppDbContext> DbContextFactory { get; set; }
+
+    [SupplyParameterFromQuery(Name = "success")]
+    public bool? Success { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -63,6 +80,54 @@ public partial class ManageAccountModel : BlazorBase
                     {
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
+                        await LoadSubscriptionStatus();
+                        
+                        // Handle return from PayPal
+                        if (Success.HasValue)
+                        {
+                            if (Success.Value)
+                            {
+                                try
+                                {
+                                    var activateResponse = await Http.PostAsync("api/subscription/activate-current", null);
+                                    if (activateResponse.IsSuccessStatusCode)
+                                    {
+                                        _successMessage = "Your subscription has been activated successfully!";
+                                        await LoadSubscriptionStatus();
+                                    }
+                                    else
+                                    {
+                                        _errorMessage = "Failed to activate subscription. Please contact support.";
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.LogError(ex, "Error activating subscription");
+                                    _errorMessage = "An error occurred while activating your subscription.";
+                                }
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    var deleteResponse = await Http.PostAsync("api/subscription/delete-pending", null);
+                                    if (deleteResponse.IsSuccessStatusCode)
+                                    {
+                                        _errorMessage = "Subscription setup was cancelled.";
+                                    }
+                                    else
+                                    {
+                                        _errorMessage = "Subscription setup was cancelled. Please try again if you wish to subscribe.";
+                                    }
+                                    await LoadSubscriptionStatus();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.LogError(ex, "Error deleting pending subscription");
+                                    _errorMessage = "Subscription setup was cancelled.";
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -359,4 +424,147 @@ public partial class ManageAccountModel : BlazorBase
             _errorMessage = "An error occurred while deleting your account.";
         }
     }
+
+    private async Task LoadSubscriptionStatus()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<SubscriptionStatusResponse>("api/subscription/status");
+            if (response != null)
+            {
+                _hasSubscription = response.HasSubscription;
+                _subscriptionStatus = response.Status ?? "N/A";
+                _monthlyPrice = response.MonthlyPrice;
+                _startDate = response.StartDate;
+                _endDate = response.EndDate;
+                _nextBillingDate = response.NextBillingDate;
+                _paypalSubscriptionId = response.PaypalSubscriptionId;
+                _subscriptionPrice = response.SubscriptionPrice ?? "3.99";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading subscription status");
+        }
+    }
+
+    protected async Task Subscribe()
+    {
+        if (!_agreeToTerms)
+        {
+            _errorMessage = "You must agree to the terms and conditions to subscribe.";
+            return;
+        }
+
+        _subscribing = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/subscription/create", new { AgreeToTerms = _agreeToTerms });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CreateSubscriptionResponse>();
+                
+                if (!string.IsNullOrEmpty(result?.ApprovalUrl))
+                {
+                    // Redirect to PayPal for approval
+                    NavigationManager.NavigateTo(result.ApprovalUrl, forceLoad: true);
+                }
+                else
+                {
+                    _errorMessage = "Failed to create subscription. Please try again.";
+                    _subscribing = false;
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to create subscription: {errorContent}";
+                _subscribing = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating subscription");
+            _errorMessage = $"Error creating subscription: {ex.Message}";
+            _subscribing = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task CancelSubscription()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Are you sure you want to cancel your subscription? You will have access until the end of your current billing period."))
+        {
+            return;
+        }
+
+        _cancelling = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsync("api/subscription/cancel", null);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CancelSubscriptionResponse>();
+                
+                if (result?.Success == true)
+                {
+                    await LoadSubscriptionStatus();
+                    _successMessage = $"Your subscription has been cancelled. You can continue to listen to unlimited music until {_endDate?.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")}.";
+                }
+                else
+                {
+                    _errorMessage = "Failed to cancel subscription. Please try again.";
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to cancel subscription: {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error cancelling subscription");
+            _errorMessage = $"Error cancelling subscription: {ex.Message}";
+        }
+        finally
+        {
+            _cancelling = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}
+
+public class SubscriptionStatusResponse
+{
+    public bool HasSubscription { get; set; }
+    public string Status { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public DateTime? NextBillingDate { get; set; }
+    public decimal MonthlyPrice { get; set; }
+    public string PaypalSubscriptionId { get; set; }
+    public string SubscriptionPrice { get; set; }
+}
+
+public class CreateSubscriptionResponse
+{
+    public bool Success { get; set; }
+    public string SubscriptionId { get; set; }
+    public string ApprovalUrl { get; set; }
+}
+
+public class CancelSubscriptionResponse
+{
+    public bool Success { get; set; }
+    public DateTime? EndDate { get; set; }
 }
