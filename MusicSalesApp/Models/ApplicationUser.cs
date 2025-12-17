@@ -11,4 +11,8 @@ public class ApplicationUser : IdentityUser<int>
     // User's preferred theme (Light or Dark)
     [MaxLength(10)]
     public string Theme { get; set; } = "Light";
+
+    // Account suspension
+    public bool IsSuspended { get; set; } = false;
+    public DateTime? SuspendedAt { get; set; }
 }

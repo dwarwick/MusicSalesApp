@@ -20,6 +20,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<UserPlaylist> UserPlaylists { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
+    public DbSet<Passkey> Passkeys { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -149,5 +150,16 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(up => up.OwnedSongId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure Passkey entity
+        builder.Entity<Passkey>()
+            .HasOne(p => p.User)
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Passkey>()
+            .HasIndex(p => p.CredentialId)
+            .IsUnique();
     }
 }

@@ -437,4 +437,54 @@ The `OwnedSong` table uses `PayPalOrderId` to distinguish ownership types:
 3. Keeps purchased songs (with PayPal order ID) in database and playlists
 
 **Key Implementation Detail:** When subscribers add non-owned songs to playlists, the system creates "virtual" `OwnedSong` records with `PayPalOrderId = null`. These are cleaned up when subscription ends.
+
+## Passkey Authentication
+
+### Overview
+The application supports WebAuthn/FIDO2 passkey authentication for secure, passwordless login alongside traditional password authentication.
+
+### Key Components
+
+**Models:**
+- `Passkey` - Stores passkey credentials linked to users
+
+**Services:**
+- `IPasskeyService` / `PasskeyService` - Manages passkey registration, login, and CRUD operations
+- Uses Fido2 library (v3.0.1) for WebAuthn protocol handling
+
+**API Endpoints (`PasskeyController`):**
+- Registration: `/api/passkey/register/begin`, `/api/passkey/register/complete`
+- Login: `/api/passkey/login/begin`, `/api/passkey/login/complete`
+- Management: `/api/passkey/list`, `/api/passkey/{id}` (DELETE), `/api/passkey/{id}/rename` (PUT)
+
+**Pages:**
+- `ManageAccount.razor` - User account management including passkey add/delete/rename, password change, and account deletion
+- `Login.razor` - Updated with "Login with Passkey" option
+
+**JavaScript:**
+- `ManageAccount.razor.js` - WebAuthn API integration via `passkeyHelper` object
+
+### Configuration
+```json
+"Fido2": {
+  "ServerDomain": "localhost",
+  "Origins": ["https://localhost:5001", "http://localhost:5000"],
+  "TimestampDriftTolerance": 300000
+}
+```
+
+### Testing
+- `ManageAccountTests` - Component tests for account management
+- `LoginTests` - Updated with passkey login tests
+- `BUnitTestBase` - Includes `MockPasskeyService`
+
+### Important Implementation Notes
+- Passkeys require WebAuthn-supported browsers
+- Users can have multiple passkeys with custom names
+- Password authentication remains available as fallback
+- Current implementation uses in-memory storage for registration/login flow (use Redis in production)
+- Public key cryptography ensures private keys never leave user's device
+
+## Database
+
 - Database created automatically on first run with seed data

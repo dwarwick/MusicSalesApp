@@ -477,8 +477,8 @@ public class SubscriptionController : ControllerBase
                     locale = "en-US",
                     shipping_preference = "NO_SHIPPING",
                     user_action = "SUBSCRIBE_NOW",
-                    return_url = $"{returnBaseUrl}/manage-subscription?success=true",
-                    cancel_url = $"{returnBaseUrl}/manage-subscription?success=false"
+                    return_url = $"{returnBaseUrl}/manage-account?success=true",
+                    cancel_url = $"{returnBaseUrl}/manage-account?success=false"
                 }
             };
 

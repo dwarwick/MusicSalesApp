@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251215221744_AddPasskeySupport")]
+    partial class AddPasskeySupport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -242,9 +245,6 @@ namespace MusicSalesApp.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsSuspended")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime?>("LastVerificationEmailSent")
                         .HasColumnType("datetime2");
 
@@ -273,9 +273,6 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("SuspendedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("Theme")
                         .HasMaxLength(10)
@@ -308,7 +305,6 @@ namespace MusicSalesApp.Migrations
                             ConcurrencyStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             Email = "admin@app.com",
                             EmailConfirmed = true,
-                            IsSuspended = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "ADMIN@APP.COM",
                             NormalizedUserName = "ADMIN@APP.COM",
@@ -326,7 +322,6 @@ namespace MusicSalesApp.Migrations
                             ConcurrencyStamp = "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b",
                             Email = "user@app.com",
                             EmailConfirmed = true,
-                            IsSuspended = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "USER@APP.COM",
                             NormalizedUserName = "USER@APP.COM",

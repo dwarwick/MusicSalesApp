@@ -23,7 +23,7 @@ public class LoginPageModel : PageModel
         _logger = logger;
     }
 
-    public async Task<IActionResult> OnPostAsync([FromForm] string username, [FromForm] string password, [FromForm] string returnUrl = "/")
+    public async Task<IActionResult> OnPostAsync([FromForm] string username, [FromForm] string password, [FromForm] bool reactivateAccount = false, [FromForm] string returnUrl = "/")
     {
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
@@ -37,6 +37,33 @@ public class LoginPageModel : PageModel
         {
             _logger.LogWarning("Login failed: User not found for username: {Username}", username);
             return Redirect($"/login?error=Invalid username or password");
+        }
+
+        // Check if account is suspended
+        if (user.IsSuspended)
+        {
+            // If user wants to reactivate account, verify password first
+            if (reactivateAccount)
+            {
+                // Verify the password is correct
+                var passwordValid = await _userManager.CheckPasswordAsync(user, password);
+                if (!passwordValid)
+                {
+                    _logger.LogWarning("Login failed: Invalid password for suspended account reactivation: {Username}", username);
+                    return Redirect($"/login?error=Invalid username or password");
+                }
+
+                // Reactivate the account
+                user.IsSuspended = false;
+                user.SuspendedAt = null;
+                await _userManager.UpdateAsync(user);
+                _logger.LogInformation("Account reactivated for user: {Username}", username);
+            }
+            else
+            {
+                _logger.LogWarning("Login failed: Account suspended for username: {Username}", username);
+                return Redirect($"/login?error=Your account has been suspended. Check the 'Reactivate my suspended account' box to restore access.");
+            }
         }
 
         // Validate password and sign in with lockout protection

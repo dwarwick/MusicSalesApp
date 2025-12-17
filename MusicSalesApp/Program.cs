@@ -1,4 +1,5 @@
 using FFMpegCore;
+using Fido2NetLib;
 using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.SqlServer;
@@ -158,6 +159,21 @@ try
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
+    builder.Services.AddScoped<IPasskeyService, PasskeyService>();
+
+    // Configure Fido2 for passkey support
+    builder.Services.AddSingleton<IFido2>(sp =>
+    {
+        var config = new Fido2Configuration
+        {
+            ServerDomain = builder.Configuration["Fido2:ServerDomain"] ?? "localhost",
+            ServerName = "Music Sales App",
+            Origins = builder.Configuration.GetSection("Fido2:Origins").Get<HashSet<string>>() 
+                      ?? new HashSet<string> { "https://localhost:5001", "http://localhost:5000" },
+            TimestampDriftTolerance = builder.Configuration.GetValue<int>("Fido2:TimestampDriftTolerance", 300000)
+        };
+        return new Fido2(config);
+    });
 
     // Add Hangfire services with SQL Server storage
     try

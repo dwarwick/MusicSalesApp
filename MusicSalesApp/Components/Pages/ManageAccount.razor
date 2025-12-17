@@ -1,0 +1,316 @@
+@page "/manage-account"
+@using MusicSalesApp.Models
+@inherits ManageAccountModel
+
+<PageTitle>Manage Account</PageTitle>
+
+<div class="container mt-4">
+    <h2>Manage Account</h2>
+
+    @if (_loading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <SfMessage Severity="MessageSeverity.Warning">You must be logged in to manage your account.</SfMessage>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
+        }
+
+        <!-- Password Change Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Change Password" />
+            <CardContent>
+                <div class="mb-3">
+                    <label for="currentPassword" class="e-label">Current Password</label>
+                    <SfTextBox @bind-Value="_currentPassword" ID="currentPassword" Type="InputType.Password" Placeholder="Enter current password" CssClass="e-outline" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="newPassword" class="e-label">New Password</label>
+                    <SfTextBox @bind-Value="_newPassword" ID="newPassword" Type="InputType.Password" Placeholder="Enter new password" CssClass="e-outline" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="confirmPassword" class="e-label">Confirm New Password</label>
+                    <SfTextBox @bind-Value="_confirmPassword" ID="confirmPassword" Type="InputType.Password" Placeholder="Confirm new password" CssClass="e-outline" />
+                </div>
+
+                <SfButton IsPrimary="true" Content="Change Password" OnClick="ChangePassword" />
+            </CardContent>
+        </SfCard>
+
+        <!-- Passkey Management Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Passkeys" />
+            <CardContent>
+                <p>Passkeys provide a secure and convenient way to sign in without a password.</p>
+                
+                @if (_passkeys.Any())
+                {
+                    <SfGrid DataSource="@_passkeys" AllowPaging="false" CssClass="mt-3">
+                        <GridColumns>
+                            <GridColumn Field="@nameof(Passkey.Name)" HeaderText="Name" Width="200"></GridColumn>
+                            <GridColumn Field="@nameof(Passkey.CreatedAt)" HeaderText="Created" Width="180">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <span>@passkey.CreatedAt.ToLocalTime().ToString("g")</span>
+                                    }
+                                </Template>
+                            </GridColumn>
+                            <GridColumn Field="@nameof(Passkey.LastUsedAt)" HeaderText="Last Used" Width="180">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <span>@passkey.LastUsedAt.ToLocalTime().ToString("g")</span>
+                                    }
+                                </Template>
+                            </GridColumn>
+                            <GridColumn HeaderText="Actions" Width="200">
+                                <Template>
+                                    @{
+                                        var passkey = (context as Passkey);
+                                        <div>
+                                            <SfButton CssClass="e-small" Content="Rename" OnClick="() => ShowRenameDialog(passkey)" />
+                                            <SfButton CssClass="e-small e-danger" Content="Delete" OnClick="() => ShowDeleteConfirmDialog(passkey)" />
+                                        </div>
+                                    }
+                                </Template>
+                            </GridColumn>
+                        </GridColumns>
+                    </SfGrid>
+                }
+                else
+                {
+                    <p>You don't have any passkeys yet.</p>
+                }
+
+                <SfButton IsPrimary="true" Content="Add Passkey" OnClick="ShowAddPasskeyDialog" CssClass="mt-2" />
+            </CardContent>
+        </SfCard>
+
+        <!-- Subscription Management Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Manage Your Subscription" />
+            <CardContent>
+                @if (_hasSubscription)
+                {
+                    <div class="subscription-details">
+                        <p><strong>Status:</strong> @_subscriptionStatus</p>
+                        <p><strong>Monthly Price:</strong> $@_monthlyPrice</p>
+                        @if (_startDate.HasValue)
+                        {
+                            <p><strong>Started:</strong> @_startDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                        }
+                        @if (_nextBillingDate.HasValue)
+                        {
+                            <p><strong>Next Billing Date:</strong> @_nextBillingDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                        }
+                        @if (_endDate.HasValue)
+                        {
+                            <p><strong>Access Until:</strong> @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")</p>
+                            <p class="subscription-note">Your subscription has been cancelled. You can continue to enjoy unlimited music streaming until @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt").</p>
+                        }
+                        else
+                        {
+                            <p class="subscription-note">You have unlimited access to all music on our platform.</p>
+                        }
+                        
+                        @if (!_endDate.HasValue && !_cancelling)
+                        {
+                            <SfButton OnClick="@CancelSubscription" CssClass="e-danger mt-2">Cancel Subscription</SfButton>
+                        }
+                        else if (_cancelling)
+                        {
+                            <p>Processing...</p>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="subscription-description">
+                        <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
+                        <p>Enjoy unlimited streaming of all music on our platform.</p>
+                        
+                        <div class="subscription-terms mt-3">
+                            <h4>Subscription Terms:</h4>
+                            <ul>
+                                <li>Monthly fee of <strong>${@_subscriptionPrice}</strong> will continue until cancelled by the user.</li>
+                                <li>The charge will occur on or about the same day each month, subject to PayPal's policy.</li>
+                                <li>Once cancelled, the subscription will be in effect until the end of the paid month.</li>
+                                <li>You can cancel at any time from this page.</li>
+                            </ul>
+                        </div>
+
+                        <div class="terms-agreement mt-3">
+                            <SfCheckBox @bind-Checked="_agreeToTerms" Label="I agree to the subscription terms and conditions" TChecked="bool" />
+                        </div>
+                        
+                        @if (!_subscribing)
+                        {
+                            <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="e-primary mt-2">Sign Up for Monthly Subscription</SfButton>
+                        }
+                        else
+                        {
+                            <p>Processing your subscription...</p>
+                        }
+                    </div>
+                }
+            </CardContent>
+        </SfCard>
+
+        <!-- Account Closure Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Close Account" />
+            <CardContent>
+                <p class="text-danger">Warning: Closing your account will prevent you from logging in.</p>
+                <SfButton CssClass="e-danger" Content="Close My Account" OnClick="ShowAccountClosureDialog" />
+            </CardContent>
+        </SfCard>
+    }
+</div>
+
+<!-- Add Passkey Dialog -->
+<SfDialog @ref="_addPasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Add Passkey</Header>
+        <Content>
+            <div class="mb-3">
+                <label for="passkeyName" class="e-label">Passkey Name</label>
+                <SfTextBox @bind-Value="_newPasskeyName" ID="passkeyName" Placeholder="e.g., My Laptop, iPhone" CssClass="e-outline" />
+                <small class="form-text text-muted">Choose a name to help you identify this passkey.</small>
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Create" OnClick="AddPasskey" />
+            <SfButton Content="Cancel" OnClick="CloseAddPasskeyDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Rename Passkey Dialog -->
+<SfDialog @ref="_renamePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Rename Passkey</Header>
+        <Content>
+            <div class="mb-3">
+                <label for="renamePasskeyName" class="e-label">New Name</label>
+                <SfTextBox @bind-Value="_renamePasskeyName" ID="renamePasskeyName" Placeholder="Enter new name" CssClass="e-outline" />
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Save" OnClick="RenamePasskey" />
+            <SfButton Content="Cancel" OnClick="CloseRenameDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Delete Passkey Confirm Dialog -->
+<SfDialog @ref="_deletePasskeyDialog" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Delete Passkey</Header>
+        <Content>
+            <p>Are you sure you want to delete the passkey "@_selectedPasskey?.Name"?</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Delete" OnClick="DeletePasskey" />
+            <SfButton Content="Cancel" OnClick="CloseDeletePasskeyDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Account Closure Options Dialog -->
+<SfDialog @ref="_accountClosureDialog" Width="600px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Close Account</Header>
+        <Content>
+            @if (_hasPurchasedMusic)
+            {
+                <div class="mb-3">
+                    <p><strong>You have purchased music on this website.</strong></p>
+                    <p>Please choose how you would like to close your account:</p>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <h6>Suspend Account</h6>
+                        <p>You will not be able to log in, and you will not receive any communications from us. If you decide to re-enable your account in the future, you will still have access to your owned songs.</p>
+                    </div>
+                    
+                    <div class="alert alert-danger mt-3">
+                        <h6>Delete Account Permanently</h6>
+                        <p>All your data including purchases, playlists, and subscriptions will be permanently deleted. You will no longer have access to your music if you create a new account in the future. <strong>This action cannot be undone!</strong></p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+                    <p>All your data including playlists and subscriptions will be permanently deleted.</p>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            @if (_hasPurchasedMusic)
+            {
+                <SfButton IsPrimary="true" Content="Suspend Account" OnClick="ShowSuspendConfirmDialog" />
+                <SfButton CssClass="e-danger" Content="Delete Permanently" OnClick="ShowDeleteConfirmDialog" />
+                <SfButton Content="Cancel" OnClick="CloseAccountClosureDialog" />
+            }
+            else
+            {
+                <SfButton CssClass="e-danger" Content="Delete Account" OnClick="ShowDeleteConfirmDialog" />
+                <SfButton Content="Cancel" OnClick="CloseAccountClosureDialog" />
+            }
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Suspend Account Confirm Dialog -->
+<SfDialog @ref="_suspendAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Suspend Account</Header>
+        <Content>
+            <p>Type your email address to confirm account suspension:</p>
+            <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+            <div class="mt-3">
+                <small class="text-muted">You can re-enable your account by contacting support.</small>
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Suspend My Account" OnClick="SuspendAccount" />
+            <SfButton Content="Cancel" OnClick="CloseSuspendAccountDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Delete Account Confirm Dialog -->
+<SfDialog @ref="_deleteAccountDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false">
+    <DialogTemplates>
+        <Header>Delete Account</Header>
+        <Content>
+            <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+            <p>All your data including purchases, playlists, and subscriptions will be permanently deleted.</p>
+            <p>Type your email address to confirm:</p>
+            <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="DeleteAccount" />
+            <SfButton Content="Cancel" OnClick="CloseDeleteAccountDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

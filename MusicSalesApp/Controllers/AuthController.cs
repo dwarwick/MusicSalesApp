@@ -42,6 +42,30 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid username or password" });
         }
 
+        // Check if account is suspended
+        if (user.IsSuspended)
+        {
+            // If user wants to reactivate account, verify password first
+            if (request.ReactivateAccount)
+            {
+                // Verify the password is correct
+                var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+                if (!passwordValid)
+                {
+                    return Unauthorized(new { message = "Invalid username or password" });
+                }
+
+                // Reactivate the account
+                user.IsSuspended = false;
+                user.SuspendedAt = null;
+                await _userManager.UpdateAsync(user);
+            }
+            else
+            {
+                return Unauthorized(new { message = "Your account has been suspended. Check the 'Reactivate my suspended account' box to restore access." });
+            }
+        }
+
         // Validate password and trigger lockout protection
         var signInResult = await _signInManager.PasswordSignInAsync(
             user.UserName,
@@ -124,4 +148,5 @@ public class LoginRequest
 {
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public bool ReactivateAccount { get; set; } = false;
 }
