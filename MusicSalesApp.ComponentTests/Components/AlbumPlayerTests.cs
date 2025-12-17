@@ -346,6 +346,34 @@ public class AlbumPlayerTests : BUnitTestBase
     }
 
     [Test]
+    public void AlbumPlayer_RepeatButton_TogglesRepeatState()
+    {
+        // Arrange - Setup album with tracks
+        var albumMetadata = CreateTestAlbumMetadata("Test Album", 3);
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
+            .ReturnsAsync(albumMetadata);
+
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "Test Album"));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Act - Click repeat button
+        var repeatButton = cut.Find("button[title='Repeat']");
+        repeatButton.Click();
+
+        // Assert - Repeat button should have "active" class
+        Assert.That(repeatButton.ClassList, Does.Contain("active"));
+
+        // Act - Click repeat button again to disable
+        repeatButton.Click();
+
+        // Assert - Repeat button should not have "active" class
+        Assert.That(repeatButton.ClassList, Does.Not.Contain("active"));
+    }
+
+    [Test]
     public async Task AlbumPlayer_ShuffleEnabled_GeneratesShuffledOrder()
     {
         // Arrange - Setup album with multiple tracks
@@ -383,6 +411,86 @@ public class AlbumPlayerTests : BUnitTestBase
         sortedOrder.Sort();
         Assert.That(sortedOrder, Is.EqualTo(Enumerable.Range(0, 10).ToList()), 
             "Shuffled order should contain all track indices exactly once");
+    }
+
+    [Test]
+    public async Task AlbumPlayer_RepeatEnabled_LoopsToBeginning()
+    {
+        // Arrange - Setup album with tracks
+        var albumMetadata = CreateTestAlbumMetadata("Test Album", 3);
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
+            .ReturnsAsync(albumMetadata);
+
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "Test Album"));
+
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        var instance = cut.Instance as AlbumPlayerModel;
+        Assert.That(instance, Is.Not.Null);
+
+        // Enable repeat
+        var repeatButton = cut.Find("button[title='Repeat']");
+        repeatButton.Click();
+
+        // Use reflection to access GetNextTrackIndex method
+        var getNextTrackMethod = typeof(AlbumPlayerModel).GetMethod("GetNextTrackIndex",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.That(getNextTrackMethod, Is.Not.Null);
+
+        // Set current track to last track
+        var currentTrackField = typeof(AlbumPlayerModel).GetField("_currentTrackIndex",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        currentTrackField.SetValue(instance, 2); // Last track (0-indexed)
+
+        // Act - Get next track after the last one
+        var nextIndex = getNextTrackMethod.Invoke(instance, null) as int?;
+
+        // Assert - Should loop back to first track (0)
+        Assert.That(nextIndex, Is.EqualTo(0), "With repeat enabled, should loop back to first track");
+    }
+
+    [Test]
+    public async Task AlbumPlayer_RepeatWithShuffle_RegeneratesShuffleOrder()
+    {
+        // Arrange - Setup album with tracks
+        var albumMetadata = CreateTestAlbumMetadata("Test Album", 5);
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
+            .ReturnsAsync(albumMetadata);
+
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "Test Album"));
+
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        var instance = cut.Instance as AlbumPlayerModel;
+        Assert.That(instance, Is.Not.Null);
+
+        // Enable both shuffle and repeat
+        var shuffleButton = cut.Find("button[title='Shuffle']");
+        shuffleButton.Click();
+        var repeatButton = cut.Find("button[title='Repeat']");
+        repeatButton.Click();
+
+        // Use reflection to access fields and methods
+        var getNextTrackMethod = typeof(AlbumPlayerModel).GetMethod("GetNextTrackIndex",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var shufflePositionField = typeof(AlbumPlayerModel).GetField("_currentShufflePosition",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var shuffledOrderField = typeof(AlbumPlayerModel).GetField("_shuffledTrackOrder",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Set shuffle position to last position
+        var shuffledOrder = shuffledOrderField.GetValue(instance) as List<int>;
+        shufflePositionField.SetValue(instance, shuffledOrder.Count - 1);
+
+        // Act - Get next track after the last one in shuffle order
+        var nextIndex = getNextTrackMethod.Invoke(instance, null) as int?;
+
+        // Assert - Should return a valid track index (shuffle regenerated)
+        Assert.That(nextIndex, Is.Not.Null);
+        Assert.That(nextIndex.Value, Is.GreaterThanOrEqualTo(0));
+        Assert.That(nextIndex.Value, Is.LessThan(5));
     }
 
     private List<SongMetadata> CreateTestAlbumMetadata(string albumName, int trackCount)

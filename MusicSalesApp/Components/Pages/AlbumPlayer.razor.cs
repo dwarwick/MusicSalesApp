@@ -33,6 +33,7 @@ namespace MusicSalesApp.Components.Pages
         protected ElementReference _progressBarContainer;
         protected ElementReference _volumeBarContainer;
         protected bool _shuffleEnabled;
+        protected bool _repeatEnabled;
         private List<int> _shuffledTrackOrder = new List<int>();
         private int _currentShufflePosition = 0;
         protected double _volume = 1.0;
@@ -840,6 +841,11 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        protected void ToggleRepeat()
+        {
+            _repeatEnabled = !_repeatEnabled;
+        }
+
         /// <summary>
         /// Generates a shuffled order of track indices, ensuring the current track is first.
         /// </summary>
@@ -892,7 +898,15 @@ namespace MusicSalesApp.Components.Pages
                     return _shuffledTrackOrder[_currentShufflePosition];
                 }
                 
-                return null; // End of shuffled playlist
+                // End of shuffled playlist
+                if (_repeatEnabled)
+                {
+                    // Loop back to the beginning and regenerate shuffle order
+                    GenerateShuffleOrder();
+                    return _shuffledTrackOrder[0];
+                }
+                
+                return null;
             }
             else
             {
@@ -902,7 +916,14 @@ namespace MusicSalesApp.Components.Pages
                     return _currentTrackIndex + 1;
                 }
                 
-                return null; // End of playlist
+                // End of playlist
+                if (_repeatEnabled)
+                {
+                    // Loop back to the first track
+                    return 0;
+                }
+                
+                return null;
             }
         }
 
