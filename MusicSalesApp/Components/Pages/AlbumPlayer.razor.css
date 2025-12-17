@@ -2,7 +2,9 @@
     background: linear-gradient(to bottom, #1a4b30 0%, #121212 40%);
     min-height: calc(100vh - 80px);
     padding: 24px;
-    padding-bottom: 160px; /* Account for fixed player bar at bottom */
+    /* Account for fixed player bar at bottom (~120px height + margin) */
+    /* This value should be adjusted if player bar height changes */
+    padding-bottom: 160px;
     color: #fff;
     display: flex;
     flex-direction: column;
