@@ -15,7 +15,7 @@
     .track-list-container {
         margin: 24px 0;
         padding-bottom: 20px;
-        max-height: 500px;
+        max-height: calc(100vh - 580px);
         overflow-y: auto;
         overflow-x: hidden;
     }
