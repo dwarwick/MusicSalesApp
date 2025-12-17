@@ -33,6 +33,8 @@ namespace MusicSalesApp.Components.Pages
         protected ElementReference _progressBarContainer;
         protected ElementReference _volumeBarContainer;
         protected bool _shuffleEnabled;
+        private List<int> _shuffledTrackOrder = new List<int>();
+        private int _currentShufflePosition = 0;
         protected double _volume = 1.0;
         protected double _previousVolume = 1.0;
         protected bool _isMuted;
@@ -732,6 +734,10 @@ namespace MusicSalesApp.Components.Pages
             if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return;
 
             _currentTrackIndex = index;
+            
+            // Update shuffle position if shuffle is enabled
+            UpdateShufflePosition(index);
+            
             _streamUrl = await GetTrackStreamUrlAsync(index);
             _currentTime = 0;
             _duration = 0;
@@ -785,10 +791,12 @@ namespace MusicSalesApp.Components.Pages
         [JSInvokable]
         public async Task AudioEnded()
         {
-            // Move to next track if available
-            if (_albumInfo != null && _currentTrackIndex < _albumInfo.Tracks.Count - 1)
+            // Get next track index based on shuffle state
+            var nextIndex = GetNextTrackIndex();
+            
+            if (nextIndex.HasValue)
             {
-                _currentTrackIndex++;
+                _currentTrackIndex = nextIndex.Value;
                 _streamUrl = await GetTrackStreamUrlAsync(_currentTrackIndex);
                 _currentTime = 0;
                 _duration = 0;
@@ -818,6 +826,135 @@ namespace MusicSalesApp.Components.Pages
         protected void ToggleShuffle()
         {
             _shuffleEnabled = !_shuffleEnabled;
+            
+            if (_shuffleEnabled)
+            {
+                // Generate a shuffled order when enabled
+                GenerateShuffleOrder();
+            }
+            else
+            {
+                // Clear shuffle order when disabled
+                _shuffledTrackOrder.Clear();
+                _currentShufflePosition = 0;
+            }
+        }
+
+        /// <summary>
+        /// Generates a shuffled order of track indices, ensuring the current track is first.
+        /// </summary>
+        private void GenerateShuffleOrder()
+        {
+            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+                return;
+
+            // Create a list of all track indices except the current one
+            var remainingIndices = Enumerable.Range(0, _albumInfo.Tracks.Count)
+                .Where(i => i != _currentTrackIndex)
+                .ToList();
+
+            // Shuffle the remaining indices using Fisher-Yates algorithm
+            var random = new Random();
+            for (int i = remainingIndices.Count - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                var temp = remainingIndices[i];
+                remainingIndices[i] = remainingIndices[j];
+                remainingIndices[j] = temp;
+            }
+
+            // Build the shuffled order with current track first
+            _shuffledTrackOrder = new List<int> { _currentTrackIndex };
+            _shuffledTrackOrder.AddRange(remainingIndices);
+            _currentShufflePosition = 0;
+        }
+
+        /// <summary>
+        /// Gets the next track index based on shuffle state.
+        /// </summary>
+        private int? GetNextTrackIndex()
+        {
+            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+                return null;
+
+            if (_shuffleEnabled)
+            {
+                // If shuffle order hasn't been generated yet, generate it
+                if (_shuffledTrackOrder.Count == 0)
+                {
+                    GenerateShuffleOrder();
+                }
+
+                // Move to next position in shuffle order
+                if (_currentShufflePosition < _shuffledTrackOrder.Count - 1)
+                {
+                    _currentShufflePosition++;
+                    return _shuffledTrackOrder[_currentShufflePosition];
+                }
+                
+                return null; // End of shuffled playlist
+            }
+            else
+            {
+                // Normal sequential playback
+                if (_currentTrackIndex < _albumInfo.Tracks.Count - 1)
+                {
+                    return _currentTrackIndex + 1;
+                }
+                
+                return null; // End of playlist
+            }
+        }
+
+        /// <summary>
+        /// Gets the previous track index based on shuffle state.
+        /// </summary>
+        private int? GetPreviousTrackIndex()
+        {
+            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+                return null;
+
+            if (_shuffleEnabled)
+            {
+                // If shuffle order hasn't been generated yet, can't go back
+                if (_shuffledTrackOrder.Count == 0 || _currentShufflePosition == 0)
+                    return null;
+
+                _currentShufflePosition--;
+                return _shuffledTrackOrder[_currentShufflePosition];
+            }
+            else
+            {
+                // Normal sequential playback
+                if (_currentTrackIndex > 0)
+                {
+                    return _currentTrackIndex - 1;
+                }
+                
+                return null; // Beginning of playlist
+            }
+        }
+
+        /// <summary>
+        /// Updates the current shuffle position when a track is played directly (e.g., by clicking on it).
+        /// </summary>
+        private void UpdateShufflePosition(int trackIndex)
+        {
+            if (!_shuffleEnabled || _shuffledTrackOrder.Count == 0)
+                return;
+
+            // Find this track in the shuffle order
+            var position = _shuffledTrackOrder.IndexOf(trackIndex);
+            if (position >= 0)
+            {
+                _currentShufflePosition = position;
+            }
+            else
+            {
+                // Track not in current shuffle order, regenerate with this track
+                _currentTrackIndex = trackIndex;
+                GenerateShuffleOrder();
+            }
         }
 
         protected async Task OnProgressBarClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
@@ -894,17 +1031,19 @@ namespace MusicSalesApp.Components.Pages
 
         protected async Task PlayPreviousTrack()
         {
-            if (_currentTrackIndex > 0)
+            var previousIndex = GetPreviousTrackIndex();
+            if (previousIndex.HasValue)
             {
-                await PlayTrack(_currentTrackIndex - 1);
+                await PlayTrack(previousIndex.Value);
             }
         }
 
         protected async Task PlayNextTrack()
         {
-            if (_albumInfo != null && _currentTrackIndex < _albumInfo.Tracks.Count - 1)
+            var nextIndex = GetNextTrackIndex();
+            if (nextIndex.HasValue)
             {
-                await PlayTrack(_currentTrackIndex + 1);
+                await PlayTrack(nextIndex.Value);
             }
         }
     }

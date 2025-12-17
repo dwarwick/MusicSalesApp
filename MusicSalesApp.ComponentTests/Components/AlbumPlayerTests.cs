@@ -316,4 +316,106 @@ public class AlbumPlayerTests : BUnitTestBase
         // Assert
         Assert.That(cut.Markup, Does.Contain("This playlist is empty"));
     }
+
+    [Test]
+    public void AlbumPlayer_ShuffleButton_TogglesShuffleState()
+    {
+        // Arrange - Setup album with tracks
+        var albumMetadata = CreateTestAlbumMetadata("Test Album", 3);
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
+            .ReturnsAsync(albumMetadata);
+
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "Test Album"));
+
+        // Wait for rendering to complete
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Act - Click shuffle button
+        var shuffleButton = cut.Find("button[title='Shuffle']");
+        shuffleButton.Click();
+
+        // Assert - Shuffle button should have "active" class
+        Assert.That(shuffleButton.ClassList, Does.Contain("active"));
+
+        // Act - Click shuffle button again to disable
+        shuffleButton.Click();
+
+        // Assert - Shuffle button should not have "active" class
+        Assert.That(shuffleButton.ClassList, Does.Not.Contain("active"));
+    }
+
+    [Test]
+    public async Task AlbumPlayer_ShuffleEnabled_GeneratesShuffledOrder()
+    {
+        // Arrange - Setup album with multiple tracks
+        var albumMetadata = CreateTestAlbumMetadata("Test Album", 10);
+        MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
+            .ReturnsAsync(albumMetadata);
+
+        var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
+            .Add(p => p.AlbumName, "Test Album"));
+
+        cut.WaitForState(() => !cut.Markup.Contains("Loading..."), timeout: TimeSpan.FromSeconds(5));
+
+        // Get the component instance to access internal state
+        var instance = cut.Instance as AlbumPlayerModel;
+        Assert.That(instance, Is.Not.Null);
+
+        // Act - Enable shuffle
+        var shuffleButton = cut.Find("button[title='Shuffle']");
+        shuffleButton.Click();
+
+        // Use reflection to access the private _shuffledTrackOrder field
+        var shuffledOrderField = typeof(AlbumPlayerModel).GetField("_shuffledTrackOrder", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.That(shuffledOrderField, Is.Not.Null);
+
+        var shuffledOrder = shuffledOrderField.GetValue(instance) as List<int>;
+        
+        // Assert - Shuffled order should be generated
+        Assert.That(shuffledOrder, Is.Not.Null);
+        Assert.That(shuffledOrder.Count, Is.EqualTo(10), "Shuffled order should contain all tracks");
+        Assert.That(shuffledOrder[0], Is.EqualTo(0), "Current track should be first in shuffled order");
+        
+        // Verify all track indices are present (0-9)
+        var sortedOrder = new List<int>(shuffledOrder);
+        sortedOrder.Sort();
+        Assert.That(sortedOrder, Is.EqualTo(Enumerable.Range(0, 10).ToList()), 
+            "Shuffled order should contain all track indices exactly once");
+    }
+
+    private List<SongMetadata> CreateTestAlbumMetadata(string albumName, int trackCount)
+    {
+        var metadata = new List<SongMetadata>();
+
+        // Add album cover
+        metadata.Add(new SongMetadata
+        {
+            Id = 1,
+            AlbumName = albumName,
+            IsAlbumCover = true,
+            ImageBlobPath = $"music/{albumName}/cover.jpg",
+            AlbumPrice = 9.99m
+        });
+
+        // Add tracks
+        for (int i = 1; i <= trackCount; i++)
+        {
+            metadata.Add(new SongMetadata
+            {
+                Id = i + 1,
+                AlbumName = albumName,
+                IsAlbumCover = false,
+                Mp3BlobPath = $"music/{albumName}/track{i}.mp3",
+                ImageBlobPath = $"music/{albumName}/track{i}.jpg",
+                TrackNumber = i,
+                TrackLength = 180.0,
+                Genre = "Rock",
+                SongPrice = 0.99m
+            });
+        }
+
+        return metadata;
+    }
 }
