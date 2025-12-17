@@ -28,6 +28,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected ElementReference _progressBarContainer;
     protected ElementReference _volumeBarContainer;
     protected bool _shuffleEnabled;
+    protected bool _repeatEnabled;
     protected double _volume = 1.0;
     protected double _previousVolume = 1.0;
     protected bool _isMuted;
@@ -402,10 +403,20 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public void AudioEnded()
+    public async Task AudioEnded()
     {
-        _isPlaying = false;
-        InvokeAsync(StateHasChanged);
+        if (_repeatEnabled && _jsModule != null)
+        {
+            // Restart the song from the beginning
+            await _jsModule.InvokeVoidAsync("seekTo", _audioElement, 0);
+            await _jsModule.InvokeVoidAsync("play", _audioElement);
+            _isPlaying = true;
+        }
+        else
+        {
+            _isPlaying = false;
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     protected async Task SeekTo(double percentage)
@@ -420,6 +431,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected void ToggleShuffle()
     {
         _shuffleEnabled = !_shuffleEnabled;
+    }
+
+    protected void ToggleRepeat()
+    {
+        _repeatEnabled = !_repeatEnabled;
     }
 
     protected async Task OnProgressBarClick(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
