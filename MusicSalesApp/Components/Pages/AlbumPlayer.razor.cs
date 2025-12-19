@@ -54,28 +54,51 @@ namespace MusicSalesApp.Components.Pages
         private bool invokedJs = false;
 
         private bool _hasLoadedData = false;
+        private string _lastLoadedAlbum;
+        private int? _lastLoadedPlaylistId;
         protected bool _hasActiveSubscription;
 
         protected override void OnParametersSet()
         {
             // Only set the mode flag, don't load data here
             _isPlaylistMode = PlaylistId.HasValue;
+            
+            // Check if parameters have changed and reset the flag if needed
+            bool parametersChanged = false;
+            
+            if (_isPlaylistMode)
+            {
+                parametersChanged = PlaylistId != _lastLoadedPlaylistId;
+            }
+            else
+            {
+                parametersChanged = AlbumName != _lastLoadedAlbum;
+            }
+            
+            if (parametersChanged)
+            {
+                _hasLoadedData = false;
+                invokedJs = false;
+            }
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
         {
-            // Load data only on first render to avoid DbContext threading issues
-            if (firstRender && !_hasLoadedData)
+            // Load data only on first render or when parameters change to avoid DbContext threading issues
+            if (!_hasLoadedData)
             {
                 _hasLoadedData = true;
+                
                 try
                 {
                     if (_isPlaylistMode)
                     {
+                        _lastLoadedPlaylistId = PlaylistId;
                         await LoadPlaylistInfo();
                     }
                     else
                     {
+                        _lastLoadedAlbum = AlbumName;
                         await LoadAlbumInfo();
                     }
                 }
