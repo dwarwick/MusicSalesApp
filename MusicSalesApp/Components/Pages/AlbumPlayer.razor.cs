@@ -64,16 +64,9 @@ namespace MusicSalesApp.Components.Pages
             _isPlaylistMode = PlaylistId.HasValue;
             
             // Check if parameters have changed and reset the flag if needed
-            bool parametersChanged = false;
-            
-            if (_isPlaylistMode)
-            {
-                parametersChanged = PlaylistId != _lastLoadedPlaylistId;
-            }
-            else
-            {
-                parametersChanged = AlbumName != _lastLoadedAlbum;
-            }
+            bool parametersChanged = _isPlaylistMode 
+                ? PlaylistId != _lastLoadedPlaylistId 
+                : AlbumName != _lastLoadedAlbum;
             
             if (parametersChanged)
             {
