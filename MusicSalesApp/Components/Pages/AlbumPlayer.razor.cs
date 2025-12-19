@@ -52,24 +52,56 @@ namespace MusicSalesApp.Components.Pages
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
+
+        private bool _hasLoadedData = false;
+        private string _lastLoadedAlbum;
+        private int? _lastLoadedPlaylistId;
         protected bool _hasActiveSubscription;
 
-        protected override async Task OnParametersSetAsync()
+        protected override void OnParametersSet()
         {
+            // Only set the mode flag, don't load data here
             _isPlaylistMode = PlaylistId.HasValue;
             
-            if (_isPlaylistMode)
+            // Check if parameters have changed and reset the flag if needed
+            bool parametersChanged = _isPlaylistMode 
+                ? PlaylistId != _lastLoadedPlaylistId 
+                : AlbumName != _lastLoadedAlbum;
+            
+            if (parametersChanged)
             {
-                await LoadPlaylistInfo();
-            }
-            else
-            {
-                await LoadAlbumInfo();
+                _hasLoadedData = false;
+                invokedJs = false;
             }
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
         {
+            // Load data only on first render or when parameters change to avoid DbContext threading issues
+            if (!_hasLoadedData)
+            {
+                _hasLoadedData = true;
+                
+                try
+                {
+                    if (_isPlaylistMode)
+                    {
+                        _lastLoadedPlaylistId = PlaylistId;
+                        await LoadPlaylistInfo();
+                    }
+                    else
+                    {
+                        _lastLoadedAlbum = AlbumName;
+                        await LoadAlbumInfo();
+                    }
+                }
+                finally
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+
+            // Initialize JS after data is loaded
             if (!invokedJs && !_loading && _albumInfo != null && _albumInfo.Tracks.Any())
             {
                 invokedJs = true;

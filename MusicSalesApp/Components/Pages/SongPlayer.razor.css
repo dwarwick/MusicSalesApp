@@ -1,7 +1,6 @@
-.spotify-container {
-    background: linear-gradient(to bottom, #5c4b30 0%, #121212 40%);
-    min-height: calc(100vh - 80px);
-    padding: 24px;
+.spotify-container[b-j4cmwyye8k] {    
+    min-height: calc(100vh - 66px);
+    padding: 0px 24px;
     color: #fff;
     display: flex;
     flex-direction: column;

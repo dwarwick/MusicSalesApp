@@ -536,7 +536,9 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 
 - **OnInitializedAsync**: Only for setting up event handlers or initializing non-data fields
 - **OnAfterRenderAsync(firstRender)**: For data loading, API calls, and DbContext operations
-- **OnParametersSetAsync**: For reacting to parameter changes
+- **OnParametersSetAsync**: For reacting to parameter changes (NON-database operations only)
+
+**CRITICAL**: Never perform database operations in `OnParametersSetAsync` as it can be called multiple times during component lifecycle, leading to concurrent DbContext access issues.
 
 ### Example Pattern
 
@@ -545,6 +547,12 @@ public partial class MyPageModel : BlazorBase
 {
     protected bool _loading = true;
     private bool _hasLoadedData = false;
+    
+    protected override void OnParametersSet()
+    {
+        // Only set flags or simple state, NO database calls
+        _isPlaylistMode = PlaylistId.HasValue;
+    }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
