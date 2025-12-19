@@ -526,29 +526,18 @@ h1:focus {
     gap: 1rem;
 }
 
-.like-dislike-counts {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.like-count,
-.dislike-count {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.like-icon,
-.dislike-icon {
-    width: 1.25rem;
-    height: 1.25rem;
-}
-
-.like-dislike-actions {
+.like-dislike-actions,
+.like-dislike-display {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.like-display,
+.dislike-display {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .like-button,
@@ -556,11 +545,14 @@ h1:focus {
     border: none;
     transition: transform 0.2s ease, opacity 0.2s ease;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .like-button:hover,
 .dislike-button:hover {
-    transform: scale(1.1);
+    transform: scale(1.05);
 }
 
 .like-button:disabled,
@@ -569,7 +561,14 @@ h1:focus {
     cursor: not-allowed;
 }
 
-.action-icon {
-    width: 1.5rem;
-    height: 1.5rem;
+.action-icon,
+.display-icon {
+    width: 1.25rem;
+    height: 1.25rem;
 }
+
+.count-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+

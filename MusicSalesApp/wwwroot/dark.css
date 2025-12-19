@@ -225,43 +225,26 @@ body {
 }
 
 /* Like/Dislike Component - Dark Theme Colors */
-.like-count {
-    color: #1ed760;
+.like-button,
+.dislike-button,
+.like-display,
+.dislike-display {
+    color: #8a8a8a;
 }
 
-.dislike-count {
-    color: #ff5555;
-}
-
-.like-icon,
-.dislike-icon {
-    opacity: 0.7;
-}
-
-.like-button {
-    background-color: transparent;
-    color: #1ed760;
-}
-
-.like-button:hover {
-    background-color: rgba(30, 215, 96, 0.15);
-}
-
-.like-button.active {
-    background-color: #1db954;
-    color: #000;
-}
-
-.dislike-button {
-    background-color: transparent;
-    color: #ff5555;
-}
-
+.like-button:hover,
 .dislike-button:hover {
-    background-color: rgba(255, 85, 85, 0.15);
+    background-color: rgba(138, 138, 138, 0.15);
+    color: #e0e0e0;
 }
 
+.like-button.active,
 .dislike-button.active {
-    background-color: #ff5555;
-    color: #000;
+    background-color: transparent;
+    color: #e0e0e0;
 }
+
+.count-text {
+    color: inherit;
+}
+
