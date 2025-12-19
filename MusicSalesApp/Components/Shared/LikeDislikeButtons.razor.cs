@@ -16,6 +16,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     protected bool? _userLikeStatus = null; // true = liked, false = disliked, null = no preference
     protected bool _isProcessing = false;
     private int? _currentUserId = null;
+    private int _previousSongMetadataId = 0;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -29,9 +30,10 @@ public partial class LikeDislikeButtonsModel : BlazorBase
 
     protected override async Task OnParametersSetAsync()
     {
-        // Reload data when SongMetadataId changes
-        if (SongMetadataId > 0)
+        // Only reload data when SongMetadataId actually changes
+        if (SongMetadataId > 0 && SongMetadataId != _previousSongMetadataId)
         {
+            _previousSongMetadataId = SongMetadataId;
             await LoadLikeCounts();
             await LoadUserLikeStatus();
         }
