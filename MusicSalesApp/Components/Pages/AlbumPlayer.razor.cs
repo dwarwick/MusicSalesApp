@@ -219,7 +219,8 @@ namespace MusicSalesApp.Components.Pages
                     CoverArtUrl = $"api/music/{SafeEncodePath(coverImagePath)}", // Cover art from metadata
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
-                    Price = albumPrice
+                    Price = albumPrice,
+                    MetadataId = albumCoverMeta.Id
                 };
 
                 // Pre-fetch all track SAS URLs in parallel for better performance
@@ -421,7 +422,8 @@ namespace MusicSalesApp.Components.Pages
                     CoverArtUrl = coverImageUrl,
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
-                    Price = 0 // Playlists don't have a price
+                    Price = 0, // Playlists don't have a price
+                    MetadataId = firstTrackMeta.Id // Use first track's metadata ID for playlists
                 };
 
                 // Pre-fetch all track SAS URLs in parallel for better performance
@@ -679,6 +681,19 @@ namespace MusicSalesApp.Components.Pages
             }
             
             return null;
+        }
+
+        protected int GetCurrentTrackMetadataId()
+        {
+            if (_albumInfo == null || _currentTrackIndex >= _albumInfo.Tracks.Count) return 0;
+            
+            var track = _albumInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                return metadata.Id;
+            }
+            
+            return 0;
         }
 
         /// <summary>
