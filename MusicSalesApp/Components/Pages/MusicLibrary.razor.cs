@@ -28,6 +28,7 @@ public class AlbumInfo
     public string CoverArtFileName { get; set; }
     public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
     public decimal Price { get; set; } = PriceDefaults.DefaultAlbumPrice;
+    public int MetadataId { get; set; } // ID of the album cover's SongMetadata record
 }
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
@@ -271,7 +272,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                             CoverArtUrl = $"api/music/{SafeEncodePath(imagePath)}",
                             CoverArtFileName = imagePath,
                             Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
-                            Price = albumPrice
+                            Price = albumPrice,
+                            MetadataId = coverMeta.Id
                         };
                         _albums.Add(album);
 
@@ -397,6 +399,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected decimal GetSongPrice(string fileName)
     {
         return _songPrices.TryGetValue(fileName, out var price) ? price : PriceDefaults.DefaultSongPrice;
+    }
+
+    protected int GetSongMetadataId(string fileName)
+    {
+        return _songMetadataIds.TryGetValue(fileName, out var id) ? id : 0;
     }
 
     protected async Task ToggleCartItem(string fileName)

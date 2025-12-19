@@ -518,3 +518,58 @@ h1:focus {
 .playlists-page-dialog-content {
     text-align: center;
 }
+
+/* Like/Dislike Component - Layout and Structure */
+.like-dislike-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.like-dislike-counts {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.like-count,
+.dislike-count {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.like-icon,
+.dislike-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.like-dislike-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.like-button,
+.dislike-button {
+    border: none;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+}
+
+.like-button:hover,
+.dislike-button:hover {
+    transform: scale(1.1);
+}
+
+.like-button:disabled,
+.dislike-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+}

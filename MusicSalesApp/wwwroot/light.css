@@ -275,3 +275,45 @@ body {
 .playlists-page-add-song-item {
     border: 1px solid #eee;
 }
+
+/* Like/Dislike Component - Light Theme Colors */
+.like-count {
+    color: #1db954;
+}
+
+.dislike-count {
+    color: #e50000;
+}
+
+.like-icon,
+.dislike-icon {
+    opacity: 0.7;
+}
+
+.like-button {
+    background-color: transparent;
+    color: #1db954;
+}
+
+.like-button:hover {
+    background-color: rgba(29, 185, 84, 0.1);
+}
+
+.like-button.active {
+    background-color: #1db954;
+    color: #fff;
+}
+
+.dislike-button {
+    background-color: transparent;
+    color: #e50000;
+}
+
+.dislike-button:hover {
+    background-color: rgba(229, 0, 0, 0.1);
+}
+
+.dislike-button.active {
+    background-color: #e50000;
+    color: #fff;
+}

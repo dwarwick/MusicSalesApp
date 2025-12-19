@@ -1,6 +1,7 @@
 @page "/music-library"
 @inherits MusicSalesApp.Components.Pages.MusicLibraryModel
 @using MusicSalesApp.Services
+@using MusicSalesApp.Components.Shared
 
 <h3>Music Library</h3>
 
@@ -184,6 +185,9 @@ else
                         }
                     </Authorized>
                 </AuthorizeView>
+
+                <!-- Like/Dislike Buttons -->
+                <LikeDislikeButtons SongMetadataId="album.MetadataId" />
             </SfCard>
         }
 
@@ -338,6 +342,9 @@ else
                         }
                     </Authorized>
                 </AuthorizeView>
+
+                <!-- Like/Dislike Buttons -->
+                <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" />
             </SfCard>
         }
     </div>
