@@ -52,20 +52,27 @@ namespace MusicSalesApp.Components.Pages
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
+
+        private bool isLoading;
         protected bool _hasActiveSubscription;
 
         protected override async Task OnParametersSetAsync()
         {
             _isPlaylistMode = PlaylistId.HasValue;
-            
-            if (_isPlaylistMode)
+
+            if (!isLoading)
             {
-                await LoadPlaylistInfo();
-            }
-            else
-            {
-                await LoadAlbumInfo();
-            }
+                isLoading = true;
+
+                if (_isPlaylistMode)
+                {
+                    await LoadPlaylistInfo();
+                }
+                else
+                {
+                    await LoadAlbumInfo();
+                }
+            }            
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)

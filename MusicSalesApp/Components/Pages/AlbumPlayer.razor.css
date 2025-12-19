@@ -1,12 +1,12 @@
-.spotify-container {
+/*.spotify-container {
     background: linear-gradient(to bottom, #1a4b30 0%, #121212 40%);
     min-height: calc(100vh - 80px);
     padding: 24px;
-    padding-bottom: 160px; /* Account for fixed player bar at bottom */
-    color: #fff;
+    padding-bottom: 160px;*/ /* Account for fixed player bar at bottom */
+    /*color: #fff;
     display: flex;
     flex-direction: column;
-}
+}*/
 
 .loading-state,
 .error-state {
@@ -430,4 +430,18 @@
     background-color: #ffa500;
     border-radius: 2px;
     z-index: 2;
+}
+
+
+
+
+/* 2. Section Styles */
+.song-header {
+    
+}
+
+.track-list-container {
+    overflow-y: auto;
+    min-height: 0; /* Keeps the grid row from expanding */    
+    margin: 24px 0;
 }
