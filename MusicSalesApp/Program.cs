@@ -160,6 +160,7 @@ try
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
+    builder.Services.AddScoped<ISongLikeService, SongLikeService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>

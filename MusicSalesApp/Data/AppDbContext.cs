@@ -21,6 +21,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<UserPlaylist> UserPlaylists { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Passkey> Passkeys { get; set; }
+    public DbSet<SongLike> SongLikes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -161,5 +162,31 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<Passkey>()
             .HasIndex(p => p.CredentialId)
             .IsUnique();
+
+        // Configure SongLike entity
+        builder.Entity<SongLike>()
+            .HasOne(sl => sl.User)
+            .WithMany()
+            .HasForeignKey(sl => sl.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<SongLike>()
+            .HasOne(sl => sl.SongMetadata)
+            .WithMany()
+            .HasForeignKey(sl => sl.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Composite unique index to ensure one like/dislike per user per song
+        builder.Entity<SongLike>()
+            .HasIndex(sl => new { sl.UserId, sl.SongMetadataId })
+            .IsUnique();
+
+        // Index for efficient querying of likes/dislikes by song
+        builder.Entity<SongLike>()
+            .HasIndex(sl => sl.SongMetadataId);
+
+        // Index for efficient querying of user's likes/dislikes
+        builder.Entity<SongLike>()
+            .HasIndex(sl => sl.UserId);
     }
 }
