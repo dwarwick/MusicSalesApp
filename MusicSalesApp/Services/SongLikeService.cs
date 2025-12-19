@@ -64,6 +64,7 @@ public class SongLikeService : ISongLikeService
                 // User disliked, change to like
                 existingLike.IsLike = true;
                 existingLike.UpdatedAt = DateTime.UtcNow;
+                context.Entry(existingLike).State = EntityState.Modified;
                 await context.SaveChangesAsync();
                 return true;
             }
@@ -107,6 +108,7 @@ public class SongLikeService : ISongLikeService
                 // User liked, change to dislike
                 existingLike.IsLike = false;
                 existingLike.UpdatedAt = DateTime.UtcNow;
+                context.Entry(existingLike).State = EntityState.Modified;
                 await context.SaveChangesAsync();
                 return true;
             }
