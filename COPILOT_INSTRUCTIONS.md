@@ -134,12 +134,18 @@ wwwroot/
 
 ### Blazor Server Component Lifecycle
 **IMPORTANT:** To avoid DbContext threading issues in Blazor Server:
-- **Use `OnAfterRenderAsync(bool firstRender)` for data loading**, not `OnInitializedAsync`
+- **Use `OnAfterRenderAsync(bool firstRender)` for data loading**, not `OnInitializedAsync` or `OnParametersSetAsync`
 - **Guard with `firstRender` check** and a `_hasLoadedData` flag
 - **Call `StateHasChanged()` after loading** to update the UI
 - **Use `InvokeAsync()` when updating UI from async context**
+- **Never perform database operations in `OnParametersSetAsync`** - it can be called multiple times, causing concurrent DbContext access
 
-`OnInitializedAsync()` can be called multiple times during circuit reconnections, causing "A second operation was started on this context instance" errors.
+`OnInitializedAsync()` and `OnParametersSetAsync()` can be called multiple times during circuit reconnections or parameter changes, causing "A second operation was started on this context instance" errors.
+
+**Lifecycle Method Usage:**
+- `OnParametersSet()` (not async): Only for setting flags or simple state based on parameters
+- `OnAfterRenderAsync(firstRender)`: For all data loading, API calls, and DbContext operations
+- `OnInitializedAsync()`: Only for event handler setup or non-data field initialization
 
 ### Example
 ```razor

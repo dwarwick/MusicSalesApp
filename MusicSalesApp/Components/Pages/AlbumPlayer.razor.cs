@@ -53,30 +53,39 @@ namespace MusicSalesApp.Components.Pages
         private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
         private bool invokedJs = false;
 
-        private bool isLoading;
+        private bool _hasLoadedData = false;
         protected bool _hasActiveSubscription;
 
-        protected override async Task OnParametersSetAsync()
+        protected override void OnParametersSet()
         {
+            // Only set the mode flag, don't load data here
             _isPlaylistMode = PlaylistId.HasValue;
-
-            if (!isLoading)
-            {
-                isLoading = true;
-
-                if (_isPlaylistMode)
-                {
-                    await LoadPlaylistInfo();
-                }
-                else
-                {
-                    await LoadAlbumInfo();
-                }
-            }            
         }
 
         protected override async Task OnAfterRenderAsync(bool firstRender)
         {
+            // Load data only on first render to avoid DbContext threading issues
+            if (firstRender && !_hasLoadedData)
+            {
+                _hasLoadedData = true;
+                try
+                {
+                    if (_isPlaylistMode)
+                    {
+                        await LoadPlaylistInfo();
+                    }
+                    else
+                    {
+                        await LoadAlbumInfo();
+                    }
+                }
+                finally
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+
+            // Initialize JS after data is loaded
             if (!invokedJs && !_loading && _albumInfo != null && _albumInfo.Tracks.Any())
             {
                 invokedJs = true;
