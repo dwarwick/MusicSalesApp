@@ -113,6 +113,14 @@
                             </div>
                         }
 
+                        <!-- Like/Dislike Buttons for current track -->
+                        @if (_currentTrackIndex >= 0 && _currentTrackIndex < _albumInfo.Tracks.Count)
+                        {
+                            <div class="track-like-dislike">
+                                <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
+                            </div>
+                        }
+
                     </div>
                 </div>
 
@@ -131,13 +139,7 @@
                     <span class="preview-label">Preview Only (60 seconds per track)</span>
                 }
 
-                <!-- Like/Dislike Buttons for current track -->
-                @if (_currentTrackIndex >= 0 && _currentTrackIndex < _albumInfo.Tracks.Count)
-                {
-                    <div class="track-like-dislike">
-                        <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
-                    </div>
-                }
+                
             </div>
         </div>
 
