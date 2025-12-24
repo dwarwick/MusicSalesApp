@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
@@ -40,6 +41,8 @@ public abstract class BUnitTestBase
     protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
     protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
+    protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
+    protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -60,6 +63,8 @@ public abstract class BUnitTestBase
         MockPlaylistService = new Mock<IPlaylistService>();
         MockSubscriptionService = new Mock<ISubscriptionService>();
         MockPasskeyService = new Mock<IPasskeyService>();
+        MockOpenGraphService = new Mock<IOpenGraphService>();
+        MockSongLikeService = new Mock<ISongLikeService>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -134,6 +139,18 @@ public abstract class BUnitTestBase
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<Passkey>());
 
+        // Setup default returns for IOpenGraphService methods
+        MockOpenGraphService.Setup(x => x.GenerateSongMetaTagsAsync(It.IsAny<string>()))
+            .ReturnsAsync(string.Empty);
+        MockOpenGraphService.Setup(x => x.GenerateAlbumMetaTagsAsync(It.IsAny<string>()))
+            .ReturnsAsync(string.Empty);
+
+        // Setup default returns for ISongLikeService methods
+        MockSongLikeService.Setup(x => x.GetLikeCountsAsync(It.IsAny<int>()))
+            .ReturnsAsync((0, 0));
+        MockSongLikeService.Setup(x => x.GetUserLikeStatusAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((bool?)null);
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -150,6 +167,19 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
         TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
+        TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
+        TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
+
+        // Add IConfiguration for components that need it
+        var configData = new Dictionary<string, string>
+        {
+            ["Facebook:AppId"] = "test-facebook-app-id",
+            ["PayPal:SubscriptionPrice"] = "3.99"
+        };
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(configData!)
+            .Build();
+        TestContext.Services.AddSingleton<IConfiguration>(configuration);
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
