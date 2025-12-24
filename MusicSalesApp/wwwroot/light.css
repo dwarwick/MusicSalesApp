@@ -281,19 +281,20 @@ body {
 .dislike-button,
 .like-display,
 .dislike-display {
-    color: black;
+    color: #b3b3b3;
+    background-color: rgba(179, 179, 179, 0.1);
 }
 
 .like-button:hover,
 .dislike-button:hover {
-    background-color: rgba(179, 179, 179, 0.1);
-    /*color: #fff;*/
+    background-color: rgba(179, 179, 179, 0.2);
+    color: #fff;
 }
 
 .like-button.active,
 .dislike-button.active {
-    background-color: transparent;
-    color: black;
+    background-color: rgba(179, 179, 179, 0.2);
+    color: #fff;
 }
 
 .count-text {

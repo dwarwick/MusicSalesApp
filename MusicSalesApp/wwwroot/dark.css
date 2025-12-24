@@ -230,17 +230,18 @@ body {
 .like-display,
 .dislike-display {
     color: #8a8a8a;
+    background-color: rgba(138, 138, 138, 0.1);
 }
 
 .like-button:hover,
 .dislike-button:hover {
-    background-color: rgba(138, 138, 138, 0.15);
+    background-color: rgba(138, 138, 138, 0.2);
     color: #e0e0e0;
 }
 
 .like-button.active,
 .dislike-button.active {
-    background-color: transparent;
+    background-color: rgba(138, 138, 138, 0.2);
     color: #e0e0e0;
 }
 

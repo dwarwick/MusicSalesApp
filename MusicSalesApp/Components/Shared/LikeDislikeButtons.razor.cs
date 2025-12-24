@@ -12,10 +12,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     public EventCallback OnLikeStatusChanged { get; set; }
 
     [Parameter]
-    public bool ShowOnlyLike { get; set; } = false;
-
-    [Parameter]
-    public bool ShowOnlyDislike { get; set; } = false;
+    public bool VerticalLayout { get; set; } = false;
 
     protected int _likeCount = 0;
     protected int _dislikeCount = 0;
