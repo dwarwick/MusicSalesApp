@@ -1,0 +1,52 @@
+@* Facebook Share Button Component *@
+
+<div class="fb-share-button-wrapper @CssClass" 
+     data-href="@ShareUrl" 
+     data-layout="@Layout" 
+     data-size="@Size">
+    <a target="_blank" 
+       rel="noopener noreferrer"
+       href="https://www.facebook.com/sharer/sharer.php?u=@System.Web.HttpUtility.UrlEncode(ShareUrl)&amp;src=sdkpreparse" 
+       class="fb-xfbml-parse-ignore">
+        @if (!string.IsNullOrEmpty(ButtonText))
+        {
+            @ButtonText
+        }
+        else
+        {
+            <span>Share</span>
+        }
+    </a>
+</div>
+
+@code {
+    /// <summary>
+    /// The URL to share
+    /// </summary>
+    [Parameter]
+    public string ShareUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Layout style: button, button_count, box_count, or icon_link
+    /// </summary>
+    [Parameter]
+    public string Layout { get; set; } = "button_count";
+
+    /// <summary>
+    /// Button size: small, medium, or large
+    /// </summary>
+    [Parameter]
+    public string Size { get; set; } = "small";
+
+    /// <summary>
+    /// Custom button text (optional)
+    /// </summary>
+    [Parameter]
+    public string ButtonText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Additional CSS classes
+    /// </summary>
+    [Parameter]
+    public string CssClass { get; set; } = string.Empty;
+}

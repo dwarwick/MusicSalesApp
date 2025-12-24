@@ -9,6 +9,7 @@ using System.Net.Http; // HttpClient
 using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace MusicSalesApp.Components.Base;
 
@@ -61,12 +62,18 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected ISongLikeService SongLikeService { get; set; } = default!;
 
+    [Inject]
+    protected IOpenGraphService OpenGraphService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;
 
     [Inject]
     protected ILoggerFactory LoggerFactory { get; set; } = default!;
+
+    [Inject]
+    protected IConfiguration Configuration { get; set; } = default!;
 
     private ILogger _logger;
     protected ILogger Logger => _logger ??= LoggerFactory.CreateLogger(GetType());

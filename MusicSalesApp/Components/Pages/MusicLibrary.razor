@@ -157,6 +157,12 @@ else
                         </div>
                         <LikeDislikeButtons SongMetadataId="album.MetadataId" VerticalLayout="false" />
                         <div class="action-column">
+                            <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
+                                               Layout="icon_link" 
+                                               Size="small" 
+                                               CssClass="share-button-action" />
+                        </div>
+                        <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                         </div>
                     </div>
@@ -315,6 +321,12 @@ else
                             <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
+                        <div class="action-column">
+                            <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
+                                               Layout="icon_link" 
+                                               Size="small" 
+                                               CssClass="share-button-action" />
+                        </div>
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                         </div>

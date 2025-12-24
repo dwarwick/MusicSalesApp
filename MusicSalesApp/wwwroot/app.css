@@ -648,3 +648,25 @@ h1:focus {
     font-weight: 500;
 }
 
+
+/* Facebook Share Button Styles */
+.fb-share-button-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fb-share-button-wrapper a {
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.fb-share-button-wrapper a:hover {
+    opacity: 0.8;
+}
+
+/* Facebook share button in action controls */
+.share-button-action {
+    display: inline-flex;
+    align-items: center;
+}

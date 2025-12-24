@@ -365,6 +365,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         return _songMetadata?.Id ?? 0;
     }
 
+    protected string GetShareUrl()
+    {
+        var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+        return $"{baseUrl}/song/{Uri.EscapeDataString(SongTitle)}";
+    }
+
     protected string FormatTime(double seconds)
     {
         if (double.IsNaN(seconds) || double.IsInfinity(seconds))

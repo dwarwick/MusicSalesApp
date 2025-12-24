@@ -161,6 +161,7 @@ try
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
     builder.Services.AddScoped<ISongLikeService, SongLikeService>();
+    builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
