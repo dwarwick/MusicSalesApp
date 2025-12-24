@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
+using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -20,6 +21,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     protected bool _isProcessing = false;
     private int? _currentUserId = null;
     private int _previousSongMetadataId = 0;
+    protected SfDialog _loginDialog;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -155,5 +157,40 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     protected string GetDislikeButtonTitle()
     {
         return _userLikeStatus == false ? "Remove dislike" : "Dislike this song";
+    }
+
+    protected void HandleUnauthenticatedLikeClick()
+    {
+        ShowLoginDialog();
+    }
+
+    protected void HandleUnauthenticatedDislikeClick()
+    {
+        ShowLoginDialog();
+    }
+
+    private async void ShowLoginDialog()
+    {
+        if (_loginDialog != null)
+        {
+            await _loginDialog.ShowAsync();
+        }
+    }
+
+    protected async void NavigateToLogin()
+    {
+        if (_loginDialog != null)
+        {
+            await _loginDialog.HideAsync();
+        }
+        NavigationManager.NavigateTo("/login", forceLoad: true);
+    }
+
+    protected async void CloseLoginDialog()
+    {
+        if (_loginDialog != null)
+        {
+            await _loginDialog.HideAsync();
+        }
     }
 }
