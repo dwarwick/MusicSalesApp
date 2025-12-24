@@ -112,7 +112,7 @@ h1:focus {
 
 .music-cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 24px;
     width: 100%;
 }
@@ -153,7 +153,7 @@ h1:focus {
 
 .card-actions {
     display: flex;
-    justify-content: space-between !important;
+    justify-content: space-between !important;    
     align-items: center;
     margin-top: auto;
 }
@@ -162,6 +162,7 @@ h1:focus {
 .card-actions-with-likes {
     display: flex;
     justify-content: space-between !important;
+    gap: 6px;
     align-items: center;
     margin-top: auto;
 }

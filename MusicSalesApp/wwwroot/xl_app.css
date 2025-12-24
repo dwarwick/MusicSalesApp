@@ -350,7 +350,7 @@
 /* 1. The Wrapper (Router Container) */
 .album-player-spotify-container {
     display: grid;
-    grid-template-rows: 41vh 1fr 88px;
+    grid-template-rows: 40vh 1fr 88px;
     grid-template-columns: 100%;
     height: calc(100vh - 66px);
     width: 100%;

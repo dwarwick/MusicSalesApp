@@ -123,8 +123,6 @@
 
                     </div>
                 </div>
-
-                <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>
                 @if (_hasActiveSubscription)
                 {
                     <span class="subscription-badge">
@@ -138,8 +136,7 @@
                 {
                     <span class="preview-label">Preview Only (60 seconds per track)</span>
                 }
-
-                
+                <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>                
             </div>
         </div>
 
