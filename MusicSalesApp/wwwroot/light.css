@@ -252,6 +252,10 @@ body {
     color: black;    
 }
 
+.song-title {
+    color: #282828;
+}
+
 .card-track-count {
     color: black;
 }
