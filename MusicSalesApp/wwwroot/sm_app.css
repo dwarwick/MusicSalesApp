@@ -264,3 +264,134 @@
             fill: #b3b3b3;
         }
 }
+
+/* Landscape Mobile Optimization - for devices with limited viewport height */
+@media (max-width: 1200px) and (max-height: 600px) and (orientation: landscape) {
+    /* MusicLibrary - Reduce grid gaps and card spacing in landscape */
+    .music-cards-grid {
+        gap: 12px;
+    }
+
+    .music-card {
+        padding: 8px;
+    }
+
+    /* Reduce album art size to fit more content vertically */
+    .card-album-art {
+        margin-bottom: 8px;
+    }
+
+    /* Reduce title spacing */
+    .card-song-title {
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+
+    /* Reduce track count spacing */
+    .card-track-count {
+        font-size: 11px;
+        margin-bottom: 6px;
+    }
+
+    /* Compact card actions */
+    .card-actions-with-likes {
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    /* Reduce action button sizes */
+    .action-button {
+        min-width: 32px !important;
+        min-height: 32px !important;
+    }
+
+    .action-button .e-btn-icon {
+        font-size: 16px !important;
+    }
+
+    /* Compact like/dislike buttons */
+    .like-button,
+    .dislike-button,
+    .like-display,
+    .dislike-display {
+        min-width: 32px !important;
+        min-height: 32px !important;
+        padding: 6px !important;
+    }
+
+    .action-icon,
+    .display-icon {
+        width: 16px !important;
+        height: 16px !important;
+    }
+
+    .count-text {
+        font-size: 0.75rem !important;
+    }
+
+    /* Compact cart button */
+    .card-cart-button {
+        padding: 6px 10px;
+        margin-top: 6px;
+        font-size: 12px;
+    }
+
+    /* Reduce owned badge size */
+    .owned-badge {
+        width: 20px;
+        height: 20px;
+        top: 6px;
+        right: 6px;
+    }
+
+    .owned-badge svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    /* Reduce album badge size */
+    .album-badge {
+        font-size: 9px;
+        padding: 3px 6px;
+        bottom: 6px;
+        left: 6px;
+    }
+
+    /* Compact mini player controls */
+    .card-mini-player {
+        gap: 6px;
+    }
+
+    .card-mini-controls-row {
+        gap: 6px;
+    }
+
+    .card-mini-controls {
+        gap: 3px;
+    }
+
+    .card-volume-controls {
+        gap: 2px;
+    }
+
+    .card-volume-bar-container {
+        width: 50px;
+    }
+
+    .card-progress-container {
+        gap: 4px;
+    }
+
+    .card-time-display {
+        font-size: 10px;
+    }
+
+    .card-now-playing {
+        font-size: 11px;
+    }
+
+    /* Reduce library container padding */
+    .music-library-container {
+        padding: 12px;
+    }
+}

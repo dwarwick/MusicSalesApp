@@ -255,6 +255,14 @@ h1:focus {
     margin-top: auto;
 }
 
+.card-now-playing {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .card-mini-controls-row {
     display: flex;
     align-items: center;
@@ -484,6 +492,13 @@ h1:focus {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Track Count */
+.card-track-count {
+    font-size: 12px;
+    margin-bottom: 8px;
+    opacity: 0.8;
 }
 /* Playlists Page Layout */
 .playlists-page-header {
