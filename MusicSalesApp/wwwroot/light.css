@@ -62,7 +62,7 @@ body {
 }
 
 .music-card {
-    background: white;
+    background: rgba(0, 0, 0, 0.125);    
 }
 
     .music-card:hover {
@@ -281,19 +281,19 @@ body {
 .dislike-button,
 .like-display,
 .dislike-display {
-    color: #b3b3b3;
+    color: black;
 }
 
 .like-button:hover,
 .dislike-button:hover {
     background-color: rgba(179, 179, 179, 0.1);
-    color: #fff;
+    /*color: #fff;*/
 }
 
 .like-button.active,
 .dislike-button.active {
     background-color: transparent;
-    color: #fff;
+    color: black;
 }
 
 .count-text {
