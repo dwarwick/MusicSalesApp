@@ -158,6 +158,41 @@ h1:focus {
     margin-top: auto;
 }
 
+/* New layout for card actions with like/dislike buttons */
+.card-actions-with-likes {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-top: auto;
+    gap: 1rem;
+}
+
+.action-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.action-button {
+    /* Ensure consistent button sizing */
+}
+
+.like-dislike-actions.single-action,
+.like-dislike-display.single-action {
+    /* Remove gap when showing single button */
+    gap: 0;
+}
+
+.like-dislike-actions.single-action .like-button,
+.like-dislike-actions.single-action .dislike-button,
+.like-dislike-display.single-action .like-display,
+.like-dislike-display.single-action .dislike-display {
+    /* Center single button */
+    margin: 0;
+}
+
 .card-play-button {
     width: 40px;
     height: 40px;

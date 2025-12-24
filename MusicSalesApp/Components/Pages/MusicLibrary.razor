@@ -150,10 +150,16 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions (Play and View buttons) -->
-                    <div class="card-actions">
-                        <SfButton onclick=@(() => PlayAlbum(album)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
-                        <SfButton onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                    <!-- Card Actions with Like/Dislike (Play and View buttons) -->
+                    <div class="card-actions-with-likes">
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => PlayAlbum(album)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
+                            <LikeDislikeButtons SongMetadataId="album.MetadataId" ShowOnlyLike="true" />
+                        </div>
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                            <LikeDislikeButtons SongMetadataId="album.MetadataId" ShowOnlyDislike="true" />
+                        </div>
                     </div>
                 }
 
@@ -185,9 +191,6 @@ else
                         }
                     </Authorized>
                 </AuthorizeView>
-
-                <!-- Like/Dislike Buttons -->
-                <LikeDislikeButtons SongMetadataId="album.MetadataId" />
             </SfCard>
         }
 
@@ -307,10 +310,16 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions (Play and View buttons) -->
-                    <div class="card-actions">
-                        <SfButton onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
-                        <SfButton onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                    <!-- Card Actions with Like/Dislike (Play and View buttons) -->
+                    <div class="card-actions-with-likes">
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
+                            <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" ShowOnlyLike="true" />
+                        </div>
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                            <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" ShowOnlyDislike="true" />
+                        </div>
                     </div>
                 }
 
@@ -342,9 +351,6 @@ else
                         }
                     </Authorized>
                 </AuthorizeView>
-
-                <!-- Like/Dislike Buttons -->
-                <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" />
             </SfCard>
         }
     </div>
