@@ -159,17 +159,17 @@ public partial class LikeDislikeButtonsModel : BlazorBase
         return _userLikeStatus == false ? "Remove dislike" : "Dislike this song";
     }
 
-    protected void HandleUnauthenticatedLikeClick()
+    protected async Task HandleUnauthenticatedLikeClick()
     {
-        ShowLoginDialog();
+        await ShowLoginDialog();
     }
 
-    protected void HandleUnauthenticatedDislikeClick()
+    protected async Task HandleUnauthenticatedDislikeClick()
     {
-        ShowLoginDialog();
+        await ShowLoginDialog();
     }
 
-    private async void ShowLoginDialog()
+    private async Task ShowLoginDialog()
     {
         if (_loginDialog != null)
         {
@@ -177,7 +177,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase
         }
     }
 
-    protected async void NavigateToLogin()
+    protected async Task NavigateToLogin()
     {
         if (_loginDialog != null)
         {
@@ -186,7 +186,7 @@ public partial class LikeDislikeButtonsModel : BlazorBase
         NavigationManager.NavigateTo("/login", forceLoad: true);
     }
 
-    protected async void CloseLoginDialog()
+    protected async Task CloseLoginDialog()
     {
         if (_loginDialog != null)
         {
