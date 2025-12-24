@@ -161,7 +161,7 @@ h1:focus {
 /* New layout for card actions with like/dislike buttons */
 .card-actions-with-likes {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between !important;
     align-items: center;
     margin-top: auto;
 }
