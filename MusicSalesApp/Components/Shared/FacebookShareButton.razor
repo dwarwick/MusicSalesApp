@@ -1,22 +1,9 @@
 @* Facebook Share Button Component *@
 
-<div class="fb-share-button-wrapper @CssClass" 
+<div class="fb-share-button @CssClass" 
      data-href="@ShareUrl" 
      data-layout="@Layout" 
      data-size="@Size">
-    <a target="_blank" 
-       rel="noopener noreferrer"
-       href="https://www.facebook.com/sharer/sharer.php?u=@System.Web.HttpUtility.UrlEncode(ShareUrl)&amp;src=sdkpreparse" 
-       class="fb-xfbml-parse-ignore">
-        @if (!string.IsNullOrEmpty(ButtonText))
-        {
-            @ButtonText
-        }
-        else
-        {
-            <span>Share</span>
-        }
-    </a>
 </div>
 
 @code {

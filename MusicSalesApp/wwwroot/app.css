@@ -650,19 +650,16 @@ h1:focus {
 
 
 /* Facebook Share Button Styles */
-.fb-share-button-wrapper {
+.fb-share-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.fb-share-button-wrapper a {
-    text-decoration: none;
-    transition: opacity 0.2s ease;
-}
-
-.fb-share-button-wrapper a:hover {
-    opacity: 0.8;
+/* Facebook share button on cards */
+.share-button-card {
+    display: inline-flex;
+    align-items: center;
 }
 
 /* Facebook share button in action controls */
