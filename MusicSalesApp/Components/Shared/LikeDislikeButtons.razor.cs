@@ -161,17 +161,32 @@ public partial class LikeDislikeButtonsModel : BlazorBase
 
     protected async Task HandleUnauthenticatedClick()
     {
-        await _loginDialog?.ShowAsync();
+        if (_loginDialog != null)
+        {
+            await _loginDialog.ShowAsync();
+        }
+        else
+        {
+            Logger.LogWarning("Login dialog reference is null when attempting to show dialog");
+        }
     }
 
     protected async Task NavigateToLogin()
     {
-        await _loginDialog?.HideAsync();
+        await HideLoginDialog();
         NavigationManager.NavigateTo("/login", forceLoad: true);
     }
 
     protected async Task CloseLoginDialog()
     {
-        await _loginDialog?.HideAsync();
+        await HideLoginDialog();
+    }
+
+    private async Task HideLoginDialog()
+    {
+        if (_loginDialog != null)
+        {
+            await _loginDialog.HideAsync();
+        }
     }
 }
