@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -43,6 +44,7 @@ public abstract class BUnitTestBase
     protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
     protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
     protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
+    protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -65,6 +67,7 @@ public abstract class BUnitTestBase
         MockPasskeyService = new Mock<IPasskeyService>();
         MockOpenGraphService = new Mock<IOpenGraphService>();
         MockSongLikeService = new Mock<ISongLikeService>();
+        MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -151,6 +154,14 @@ public abstract class BUnitTestBase
         MockSongLikeService.Setup(x => x.GetUserLikeStatusAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((bool?)null);
 
+        // Setup DbContextFactory mock - use in-memory database for testing
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+            .Options;
+        
+        MockDbContextFactory.Setup(x => x.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MusicSalesApp.Data.AppDbContext(options));
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -169,6 +180,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
         TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
         TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
+        TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it
         var configData = new Dictionary<string, string>

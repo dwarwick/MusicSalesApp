@@ -14,6 +14,6 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Hello, world!"));
+        Assert.That(cut.Markup, Does.Contain("Welcome to Stream Tunes!"));
     }
 }
