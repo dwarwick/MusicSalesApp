@@ -1,6 +1,7 @@
 @page "/song/{SongTitle}"
 @inherits SongPlayerModel
 @using MusicSalesApp.Services
+@using MusicSalesApp.Components.Shared
 
 <PageTitle>@GetDisplayTitle()</PageTitle>
 
@@ -117,6 +118,14 @@
                 else if (!_ownsSong)
                 {
                     <span class="preview-label">Preview Only (60 seconds)</span>
+                }
+
+                <!-- Like/Dislike Buttons -->
+                @if (GetSongMetadataId() > 0)
+                {
+                    <div class="song-like-dislike">
+                        <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
+                    </div>
                 }
             </div>
         </div>        

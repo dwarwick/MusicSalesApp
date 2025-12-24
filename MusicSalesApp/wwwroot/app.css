@@ -112,7 +112,7 @@ h1:focus {
 
 .music-cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 24px;
     width: 100%;
 }
@@ -153,9 +153,62 @@ h1:focus {
 
 .card-actions {
     display: flex;
-    justify-content: space-between !important;
+    justify-content: space-between !important;    
     align-items: center;
     margin-top: auto;
+}
+
+/* New layout for card actions with like/dislike buttons */
+.card-actions-with-likes {
+    display: flex;
+    justify-content: space-between !important;
+    gap: 6px;
+    align-items: center;
+    margin-top: auto;
+}
+
+.action-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.action-button {
+    /* Ensure consistent button sizing with like/dislike buttons */
+    min-width: 40px;
+    min-height: 40px;
+}
+
+.action-button .e-btn-icon {
+    /* Ensure icon inside button is consistent size */
+    font-size: 20px;
+}
+
+/* Vertical layout support for like/dislike buttons */
+.like-dislike-container.vertical-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.like-dislike-actions.vertical {
+    flex-direction: row;
+    gap: 0.5rem;
+}
+
+.like-dislike-display.vertical {
+    flex-direction: row;
+    gap: 0.5rem;
+}
+
+.like-dislike-counts-vertical {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: inherit;
 }
 
 .card-play-button {
@@ -518,3 +571,65 @@ h1:focus {
 .playlists-page-dialog-content {
     text-align: center;
 }
+
+/* Like/Dislike Component - Layout and Structure */
+.like-dislike-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.like-dislike-actions,
+.like-dislike-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.like-display,
+.dislike-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+}
+
+.like-button,
+.dislike-button {
+    border: none;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+}
+
+.like-button:hover,
+.dislike-button:hover {
+    transform: scale(1.05);
+}
+
+.like-button:disabled,
+.dislike-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-icon,
+.display-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.count-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+

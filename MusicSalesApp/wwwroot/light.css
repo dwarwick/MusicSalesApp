@@ -62,7 +62,7 @@ body {
 }
 
 .music-card {
-    background: white;
+    background: rgba(0, 0, 0, 0.125);    
 }
 
     .music-card:hover {
@@ -275,3 +275,29 @@ body {
 .playlists-page-add-song-item {
     border: 1px solid #eee;
 }
+
+/* Like/Dislike Component - Light Theme Colors */
+.like-button,
+.dislike-button,
+.like-display,
+.dislike-display {
+    color: black;
+    background-color: white;
+}
+
+.like-button:hover,
+.dislike-button:hover {
+    background-color: rgba(179, 179, 179, 0.2);
+    /*color: #fff;*/
+}
+
+.like-button.active,
+.dislike-button.active {
+    background-color: rgba(179, 179, 179, 0.2);
+    /*color: #fff;*/
+}
+
+.count-text {
+    color: inherit;
+}
+

@@ -2,6 +2,7 @@
 @page "/playlist/{PlaylistId:int}"
 @inherits AlbumPlayerModel
 @using MusicSalesApp.Services
+@using MusicSalesApp.Components.Shared
 
 <PageTitle>@GetDisplayTitle()</PageTitle>
 
@@ -112,10 +113,16 @@
                             </div>
                         }
 
+                        <!-- Like/Dislike Buttons for current track -->
+                        @if (_currentTrackIndex >= 0 && _currentTrackIndex < _albumInfo.Tracks.Count)
+                        {
+                            <div class="track-like-dislike">
+                                <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
+                            </div>
+                        }
+
                     </div>
                 </div>
-
-                <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>
                 @if (_hasActiveSubscription)
                 {
                     <span class="subscription-badge">
@@ -129,6 +136,7 @@
                 {
                     <span class="preview-label">Preview Only (60 seconds per track)</span>
                 }
+                <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>                
             </div>
         </div>
 

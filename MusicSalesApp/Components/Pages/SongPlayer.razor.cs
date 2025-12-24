@@ -360,6 +360,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         return null;
     }
 
+    protected int GetSongMetadataId()
+    {
+        return _songMetadata?.Id ?? 0;
+    }
+
     protected string FormatTime(double seconds)
     {
         if (double.IsNaN(seconds) || double.IsInfinity(seconds))
