@@ -205,6 +205,26 @@ public abstract class BUnitTestBase
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
         TestContext.Services.AddSingleton<HttpClient>(httpClient);
         // NavigationManager is provided by bUnit automatically.
+        
+        // NOTE: Cannot set RendererInfo here because it triggers service retrieval
+        // which prevents adding more services. This causes SfDialog components to fail
+        // in tests. See: https://github.com/bUnit-dev/bUnit/issues/XXX
+    }
+
+    /// <summary>
+    /// Sets the RendererInfo for tests that need it (e.g., tests with SfDialog components).
+    /// Call this method AFTER BaseSetup and BEFORE rendering any components.
+    /// </summary>
+    protected void SetupRendererInfo()
+    {
+        try
+        {
+            TestContext.Renderer.SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
+        }
+        catch (InvalidOperationException)
+        {
+            // RendererInfo already set or services already retrieved - ignore
+        }
     }
 
     [TearDown]

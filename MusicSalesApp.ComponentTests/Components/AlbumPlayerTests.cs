@@ -127,6 +127,7 @@ public class AlbumPlayerTests : BUnitTestBase
             .ReturnsAsync(new List<UserPlaylist> { userPlaylist });
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.PlaylistId, 1));
 
@@ -189,6 +190,7 @@ public class AlbumPlayerTests : BUnitTestBase
             .ReturnsAsync(new List<UserPlaylist> { userPlaylist });
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.PlaylistId, 1));
 
@@ -255,6 +257,7 @@ public class AlbumPlayerTests : BUnitTestBase
             .ReturnsAsync(songs);
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.PlaylistId, 1));
 
@@ -325,6 +328,7 @@ public class AlbumPlayerTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
             .ReturnsAsync(albumMetadata);
 
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.AlbumName, "Test Album"));
 
@@ -353,6 +357,7 @@ public class AlbumPlayerTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
             .ReturnsAsync(albumMetadata);
 
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.AlbumName, "Test Album"));
 
@@ -381,6 +386,7 @@ public class AlbumPlayerTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
             .ReturnsAsync(albumMetadata);
 
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.AlbumName, "Test Album"));
 
@@ -421,6 +427,7 @@ public class AlbumPlayerTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
             .ReturnsAsync(albumMetadata);
 
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.AlbumName, "Test Album"));
 
@@ -458,6 +465,7 @@ public class AlbumPlayerTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetByAlbumNameAsync("Test Album"))
             .ReturnsAsync(albumMetadata);
 
+        SetupRendererInfo();
         var cut = TestContext.Render<AlbumPlayer>(parameters => parameters
             .Add(p => p.AlbumName, "Test Album"));
 
