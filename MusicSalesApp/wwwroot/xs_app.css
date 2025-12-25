@@ -235,4 +235,20 @@
             height: 24px;
             fill: #b3b3b3;
         }
+
+    /* Stream Count on Card */
+    .card-stream-count {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        color: #b3b3b3;
+        font-size: 10px;
+        margin-bottom: 4px;
+    }
+
+    .card-stream-icon {
+        width: 10px;
+        height: 10px;
+        fill: currentColor;
+    }
 }

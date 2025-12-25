@@ -84,14 +84,28 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to song metadata IDs for cart operations
     private Dictionary<string, int> _songMetadataIds = new Dictionary<string, int>();
 
+    // Map song metadata IDs to stream counts
+    private Dictionary<int, int> _streamCounts = new Dictionary<int, int>();
+
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
     private bool _isAuthenticated;
     protected bool _hasActiveSubscription;
+    private Action<int, int> _streamCountUpdatedHandler;
+    private Action<int, int> _hubStreamCountHandler;
 
     protected override async Task OnInitializedAsync()
     {
+        // Subscribe to stream count updates (local in-process events)
+        _streamCountUpdatedHandler = OnStreamCountUpdated;
+        StreamCountService.OnStreamCountUpdated += _streamCountUpdatedHandler;
+
+        // Subscribe to SignalR hub for cross-tab updates
+        _hubStreamCountHandler = OnStreamCountUpdated;
+        StreamCountHubClient.OnStreamCountReceived += _hubStreamCountHandler;
+        await StreamCountHubClient.StartAsync();
+
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
@@ -103,6 +117,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         
         // Then load files - this will set _loading to false
         await LoadFiles();
+    }
+
+    private void OnStreamCountUpdated(int songMetadataId, int newCount)
+    {
+        // Update local stream count tracking
+        if (_streamCounts.ContainsKey(songMetadataId))
+        {
+            _streamCounts[songMetadataId] = newCount;
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -118,7 +142,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             }
 
             var isRestricted = IsCurrentPlayingTrackRestricted();
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS);
+            var songMetadataId = GetCurrentPlayingSongMetadataId();
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS, songMetadataId);
             await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
@@ -149,6 +174,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Unsubscribe from stream count updates (local)
+        if (_streamCountUpdatedHandler != null)
+        {
+            StreamCountService.OnStreamCountUpdated -= _streamCountUpdatedHandler;
+        }
+
+        // Unsubscribe from SignalR hub updates
+        if (_hubStreamCountHandler != null)
+        {
+            StreamCountHubClient.OnStreamCountReceived -= _hubStreamCountHandler;
+        }
+
         try
         {
             if (_jsModule != null)
@@ -327,6 +364,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     }
                     // Store the metadata ID for cart operations
                     _songMetadataIds[audioFile.Name] = songMeta.Id;
+                    // Store the stream count
+                    _streamCounts[songMeta.Id] = songMeta.NumberOfStreams;
                 }
                 _songPrices[audioFile.Name] = songPrice;
             }
@@ -404,6 +443,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected int GetSongMetadataId(string fileName)
     {
         return _songMetadataIds.TryGetValue(fileName, out var id) ? id : 0;
+    }
+
+    protected int GetSongStreamCount(string fileName)
+    {
+        var metadataId = GetSongMetadataId(fileName);
+        if (metadataId > 0 && _streamCounts.TryGetValue(metadataId, out var count))
+        {
+            return count;
+        }
+        return 0;
     }
 
     protected async Task ToggleCartItem(string fileName)
@@ -623,6 +672,27 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
 
         return true; // Default to restricted if we can't determine
+    }
+
+    /// <summary>
+    /// Gets the metadata ID for the currently playing track.
+    /// </summary>
+    protected int GetCurrentPlayingSongMetadataId()
+    {
+        // For albums, get the current track's metadata ID
+        if (_playingAlbum != null && _currentTrackIndex < _playingAlbum.Tracks.Count)
+        {
+            var trackFileName = _playingAlbum.Tracks[_currentTrackIndex].Name;
+            return GetSongMetadataId(trackFileName);
+        }
+
+        // For individual songs, get the file's metadata ID
+        if (!string.IsNullOrEmpty(_playingFileName))
+        {
+            return GetSongMetadataId(_playingFileName);
+        }
+
+        return 0;
     }
 
     protected async Task PlayCard(string fileName)
@@ -856,6 +926,36 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             _currentTrackIndex = 0;
             InvokeAsync(StateHasChanged);
         }
+    }
+
+    [JSInvokable]
+    public async Task RecordStream(int songMetadataId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
+                if (result != null)
+                {
+                    // Update local stream count tracking
+                    _streamCounts[songMetadataId] = result.StreamCount;
+                    await InvokeAsync(StateHasChanged);
+                    Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+        }
+    }
+
+    private class StreamCountResponse
+    {
+        public int SongMetadataId { get; set; }
+        public int StreamCount { get; set; }
     }
 
     // Album-specific methods

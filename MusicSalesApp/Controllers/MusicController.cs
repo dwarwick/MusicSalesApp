@@ -14,15 +14,18 @@ namespace MusicSalesApp.Controllers
     {
         private readonly IAzureStorageService _storageService;
         private readonly ICartService _cartService;
+        private readonly IStreamCountService _streamCountService;
         private readonly UserManager<ApplicationUser> _userManager;
 
         public MusicController(
             IAzureStorageService storageService,
             ICartService cartService,
+            IStreamCountService streamCountService,
             UserManager<ApplicationUser> userManager)
         {
             _storageService = storageService;
             _cartService = cartService;
+            _streamCountService = streamCountService;
             _userManager = userManager;
         }
 
@@ -69,6 +72,38 @@ namespace MusicSalesApp.Controllers
             var uri = _storageService.GetReadSasUri(fileName, lifetime);
 
             return Ok(new { url = uri.ToString() });
+        }
+
+        /// <summary>
+        /// Records a stream for a song. Called when a song has been played for at least 30 continuous seconds.
+        /// </summary>
+        /// <param name="songMetadataId">The ID of the song metadata record.</param>
+        /// <returns>The updated stream count.</returns>
+        [HttpPost("stream/{songMetadataId:int}")]
+        public async Task<IActionResult> RecordStream(int songMetadataId)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            var newCount = await _streamCountService.IncrementStreamCountAsync(songMetadataId);
+            
+            return Ok(new { songMetadataId, streamCount = newCount });
+        }
+
+        /// <summary>
+        /// Gets the stream count for a song.
+        /// </summary>
+        /// <param name="songMetadataId">The ID of the song metadata record.</param>
+        /// <returns>The current stream count.</returns>
+        [HttpGet("stream-count/{songMetadataId:int}")]
+        public async Task<IActionResult> GetStreamCount(int songMetadataId)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            var count = await _streamCountService.GetStreamCountAsync(songMetadataId);
+            
+            return Ok(new { songMetadataId, streamCount = count });
         }
 
         private static string NormalizeContentType(string original, string fileName)

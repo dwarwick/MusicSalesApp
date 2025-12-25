@@ -4,12 +4,44 @@ let playerState = {
     maxDuration: 60
 };
 
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
+// Stream tracking state for album player
+const STREAM_THRESHOLD_SECONDS = 30;
+const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
+let streamTracker = {
+    songMetadataId: 0,
+    playedTime: 0,
+    lastTime: 0,
+    hasRecordedStream: false,
+    isSeeking: false
+};
+
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
     if (!audioElement) return;
 
     // Store initial state
     playerState.isRestricted = isRestricted;
     playerState.maxDuration = maxDuration;
+
+    // Reset stream tracking for new song
+    streamTracker = {
+        songMetadataId: songMetadataId,
+        playedTime: 0,
+        lastTime: 0,
+        hasRecordedStream: false,
+        isSeeking: false
+    };
+
+    // Track seeking events to reset continuous playback tracking
+    audioElement.addEventListener('seeking', () => {
+        streamTracker.isSeeking = true;
+    });
+
+    audioElement.addEventListener('seeked', () => {
+        // Reset the continuous playback counter when user seeks
+        streamTracker.playedTime = 0;
+        streamTracker.lastTime = audioElement.currentTime;
+        streamTracker.isSeeking = false;
+    });
 
     audioElement.addEventListener('timeupdate', () => {
         // Enforce 60 second limit for restricted users (uses current state)
@@ -18,6 +50,23 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
             audioElement.currentTime = playerState.maxDuration;
             dotNetRef.invokeMethodAsync('AudioEnded');
         }
+
+        // Track continuous playback time for stream counting
+        if (!streamTracker.isSeeking && !streamTracker.hasRecordedStream && streamTracker.songMetadataId > 0) {
+            const timeDelta = audioElement.currentTime - streamTracker.lastTime;
+            // Only count if time moved forward naturally (not seeking)
+            if (timeDelta > 0 && timeDelta < MAX_TIME_DELTA_SECONDS) {
+                streamTracker.playedTime += timeDelta;
+                
+                // Check if we've reached the threshold
+                if (streamTracker.playedTime >= STREAM_THRESHOLD_SECONDS) {
+                    streamTracker.hasRecordedStream = true;
+                    dotNetRef.invokeMethodAsync('RecordStream', streamTracker.songMetadataId);
+                }
+            }
+            streamTracker.lastTime = audioElement.currentTime;
+        }
+
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
     });
 
@@ -109,12 +158,22 @@ export function setTrackSource(audioElement, src) {
 
 // Change the track source for album playback (used when transitioning to next/previous track)
 // isRestricted parameter updates the player state for the new track
-export function changeTrack(audioElement, newSrc, isRestricted = null) {
+// songMetadataId updates the stream tracking for the new track
+export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0) {
     if (audioElement) {
         // Update restriction state if provided
         if (isRestricted !== null) {
             playerState.isRestricted = isRestricted;
         }
+
+        // Reset stream tracking for the new track
+        streamTracker = {
+            songMetadataId: songMetadataId,
+            playedTime: 0,
+            lastTime: 0,
+            hasRecordedStream: false,
+            isSeeking: false
+        };
 
         // Pause and reset first
         audioElement.pause();

@@ -46,6 +46,7 @@ namespace MusicSalesApp.Components.Pages
         protected bool _cartAnimating;
         protected int _currentTrackIndex;
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
+        protected Dictionary<int, int> _trackStreamCounts = new Dictionary<int, int>();
         private List<string> _trackStreamUrls = new List<string>();
         private Dictionary<int, string> _trackImageUrls = new Dictionary<int, string>();
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
@@ -57,6 +58,30 @@ namespace MusicSalesApp.Components.Pages
         private string _lastLoadedAlbum;
         private int? _lastLoadedPlaylistId;
         protected bool _hasActiveSubscription;
+        private Action<int, int> _streamCountUpdatedHandler;
+        private Action<int, int> _hubStreamCountHandler;
+
+        protected override async Task OnInitializedAsync()
+        {
+            // Subscribe to stream count updates (local in-process events)
+            _streamCountUpdatedHandler = OnStreamCountUpdated;
+            StreamCountService.OnStreamCountUpdated += _streamCountUpdatedHandler;
+
+            // Subscribe to SignalR hub for cross-tab updates
+            _hubStreamCountHandler = OnStreamCountUpdated;
+            StreamCountHubClient.OnStreamCountReceived += _hubStreamCountHandler;
+            await StreamCountHubClient.StartAsync();
+        }
+
+        private void OnStreamCountUpdated(int songMetadataId, int newCount)
+        {
+            // Update local tracking if this song is in our list
+            if (_trackStreamCounts.ContainsKey(songMetadataId))
+            {
+                _trackStreamCounts[songMetadataId] = newCount;
+                InvokeAsync(StateHasChanged);
+            }
+        }
 
         protected override void OnParametersSet()
         {
@@ -108,7 +133,7 @@ namespace MusicSalesApp.Components.Pages
                 _dotNetRef = DotNetObjectReference.Create(this);
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/AlbumPlayer.razor.js");
 
-                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS);
+                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId());
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
                 await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
@@ -122,6 +147,18 @@ namespace MusicSalesApp.Components.Pages
 
         public async ValueTask DisposeAsync()
         {
+            // Unsubscribe from stream count updates (local)
+            if (_streamCountUpdatedHandler != null)
+            {
+                StreamCountService.OnStreamCountUpdated -= _streamCountUpdatedHandler;
+            }
+
+            // Unsubscribe from SignalR hub updates
+            if (_hubStreamCountHandler != null)
+            {
+                StreamCountHubClient.OnStreamCountReceived -= _hubStreamCountHandler;
+            }
+
             try
             {
                 if (_jsModule != null)
@@ -211,6 +248,13 @@ namespace MusicSalesApp.Components.Pages
 
                 // Build metadata lookup for track info (use Mp3BlobPath if available)
                 _metadataLookup = albumMetadata.ToDictionary(m => m.Mp3BlobPath ?? m.BlobPath, m => m);
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in albumMetadata.Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath)))
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
 
                 var coverImagePath = albumCoverMeta.ImageBlobPath ?? albumCoverMeta.BlobPath;
                 _albumInfo = new AlbumInfo
@@ -401,6 +445,13 @@ namespace MusicSalesApp.Components.Pages
                 _metadataLookup = allMetadata
                     .GroupBy(m => m.Mp3BlobPath)
                     .ToDictionary(g => g.Key, g => g.First());
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in allMetadata)
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
 
                 // For playlist mode, we use the first track's image as the "cover"
                 if (allMetadata.Count == 0)
@@ -693,6 +744,23 @@ namespace MusicSalesApp.Components.Pages
             return null;
         }
 
+        protected int GetTrackStreamCount(int index)
+        {
+            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return 0;
+            
+            var track = _albumInfo.Tracks[index];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                if (_trackStreamCounts.TryGetValue(metadata.Id, out var count))
+                {
+                    return count;
+                }
+                return metadata.NumberOfStreams;
+            }
+            
+            return 0;
+        }
+
         protected int GetCurrentTrackMetadataId()
         {
             if (_albumInfo == null || _currentTrackIndex >= _albumInfo.Tracks.Count) return 0;
@@ -802,7 +870,7 @@ namespace MusicSalesApp.Components.Pages
 
             if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
             {
-                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted());
+                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId());
                 _isPlaying = true;
             }
 
@@ -826,6 +894,36 @@ namespace MusicSalesApp.Components.Pages
                 _trackDurations[_currentTrackIndex] = duration;
             }
             InvokeAsync(StateHasChanged);
+        }
+
+        [JSInvokable]
+        public async Task RecordStream(int songMetadataId)
+        {
+            try
+            {
+                var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
+                    if (result != null)
+                    {
+                        // Update the stream count in our local tracking
+                        _trackStreamCounts[songMetadataId] = result.StreamCount;
+                        await InvokeAsync(StateHasChanged);
+                        Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+            }
+        }
+
+        private class StreamCountResponse
+        {
+            public int SongMetadataId { get; set; }
+            public int StreamCount { get; set; }
         }
 
         protected string GetTrackDuration(int index)
@@ -861,7 +959,7 @@ namespace MusicSalesApp.Components.Pages
 
                 if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
                 {
-                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted());
+                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId());
                 }
                 await InvokeAsync(StateHasChanged);
             }

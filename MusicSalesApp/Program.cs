@@ -100,6 +100,9 @@ try
 
     builder.Services.AddControllers();
 
+    // Add SignalR for real-time stream count updates
+    builder.Services.AddSignalR();
+
     // Provide HttpClient with base address and cookies configured.
     // For Blazor Server, we need to forward the authentication cookies from the HttpContext.
     builder.Services.AddScoped(sp =>
@@ -162,6 +165,8 @@ try
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
     builder.Services.AddScoped<ISongLikeService, SongLikeService>();
     builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
+    builder.Services.AddScoped<IStreamCountService, StreamCountService>();
+    builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
@@ -267,6 +272,9 @@ try
     app.MapRazorPages(); // Add Razor Pages routing
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
+
+    // Map SignalR hub for real-time stream count updates
+    app.MapHub<MusicSalesApp.Hubs.StreamCountHub>("/streamcounthub");
 
     app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
     {
