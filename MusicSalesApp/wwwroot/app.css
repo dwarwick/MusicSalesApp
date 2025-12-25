@@ -718,7 +718,7 @@ h1:focus {
 /* Card bottom row - contains cart button and share button */
 .card-bottom-row {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: stretch;
     gap: 8px;
     margin-top: 8px;
@@ -731,11 +731,19 @@ h1:focus {
 
 .card-bottom-row .cart-button-wrapper .card-cart-button {
     width: 100%;
+    height: 36px;
+    margin-top: 0;
+    padding: 0 12px;
+    box-sizing: border-box;
 }
 
 .card-bottom-row .fb-share-btn {
-    flex-shrink: 0;
-    padding: 8px 12px;
+    flex: 1;
+    height: 36px;
+    padding: 0 12px;
     box-sizing: border-box;
     align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
