@@ -714,3 +714,24 @@ h1:focus {
     padding: 8px 16px;
     gap: 8px;
 }
+
+/* Card share row - contains Facebook share button */
+.card-share-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+/* Card view row - contains view button */
+.card-view-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+}
+
+.card-view-row .action-button {
+    width: 100%;
+}

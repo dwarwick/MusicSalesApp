@@ -150,21 +150,25 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions with Like/Dislike (Play and View buttons) -->
+                    <!-- Card Actions with Like/Dislike and Play button -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => PlayAlbum(album)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="album.MetadataId" VerticalLayout="false" />
-                        <div class="action-column">
-                            <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
-                                               Layout="button_count" 
-                                               Size="small" 
-                                               CssClass="share-button-card" />
-                        </div>
-                        <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
-                        </div>
+                    </div>
+                    
+                    <!-- Facebook Share Button -->
+                    <div class="card-share-row">
+                        <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
+                                           Layout="button_count" 
+                                           Size="small" 
+                                           CssClass="share-button-card" />
+                    </div>
+                    
+                    <!-- View Button -->
+                    <div class="card-view-row">
+                        <SfButton CssClass="e-control e-btn e-lib action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
 
@@ -315,21 +319,25 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions with Like/Dislike (Play and View buttons) -->
+                    <!-- Card Actions with Like/Dislike and Play button -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
-                        <div class="action-column">
-                            <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
-                                               Layout="button_count" 
-                                               Size="small" 
-                                               CssClass="share-button-card" />
-                        </div>
-                        <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
-                        </div>
+                    </div>
+                    
+                    <!-- Facebook Share Button -->
+                    <div class="card-share-row">
+                        <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
+                                           Layout="button_count" 
+                                           Size="small" 
+                                           CssClass="share-button-card" />
+                    </div>
+                    
+                    <!-- View Button -->
+                    <div class="card-view-row">
+                        <SfButton CssClass="e-control e-btn e-lib action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
 
