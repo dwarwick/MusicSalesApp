@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 
 namespace MusicSalesApp.Services;
 
@@ -10,13 +12,16 @@ public class StreamCountService : IStreamCountService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<StreamCountService> _logger;
+    private readonly IHubContext<StreamCountHub> _hubContext;
 
     public StreamCountService(
         IDbContextFactory<AppDbContext> contextFactory,
-        ILogger<StreamCountService> logger)
+        ILogger<StreamCountService> logger,
+        IHubContext<StreamCountHub> hubContext)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     /// <inheritdoc />
@@ -68,8 +73,11 @@ public class StreamCountService : IStreamCountService
 
         _logger.LogDebug("Incremented stream count for song {SongMetadataId} to {NewCount}", songMetadataId, newCount);
 
-        // Notify subscribers
+        // Notify subscribers (local in-process event)
         NotifyStreamCountUpdated(songMetadataId, newCount);
+
+        // Broadcast to all connected clients via SignalR for cross-tab updates
+        await _hubContext.Clients.All.SendAsync("ReceiveStreamCountUpdate", songMetadataId, newCount);
 
         return newCount;
     }

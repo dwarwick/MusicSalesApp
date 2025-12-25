@@ -45,6 +45,7 @@ public abstract class BUnitTestBase
     protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
     protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
     protected Mock<IStreamCountService> MockStreamCountService { get; private set; } = default!;
+    protected Mock<IStreamCountHubClient> MockStreamCountHubClient { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -69,6 +70,7 @@ public abstract class BUnitTestBase
         MockOpenGraphService = new Mock<IOpenGraphService>();
         MockSongLikeService = new Mock<ISongLikeService>();
         MockStreamCountService = new Mock<IStreamCountService>();
+        MockStreamCountHubClient = new Mock<IStreamCountHubClient>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -162,6 +164,12 @@ public abstract class BUnitTestBase
         MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>()))
             .ReturnsAsync(1);
 
+        // Setup default returns for IStreamCountHubClient methods
+        MockStreamCountHubClient.Setup(x => x.StartAsync())
+            .Returns(Task.CompletedTask);
+        MockStreamCountHubClient.Setup(x => x.IsConnected)
+            .Returns(true);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -189,6 +197,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
         TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
         TestContext.Services.AddSingleton<IStreamCountService>(MockStreamCountService.Object);
+        TestContext.Services.AddSingleton<IStreamCountHubClient>(MockStreamCountHubClient.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

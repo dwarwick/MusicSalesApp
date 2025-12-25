@@ -59,12 +59,18 @@ namespace MusicSalesApp.Components.Pages
         private int? _lastLoadedPlaylistId;
         protected bool _hasActiveSubscription;
         private Action<int, int> _streamCountUpdatedHandler;
+        private Action<int, int> _hubStreamCountHandler;
 
-        protected override void OnInitialized()
+        protected override async Task OnInitializedAsync()
         {
-            // Subscribe to stream count updates
+            // Subscribe to stream count updates (local in-process events)
             _streamCountUpdatedHandler = OnStreamCountUpdated;
             StreamCountService.OnStreamCountUpdated += _streamCountUpdatedHandler;
+
+            // Subscribe to SignalR hub for cross-tab updates
+            _hubStreamCountHandler = OnStreamCountUpdated;
+            StreamCountHubClient.OnStreamCountReceived += _hubStreamCountHandler;
+            await StreamCountHubClient.StartAsync();
         }
 
         private void OnStreamCountUpdated(int songMetadataId, int newCount)
@@ -141,10 +147,16 @@ namespace MusicSalesApp.Components.Pages
 
         public async ValueTask DisposeAsync()
         {
-            // Unsubscribe from stream count updates
+            // Unsubscribe from stream count updates (local)
             if (_streamCountUpdatedHandler != null)
             {
                 StreamCountService.OnStreamCountUpdated -= _streamCountUpdatedHandler;
+            }
+
+            // Unsubscribe from SignalR hub updates
+            if (_hubStreamCountHandler != null)
+            {
+                StreamCountHubClient.OnStreamCountReceived -= _hubStreamCountHandler;
             }
 
             try

@@ -263,6 +263,22 @@
             height: 24px;
             fill: #b3b3b3;
         }
+
+    /* Stream Count on Card */
+    .card-stream-count {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: #b3b3b3;
+        font-size: 11px;
+        margin-bottom: 6px;
+    }
+
+    .card-stream-icon {
+        width: 11px;
+        height: 11px;
+        fill: currentColor;
+    }
 }
 
 /* Landscape Mobile Optimization - for devices with limited viewport height */

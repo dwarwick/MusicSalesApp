@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -12,6 +14,9 @@ public class StreamCountServiceTests
 {
     private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
     private Mock<ILogger<StreamCountService>> _mockLogger;
+    private Mock<IHubContext<StreamCountHub>> _mockHubContext;
+    private Mock<IHubClients> _mockHubClients;
+    private Mock<IClientProxy> _mockClientProxy;
     private StreamCountService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -32,7 +37,15 @@ public class StreamCountServiceTests
             .ReturnsAsync(() => new AppDbContext(_contextOptions));
 
         _mockLogger = new Mock<ILogger<StreamCountService>>();
-        _service = new StreamCountService(_mockContextFactory.Object, _mockLogger.Object);
+
+        // Mock SignalR hub context
+        _mockClientProxy = new Mock<IClientProxy>();
+        _mockHubClients = new Mock<IHubClients>();
+        _mockHubClients.Setup(c => c.All).Returns(_mockClientProxy.Object);
+        _mockHubContext = new Mock<IHubContext<StreamCountHub>>();
+        _mockHubContext.Setup(c => c.Clients).Returns(_mockHubClients.Object);
+
+        _service = new StreamCountService(_mockContextFactory.Object, _mockLogger.Object, _mockHubContext.Object);
     }
 
     [TearDown]
