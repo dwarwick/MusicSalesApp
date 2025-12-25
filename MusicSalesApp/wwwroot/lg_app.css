@@ -20,6 +20,77 @@
         gap: 8px;
     }
 
+    /* AlbumPlayer - Container adjustments for large screens */
+    .album-player-spotify-container {
+        grid-template-rows: auto 1fr 88px;
+    }
+
+    .album-player-spotify-container .song-header {
+        padding: 24px;
+    }
+
+    .album-player-spotify-container .player-bar {
+        padding: 14px 24px;
+        gap: 8px;
+    }
+
+    /* AlbumPlayer - Player controls layout for large screens */
+    .album-player-spotify-container .controls-wrapper {
+        gap: 8px;
+        margin-bottom: 8px;
+        max-width: 600px;
+    }
+
+    .album-player-spotify-container .time-spacer {
+        min-width: 40px;
+    }
+
+    .album-player-spotify-container .player-controls-row {
+        gap: 16px;
+    }
+
+    .album-player-spotify-container .player-controls {
+        gap: 16px;
+    }
+
+    .album-player-spotify-container .volume-controls {
+        gap: 8px;
+    }
+
+    .album-player-spotify-container .control-button {
+        width: 32px;
+        height: 32px;
+    }
+
+    .album-player-spotify-container .control-icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    .album-player-spotify-container .play-button-small {
+        width: 32px;
+        height: 32px;
+    }
+
+    .album-player-spotify-container .play-icon-small {
+        width: 16px;
+        height: 16px;
+    }
+
+    .album-player-spotify-container .progress-container {
+        gap: 8px;
+        max-width: 600px;
+    }
+
+    .album-player-spotify-container .time-display {
+        min-width: 40px;
+        font-size: 11px;
+    }
+
+    .album-player-spotify-container .volume-bar-container {
+        width: 100px;
+    }
+
     .album-art {
         width: 235px;
         object-fit: cover;

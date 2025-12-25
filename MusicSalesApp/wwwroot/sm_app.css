@@ -70,6 +70,94 @@
         max-width: 100%;
     }
 
+    /* AlbumPlayer - Container adjustments for small screens */
+    .album-player-spotify-container {
+        grid-template-rows: auto 1fr 80px;
+    }
+
+    .album-player-spotify-container .song-header {
+        padding: 16px;
+    }
+
+    .album-player-spotify-container .player-bar {
+        padding: 10px 16px;
+        gap: 6px;
+    }
+
+    /* AlbumPlayer - Player controls compact layout */
+    .album-player-spotify-container .controls-wrapper {
+        gap: 2px;
+        margin-bottom: 4px;
+        max-width: 100%;
+    }
+
+    .album-player-spotify-container .time-spacer {
+        display: none;
+        min-width: 0;
+    }
+
+    .album-player-spotify-container .player-controls-row {
+        gap: 4px;
+        width: 100%;
+    }
+
+    .album-player-spotify-container .player-controls {
+        gap: 4px;
+    }
+
+    .album-player-spotify-container .volume-controls {
+        gap: 4px;
+    }
+
+    .album-player-spotify-container .control-button {
+        width: 28px;
+        height: 28px;
+    }
+
+    .album-player-spotify-container .control-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .album-player-spotify-container .play-button-small {
+        width: 28px;
+        height: 28px;
+    }
+
+    .album-player-spotify-container .play-icon-small {
+        width: 14px;
+        height: 14px;
+    }
+
+    .album-player-spotify-container .progress-container {
+        gap: 4px;
+        max-width: 100%;
+    }
+
+    .album-player-spotify-container .time-display {
+        min-width: 28px;
+        font-size: 10px;
+    }
+
+    .album-player-spotify-container .volume-bar-container {
+        width: 60px;
+    }
+
+    .album-player-spotify-container .action-controls {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .album-player-spotify-container .cart-button-large {
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+
+    .album-player-spotify-container .cart-icon-large {
+        width: 18px;
+        height: 18px;
+    }
+
     /* MusicLibrary small adjustments */
     .music-cards-grid {
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -284,6 +372,16 @@
     }
 
     .song-player-container .player-bar {
+        padding: 6px 12px;
+        gap: 2px;
+    }
+
+    /* AlbumPlayer - Landscape adjustments */
+    .album-player-spotify-container {
+        grid-template-rows: auto 1fr 70px;
+    }
+
+    .album-player-spotify-container .player-bar {
         padding: 6px 12px;
         gap: 2px;
     }
