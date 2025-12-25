@@ -150,17 +150,15 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions: Play button and Like/Dislike -->
+                    <!-- Card Actions: Play button, Like/Dislike, and View button -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => PlayAlbum(album)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="album.MetadataId" VerticalLayout="false" />
-                    </div>
-                    
-                    <!-- View Button -->
-                    <div class="card-view-row">
-                        <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                        </div>
                     </div>
                 }
 
@@ -319,17 +317,15 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions: Play button and Like/Dislike -->
+                    <!-- Card Actions: Play button, Like/Dislike, and View button -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
-                    </div>
-                    
-                    <!-- View Button -->
-                    <div class="card-view-row">
-                        <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                        <div class="action-column">
+                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                        </div>
                     </div>
                 }
 
