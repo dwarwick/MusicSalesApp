@@ -27,22 +27,42 @@ public class StreamCountService : IStreamCountService
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         
-        // Use ExecuteSqlRawAsync for atomic update
-        var rowsAffected = await context.Database.ExecuteSqlRawAsync(
-            "UPDATE SongMetadata SET NumberOfStreams = NumberOfStreams + 1 WHERE Id = {0}",
-            songMetadataId);
-
-        if (rowsAffected == 0)
+        int newCount;
+        
+        // Check if we're using a relational database (supports raw SQL)
+        if (context.Database.IsRelational())
         {
-            _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
-            return 0;
-        }
+            // Use ExecuteSqlRawAsync for atomic update in production
+            var rowsAffected = await context.Database.ExecuteSqlRawAsync(
+                "UPDATE SongMetadata SET NumberOfStreams = NumberOfStreams + 1 WHERE Id = {0}",
+                songMetadataId);
 
-        // Get the new count
-        var newCount = await context.SongMetadata
-            .Where(s => s.Id == songMetadataId)
-            .Select(s => s.NumberOfStreams)
-            .FirstOrDefaultAsync();
+            if (rowsAffected == 0)
+            {
+                _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
+                return 0;
+            }
+
+            // Get the new count
+            newCount = await context.SongMetadata
+                .Where(s => s.Id == songMetadataId)
+                .Select(s => s.NumberOfStreams)
+                .FirstOrDefaultAsync();
+        }
+        else
+        {
+            // Fallback for in-memory database (testing)
+            var song = await context.SongMetadata.FindAsync(songMetadataId);
+            if (song == null)
+            {
+                _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
+                return 0;
+            }
+
+            song.NumberOfStreams++;
+            await context.SaveChangesAsync();
+            newCount = song.NumberOfStreams;
+        }
 
         _logger.LogDebug("Incremented stream count for song {SongMetadataId} to {NewCount}", songMetadataId, newCount);
 
