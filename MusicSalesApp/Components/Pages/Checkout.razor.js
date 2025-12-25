@@ -58,6 +58,8 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                         }
                     }],
                     // Enable 3D Secure authentication when required
+                    // Note: This applies to card payments only. PayPal wallet and other
+                    // payment methods have their own authentication mechanisms.
                     payment_source: {
                         card: {
                             attributes: {

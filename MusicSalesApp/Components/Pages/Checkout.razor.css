@@ -194,11 +194,17 @@
     border-radius: 8px;
 }
 
-.error-icon,
-.cancel-icon {
+.error-icon {
     width: 64px;
     height: 64px;
     color: #ff4444;
+    margin-bottom: 16px;
+}
+
+.cancel-icon {
+    width: 64px;
+    height: 64px;
+    color: #ffa726;
     margin-bottom: 16px;
 }
 

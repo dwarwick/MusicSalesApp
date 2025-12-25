@@ -65,6 +65,8 @@ const paypalOrderId = await actions.order.create({
 - Added explicit `currency_code` in amount object
 - Added `payment_source.card.attributes.verification.method: 'SCA_ALWAYS'` to enable 3D Secure authentication when required by the card issuer
 
+**Note:** The 3D Secure configuration applies to card payments only. PayPal wallet, Venmo, and other payment methods have their own built-in authentication mechanisms and are not affected by this setting.
+
 ### 3. Client-Side Capture (Checkout.razor.js)
 
 **Before:**
