@@ -735,6 +735,7 @@ h1:focus {
 
 .card-bottom-row .fb-share-btn {
     flex-shrink: 0;
-    min-height: 100%;
-    padding: 8px 14px;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    align-self: stretch;
 }
