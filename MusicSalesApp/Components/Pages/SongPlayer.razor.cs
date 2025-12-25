@@ -37,11 +37,29 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _inCart;
     protected bool _cartAnimating;
     protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
+    protected int _streamCount;
     private Models.SongMetadata _songMetadata;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
     protected bool _hasActiveSubscription;
+    private Action<int, int> _streamCountUpdatedHandler;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to stream count updates
+        _streamCountUpdatedHandler = OnStreamCountUpdated;
+        StreamCountService.OnStreamCountUpdated += _streamCountUpdatedHandler;
+    }
+
+    private void OnStreamCountUpdated(int songMetadataId, int newCount)
+    {
+        if (_songMetadata != null && _songMetadata.Id == songMetadataId)
+        {
+            _streamCount = newCount;
+            InvokeAsync(StateHasChanged);
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -55,7 +73,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId());
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
         }
@@ -63,6 +81,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Unsubscribe from stream count updates
+        if (_streamCountUpdatedHandler != null)
+        {
+            StreamCountService.OnStreamCountUpdated -= _streamCountUpdatedHandler;
+        }
+
         try
         {
             if (_jsModule != null)
@@ -114,6 +138,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _loading = false;
                 return;
             }
+
+            // Initialize stream count from metadata
+            _streamCount = _songMetadata.NumberOfStreams;
 
             // Build StorageFileInfo from metadata (no longer calling api/music List endpoint)
             _songInfo = new StorageFileInfo
@@ -428,6 +455,35 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             _isPlaying = false;
         }
         await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task RecordStream(int songMetadataId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
+                if (result != null)
+                {
+                    _streamCount = result.StreamCount;
+                    await InvokeAsync(StateHasChanged);
+                    Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+        }
+    }
+
+    private class StreamCountResponse
+    {
+        public int SongMetadataId { get; set; }
+        public int StreamCount { get; set; }
     }
 
     protected async Task SeekTo(double percentage)

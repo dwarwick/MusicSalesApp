@@ -3,11 +3,43 @@
 // Map of audio elements by cardId for tracking multiple audio players
 const cardPlayers = new Map();
 
-export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60) {
+// Stream tracking state (per card)
+const STREAM_THRESHOLD_SECONDS = 30;
+
+export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
     if (!audioElement) return;
 
-    // Store reference with restriction state
-    cardPlayers.set(cardId, { audioElement, dotNetRef, isRestricted, maxDuration });
+    // Store reference with restriction state and stream tracking
+    cardPlayers.set(cardId, { 
+        audioElement, 
+        dotNetRef, 
+        isRestricted, 
+        maxDuration,
+        // Stream tracking state
+        songMetadataId: songMetadataId,
+        playedTime: 0,
+        lastTime: 0,
+        hasRecordedStream: false,
+        isSeeking: false
+    });
+
+    // Track seeking events to reset continuous playback tracking
+    audioElement.addEventListener('seeking', () => {
+        const player = cardPlayers.get(cardId);
+        if (player) {
+            player.isSeeking = true;
+        }
+    });
+
+    audioElement.addEventListener('seeked', () => {
+        const player = cardPlayers.get(cardId);
+        if (player) {
+            // Reset the continuous playback counter when user seeks
+            player.playedTime = 0;
+            player.lastTime = audioElement.currentTime;
+            player.isSeeking = false;
+        }
+    });
 
     audioElement.addEventListener('timeupdate', () => {
         const player = cardPlayers.get(cardId);
@@ -18,6 +50,23 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
             dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
             return;
         }
+
+        // Track continuous playback time for stream counting
+        if (player && !player.isSeeking && !player.hasRecordedStream && player.songMetadataId > 0) {
+            const timeDelta = audioElement.currentTime - player.lastTime;
+            // Only count if time moved forward naturally (not seeking)
+            if (timeDelta > 0 && timeDelta < 1) {
+                player.playedTime += timeDelta;
+                
+                // Check if we've reached the threshold
+                if (player.playedTime >= STREAM_THRESHOLD_SECONDS) {
+                    player.hasRecordedStream = true;
+                    dotNetRef.invokeMethodAsync('RecordStream', player.songMetadataId);
+                }
+            }
+            player.lastTime = audioElement.currentTime;
+        }
+
         dotNetRef.invokeMethodAsync('UpdateCardTime', cardId, audioElement.currentTime);
     });
 
@@ -203,12 +252,21 @@ export function setTrackSource(audioElement, src) {
 
 // Change the track source for album playback (used when transitioning to next track)
 // isRestricted parameter updates the player state for the new track
-export function changeTrack(audioElement, newSrc, cardId, isRestricted = null) {
+// songMetadataId updates the stream tracking for the new track
+export function changeTrack(audioElement, newSrc, cardId, isRestricted = null, songMetadataId = 0) {
     if (audioElement) {
-        // Update restriction state if provided
+        // Update restriction state and reset stream tracking if provided
         const player = cardPlayers.get(cardId);
-        if (player && isRestricted !== null) {
-            player.isRestricted = isRestricted;
+        if (player) {
+            if (isRestricted !== null) {
+                player.isRestricted = isRestricted;
+            }
+            // Reset stream tracking for the new track
+            player.songMetadataId = songMetadataId;
+            player.playedTime = 0;
+            player.lastTime = 0;
+            player.hasRecordedStream = false;
+            player.isSeeking = false;
         }
 
         // Pause and reset first

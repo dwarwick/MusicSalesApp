@@ -1,5 +1,36 @@
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60) {
+// Stream tracking state
+const STREAM_THRESHOLD_SECONDS = 30;
+let streamTracker = {
+    songMetadataId: 0,
+    playedTime: 0,
+    lastTime: 0,
+    hasRecordedStream: false,
+    isSeeking: false
+};
+
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
     if (!audioElement) return;
+
+    // Reset stream tracking for new song
+    streamTracker = {
+        songMetadataId: songMetadataId,
+        playedTime: 0,
+        lastTime: 0,
+        hasRecordedStream: false,
+        isSeeking: false
+    };
+
+    // Track seeking events to reset continuous playback tracking
+    audioElement.addEventListener('seeking', () => {
+        streamTracker.isSeeking = true;
+    });
+
+    audioElement.addEventListener('seeked', () => {
+        // Reset the continuous playback counter when user seeks
+        streamTracker.playedTime = 0;
+        streamTracker.lastTime = audioElement.currentTime;
+        streamTracker.isSeeking = false;
+    });
 
     audioElement.addEventListener('timeupdate', () => {
         // Enforce 60 second limit for non-owners
@@ -8,6 +39,23 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
             audioElement.currentTime = maxDuration;
             dotNetRef.invokeMethodAsync('AudioEnded');
         }
+
+        // Track continuous playback time for stream counting
+        if (!streamTracker.isSeeking && !streamTracker.hasRecordedStream && streamTracker.songMetadataId > 0) {
+            const timeDelta = audioElement.currentTime - streamTracker.lastTime;
+            // Only count if time moved forward naturally (not seeking)
+            if (timeDelta > 0 && timeDelta < 1) {
+                streamTracker.playedTime += timeDelta;
+                
+                // Check if we've reached the threshold
+                if (streamTracker.playedTime >= STREAM_THRESHOLD_SECONDS) {
+                    streamTracker.hasRecordedStream = true;
+                    dotNetRef.invokeMethodAsync('RecordStream', streamTracker.songMetadataId);
+                }
+            }
+            streamTracker.lastTime = audioElement.currentTime;
+        }
+
         dotNetRef.invokeMethodAsync('UpdateTime', audioElement.currentTime);
     });
 

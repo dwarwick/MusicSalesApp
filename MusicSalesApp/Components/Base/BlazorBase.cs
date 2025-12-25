@@ -65,6 +65,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IOpenGraphService OpenGraphService { get; set; } = default!;
 
+    [Inject]
+    protected IStreamCountService StreamCountService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

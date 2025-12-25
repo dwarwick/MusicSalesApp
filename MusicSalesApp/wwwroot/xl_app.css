@@ -72,10 +72,26 @@
         color: #fff;
         font-size: 14px;
         font-weight: 600;
-        margin-bottom: 12px;
+        margin-bottom: 4px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    /* Stream Count on Card */
+    .card-stream-count {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: #b3b3b3;
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .card-stream-icon {
+        width: 12px;
+        height: 12px;
+        fill: currentColor;
     }
 
     
@@ -110,6 +126,11 @@
             }
 
             .track-list th.track-duration {
+                width: 80px;
+                text-align: right;
+            }
+
+            .track-list th.track-streams {
                 width: 80px;
                 text-align: right;
             }
@@ -179,6 +200,21 @@
         font-weight: 500;
     }
 
+    .stream-count-info {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #b3b3b3;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .stream-icon {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+    }
+
     .track-title-cell {
         text-align: left;
     }
@@ -201,6 +237,12 @@
     .track-duration {
         text-align: right;
         font-size: 14px;
+    }
+
+    .track-streams {
+        text-align: right;
+        font-size: 14px;
+        color: #b3b3b3;
     }
 
     /* Playing Indicator */
