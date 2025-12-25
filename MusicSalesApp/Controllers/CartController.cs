@@ -269,11 +269,12 @@ public class CartController : ControllerBase
             return Forbid();
 
         // Capture the payment with PayPal (3D Secure authentication already completed during approval)
-        var captured = await CaptureWithPayPalAsync(request.PayPalOrderId);
+        var (captured, errorMessage) = await CaptureWithPayPalAsync(request.PayPalOrderId);
         if (!captured)
         {
-            _logger.LogWarning("PayPal capture failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}", request.PayPalOrderId, request.OrderId);
-            return BadRequest("Failed to capture PayPal order. Payment may not have been completed.");
+            _logger.LogWarning("PayPal capture failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}: {ErrorMessage}", 
+                request.PayPalOrderId, request.OrderId, errorMessage);
+            return BadRequest(new { success = false, error = errorMessage ?? "Failed to capture PayPal order. Payment may not have been completed." });
         }
 
         // Get cart items before clearing
@@ -294,7 +295,7 @@ public class CartController : ControllerBase
         return Ok(new { success = true, purchasedCount = songFileNames.Count });
     }
 
-    private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
+    private async Task<(bool success, string errorMessage)> CaptureWithPayPalAsync(string payPalOrderId)
     {
         try
         {
@@ -302,7 +303,7 @@ public class CartController : ControllerBase
             if (string.IsNullOrWhiteSpace(token))
             {
                 _logger.LogError("Unable to retrieve PayPal access token.");
-                return false;
+                return (false, "Unable to connect to payment processor. Please try again later.");
             }
 
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
@@ -314,27 +315,74 @@ public class CartController : ControllerBase
             // Capture the order (3D Secure authentication already completed during approval flow)
             var response = await client.PostAsync($"v2/checkout/orders/{payPalOrderId}/capture", new StringContent("{}", Encoding.UTF8, "application/json"));
             var body = await response.Content.ReadAsStringAsync();
+            
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("PayPal capture failed: {Status} {Body}", response.StatusCode, body);
-                return false;
+                
+                // Parse PayPal error response for user-friendly message
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    var root = doc.RootElement;
+                    
+                    // Check for details array with specific error issues
+                    if (root.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var detail in details.EnumerateArray())
+                        {
+                            if (detail.TryGetProperty("issue", out var issue))
+                            {
+                                var issueCode = issue.GetString();
+                                var description = detail.TryGetProperty("description", out var desc) ? desc.GetString() : null;
+                                
+                                return issueCode switch
+                                {
+                                    "INSTRUMENT_DECLINED" => (false, "Your payment method was declined. Please try a different payment method or contact your bank."),
+                                    "INSUFFICIENT_FUNDS" => (false, "Insufficient funds. Please try a different payment method."),
+                                    "EXPIRED_CARD" => (false, "Your card has expired. Please use a different payment method."),
+                                    "INVALID_CVV" => (false, "Invalid security code (CVV). Please check your card details and try again."),
+                                    "CARD_SECURITY_CODE_MISMATCH" => (false, "Card security code mismatch. Please check your CVV and try again."),
+                                    "AVS_FAILURE" => (false, "Card verification failed. Please check your billing address and try again."),
+                                    "PAYER_ACCOUNT_LOCKED_OR_CLOSED" => (false, "Your PayPal account is locked or closed. Please contact PayPal support."),
+                                    "TRANSACTION_REFUSED" => (false, "Transaction was refused. Please try a different payment method."),
+                                    "DUPLICATE_TRANSACTION" => (false, "This appears to be a duplicate transaction. Please check your account."),
+                                    _ => (false, description ?? "Payment could not be processed. Please try again or use a different payment method.")
+                                };
+                            }
+                        }
+                    }
+                    
+                    // Fallback to general message from PayPal
+                    if (root.TryGetProperty("message", out var message))
+                    {
+                        return (false, $"Payment error: {message.GetString()}");
+                    }
+                }
+                catch (JsonException)
+                {
+                    // If we can't parse the error, return generic message
+                }
+                
+                return (false, "Payment could not be processed. Please try again or contact support.");
             }
 
-            using var doc = JsonDocument.Parse(body);
-            var status = doc.RootElement.GetProperty("status").GetString();
+            using var successDoc = JsonDocument.Parse(body);
+            var status = successDoc.RootElement.GetProperty("status").GetString();
             var succeeded = string.Equals(status, "COMPLETED", StringComparison.OrdinalIgnoreCase);
             
             if (!succeeded)
             {
                 _logger.LogWarning("PayPal capture returned non-completed status {Status} for order {OrderId}", status, payPalOrderId);
+                return (false, $"Payment is in {status} status. Please contact support if you have been charged.");
             }
             
-            return succeeded;
+            return (true, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error capturing PayPal order {OrderId}", payPalOrderId);
-            return false;
+            return (false, "An unexpected error occurred. Please try again later.");
         }
     }
 

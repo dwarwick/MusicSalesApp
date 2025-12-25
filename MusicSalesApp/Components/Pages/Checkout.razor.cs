@@ -185,6 +185,9 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 Logger.LogInformation("Purchase completed, {Count} songs bought", result?.PurchasedCount);
                 _purchasedCount = result?.PurchasedCount ?? 0;
                 _checkoutComplete = true;
+                _checkoutError = false;
+                _checkoutCancelled = false;
+                _errorMessage = string.Empty;
                 _cartItems.Clear();
                 _cartTotal = 0;
                 CartService.NotifyCartUpdated();
@@ -193,11 +196,33 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
                 Logger.LogWarning("capture-order error: {Content}", errorContent);
+                
+                // Try to parse error response for user-friendly message
+                string errorMessage = "Payment could not be processed. Please try again.";
+                try
+                {
+                    var errorResult = await response.Content.ReadFromJsonAsync<CaptureOrderErrorResponse>();
+                    if (!string.IsNullOrEmpty(errorResult?.Error))
+                    {
+                        errorMessage = errorResult.Error;
+                    }
+                }
+                catch
+                {
+                    // If parsing fails, use default message
+                }
+                
+                _checkoutError = true;
+                _checkoutComplete = false;
+                _errorMessage = errorMessage;
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error capturing order");
+            _checkoutError = true;
+            _checkoutComplete = false;
+            _errorMessage = "An unexpected error occurred. Please try again or contact support.";
         }
         finally
         {
@@ -288,4 +313,10 @@ public class CaptureOrderResponse
 {
     public bool Success { get; set; }
     public int PurchasedCount { get; set; }
+}
+
+public class CaptureOrderErrorResponse
+{
+    public bool Success { get; set; }
+    public string Error { get; set; }
 }
