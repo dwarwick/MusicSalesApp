@@ -64,8 +64,11 @@ This document describes the Facebook sharing feature that has been implemented a
 
 3. **Public Domain**
    - Facebook Open Graph requires a publicly accessible domain
-   - For local testing, you can use:
-     - ngrok or similar tunneling service
+   - **IMPORTANT**: Localhost testing will show the favicon instead of actual images
+     - This is expected: Facebook's crawler cannot access `https://localhost:7173` URLs
+     - Images will work correctly when deployed to production (`https://streamtunes.net`)
+   - For pre-production testing, you can use:
+     - ngrok or similar tunneling service to expose localhost
      - Or deploy to a staging environment
    - The domain must match what's configured in your Facebook App
 
@@ -141,6 +144,14 @@ This document describes the Facebook sharing feature that has been implemented a
 
 ## Troubleshooting
 
+### Facebook Shows Favicon Instead of Album/Song Art (Localhost Only)
+**This is expected behavior when testing from localhost!**
+- Facebook's Open Graph crawler cannot access `https://localhost:7173` URLs
+- The image URLs in the meta tags are correct, but Facebook can't fetch them
+- **Solution**: This will work correctly when deployed to production at `https://streamtunes.net`
+- **Verification**: Check page source to confirm `og:image` meta tag has correct image path
+- **Pre-production testing**: Use ngrok to temporarily expose localhost publicly
+
 ### Meta Tags Not Showing
 - Check that `OpenGraphService` is registered in `Program.cs`
 - Verify `App.razor.cs` is generating meta tags in `OnInitializedAsync`
@@ -151,10 +162,10 @@ This document describes the Facebook sharing feature that has been implemented a
 - Check that Facebook SDK is loading (look for `fb-root` div in page source)
 - Check browser console for SDK loading errors
 
-### Share Preview Incorrect
+### Share Preview Incorrect (Production)
 - Run URL through Facebook Debugger
 - Facebook caches share previews - use "Fetch new information" to update
-- Verify image URLs are publicly accessible
+- Verify image URLs are publicly accessible (not localhost)
 - Check that meta tags contain proper HTML entity encoding
 
 ### Share Button Shows Wrong URL
