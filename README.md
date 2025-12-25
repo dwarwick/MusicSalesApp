@@ -65,8 +65,14 @@ The application uses a custom permissions system:
 ### Shopping and Purchases
 
 - Add songs and albums to cart
-- Purchase music through PayPal integration
+- Purchase music through **PayPal Expanded Checkout** with:
+  - Multiple payment options (PayPal, Venmo, Pay Later)
+  - **3D Secure authentication** for enhanced security
+  - Enhanced error handling and user experience
+  - Compliance with PayPal merchant requirements
 - Owned music accessible indefinitely
+
+For detailed information about the PayPal Expanded Checkout integration, see [PAYPAL_EXPANDED_CHECKOUT.md](PAYPAL_EXPANDED_CHECKOUT.md).
 
 ### Monthly Subscription
 
