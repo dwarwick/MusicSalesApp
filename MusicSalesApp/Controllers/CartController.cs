@@ -268,12 +268,12 @@ public class CartController : ControllerBase
         if (order.UserId != user.Id)
             return Forbid();
 
-        // Capture with PayPal first
-        var captured = await CaptureWithPayPalAsync(request.PayPalOrderId);
-        if (!captured)
+        // Verify the capture was successful (already captured on client side with 3D Secure support)
+        var verified = await VerifyPayPalCaptureAsync(request.PayPalOrderId);
+        if (!verified)
         {
-            _logger.LogWarning("PayPal capture failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}", request.PayPalOrderId, request.OrderId);
-            return BadRequest("Failed to capture PayPal order");
+            _logger.LogWarning("PayPal capture verification failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}", request.PayPalOrderId, request.OrderId);
+            return BadRequest("Failed to verify PayPal order capture. Payment may not have been completed.");
         }
 
         // Get cart items before clearing
@@ -294,7 +294,7 @@ public class CartController : ControllerBase
         return Ok(new { success = true, purchasedCount = songFileNames.Count });
     }
 
-    private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
+    private async Task<bool> VerifyPayPalCaptureAsync(string payPalOrderId)
     {
         try
         {
@@ -309,28 +309,30 @@ public class CartController : ControllerBase
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
-            var response = await client.PostAsync($"v2/checkout/orders/{payPalOrderId}/capture", new StringContent("{}", Encoding.UTF8, "application/json"));
+            // Get the order details to verify it was captured
+            var response = await client.GetAsync($"v2/checkout/orders/{payPalOrderId}");
             var body = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("PayPal capture failed: {Status} {Body}", response.StatusCode, body);
+                _logger.LogWarning("PayPal order verification failed: {Status} {Body}", response.StatusCode, body);
                 return false;
             }
 
             using var doc = JsonDocument.Parse(body);
             var status = doc.RootElement.GetProperty("status").GetString();
-            var succeeded = string.Equals(status, "COMPLETED", StringComparison.OrdinalIgnoreCase);
-            if (!succeeded)
+            var isCompleted = string.Equals(status, "COMPLETED", StringComparison.OrdinalIgnoreCase);
+            
+            if (!isCompleted)
             {
-                _logger.LogWarning("PayPal capture returned non-completed status {Status} for order {OrderId}", status, payPalOrderId);
+                _logger.LogWarning("PayPal order status is {Status} for order {OrderId}, expected COMPLETED", status, payPalOrderId);
             }
-            return succeeded;
+            
+            return isCompleted;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error capturing PayPal order {OrderId}", payPalOrderId);
+            _logger.LogError(ex, "Error verifying PayPal order {OrderId}", payPalOrderId);
             return false;
         }
     }

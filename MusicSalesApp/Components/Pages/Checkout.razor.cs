@@ -16,6 +16,9 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     protected decimal _cartTotal;
     protected bool _checkoutInProgress;
     protected bool _checkoutComplete;
+    protected bool _checkoutError;
+    protected bool _checkoutCancelled;
+    protected string _errorMessage = string.Empty;
     protected int _purchasedCount;
 
     private IJSObjectReference _jsModule;
@@ -208,6 +211,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     {
         Logger.LogInformation("OnCancel called - payment was cancelled");
         _checkoutInProgress = false;
+        _checkoutCancelled = true;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -216,7 +220,26 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     {
         Logger.LogError("OnError called - PayPal error: {Error}", error);
         _checkoutInProgress = false;
+        _checkoutError = true;
+        _errorMessage = !string.IsNullOrEmpty(error) 
+            ? $"There was an error processing your payment: {error}" 
+            : "There was an error processing your payment. Please try again.";
         await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task ResetCheckout()
+    {
+        _checkoutError = false;
+        _checkoutCancelled = false;
+        _errorMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+        
+        // Reinitialize PayPal buttons if there are still items
+        if (_cartItems.Count > 0)
+        {
+            startedPaypalInitialization = false;
+            await InitializePayPal();
+        }
     }
 
     public async ValueTask DisposeAsync()
