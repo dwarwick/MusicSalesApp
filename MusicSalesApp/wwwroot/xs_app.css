@@ -308,4 +308,92 @@
         width: 16px;
         height: 16px;
     }
+
+    /* AlbumPlayer - Container adjustments for extra small screens */
+    .album-player-spotify-container {
+        grid-template-rows: auto 1fr 80px;
+    }
+
+    .album-player-spotify-container .song-header {
+        padding: 16px;
+    }
+
+    .album-player-spotify-container .player-bar {
+        padding: 8px 12px;
+        gap: 4px;
+    }
+
+    /* AlbumPlayer - Player controls compact layout */
+    .album-player-spotify-container .controls-wrapper {
+        gap: 2px;
+        margin-bottom: 4px;
+        max-width: 100%;
+    }
+
+    .album-player-spotify-container .time-spacer {
+        display: none;
+        min-width: 0;
+    }
+
+    .album-player-spotify-container .player-controls-row {
+        gap: 4px;
+        width: 100%;
+    }
+
+    .album-player-spotify-container .player-controls {
+        gap: 2px;
+    }
+
+    .album-player-spotify-container .volume-controls {
+        gap: 4px;
+    }
+
+    .album-player-spotify-container .control-button {
+        width: 28px;
+        height: 28px;
+    }
+
+    .album-player-spotify-container .control-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .album-player-spotify-container .play-button-small {
+        width: 28px;
+        height: 28px;
+    }
+
+    .album-player-spotify-container .play-icon-small {
+        width: 14px;
+        height: 14px;
+    }
+
+    .album-player-spotify-container .progress-container {
+        gap: 4px;
+        max-width: 100%;
+    }
+
+    .album-player-spotify-container .time-display {
+        min-width: 28px;
+        font-size: 10px;
+    }
+
+    .album-player-spotify-container .volume-bar-container {
+        width: 50px;
+    }
+
+    .album-player-spotify-container .action-controls {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .album-player-spotify-container .cart-button-large {
+        padding: 8px 16px;
+        font-size: 12px;
+    }
+
+    .album-player-spotify-container .cart-icon-large {
+        width: 16px;
+        height: 16px;
+    }
 }
