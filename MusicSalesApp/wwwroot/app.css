@@ -650,16 +650,51 @@ h1:focus {
 
 
 /* Facebook Share Button Styles */
-.fb-share-button {
+.fb-share-link {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: #1877f2;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+}
+
+.fb-share-link:hover {
+    background-color: #166fe5;
+    color: white;
+    text-decoration: none;
+}
+
+.fb-share-link:active {
+    background-color: #1564d6;
+}
+
+.fb-share-link .fb-icon {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.fb-share-link .share-text {
+    line-height: 1;
 }
 
 /* Facebook share button on cards */
 .share-button-card {
-    display: inline-flex;
-    align-items: center;
+    padding: 4px 10px;
+    font-size: 13px;
+}
+
+.share-button-card .fb-icon {
+    width: 16px;
+    height: 16px;
 }
 
 /* Facebook share button in action controls */
