@@ -158,48 +158,48 @@ else
                         <LikeDislikeButtons SongMetadataId="album.MetadataId" VerticalLayout="false" />
                     </div>
                     
-                    <!-- Facebook Share Button -->
-                    <div class="card-share-row">
-                        <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
-                                           Layout="button_count" 
-                                           Size="small" 
-                                           CssClass="share-button-card" />
-                    </div>
-                    
                     <!-- View Button -->
                     <div class="card-view-row">
                         <SfButton CssClass="action-button" onclick=@(() => GetAlbumPlayerUrl(album)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
 
-                <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the album) -->
-                <AuthorizeView>
-                    <Authorized>
-                        @if (!owned && !_hasActiveSubscription)
-                        {
-                            <div class="cart-button-wrapper">
-                                <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
-                                          OnClick="@(args => ToggleAlbumCartItem(album))"
-                                          Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                    @if (inCart)
+                <!-- Bottom row: Add to Cart and Share buttons -->
+                <div class="card-bottom-row">
+                    <AuthorizeView>
+                        <Authorized>
+                            @if (!owned && !_hasActiveSubscription)
+                            {
+                                <div class="cart-button-wrapper">
+                                    <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
+                                              OnClick="@(args => ToggleAlbumCartItem(album))"
+                                              Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                        @if (inCart)
+                                        {
+                                            <SfIcon IconCss="fas fa-regular fa-circle-check" />
+                                            <span>Added</span>
+                                        }
+                                        else
+                                        {
+                                            <SfIcon IconCss="fas fa-shopping-cart" />
+                                            <span>$@album.Price.ToString("F2")</span>
+                                        }
+                                    </SfButton>
+                                    @if (_animatingCartButtons.Contains(album.AlbumName))
                                     {
-                                        <SfIcon IconCss="fas fa-regular fa-circle-check" />
-                                        <span>Added</span>
+                                        <div class="music-note-float">♪</div>
                                     }
-                                    else
-                                    {
-                                        <SfIcon IconCss="fas fa-shopping-cart" />
-                                        <span>$@album.Price.ToString("F2")</span>
-                                    }
-                                </SfButton>
-                                @if (_animatingCartButtons.Contains(album.AlbumName))
-                                {
-                                    <div class="music-note-float">♪</div>
-                                }
-                            </div>
-                        }
-                    </Authorized>
-                </AuthorizeView>
+                                </div>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+                    
+                    <!-- Facebook Share Button -->
+                    <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
+                                       Layout="button_count" 
+                                       Size="small" 
+                                       CssClass="share-button-card" />
+                </div>
             </SfCard>
         }
 
@@ -327,48 +327,48 @@ else
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
                     </div>
                     
-                    <!-- Facebook Share Button -->
-                    <div class="card-share-row">
-                        <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
-                                           Layout="button_count" 
-                                           Size="small" 
-                                           CssClass="share-button-card" />
-                    </div>
-                    
                     <!-- View Button -->
                     <div class="card-view-row">
                         <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
                     </div>
                 }
 
-                <!-- Add to Cart Button (only shown if user is authenticated and doesn't own the song) -->
-                <AuthorizeView>
-                    <Authorized>
-                        @if (!owned && !_hasActiveSubscription)
-                        {
-                            <div class="cart-button-wrapper">
-                                <SfButton CssClass="@($"card-cart-button mt-2 {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")"
-                                          OnClick="@(args => ToggleCartItem(f.Name))"
-                                          Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                    @if (inCart)
+                <!-- Bottom row: Add to Cart and Share buttons -->
+                <div class="card-bottom-row">
+                    <AuthorizeView>
+                        <Authorized>
+                            @if (!owned && !_hasActiveSubscription)
+                            {
+                                <div class="cart-button-wrapper">
+                                    <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")"
+                                              OnClick="@(args => ToggleCartItem(f.Name))"
+                                              Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
+                                        @if (inCart)
+                                        {
+                                            <SfIcon IconCss="fas fa-regular fa-circle-check" />
+                                            <span>Added</span>
+                                        }
+                                        else
+                                        {
+                                            <SfIcon IconCss="fas fa-shopping-cart" />
+                                            <span>$@GetSongPrice(f.Name).ToString("F2")</span>
+                                        }
+                                    </SfButton>
+                                    @if (_animatingCartButtons.Contains(f.Name))
                                     {
-                                        <SfIcon IconCss="fas fa-regular fa-circle-check" />
-                                        <span>Added</span>
+                                        <div class="music-note-float">♪</div>
                                     }
-                                    else
-                                    {
-                                        <SfIcon IconCss="fas fa-shopping-cart" />
-                                        <span>$@GetSongPrice(f.Name).ToString("F2")</span>
-                                    }
-                                </SfButton>
-                                @if (_animatingCartButtons.Contains(f.Name))
-                                {
-                                    <div class="music-note-float">♪</div>
-                                }
-                            </div>
-                        }
-                    </Authorized>
-                </AuthorizeView>
+                                </div>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+                    
+                    <!-- Facebook Share Button -->
+                    <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
+                                       Layout="button_count" 
+                                       Size="small" 
+                                       CssClass="share-button-card" />
+                </div>
             </SfCard>
         }
     </div>

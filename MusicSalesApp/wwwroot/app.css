@@ -715,15 +715,6 @@ h1:focus {
     gap: 8px;
 }
 
-/* Card share row - contains Facebook share button */
-.card-share-row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: 8px;
-    margin-bottom: 8px;
-}
-
 /* Card view row - contains view button */
 .card-view-row {
     display: flex;
@@ -734,4 +725,21 @@ h1:focus {
 
 .card-view-row .action-button {
     width: 100%;
+}
+
+/* Card bottom row - contains cart button and share button */
+.card-bottom-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.card-bottom-row .cart-button-wrapper {
+    flex: 1;
+}
+
+.card-bottom-row .fb-share-btn {
+    flex-shrink: 0;
 }
