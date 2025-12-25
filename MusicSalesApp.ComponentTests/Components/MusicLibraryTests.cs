@@ -92,6 +92,7 @@ public class MusicLibraryTests : BUnitTestBase
             .ReturnsAsync(metadata);
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should have song cards
@@ -118,6 +119,7 @@ public class MusicLibraryTests : BUnitTestBase
             .ReturnsAsync(metadata);
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should have card actions div with play and view buttons
@@ -144,6 +146,7 @@ public class MusicLibraryTests : BUnitTestBase
             .ReturnsAsync(metadata);
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should have album art placeholder
@@ -168,6 +171,7 @@ public class MusicLibraryTests : BUnitTestBase
             .ReturnsAsync(metadata);
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should have button with view title and blazor onclick attribute
@@ -191,6 +195,7 @@ public class MusicLibraryTests : BUnitTestBase
             });
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should display price from metadata
@@ -228,6 +233,7 @@ public class MusicLibraryTests : BUnitTestBase
             });
 
         // Act
+        SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
         // Assert - should display album price from metadata

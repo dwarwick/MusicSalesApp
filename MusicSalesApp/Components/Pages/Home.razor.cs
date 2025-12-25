@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.Extensions.Configuration;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 
@@ -7,9 +6,6 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class HomeModel : BlazorBase, IDisposable
 {
-    [Microsoft.AspNetCore.Components.Inject]
-    protected IConfiguration Configuration { get; set; }
-
     protected string _subscriptionPrice;
     protected bool _hasActiveSubscription = false;
     private bool _subscriptionStatusChecked;

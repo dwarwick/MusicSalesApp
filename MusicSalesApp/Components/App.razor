@@ -1,10 +1,16 @@
-﻿<!DOCTYPE html>
+﻿@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+    
+    @((MarkupString)metaHtml)
+    
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <!-- Theme CSS is injected dynamically by ThemeProvider component -->
@@ -22,6 +28,12 @@
 </head>
 
 <body>
+    <!-- Facebook SDK for JavaScript -->
+    <div id="fb-root"></div>
+    <script async defer crossorigin="anonymous" 
+            src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0&appId=@Configuration["Facebook:AppId"]" 
+            nonce="random-nonce"></script>
+    
     <Routes @rendermode="InteractiveServer" />
     <ReconnectModal />   
     <script src="@Assets["_framework/blazor.web.js"]"></script>

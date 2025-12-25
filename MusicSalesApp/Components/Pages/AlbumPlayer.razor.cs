@@ -646,6 +646,16 @@ namespace MusicSalesApp.Components.Pages
             return _albumInfo?.AlbumName ?? AlbumName ?? "Unknown Album";
         }
 
+        protected string GetShareUrl()
+        {
+            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            if (_isPlaylistMode)
+            {
+                return $"{baseUrl}/playlist/{PlaylistId}";
+            }
+            return $"{baseUrl}/album/{Uri.EscapeDataString(AlbumName)}";
+        }
+
         protected string GetTrackTitle(int index)
         {
             if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return "";

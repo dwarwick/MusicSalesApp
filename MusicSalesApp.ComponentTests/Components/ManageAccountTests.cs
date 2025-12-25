@@ -22,6 +22,7 @@ public class ManageAccountTests : BUnitTestBase
     public void ManageAccount_NotAuthenticated_ShowsWarning()
     {
         // Arrange - already set up with unauthenticated user
+        SetupRendererInfo();
 
         // Act
         var cut = TestContext.Render<ManageAccount>();
@@ -34,6 +35,9 @@ public class ManageAccountTests : BUnitTestBase
     [Test]
     public void ManageAccount_RendersPageTitle()
     {
+        // Arrange
+        SetupRendererInfo();
+        
         // Act
         var cut = TestContext.Render<ManageAccount>();
 

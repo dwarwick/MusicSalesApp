@@ -943,6 +943,19 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         NavigationManager.NavigateTo($"/album/{Uri.EscapeDataString(album.AlbumName)}");
     }
 
+    protected string GetAlbumShareUrl(string albumName)
+    {
+        var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+        return $"{baseUrl}/album/{Uri.EscapeDataString(albumName)}";
+    }
+
+    protected string GetSongShareUrl(string fileName)
+    {
+        var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+        var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+        return $"{baseUrl}/song/{Uri.EscapeDataString(songTitle)}";
+    }
+
     protected async Task ToggleAlbumCartItem(AlbumInfo album)
     {
         try

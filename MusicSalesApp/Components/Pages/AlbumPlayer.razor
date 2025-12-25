@@ -69,6 +69,15 @@
                         }
                     </button>
 
+                    <!-- Facebook Share Button (only show for albums, not playlists) -->
+                    @if (!_isPlaylistMode)
+                    {
+                        <FacebookShareButton ShareUrl="@GetShareUrl()" 
+                                           Layout="button_count" 
+                                           Size="large" 
+                                           CssClass="share-button-action" />
+                    }
+
                     <div class="action-controls">
                         <!-- Add to Cart Button (only show for albums, not playlists) -->
                         @if (!_isPlaylistMode)

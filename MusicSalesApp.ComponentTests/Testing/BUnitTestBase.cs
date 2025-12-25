@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
@@ -40,6 +42,9 @@ public abstract class BUnitTestBase
     protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
     protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
+    protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
+    protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
+    protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -60,6 +65,9 @@ public abstract class BUnitTestBase
         MockPlaylistService = new Mock<IPlaylistService>();
         MockSubscriptionService = new Mock<ISubscriptionService>();
         MockPasskeyService = new Mock<IPasskeyService>();
+        MockOpenGraphService = new Mock<IOpenGraphService>();
+        MockSongLikeService = new Mock<ISongLikeService>();
+        MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -134,6 +142,26 @@ public abstract class BUnitTestBase
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<Passkey>());
 
+        // Setup default returns for IOpenGraphService methods
+        MockOpenGraphService.Setup(x => x.GenerateSongMetaTagsAsync(It.IsAny<string>()))
+            .ReturnsAsync(string.Empty);
+        MockOpenGraphService.Setup(x => x.GenerateAlbumMetaTagsAsync(It.IsAny<string>()))
+            .ReturnsAsync(string.Empty);
+
+        // Setup default returns for ISongLikeService methods
+        MockSongLikeService.Setup(x => x.GetLikeCountsAsync(It.IsAny<int>()))
+            .ReturnsAsync((0, 0));
+        MockSongLikeService.Setup(x => x.GetUserLikeStatusAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((bool?)null);
+
+        // Setup DbContextFactory mock - use in-memory database for testing
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+            .Options;
+        
+        MockDbContextFactory.Setup(x => x.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MusicSalesApp.Data.AppDbContext(options));
+
         // Register services required by BlazorBase
         TestContext.Services.AddSingleton<IAuthenticationService>(MockAuthService.Object);
         TestContext.Services.AddSingleton<AuthenticationStateProvider>(MockAuthStateProvider.Object);
@@ -150,6 +178,20 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
         TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
+        TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
+        TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
+        TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
+
+        // Add IConfiguration for components that need it
+        var configData = new Dictionary<string, string>
+        {
+            ["Facebook:AppId"] = "test-facebook-app-id",
+            ["PayPal:SubscriptionPrice"] = "3.99"
+        };
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(configData!)
+            .Build();
+        TestContext.Services.AddSingleton<IConfiguration>(configuration);
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
@@ -163,6 +205,26 @@ public abstract class BUnitTestBase
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };
         TestContext.Services.AddSingleton<HttpClient>(httpClient);
         // NavigationManager is provided by bUnit automatically.
+        
+        // NOTE: Cannot set RendererInfo here because it triggers service retrieval
+        // which prevents adding more services. This causes SfDialog components to fail
+        // in tests. See: https://github.com/bUnit-dev/bUnit/issues/XXX
+    }
+
+    /// <summary>
+    /// Sets the RendererInfo for tests that need it (e.g., tests with SfDialog components).
+    /// Call this method AFTER BaseSetup and BEFORE rendering any components.
+    /// </summary>
+    protected void SetupRendererInfo()
+    {
+        try
+        {
+            TestContext.Renderer.SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
+        }
+        catch (InvalidOperationException)
+        {
+            // RendererInfo already set or services already retrieved - ignore
+        }
     }
 
     [TearDown]
