@@ -18,6 +18,48 @@
             <p>Please <a href="/login">log in</a> to view your cart.</p>
         </div>
     }
+    else if (_checkoutComplete)
+    {
+        <div class="checkout-success">
+            <svg class="success-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <h3>Purchase Complete!</h3>
+            <p>Thank you for your purchase. You now own @_purchasedCount song(s).</p>
+            <SfButton OnClick="@(() => NavigationManager.NavigateTo("/music-library"))" Content="Go to Music Library" CssClass="e-btn e-primary" />
+        </div>
+    }
+    else if (_checkoutError)
+    {
+        <div class="checkout-error">
+            <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            <h3>Payment Error</h3>
+            <p>@_errorMessage</p>
+            <p class="error-help">Please try again or contact support if the problem persists.</p>
+            <SfButton OnClick="@ResetCheckout" Content="Try Again" CssClass="e-btn e-primary" />
+        </div>
+    }
+    else if (_checkoutCancelled)
+    {
+        <div class="checkout-cancelled">
+            <svg class="cancel-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>
+            </svg>
+            <h3>Payment Cancelled</h3>
+            <p>You cancelled the payment process.</p>
+            <p>Your cart items are still saved. You can complete your purchase anytime.</p>
+            <SfButton OnClick="@ResetCheckout" Content="Continue Shopping" CssClass="e-btn e-primary" />
+        </div>
+    }
+    else if (_checkoutInProgress)
+    {
+        <div class="checkout-progress">
+            <p>Processing payment with PayPal...</p>
+            <p class="processing-note">Please wait while we securely process your payment.</p>
+        </div>
+    }
     else if (_cartItems.Count == 0)
     {
         <div class="empty-cart">
@@ -53,78 +95,33 @@
         </div>
 
         <div class="checkout-actions">
-            @if (_checkoutInProgress)
-            {
-                <div class="checkout-progress">
-                    <p>Processing payment with PayPal...</p>
-                    <p class="processing-note">Please wait while we securely process your payment.</p>
-                </div>
-            }
-            else if (_checkoutComplete)
-            {
-                <div class="checkout-success">
-                    <svg class="success-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            <!-- PayPal notification as required by PayPal guidelines -->
+            <div class="paypal-notice">
+                <p class="payment-processor-notice">
+                    <strong>Secure Payment Processing:</strong> Your payment is securely processed by PayPal. 
+                    By clicking a payment button below, you will be redirected to PayPal to complete your purchase.
+                </p>
+                <p class="payment-info">
+                    PayPal accepts credit cards, debit cards, and PayPal balance. 
+                    <a href="https://www.paypal.com/us/webapps/mpp/paypal-popup" target="_blank" rel="noopener noreferrer">Learn more about PayPal</a>
+                </p>
+                <p class="security-notice">
+                    <svg class="security-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
                     </svg>
-                    <h3>Purchase Complete!</h3>
-                    <p>Thank you for your purchase. You now own @_purchasedCount song(s).</p>
-                    <SfButton OnClick="@(() => NavigationManager.NavigateTo("/music-library"))" Content="Go to Music Library" CssClass="e-btn e-primary" />
-                </div>
-            }
-            else if (_checkoutError)
-            {
-                <div class="checkout-error">
-                    <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                    </svg>
-                    <h3>Payment Error</h3>
-                    <p>@_errorMessage</p>
-                    <p class="error-help">Please try again or contact support if the problem persists.</p>
-                    <SfButton OnClick="@ResetCheckout" Content="Try Again" CssClass="e-btn e-primary" />
-                </div>
-            }
-            else if (_checkoutCancelled)
-            {
-                <div class="checkout-cancelled">
-                    <svg class="cancel-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>
-                    </svg>
-                    <h3>Payment Cancelled</h3>
-                    <p>You cancelled the payment process.</p>
-                    <p>Your cart items are still saved. You can complete your purchase anytime.</p>
-                    <SfButton OnClick="@ResetCheckout" Content="Continue Shopping" CssClass="e-btn e-primary" />
-                </div>
-            }
-            else
-            {
-                <!-- PayPal notification as required by PayPal guidelines -->
-                <div class="paypal-notice">
-                    <p class="payment-processor-notice">
-                        <strong>Secure Payment Processing:</strong> Your payment is securely processed by PayPal. 
-                        By clicking a payment button below, you will be redirected to PayPal to complete your purchase.
-                    </p>
-                    <p class="payment-info">
-                        PayPal accepts credit cards, debit cards, and PayPal balance. 
-                        <a href="https://www.paypal.com/us/webapps/mpp/paypal-popup" target="_blank" rel="noopener noreferrer">Learn more about PayPal</a>
-                    </p>
-                    <p class="security-notice">
-                        <svg class="security-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
-                        </svg>
-                        All transactions are secured with industry-standard encryption and 3D Secure authentication when required.
-                    </p>
-                </div>
-                
-                <div id="paypal-button-container"></div>
-                
-                <!-- Additional PayPal disclosure -->
-                <div class="paypal-disclosure">
-                    <p class="disclosure-text">
-                        By completing this purchase, you agree to our terms of service. 
-                        Your payment will be processed by PayPal, and you will receive a confirmation email after purchase.
-                    </p>
-                </div>
-            }
+                    All transactions are secured with industry-standard encryption and 3D Secure authentication when required.
+                </p>
+            </div>
+            
+            <div id="paypal-button-container"></div>
+            
+            <!-- Additional PayPal disclosure -->
+            <div class="paypal-disclosure">
+                <p class="disclosure-text">
+                    By completing this purchase, you agree to our terms of service. 
+                    Your payment will be processed by PayPal, and you will receive a confirmation email after purchase.
+                </p>
+            </div>
         </div>
     }
 </div>
