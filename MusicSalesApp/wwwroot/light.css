@@ -305,3 +305,7 @@ body {
     color: inherit;
 }
 
+.stream-count-info, .album-track-info {    
+    color: #282828;    
+}
+
