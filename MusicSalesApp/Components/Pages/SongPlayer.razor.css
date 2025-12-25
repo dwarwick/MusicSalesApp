@@ -14,7 +14,22 @@
     min-height: 200px;
 }
 
+/* Song Player Container - Grid Layout (similar to AlbumPlayer) */
+.song-player-container {
+    display: grid;
+    grid-template-rows: 1fr 88px;
+    grid-template-columns: 100%;
+    height: calc(100vh - 66px);
+    width: 100%;
+    overflow: hidden;
+    color: #fff;
+}
 
+/* Song Header Section */
+.song-header {
+    padding: 24px;
+    overflow-y: auto;
+}
 
 .album-art-placeholder {
     width: 192px;
@@ -34,7 +49,7 @@
 .song-label { font-size: 14px; font-weight: 700; text-transform: uppercase; }
 
 /* Action Controls Section */
-.action-controls { display: flex; align-items: center; gap: 24px; padding: 24px 0; }
+.action-controls { display: flex; align-items: center; gap: 24px; padding: 24px 0; position: relative; }
 
 .play-button-large {
     width: 56px; height: 56px; border-radius: 50%; background-color: #1db954; border: none; cursor: pointer;
@@ -46,10 +61,18 @@
 
 .play-icon { width: 28px; height: 28px; color: #000; margin-left: 2px; }
 
-
-
-/* Desktop layout - account for sidebar and article padding */
-/* Responsive rules moved to global breakpoint files in wwwroot */
+/* Player Bar - Fixed to bottom via grid */
+.player-bar {
+    background: linear-gradient(to top, #181818 0%, #282828 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
 
 .controls-wrapper { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 600px; margin-bottom: 8px; }
 .time-spacer { min-width: 40px; }
@@ -83,10 +106,7 @@
 .volume-thumb { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; background-color: #fff; border-radius: 50%; opacity: 0; transition: opacity 0.2s ease; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); }
 .volume-bar-container:hover .volume-thumb { opacity: 1; }
 
-/* Responsive rules moved to global breakpoint files in wwwroot */
-
 /* Owned Badge */
-
 .owned-badge { position: absolute; bottom: 8px; right: 8px; background-color: #1db954; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .owned-badge svg { width: 20px; height: 20px; color: #fff; }
 
@@ -110,8 +130,6 @@
 }
 
 /* Add to Cart Button on SongPlayer */
-.action-controls { position: relative; }
-
 .cart-button-wrapper{ position:relative; display:inline-block; }
 .cart-button-large {
     display: flex;
@@ -128,22 +146,22 @@
     transition: all 0.2s ease;
 }
 
-    .cart-button-large:hover {
-        border-color: #fff;
-        color: #fff;
-        transform: scale(1.02);
-    }
+.cart-button-large:hover {
+    border-color: #fff;
+    color: #fff;
+    transform: scale(1.02);
+}
 
-    .cart-button-large.in-cart {
-        background-color: #1db954;
-        border-color: #1db954;
-        color: #fff;
-    }
+.cart-button-large.in-cart {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
 
-        .cart-button-large.in-cart:hover {
-            background-color: #1ed760;
-            border-color: #1ed760;
-        }
+.cart-button-large.in-cart:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
 
 .cart-icon-large {
     width: 20px;
@@ -171,8 +189,8 @@
 /* Music Note Float Animation for Song Player */
 .music-note-float-player {
     position: absolute;
-    left: 50%; /* center horizontally over button */
-    top: 0; /* start at top edge of button */
+    left: 50%;
+    top: 0;
     color: #1db954;
     font-size: 28px;
     pointer-events: none;

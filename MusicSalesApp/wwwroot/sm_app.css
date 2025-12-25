@@ -6,36 +6,19 @@
         height: calc(100vh - 7rem);
     }
 
-    /* AlbumPlayer - Container adjustments 
-    .spotify-container {
-        padding-bottom: 160px;
-    }*/
+    /* SongPlayer - Container adjustments for small screens */
+    .song-player-container {
+        grid-template-rows: 1fr 80px;
+    }
 
-    /* AlbumPlayer - Track List 
-    .track-list-container {
-        margin: 24px 0;
-        padding-bottom: 20px;
-        max-height: calc(100vh - 620px);
-        overflow-y: auto;
-        overflow-x: hidden;
-    }*/
+    .song-player-container .song-header {
+        padding: 16px;
+    }
 
-    /* AlbumPlayer - Player Bar 
-    .player-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(to top, #181818 0%, #282828 100%);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 12px 16px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+    .song-player-container .player-bar {
+        padding: 10px 16px;
         gap: 6px;
-        z-index: 1000;
-        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
-    }*/
+    }
 
     /* SongPlayer mobile adjustments */
     .song-title {
@@ -48,16 +31,6 @@
         box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
         border-radius: 4px;
     }
-
-    /* Song Header Section 
-    .song-header {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 24px;
-        padding: 24px 0;
-        margin-bottom: 24px;
-    }*/
 
     .time-spacer { min-width: 0; display: none; }
     .controls-wrapper { gap: 2px; margin-bottom: 4px; }
@@ -74,6 +47,28 @@
     .action-controls { flex-wrap: wrap; gap: 16px; }
     .cart-button-large { padding: 10px 20px; font-size: 13px; }
     .cart-icon-large { width: 18px; height: 18px; }
+
+    /* SongPlayer - Player controls compact layout */
+    .song-player-container .controls-wrapper {
+        gap: 2px;
+        margin-bottom: 4px;
+        max-width: 100%;
+    }
+
+    .song-player-container .time-spacer {
+        display: none;
+        min-width: 0;
+    }
+
+    .song-player-container .player-controls-row {
+        gap: 4px;
+        width: 100%;
+    }
+
+    .song-player-container .progress-container {
+        gap: 4px;
+        max-width: 100%;
+    }
 
     /* MusicLibrary small adjustments */
     .music-cards-grid {
@@ -283,6 +278,16 @@
 
 /* Landscape Mobile Optimization - for devices with limited viewport height */
 @media (max-width: 1200px) and (max-height: 600px) and (orientation: landscape) {
+    /* SongPlayer - Landscape adjustments */
+    .song-player-container {
+        grid-template-rows: 1fr 70px;
+    }
+
+    .song-player-container .player-bar {
+        padding: 6px 12px;
+        gap: 2px;
+    }
+
     /* MusicLibrary - Reduce grid gaps and card spacing in landscape */
     .music-cards-grid {
         gap: 12px;
