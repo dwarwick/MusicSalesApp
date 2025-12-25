@@ -61,10 +61,11 @@ public class StreamCountHubClient : IStreamCountHubClient
             await _hubConnection.StartAsync();
             _isStarted = true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Connection failed - this is not critical, local events still work
-            // The service will try again on next request
+            // Log for debugging purposes but don't throw
+            System.Diagnostics.Debug.WriteLine($"SignalR hub connection failed: {ex.Message}");
         }
     }
 
