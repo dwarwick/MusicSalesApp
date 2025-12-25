@@ -51,15 +51,25 @@ public class OpenGraphService : IOpenGraphService
                 return string.Empty;
             }
 
-            // Find the associated image for this song
+            // Find the associated image for this song using BlobPath or ImageBlobPath
             var imageMetadata = allMetadata.FirstOrDefault(m =>
                 !string.IsNullOrEmpty(m.ImageBlobPath) &&
                 !m.IsAlbumCover &&
                 Path.GetFileNameWithoutExtension(m.ImageBlobPath) == decodedTitle);
 
-            var imageUrl = imageMetadata != null 
-                ? GetAbsoluteUrl($"/api/music/stream?path={HttpUtility.UrlEncode(imageMetadata.ImageBlobPath)}")
-                : GetAbsoluteUrl("/favicon.ico");
+            // Use the full blob path for the image URL
+            string imageUrl;
+            if (imageMetadata != null)
+            {
+                var imagePath = !string.IsNullOrEmpty(imageMetadata.ImageBlobPath) 
+                    ? imageMetadata.ImageBlobPath 
+                    : imageMetadata.BlobPath;
+                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(imagePath)}");
+            }
+            else
+            {
+                imageUrl = GetAbsoluteUrl("/favicon.ico");
+            }
 
             var tags = new Dictionary<string, string>
             {
@@ -116,9 +126,19 @@ public class OpenGraphService : IOpenGraphService
             var coverImage = albumMetadata.FirstOrDefault(m => m.IsAlbumCover);
             var albumTracks = albumMetadata.Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath)).ToList();
 
-            var imageUrl = coverImage != null && !string.IsNullOrEmpty(coverImage.ImageBlobPath)
-                ? GetAbsoluteUrl($"/api/music/stream?path={HttpUtility.UrlEncode(coverImage.ImageBlobPath)}")
-                : GetAbsoluteUrl("/favicon.ico");
+            // Use the full blob path for the image URL
+            string imageUrl;
+            if (coverImage != null)
+            {
+                var imagePath = !string.IsNullOrEmpty(coverImage.ImageBlobPath) 
+                    ? coverImage.ImageBlobPath 
+                    : coverImage.BlobPath;
+                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(imagePath)}");
+            }
+            else
+            {
+                imageUrl = GetAbsoluteUrl("/favicon.ico");
+            }
 
             var tags = new Dictionary<string, string>
             {
@@ -183,5 +203,20 @@ public class OpenGraphService : IOpenGraphService
         }
 
         return $"{context.Request.Scheme}://{context.Request.Host}{context.Request.PathBase}{relativePath}";
+    }
+
+    private string SafeEncodePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+
+        // Check for path traversal attempts
+        if (filePath.Contains("..") || filePath.Contains("~"))
+            return string.Empty;
+
+        // Split by forward slash, encode each segment, then rejoin
+        var segments = filePath.Split('/');
+        var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
+        return string.Join("/", encodedSegments);
     }
 }
