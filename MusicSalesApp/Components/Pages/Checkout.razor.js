@@ -87,31 +87,25 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 // Show processing state
                 await dotNetRef.invokeMethodAsync('SetProcessing', true);
                 
-                // Capture the order on the client side first to handle 3D Secure
-                console.log('Capturing order on client side to handle 3D Secure authentication...');
-                const captureResult = await actions.order.capture();
-                console.log('Client-side capture result:', captureResult);
-
-                // Check if 3D Secure authentication was required and completed
-                if (captureResult.status === 'COMPLETED') {
-                    console.log('Payment completed successfully (3D Secure passed if required)');
-                    
-                    // Use our stored internal order ID
-                    const internalOrderId = currentOrderId || (data && data.orderID);
-                    const paypalOrderId = data && data.orderID;
-                    console.log('Using internal order ID:', internalOrderId);
-                    console.log('PayPal order ID:', paypalOrderId);
-                    
-                    if (!internalOrderId || !paypalOrderId) {
-                        throw new Error('Missing order identifiers');
-                    }
-
-                    // Notify server of successful payment approval
-                    await dotNetRef.invokeMethodAsync('OnApprove', { orderId: internalOrderId, payPalOrderId: paypalOrderId });
-                    console.log('Server notified of payment completion');
-                } else {
-                    throw new Error('Payment was not completed. Status: ' + captureResult.status);
+                // Note: 3D Secure authentication happens during the approval flow (before this callback)
+                // The payment_source configuration in createOrder triggers 3D Secure when required
+                // We do NOT call actions.order.capture() here because the popup may be closed
+                // Server will capture the payment after we notify it
+                console.log('Payment approved (3D Secure passed if required), notifying server to capture...');
+                
+                // Use our stored internal order ID
+                const internalOrderId = currentOrderId || (data && data.orderID);
+                const paypalOrderId = data && data.orderID;
+                console.log('Using internal order ID:', internalOrderId);
+                console.log('PayPal order ID:', paypalOrderId);
+                
+                if (!internalOrderId || !paypalOrderId) {
+                    throw new Error('Missing order identifiers');
                 }
+
+                // Notify server of successful payment approval - server will capture
+                await dotNetRef.invokeMethodAsync('OnApprove', { orderId: internalOrderId, payPalOrderId: paypalOrderId });
+                console.log('Server notified of payment approval');
             } catch (error) {
                 console.error('Error in onApprove:', error);
                 await dotNetRef.invokeMethodAsync('OnError', error.message || error.toString());

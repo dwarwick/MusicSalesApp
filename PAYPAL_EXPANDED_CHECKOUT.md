@@ -67,7 +67,7 @@ const paypalOrderId = await actions.order.create({
 
 **Note:** The 3D Secure configuration applies to card payments only. PayPal wallet, Venmo, and other payment methods have their own built-in authentication mechanisms and are not affected by this setting.
 
-### 3. Client-Side Capture (Checkout.razor.js)
+### 3. Approval and Server-Side Capture (Checkout.razor.js)
 
 **Before:**
 ```javascript
@@ -78,21 +78,18 @@ await dotNetRef.invokeMethodAsync('OnApprove', {...});
 
 **After:**
 ```javascript
-// Capture on client side to handle 3D Secure authentication
-const captureResult = await actions.order.capture();
-
-if (captureResult.status === 'COMPLETED') {
-    console.log('Payment completed successfully (3D Secure passed if required)');
-    await dotNetRef.invokeMethodAsync('OnApprove', {...});
-} else {
-    throw new Error('Payment was not completed. Status: ' + captureResult.status);
-}
+// 3D Secure authentication happens during approval flow (before this callback)
+// We notify the server to capture the payment after approval
+console.log('Payment approved (3D Secure passed if required), notifying server to capture...');
+await dotNetRef.invokeMethodAsync('OnApprove', {...});
 ```
 
 **Changes:**
-- Now captures payment on client side first
-- This allows 3D Secure authentication to complete properly
-- Server verifies the capture instead of attempting to capture again
+- 3D Secure authentication happens automatically during the PayPal approval flow when required
+- The `payment_source` configuration in `createOrder` triggers 3D Secure for card payments
+- After approval, we notify the server to capture the payment
+- Client does NOT call `actions.order.capture()` to avoid "Target window is closed" errors
+- Server performs the capture via PayPal API after approval
 
 ### 4. Enhanced Error Handling (Checkout.razor, Checkout.razor.cs)
 
@@ -151,11 +148,11 @@ Added required PayPal merchant notifications per [PayPal guidelines](https://dev
 </div>
 ```
 
-### 6. Server-Side Verification (CartController.cs)
+### 6. Server-Side Capture (CartController.cs)
 
 **Before:**
 ```csharp
-// Server-side capture
+// Server-side capture (original implementation)
 private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
 {
     var response = await client.PostAsync($"v2/checkout/orders/{payPalOrderId}/capture", ...);
@@ -165,18 +162,20 @@ private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
 
 **After:**
 ```csharp
-// Server-side verification of client-side capture
-private async Task<bool> VerifyPayPalCaptureAsync(string payPalOrderId)
+// Server-side capture after 3D Secure authentication
+private async Task<bool> CaptureWithPayPalAsync(string payPalOrderId)
 {
-    var response = await client.GetAsync($"v2/checkout/orders/{payPalOrderId}");
-    // ... verify order status is COMPLETED
+    // 3D Secure authentication already completed during approval flow
+    var response = await client.PostAsync($"v2/checkout/orders/{payPalOrderId}/capture", ...);
+    // ... verify capture status
 }
 ```
 
 **Changes:**
-- Changed from POST to GET request (verify instead of capture)
-- Checks order status is COMPLETED
-- No longer attempts to capture (already done client-side)
+- Server performs the capture after client approval
+- 3D Secure authentication happens during the approval flow (before capture)
+- This prevents "Target window is closed" errors from client-side capture attempts
+- PayPal SDK's `payment_source` configuration ensures 3D Secure runs when required
 
 ## User Experience Flow
 
@@ -187,10 +186,10 @@ private async Task<bool> VerifyPayPalCaptureAsync(string payPalOrderId)
 3. PayPal notifications inform user about secure processing
 4. User clicks PayPal/Venmo/Pay Later button
 5. PayPal popup opens for payment selection
-6. If required, 3D Secure authentication challenge appears
+6. If required, 3D Secure authentication challenge appears **during approval**
 7. User completes 3D Secure authentication (biometric/SMS code)
-8. Payment is captured on client side
-9. Server verifies capture was successful
+8. User approves payment (popup may close)
+9. Server captures the payment via PayPal API
 10. Songs are added to user's library
 11. Success message is displayed
 
