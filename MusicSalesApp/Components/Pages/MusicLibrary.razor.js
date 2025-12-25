@@ -5,6 +5,7 @@ const cardPlayers = new Map();
 
 // Stream tracking state (per card)
 const STREAM_THRESHOLD_SECONDS = 30;
+const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
 
 export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
     if (!audioElement) return;
@@ -55,7 +56,7 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         if (player && !player.isSeeking && !player.hasRecordedStream && player.songMetadataId > 0) {
             const timeDelta = audioElement.currentTime - player.lastTime;
             // Only count if time moved forward naturally (not seeking)
-            if (timeDelta > 0 && timeDelta < 1) {
+            if (timeDelta > 0 && timeDelta < MAX_TIME_DELTA_SECONDS) {
                 player.playedTime += timeDelta;
                 
                 // Check if we've reached the threshold

@@ -32,7 +32,9 @@ public class StreamCountService : IStreamCountService
         // Check if we're using a relational database (supports raw SQL)
         if (context.Database.IsRelational())
         {
-            // Use ExecuteSqlRawAsync for atomic update in production
+            // Use ExecuteSqlRawAsync for atomic update in production.
+            // Note: {0} is a parameterized placeholder, not string interpolation.
+            // EF Core properly parameterizes the query to prevent SQL injection.
             var rowsAffected = await context.Database.ExecuteSqlRawAsync(
                 "UPDATE SongMetadata SET NumberOfStreams = NumberOfStreams + 1 WHERE Id = {0}",
                 songMetadataId);

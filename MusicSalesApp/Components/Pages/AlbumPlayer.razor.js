@@ -6,6 +6,7 @@ let playerState = {
 
 // Stream tracking state for album player
 const STREAM_THRESHOLD_SECONDS = 30;
+const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
 let streamTracker = {
     songMetadataId: 0,
     playedTime: 0,
@@ -54,7 +55,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         if (!streamTracker.isSeeking && !streamTracker.hasRecordedStream && streamTracker.songMetadataId > 0) {
             const timeDelta = audioElement.currentTime - streamTracker.lastTime;
             // Only count if time moved forward naturally (not seeking)
-            if (timeDelta > 0 && timeDelta < 1) {
+            if (timeDelta > 0 && timeDelta < MAX_TIME_DELTA_SECONDS) {
                 streamTracker.playedTime += timeDelta;
                 
                 // Check if we've reached the threshold
