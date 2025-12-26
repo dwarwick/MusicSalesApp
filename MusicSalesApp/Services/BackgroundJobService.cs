@@ -27,6 +27,12 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync(),
                 Cron.Daily(3));
 
+            // Schedule nightly sync of likes to Supabase at 2 AM UTC
+            RecurringJob.AddOrUpdate<IRecommendationService>(
+                "sync-likes-to-supabase",
+                service => service.SyncLikesToSupabaseAsync(),
+                Cron.Daily(2));
+
             _logger.LogInformation("Hangfire recurring jobs initialized successfully");
         }
         catch (Exception ex)
