@@ -575,10 +575,22 @@ public class SubscriptionController : ControllerBase
                 
                 // If PayPal returns 404 RESOURCE_NOT_FOUND, the subscription is already cancelled
                 // or doesn't exist on PayPal's side. We should still allow local cancellation.
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound && body.Contains("RESOURCE_NOT_FOUND"))
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
-                    _logger.LogInformation("PayPal subscription {SubscriptionId} not found - treating as already cancelled", subscriptionId);
-                    return true;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(body);
+                        if (doc.RootElement.TryGetProperty("name", out var name) && 
+                            name.GetString() == "RESOURCE_NOT_FOUND")
+                        {
+                            _logger.LogInformation("PayPal subscription {SubscriptionId} not found - treating as already cancelled", subscriptionId);
+                            return true;
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // If JSON parsing fails, fall through to return false
+                    }
                 }
                 
                 return false;
