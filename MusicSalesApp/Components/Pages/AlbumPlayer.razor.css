@@ -462,18 +462,6 @@
 
 
 /* 2. Section Styles */
-.album-image-title-row {
-    
-}
-
-.action-buttons-row {
-    
-}
-
-.status-info-row {
-    
-}
-
 .track-list-container {
     overflow-y: auto;
     min-height: 0; /* Keeps the grid row from expanding */    
