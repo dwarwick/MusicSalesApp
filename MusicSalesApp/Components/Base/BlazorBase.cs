@@ -71,6 +71,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IStreamCountHubClient StreamCountHubClient { get; set; } = default!;
 
+    [Inject]
+    protected IRecommendationService RecommendationService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

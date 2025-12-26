@@ -1,0 +1,112 @@
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Cards
+
+<SfCard CssClass="@GetCssClass()">
+    <CardHeader Title="@PlaylistName">
+        @if (ShowActions)
+        {
+            <div class="playlists-page-actions">
+                @if (OnEdit.HasDelegate)
+                {
+                    <SfButton OnClick="@OnEdit" CssClass="e-small" IconCss="fas fa-edit" />
+                }
+                @if (OnDelete.HasDelegate)
+                {
+                    <SfButton OnClick="@OnDelete" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                }
+            </div>
+        }
+    </CardHeader>
+    <CardContent>
+        <div class="playlists-page-info">
+            <p>@SongCount song(s)</p>
+            @if (CreatedAt.HasValue)
+            {
+                <p class="playlists-page-date">Created: @CreatedAt.Value.ToLocalTime().ToString("MMM d, yyyy")</p>
+            }
+            @if (!string.IsNullOrEmpty(Description))
+            {
+                <p class="playlist-description">@Description</p>
+            }
+        </div>
+        <div class="card-actions">
+            <SfButton OnClick="@OnPlay">
+                <SfIcon IconCss="fas fa-solid fa-play" />
+            </SfButton>
+            @if (OnView.HasDelegate)
+            {
+                <SfButton OnClick="@OnView">
+                    <SfIcon IconCss="fas fa-solid fa-eye" />
+                </SfButton>
+            }
+        </div>
+    </CardContent>
+</SfCard>
+
+@code {
+    /// <summary>
+    /// The name of the playlist to display
+    /// </summary>
+    [Parameter]
+    public string PlaylistName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The number of songs in the playlist
+    /// </summary>
+    [Parameter]
+    public int SongCount { get; set; }
+
+    /// <summary>
+    /// When the playlist was created (optional)
+    /// </summary>
+    [Parameter]
+    public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// Optional description for the playlist
+    /// </summary>
+    [Parameter]
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether to show edit/delete action buttons
+    /// </summary>
+    [Parameter]
+    public bool ShowActions { get; set; } = true;
+
+    /// <summary>
+    /// Additional CSS class for the card
+    /// </summary>
+    [Parameter]
+    public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Callback when play button is clicked
+    /// </summary>
+    [Parameter]
+    public EventCallback OnPlay { get; set; }
+
+    /// <summary>
+    /// Callback when view button is clicked
+    /// </summary>
+    [Parameter]
+    public EventCallback OnView { get; set; }
+
+    /// <summary>
+    /// Callback when edit button is clicked
+    /// </summary>
+    [Parameter]
+    public EventCallback OnEdit { get; set; }
+
+    /// <summary>
+    /// Callback when delete button is clicked
+    /// </summary>
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    private string GetCssClass()
+    {
+        var baseClass = "playlists-page-card music-card";
+        return string.IsNullOrEmpty(CssClass) ? baseClass : $"{baseClass} {CssClass}";
+    }
+}

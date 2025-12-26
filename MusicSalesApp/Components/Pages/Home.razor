@@ -1,4 +1,7 @@
 ﻿@page "/"
+@using MusicSalesApp.Components.Shared
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Cards
 @inherits HomeModel
 
 <PageTitle>Home</PageTitle>
@@ -7,6 +10,31 @@
     <h1>Welcome to Stream Tunes!</h1>
 
     <p>Discover and enjoy unlimited music streaming!</p>
+    
+    @if (_isAuthenticated && _recommendedPlaylist.Any())
+    {
+        <div class="recommended-playlist-section">
+            <h2>Recommended For You</h2>
+            <p class="section-subtitle">Based on your likes and listening history</p>
+            <div class="playlists-page-grid">
+                <PlaylistCard 
+                    PlaylistName="Recommended For You"
+                    SongCount="@_recommendedPlaylist.Count"
+                    Description="Songs you might enjoy based on your preferences"
+                    ShowActions="false"
+                    CssClass="recommended-playlist-card"
+                    OnPlay="@PlayRecommendedPlaylist" />
+            </div>
+        </div>
+    }
+    else if (_isAuthenticated && _loadingRecommendations)
+    {
+        <div class="recommended-playlist-section">
+            <h2>Recommended For You</h2>
+            <p>Loading recommendations...</p>
+        </div>
+    }
+    
     @if (!_hasActiveSubscription)
     {
         <div class="subscription-offer">

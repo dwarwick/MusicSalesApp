@@ -8,8 +8,13 @@ public partial class HomeModel : BlazorBase, IDisposable
 {
     protected string _subscriptionPrice;
     protected bool _hasActiveSubscription = false;
+    protected bool _isAuthenticated = false;
+    protected List<RecommendedPlaylist> _recommendedPlaylist = new();
+    protected bool _loadingRecommendations = false;
+    protected int _currentUserId;
     private bool _subscriptionStatusChecked;
     private bool _isDisposed;
+    private bool _hasLoadedData = false;
 
     protected override void OnInitialized()
     {
@@ -19,15 +24,32 @@ public partial class HomeModel : BlazorBase, IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _subscriptionStatusChecked)
+        // Only load data on first render if we haven't already loaded it
+        // This pattern prevents duplicate data loading when the component re-renders
+        // and avoids DbContext threading issues in Blazor Server
+        if (!firstRender || _hasLoadedData)
         {
             return;
         }
 
+        _hasLoadedData = true;
+        
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User?.Identity?.IsAuthenticated == true)
         {
+            _isAuthenticated = true;
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            if (appUser != null)
+            {
+                _currentUserId = appUser.Id;
+            }
             await LoadSubscriptionStatusAsync();
+            await LoadRecommendedPlaylistAsync();
+        }
+        
+        if (!_isDisposed)
+        {
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -43,7 +65,14 @@ public partial class HomeModel : BlazorBase, IDisposable
             var state = await authenticationStateTask;
             if (state.User?.Identity?.IsAuthenticated == true)
             {
+                _isAuthenticated = true;
+                var appUser = await UserManager.GetUserAsync(state.User);
+                if (appUser != null)
+                {
+                    _currentUserId = appUser.Id;
+                }
                 await LoadSubscriptionStatusAsync();
+                await LoadRecommendedPlaylistAsync();
             }
         }
         catch (Exception ex)
@@ -71,11 +100,35 @@ public partial class HomeModel : BlazorBase, IDisposable
         finally
         {
             _subscriptionStatusChecked = true;
-            if (!_isDisposed)
-            {
-                await InvokeAsync(StateHasChanged);
-            }
         }
+    }
+
+    private async Task LoadRecommendedPlaylistAsync()
+    {
+        if (_currentUserId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _loadingRecommendations = true;
+            _recommendedPlaylist = await RecommendationService.GetRecommendedPlaylistAsync(_currentUserId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load recommended playlist for user {UserId}", _currentUserId);
+        }
+        finally
+        {
+            _loadingRecommendations = false;
+        }
+    }
+
+    protected void PlayRecommendedPlaylist()
+    {
+        // Navigate to play the recommended playlist
+        NavigationManager.NavigateTo($"/recommended-playlist/{_currentUserId}");
     }
 
     public void Dispose()

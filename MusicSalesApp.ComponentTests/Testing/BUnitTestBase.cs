@@ -46,6 +46,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
     protected Mock<IStreamCountService> MockStreamCountService { get; private set; } = default!;
     protected Mock<IStreamCountHubClient> MockStreamCountHubClient { get; private set; } = default!;
+    protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -71,6 +72,7 @@ public abstract class BUnitTestBase
         MockSongLikeService = new Mock<ISongLikeService>();
         MockStreamCountService = new Mock<IStreamCountService>();
         MockStreamCountHubClient = new Mock<IStreamCountHubClient>();
+        MockRecommendationService = new Mock<IRecommendationService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -170,6 +172,14 @@ public abstract class BUnitTestBase
         MockStreamCountHubClient.Setup(x => x.IsConnected)
             .Returns(true);
 
+        // Setup default returns for IRecommendationService methods
+        MockRecommendationService.Setup(x => x.GetRecommendedPlaylistAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<RecommendedPlaylist>());
+        MockRecommendationService.Setup(x => x.GenerateRecommendationsAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<RecommendedPlaylist>());
+        MockRecommendationService.Setup(x => x.HasFreshRecommendationsAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -198,6 +208,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
         TestContext.Services.AddSingleton<IStreamCountService>(MockStreamCountService.Object);
         TestContext.Services.AddSingleton<IStreamCountHubClient>(MockStreamCountHubClient.Object);
+        TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

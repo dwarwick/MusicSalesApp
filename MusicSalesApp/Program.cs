@@ -167,6 +167,8 @@ try
     builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
+    builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+    builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
