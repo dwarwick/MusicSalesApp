@@ -25,7 +25,7 @@
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
             </svg>
             <h3>Purchase Complete!</h3>
-            <p>Thank you for your purchase. You now own @_purchasedCount song(s).</p>
+            <p>Thank you for your purchase. You now own @_purchasedCount new song(s).</p>
             <SfButton OnClick="@(() => NavigationManager.NavigateTo("/music-library"))" Content="Go to Music Library" CssClass="e-btn e-primary" />
         </div>
     }
@@ -100,6 +100,7 @@
                 <p class="payment-processor-notice">
                     <strong>Secure Payment Processing:</strong> Your payment is securely processed by PayPal. 
                     By clicking a payment button below, you will be redirected to PayPal to complete your purchase.
+                    By paying with your card, you acknowledge that your data will be processed by PayPal subject to the PayPal Privacy Statement available at <a href="https://www.paypal.com/" target="_blank" rel="noopener noreferrer">PayPal.com</a>
                 </p>
                 <p class="payment-info">
                     PayPal accepts credit cards, debit cards, and PayPal balance. 
