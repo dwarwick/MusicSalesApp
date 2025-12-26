@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251226195224_AddIsSystemGeneratedToPlaylist")]
+    [Migration("20251226195800_AddIsSystemGeneratedToPlaylist")]
     partial class AddIsSystemGeneratedToPlaylist
     {
         /// <inheritdoc />
