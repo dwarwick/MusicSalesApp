@@ -580,16 +580,17 @@ public class SubscriptionController : ControllerBase
                     try
                     {
                         using var doc = JsonDocument.Parse(body);
-                        if (doc.RootElement.TryGetProperty("name", out var name) && 
-                            name.GetString() == "RESOURCE_NOT_FOUND")
+                        if (doc.RootElement.TryGetProperty("name", out var nameElement) && 
+                            nameElement.ValueKind == JsonValueKind.String &&
+                            nameElement.GetString() == "RESOURCE_NOT_FOUND")
                         {
                             _logger.LogInformation("PayPal subscription {SubscriptionId} not found - treating as already cancelled", subscriptionId);
                             return true;
                         }
                     }
-                    catch (JsonException)
+                    catch (JsonException ex)
                     {
-                        // If JSON parsing fails, fall through to return false
+                        _logger.LogWarning(ex, "Failed to parse PayPal error response for subscription {SubscriptionId}", subscriptionId);
                     }
                 }
                 
