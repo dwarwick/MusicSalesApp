@@ -57,4 +57,15 @@ public interface IPlaylistService
     /// Filters out songs already in the playlist and album covers
     /// </summary>
     Task<List<OwnedSong>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId);
+
+    /// <summary>
+    /// Get or create the "Liked Songs" system playlist for a user
+    /// </summary>
+    Task<Playlist> GetOrCreateLikedSongsPlaylistAsync(int userId);
+
+    /// <summary>
+    /// Sync the Liked Songs playlist with the user's current liked songs
+    /// Adds newly liked songs and removes unliked songs
+    /// </summary>
+    Task SyncLikedSongsPlaylistAsync(int userId);
 }

@@ -217,32 +217,35 @@ try
 
     var app = builder.Build();
 
-    // Apply pending migrations automatically at startup
-    using (var scope = app.Services.CreateScope())
+    // Apply pending migrations automatically at startup (skip during design-time tool execution)
+    if (!EF.IsDesignTime)
     {
-        var services = scope.ServiceProvider;
-        var migrationLogger = services.GetRequiredService<ILogger<Program>>();
-        try
+        using (var scope = app.Services.CreateScope())
         {
-            migrationLogger.LogInformation("Starting database migration...");
-            var db = services.GetRequiredService<AppDbContext>();
-            
-            // Test database connection first
-            if (!db.Database.CanConnect())
+            var services = scope.ServiceProvider;
+            var migrationLogger = services.GetRequiredService<ILogger<Program>>();
+            try
             {
-                migrationLogger.LogError("Cannot connect to database. Check your connection string.");
-                throw new InvalidOperationException("Database connection failed. Please verify your connection string in appsettings.json or environment variables.");
+                migrationLogger.LogInformation("Starting database migration...");
+                var db = services.GetRequiredService<AppDbContext>();
+                
+                // Test database connection first
+                if (!db.Database.CanConnect())
+                {
+                    migrationLogger.LogError("Cannot connect to database. Check your connection string.");
+                    throw new InvalidOperationException("Database connection failed. Please verify your connection string in appsettings.json or environment variables.");
+                }
+                
+                db.Database.Migrate();
+                migrationLogger.LogInformation("Database migration completed successfully.");
             }
-            
-            db.Database.Migrate();
-            migrationLogger.LogInformation("Database migration completed successfully.");
-        }
-        catch (Exception ex)
-        {
-            migrationLogger.LogError(ex, "CRITICAL ERROR: An error occurred while applying database migrations. Application cannot start.");
-            migrationLogger.LogError("Connection String (masked): {ConnectionString}", 
-                builder.Configuration.GetConnectionString("DefaultConnection")?.Substring(0, Math.Min(50, builder.Configuration.GetConnectionString("DefaultConnection")?.Length ?? 0)) + "...");
-            throw; // rethrow to fail fast if migrations cannot be applied
+            catch (Exception ex)
+            {
+                migrationLogger.LogError(ex, "CRITICAL ERROR: An error occurred while applying database migrations. Application cannot start.");
+                migrationLogger.LogError("Connection String (masked): {ConnectionString}", 
+                    builder.Configuration.GetConnectionString("DefaultConnection")?.Substring(0, Math.Min(50, builder.Configuration.GetConnectionString("DefaultConnection")?.Length ?? 0)) + "...");
+                throw; // rethrow to fail fast if migrations cannot be applied
+            }
         }
     }
 
@@ -329,6 +332,12 @@ try
     }
 
     app.Run();
+}
+catch (Microsoft.Extensions.Hosting.HostAbortedException)
+{
+    // This exception is thrown by EF Core design-time tools (e.g., dotnet ef database update)
+    // It's expected and indicates the host was intentionally aborted after building the model
+    Log.Information("Host was aborted by EF Core design-time tools.");
 }
 catch (Exception ex)
 {

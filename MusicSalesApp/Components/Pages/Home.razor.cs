@@ -10,6 +10,8 @@ public partial class HomeModel : BlazorBase, IDisposable
     protected bool _hasActiveSubscription = false;
     protected bool _isAuthenticated = false;
     protected List<RecommendedPlaylist> _recommendedPlaylist = new();
+    protected Playlist _likedSongsPlaylist = null;
+    protected int _likedSongsCount = 0;
     protected bool _loadingRecommendations = false;
     protected int _currentUserId;
     private bool _subscriptionStatusChecked;
@@ -45,6 +47,7 @@ public partial class HomeModel : BlazorBase, IDisposable
             }
             await LoadSubscriptionStatusAsync();
             await LoadRecommendedPlaylistAsync();
+            await LoadLikedSongsPlaylistAsync();
         }
         
         if (!_isDisposed)
@@ -73,6 +76,7 @@ public partial class HomeModel : BlazorBase, IDisposable
                 }
                 await LoadSubscriptionStatusAsync();
                 await LoadRecommendedPlaylistAsync();
+                await LoadLikedSongsPlaylistAsync();
             }
         }
         catch (Exception ex)
@@ -129,6 +133,36 @@ public partial class HomeModel : BlazorBase, IDisposable
     {
         // Navigate to play the recommended playlist
         NavigationManager.NavigateTo($"/recommended-playlist/{_currentUserId}");
+    }
+
+    private async Task LoadLikedSongsPlaylistAsync()
+    {
+        if (_currentUserId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            // Get or create the Liked Songs playlist
+            _likedSongsPlaylist = await PlaylistService.GetOrCreateLikedSongsPlaylistAsync(_currentUserId);
+            
+            // Get the song count
+            var playlistSongs = await PlaylistService.GetPlaylistSongsAsync(_likedSongsPlaylist.Id);
+            _likedSongsCount = playlistSongs.Count;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load Liked Songs playlist for user {UserId}", _currentUserId);
+        }
+    }
+
+    protected void PlayLikedSongsPlaylist()
+    {
+        if (_likedSongsPlaylist != null)
+        {
+            NavigationManager.NavigateTo($"/playlist/{_likedSongsPlaylist.Id}");
+        }
     }
 
     public void Dispose()

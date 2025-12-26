@@ -13,15 +13,18 @@ public class PlaylistService : IPlaylistService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<PlaylistService> _logger;
     private readonly ISubscriptionService _subscriptionService;
+    private readonly ISongLikeService _songLikeService;
 
     public PlaylistService(
         IDbContextFactory<AppDbContext> contextFactory, 
         ILogger<PlaylistService> logger,
-        ISubscriptionService subscriptionService)
+        ISubscriptionService subscriptionService,
+        ISongLikeService songLikeService)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _subscriptionService = subscriptionService;
+        _songLikeService = songLikeService;
     }
 
     public async Task<List<Playlist>> GetUserPlaylistsAsync(int userId)
@@ -99,6 +102,13 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
+            // Prevent editing system-generated playlists
+            if (playlist.IsSystemGenerated)
+            {
+                _logger.LogWarning("Cannot update system-generated playlist {PlaylistId}", playlistId);
+                return false;
+            }
+
             playlist.PlaylistName = playlistName;
             playlist.UpdatedAt = DateTime.UtcNow;
 
@@ -127,6 +137,13 @@ public class PlaylistService : IPlaylistService
             if (playlist == null)
             {
                 _logger.LogWarning("Playlist {PlaylistId} not found or user {UserId} doesn't own it", playlistId, userId);
+                return false;
+            }
+
+            // Prevent deleting system-generated playlists
+            if (playlist.IsSystemGenerated)
+            {
+                _logger.LogWarning("Cannot delete system-generated playlist {PlaylistId}", playlistId);
                 return false;
             }
 
@@ -417,6 +434,173 @@ public class PlaylistService : IPlaylistService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting available songs for playlist {PlaylistId} and user {UserId}", playlistId, userId);
+            throw;
+        }
+    }
+
+    public async Task<Playlist> GetOrCreateLikedSongsPlaylistAsync(int userId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // Check if the Liked Songs playlist already exists for this user
+            var likedSongsPlaylist = await context.Playlists
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated && p.PlaylistName == "Liked Songs");
+
+            if (likedSongsPlaylist == null)
+            {
+                // Create the Liked Songs playlist
+                likedSongsPlaylist = new Playlist
+                {
+                    UserId = userId,
+                    PlaylistName = "Liked Songs",
+                    IsSystemGenerated = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                context.Playlists.Add(likedSongsPlaylist);
+                await context.SaveChangesAsync();
+
+                _logger.LogInformation("Created Liked Songs playlist for user {UserId}", userId);
+            }
+
+            return likedSongsPlaylist;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting or creating Liked Songs playlist for user {UserId}", userId);
+            throw;
+        }
+    }
+
+    public async Task SyncLikedSongsPlaylistAsync(int userId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // Get or create the Liked Songs playlist
+            var likedSongsPlaylist = await GetOrCreateLikedSongsPlaylistAsync(userId);
+
+            // Get all liked song metadata IDs
+            var likedSongMetadataIds = await _songLikeService.GetUserLikedSongIdsAsync(userId);
+
+            // Get current songs in the Liked Songs playlist
+            var currentPlaylistSongs = await context.UserPlaylists
+                .Include(up => up.OwnedSong)
+                .Where(up => up.PlaylistId == likedSongsPlaylist.Id)
+                .ToListAsync();
+
+            // Determine which songs need to be added
+            var currentMetadataIds = currentPlaylistSongs
+                .Where(up => up.OwnedSong?.SongMetadataId.HasValue == true)
+                .Select(up => up.OwnedSong.SongMetadataId.Value)
+                .ToHashSet();
+
+            var songsToAdd = likedSongMetadataIds
+                .Where(id => !currentMetadataIds.Contains(id))
+                .ToList();
+
+            // Determine which songs need to be removed
+            var songsToRemove = currentPlaylistSongs
+                .Where(up => up.OwnedSong?.SongMetadataId.HasValue == true && 
+                            !likedSongMetadataIds.Contains(up.OwnedSong.SongMetadataId.Value))
+                .ToList();
+
+            // Check subscription status to determine if we can create virtual OwnedSong records
+            var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId);
+
+            // Get all existing OwnedSong records for this user to avoid creating duplicates
+            var existingOwnedSongs = await context.OwnedSongs
+                .Where(os => os.UserId == userId && os.SongMetadataId != null)
+                .ToListAsync();
+
+            var existingOwnedSongsByMetadata = existingOwnedSongs
+                .Where(os => os.SongMetadataId.HasValue)
+                .ToDictionary(os => os.SongMetadataId.Value, os => os);
+
+            // Add new liked songs to the playlist
+            foreach (var songMetadataId in songsToAdd)
+            {
+                OwnedSong ownedSong;
+
+                // Check if user already owns this song
+                if (existingOwnedSongsByMetadata.TryGetValue(songMetadataId, out var existingOwned))
+                {
+                    ownedSong = existingOwned;
+                }
+                else
+                {
+                    // User doesn't own the song - only create virtual ownership if they have an active subscription
+                    if (hasActiveSubscription)
+                    {
+                        // Get the song metadata
+                        var songMetadata = await context.SongMetadata.FindAsync(songMetadataId);
+                        if (songMetadata == null || string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
+                        {
+                            _logger.LogWarning("Cannot add song {SongMetadataId} to Liked Songs - metadata not found or no MP3", songMetadataId);
+                            continue;
+                        }
+
+                        // Create a virtual OwnedSong record (subscription access)
+                        var fileName = Path.GetFileName(songMetadata.Mp3BlobPath);
+                        ownedSong = new OwnedSong
+                        {
+                            UserId = userId,
+                            SongFileName = fileName,
+                            SongMetadataId = songMetadataId,
+                            PurchasedAt = DateTime.UtcNow,
+                            PayPalOrderId = null // Null = subscription access
+                        };
+
+                        context.OwnedSongs.Add(ownedSong);
+                        await context.SaveChangesAsync(); // Save to get the ID
+
+                        // Cache it for future iterations
+                        existingOwnedSongsByMetadata[songMetadataId] = ownedSong;
+                    }
+                    else
+                    {
+                        // User doesn't own the song and has no subscription - skip it
+                        _logger.LogInformation("Skipping song {SongMetadataId} for Liked Songs - user doesn't own it and has no subscription", songMetadataId);
+                        continue;
+                    }
+                }
+
+                // Add to the playlist if not already there
+                var existingPlaylistEntry = await context.UserPlaylists
+                    .FirstOrDefaultAsync(up => up.PlaylistId == likedSongsPlaylist.Id && up.OwnedSongId == ownedSong.Id);
+
+                if (existingPlaylistEntry == null)
+                {
+                    var userPlaylist = new UserPlaylist
+                    {
+                        UserId = userId,
+                        PlaylistId = likedSongsPlaylist.Id,
+                        OwnedSongId = ownedSong.Id,
+                        AddedAt = DateTime.UtcNow
+                    };
+
+                    context.UserPlaylists.Add(userPlaylist);
+                }
+            }
+
+            // Remove unliked songs from the playlist
+            if (songsToRemove.Any())
+            {
+                context.UserPlaylists.RemoveRange(songsToRemove);
+            }
+
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation("Synced Liked Songs playlist for user {UserId}: added {AddCount}, removed {RemoveCount}", 
+                userId, songsToAdd.Count, songsToRemove.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error syncing Liked Songs playlist for user {UserId}", userId);
             throw;
         }
     }
