@@ -330,6 +330,12 @@ try
 
     app.Run();
 }
+catch (Microsoft.Extensions.Hosting.HostAbortedException)
+{
+    // This exception is thrown by EF Core design-time tools (e.g., dotnet ef database update)
+    // It's expected and indicates the host was intentionally aborted after building the model
+    Log.Information("Host was aborted by EF Core design-time tools.");
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
