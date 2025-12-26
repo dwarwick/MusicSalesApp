@@ -15,6 +15,7 @@ public class RecommendationServiceTests
     private DbContextOptions<AppDbContext> _dbContextOptions;
     private Mock<ILogger<RecommendationService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
+    private Mock<IOpenAIEmbeddingService> _mockEmbeddingService;
 
     [SetUp]
     public void Setup()
@@ -25,10 +26,14 @@ public class RecommendationServiceTests
 
         _mockLogger = new Mock<ILogger<RecommendationService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _mockEmbeddingService = new Mock<IOpenAIEmbeddingService>();
 
         // Setup default configuration values (Supabase not configured)
         _mockConfiguration.Setup(c => c["Supabase:SUPABASE_URL"]).Returns("__REPLACE_WITH_SUPABASE_URL__");
         _mockConfiguration.Setup(c => c["Supabase:SUPABASE_KEY"]).Returns("__REPLACE_WITH_SUPABASE_KEY__");
+        
+        // Setup embedding service as not configured by default
+        _mockEmbeddingService.Setup(e => e.IsConfigured).Returns(false);
     }
 
     private IDbContextFactory<AppDbContext> CreateDbContextFactory()
@@ -77,7 +82,7 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GetRecommendedPlaylistAsync(userId: 1);
@@ -112,7 +117,7 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GetRecommendedPlaylistAsync(userId: 1);
@@ -151,7 +156,7 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GetRecommendedPlaylistAsync(userId: 1);
@@ -168,7 +173,7 @@ public class RecommendationServiceTests
     {
         // Arrange
         await CreateAndSeedDatabase();
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.HasFreshRecommendationsAsync(userId: 1);
@@ -194,7 +199,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.HasFreshRecommendationsAsync(userId: 1);
@@ -220,7 +225,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.HasFreshRecommendationsAsync(userId: 1);
@@ -251,7 +256,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GenerateRecommendationsAsync(userId: 1);
@@ -279,7 +284,7 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GetRecommendedPlaylistAsync(userId: 1);
@@ -317,7 +322,7 @@ public class RecommendationServiceTests
             .ToList();
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
         // Act
         var result = await service.GetRecommendedPlaylistAsync(userId: 1);

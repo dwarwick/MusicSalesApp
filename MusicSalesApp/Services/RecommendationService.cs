@@ -24,6 +24,7 @@ namespace MusicSalesApp.Services;
 ///     is_like BOOLEAN NOT NULL,
 ///     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 ///     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+///     embedding vector(384),
 ///     PRIMARY KEY (user_id, song_metadata_id)
 /// );
 /// </code>
@@ -52,6 +53,7 @@ public class RecommendationService : IRecommendationService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<RecommendationService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IOpenAIEmbeddingService _embeddingService;
     private readonly string _supabaseUrl;
     private readonly string _supabaseKey;
     private const int MaxRecommendations = 20;
@@ -60,11 +62,13 @@ public class RecommendationService : IRecommendationService
     public RecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<RecommendationService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IOpenAIEmbeddingService embeddingService)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _configuration = configuration;
+        _embeddingService = embeddingService;
         _supabaseUrl = configuration["Supabase:SUPABASE_URL"] ?? string.Empty;
         _supabaseKey = configuration["Supabase:SUPABASE_KEY"] ?? string.Empty;
     }
@@ -208,15 +212,19 @@ public class RecommendationService : IRecommendationService
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
 
-            // Get all likes from SQL Server
+            // Get all likes from SQL Server with song metadata for embedding generation
             var allLikes = await context.SongLikes
+                .Include(sl => sl.SongMetadata)
                 .Select(sl => new
                 {
                     sl.UserId,
                     sl.SongMetadataId,
                     sl.IsLike,
                     sl.CreatedAt,
-                    sl.UpdatedAt
+                    sl.UpdatedAt,
+                    SongName = sl.SongMetadata != null ? sl.SongMetadata.Mp3BlobPath : null,
+                    AlbumName = sl.SongMetadata != null ? sl.SongMetadata.AlbumName : null,
+                    Genre = sl.SongMetadata != null ? sl.SongMetadata.Genre : null
                 })
                 .ToListAsync();
 
@@ -229,21 +237,68 @@ public class RecommendationService : IRecommendationService
             var supabase = new Client(_supabaseUrl, _supabaseKey, options);
             await supabase.InitializeAsync();
 
+            // Generate embeddings for songs if OpenAI is configured
+            var songEmbeddings = new Dictionary<int, float[]>();
+            if (_embeddingService.IsConfigured)
+            {
+                // Get unique songs that need embeddings
+                var uniqueSongs = allLikes
+                    .GroupBy(l => l.SongMetadataId)
+                    .Select(g => g.First())
+                    .ToList();
+
+                foreach (var song in uniqueSongs)
+                {
+                    try
+                    {
+                        // Create embedding text from song metadata
+                        var songFileName = !string.IsNullOrEmpty(song.SongName) 
+                            ? Path.GetFileNameWithoutExtension(song.SongName) 
+                            : $"Song {song.SongMetadataId}";
+                        var embeddingText = $"{songFileName} {song.AlbumName ?? ""} {song.Genre ?? ""}".Trim();
+                        
+                        var embedding = await _embeddingService.GenerateEmbeddingAsync(embeddingText);
+                        if (embedding != null)
+                        {
+                            songEmbeddings[song.SongMetadataId] = embedding;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to generate embedding for song {SongId}", song.SongMetadataId);
+                    }
+                }
+
+                _logger.LogInformation("Generated embeddings for {Count} unique songs", songEmbeddings.Count);
+            }
+            else
+            {
+                _logger.LogWarning("OpenAI is not configured. Syncing likes without embeddings.");
+            }
+
             // Sync likes to Supabase song_likes table
             // See class documentation for required Supabase table schema
             foreach (var like in allLikes)
             {
                 try
                 {
+                    var songLike = new SupabaseSongLike
+                    {
+                        UserId = like.UserId,
+                        SongMetadataId = like.SongMetadataId,
+                        IsLike = like.IsLike,
+                        CreatedAt = like.CreatedAt,
+                        UpdatedAt = like.UpdatedAt
+                    };
+
+                    // Add embedding if available
+                    if (songEmbeddings.TryGetValue(like.SongMetadataId, out var embedding))
+                    {
+                        songLike.Embedding = $"[{string.Join(",", embedding)}]";
+                    }
+
                     await supabase.From<SupabaseSongLike>()
-                        .Upsert(new SupabaseSongLike
-                        {
-                            UserId = like.UserId,
-                            SongMetadataId = like.SongMetadataId,
-                            IsLike = like.IsLike,
-                            CreatedAt = like.CreatedAt,
-                            UpdatedAt = like.UpdatedAt
-                        });
+                        .Upsert(songLike);
                 }
                 catch (Exception ex)
                 {
@@ -477,5 +532,12 @@ public class RecommendationService : IRecommendationService
 
         [Supabase.Postgrest.Attributes.Column("updated_at")]
         public DateTime UpdatedAt { get; set; }
+
+        /// <summary>
+        /// Vector embedding for the song (384 dimensions from text-embedding-3-small)
+        /// Stored as a string in format "[0.1,0.2,...]" for Supabase pgvector
+        /// </summary>
+        [Supabase.Postgrest.Attributes.Column("embedding")]
+        public string Embedding { get; set; }
     }
 }
