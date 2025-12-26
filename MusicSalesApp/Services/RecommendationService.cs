@@ -142,11 +142,21 @@ public class RecommendationService : IRecommendationService
                 recommendedSongs = await GetLocalRecommendationsAsync(context, userId, userLikes, userDislikes);
             }
 
-            // Create RecommendedPlaylist entries
+            // Validate that recommended song IDs exist in SQL Server SongMetadata table
+            // (Supabase may return IDs that don't exist locally)
+            var recommendedSongIds = recommendedSongs.Select(r => r.SongId).ToList();
+            var validSongIds = await context.SongMetadata
+                .Where(sm => recommendedSongIds.Contains(sm.Id) && !sm.IsAlbumCover)
+                .Select(sm => sm.Id)
+                .ToListAsync();
+            
+            var validSongIdSet = new HashSet<int>(validSongIds);
+
+            // Create RecommendedPlaylist entries (only for valid song IDs)
             var recommendations = new List<RecommendedPlaylist>();
             var displayOrder = 1;
 
-            foreach (var (songId, score) in recommendedSongs.Take(MaxRecommendations))
+            foreach (var (songId, score) in recommendedSongs.Where(r => validSongIdSet.Contains(r.SongId)).Take(MaxRecommendations))
             {
                 recommendations.Add(new RecommendedPlaylist
                 {
