@@ -462,10 +462,6 @@
 
 
 /* 2. Section Styles */
-.song-header {
-    
-}
-
 .track-list-container {
     overflow-y: auto;
     min-height: 0; /* Keeps the grid row from expanding */    
