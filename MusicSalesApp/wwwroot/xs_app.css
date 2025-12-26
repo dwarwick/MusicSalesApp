@@ -332,8 +332,7 @@
 
     /* AlbumPlayer - Container adjustments for extra small screens */
     .album-player-spotify-container {
-        grid-template-rows: auto auto auto 1fr 70px;
-        height: 100vh;
+        grid-template-rows: auto auto auto 1fr 65px;
     }
 
         .album-player-spotify-container .album-image-title-row {
