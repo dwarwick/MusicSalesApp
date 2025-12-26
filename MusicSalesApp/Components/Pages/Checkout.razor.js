@@ -48,17 +48,30 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 // Store the order ID for use in onApprove
                 currentOrderId = orderId;
 
-                // Create PayPal order using client-side SDK
+                // Create PayPal order using client-side SDK with 3D Secure support
                 const paypalOrderId = await actions.order.create({
                     purchase_units: [{
                         reference_id: orderId,
                         amount: {
-                            value: amount
+                            value: amount,
+                            currency_code: 'USD'
                         }
-                    }]
+                    }],
+                    // Enable 3D Secure authentication when required
+                    // Note: This applies to card payments only. PayPal wallet and other
+                    // payment methods have their own authentication mechanisms.
+                    payment_source: {
+                        card: {
+                            attributes: {
+                                verification: {
+                                    method: 'SCA_ALWAYS' // Strong Customer Authentication (3D Secure)
+                                }
+                            }
+                        }
+                    }
                 });
                 
-                console.log('PayPal order created:', paypalOrderId);
+                console.log('PayPal order created with 3D Secure support:', paypalOrderId);
                 return paypalOrderId;
             } catch (error) {
                 console.error('Error creating order:', error);
@@ -74,9 +87,12 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 // Show processing state
                 await dotNetRef.invokeMethodAsync('SetProcessing', true);
                 
-                // Do NOT call actions.order.capture(); this can fail if the popup is already closed
-                console.log('Skipping client-side capture; notifying server to finalize order');
-
+                // Note: 3D Secure authentication happens during the approval flow (before this callback)
+                // The payment_source configuration in createOrder triggers 3D Secure when required
+                // We do NOT call actions.order.capture() here because the popup may be closed
+                // Server will capture the payment after we notify it
+                console.log('Payment approved (3D Secure passed if required), notifying server to capture...');
+                
                 // Use our stored internal order ID
                 const internalOrderId = currentOrderId || (data && data.orderID);
                 const paypalOrderId = data && data.orderID;
@@ -87,9 +103,9 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                     throw new Error('Missing order identifiers');
                 }
 
-                // Notify server of successful payment approval
+                // Notify server of successful payment approval - server will capture
                 await dotNetRef.invokeMethodAsync('OnApprove', { orderId: internalOrderId, payPalOrderId: paypalOrderId });
-                console.log('Server notified of payment completion');
+                console.log('Server notified of payment approval');
             } catch (error) {
                 console.error('Error in onApprove:', error);
                 await dotNetRef.invokeMethodAsync('OnError', error.message || error.toString());
@@ -118,10 +134,13 @@ function loadPayPalScript(clientId) {
         }
 
         const script = document.createElement('script');
-        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+        // Add enable-funding and intent parameters for Expanded Checkout
+        // enable-funding=venmo,paylater adds additional payment options
+        // intent=capture ensures immediate payment capture
+        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater&intent=capture`;
         script.async = true;
         script.onload = () => {
-            console.log('PayPal SDK loaded successfully');
+            console.log('PayPal SDK loaded successfully with Expanded Checkout features');
             resolve();
         };
         script.onerror = (e) => {
