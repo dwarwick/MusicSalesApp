@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using Supabase;
+using System.Text.Json.Serialization;
 
 namespace MusicSalesApp.Services;
 
@@ -512,6 +513,7 @@ public class RecommendationService : IRecommendationService
     /// </summary>
     private class SupabaseRecommendation
     {
+        [JsonPropertyName("song_id")]
         public int SongId { get; set; }
         public double Score { get; set; }
     }
