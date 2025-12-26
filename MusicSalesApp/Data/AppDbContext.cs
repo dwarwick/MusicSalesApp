@@ -22,6 +22,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<Passkey> Passkeys { get; set; }
     public DbSet<SongLike> SongLikes { get; set; }
+    public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -188,5 +189,26 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index for efficient querying of user's likes/dislikes
         builder.Entity<SongLike>()
             .HasIndex(sl => sl.UserId);
+
+        // Configure RecommendedPlaylist entity
+        builder.Entity<RecommendedPlaylist>()
+            .HasOne(rp => rp.User)
+            .WithMany()
+            .HasForeignKey(rp => rp.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<RecommendedPlaylist>()
+            .HasOne(rp => rp.SongMetadata)
+            .WithMany()
+            .HasForeignKey(rp => rp.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Index for efficient querying by user
+        builder.Entity<RecommendedPlaylist>()
+            .HasIndex(rp => rp.UserId);
+
+        // Composite index for efficient querying by user and date
+        builder.Entity<RecommendedPlaylist>()
+            .HasIndex(rp => new { rp.UserId, rp.GeneratedAt });
     }
 }

@@ -1,6 +1,7 @@
 @page "/my-playlists"
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Components.Shared
 @using Syncfusion.Blazor.Buttons
 @using Syncfusion.Blazor.Cards
 @using Syncfusion.Blazor.Inputs
@@ -11,6 +12,23 @@
 <PageTitle>My Playlists</PageTitle>
 
 <div class="playlists-page-container">
+    @if (_recommendedPlaylist.Any())
+    {
+        <div class="recommended-section">
+            <h3>Recommended For You</h3>
+            <p class="section-subtitle">Songs you might enjoy based on your preferences</p>
+            <div class="playlists-page-grid">
+                <PlaylistCard 
+                    PlaylistName="Recommended For You"
+                    SongCount="@_recommendedPlaylist.Count"
+                    Description="Personalized recommendations based on your likes"
+                    ShowActions="false"
+                    CssClass="recommended-playlist-card"
+                    OnPlay="@PlayRecommendedPlaylist" />
+            </div>
+        </div>
+    }
+
     <div class="playlists-page-header">
         <h3>My Playlists</h3>
         <SfButton OnClick="@ShowCreatePlaylistDialog" CssClass="e-success">

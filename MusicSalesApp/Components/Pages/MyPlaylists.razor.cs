@@ -10,6 +10,7 @@ public partial class MyPlaylistsModel : BlazorBase
     protected Dictionary<int, int> _playlistSongCounts = new();
     protected List<UserPlaylist> _playlistSongs;
     protected List<OwnedSong> _availableSongs;
+    protected List<RecommendedPlaylist> _recommendedPlaylist = new();
     protected Playlist _selectedPlaylist;
     protected Playlist _editingPlaylist;
     protected Playlist _playlistToDelete;
@@ -50,6 +51,7 @@ public partial class MyPlaylistsModel : BlazorBase
                         _hasOwnedSongs = ownedSongs.Any();
                         
                         await LoadPlaylists();
+                        await LoadRecommendedPlaylist();
                     }
                 }
             }
@@ -76,6 +78,25 @@ public partial class MyPlaylistsModel : BlazorBase
             var songs = await PlaylistService.GetPlaylistSongsAsync(playlist.Id);
             _playlistSongCounts[playlist.Id] = songs.Count;
         }
+    }
+
+    private async Task LoadRecommendedPlaylist()
+    {
+        try
+        {
+            _recommendedPlaylist = await RecommendationService.GetRecommendedPlaylistAsync(_currentUserId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading recommended playlist for user {UserId}", _currentUserId);
+            // Don't show error to user, just don't display recommended playlist
+            _recommendedPlaylist = new List<RecommendedPlaylist>();
+        }
+    }
+
+    protected void PlayRecommendedPlaylist()
+    {
+        NavigationManager.NavigateTo($"/recommended-playlist/{_currentUserId}");
     }
 
     protected void ShowCreatePlaylistDialog()

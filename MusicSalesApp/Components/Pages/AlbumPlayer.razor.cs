@@ -20,11 +20,15 @@ namespace MusicSalesApp.Components.Pages
         [Parameter]
         public int? PlaylistId { get; set; }
 
+        [Parameter]
+        public int? RecommendedUserId { get; set; }
+
         protected bool _loading = true;
         protected string _error;
         protected AlbumInfo _albumInfo;
         protected string _playlistName;
         protected bool _isPlaylistMode;
+        protected bool _isRecommendedMode;
         protected string _streamUrl;
         protected bool _isPlaying;
         protected double _currentTime;
@@ -57,6 +61,7 @@ namespace MusicSalesApp.Components.Pages
         private bool _hasLoadedData = false;
         private string _lastLoadedAlbum;
         private int? _lastLoadedPlaylistId;
+        private int? _lastLoadedRecommendedUserId;
         protected bool _hasActiveSubscription;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
@@ -85,13 +90,24 @@ namespace MusicSalesApp.Components.Pages
 
         protected override void OnParametersSet()
         {
-            // Only set the mode flag, don't load data here
+            // Only set the mode flags, don't load data here
             _isPlaylistMode = PlaylistId.HasValue;
+            _isRecommendedMode = RecommendedUserId.HasValue;
             
             // Check if parameters have changed and reset the flag if needed
-            bool parametersChanged = _isPlaylistMode 
-                ? PlaylistId != _lastLoadedPlaylistId 
-                : AlbumName != _lastLoadedAlbum;
+            bool parametersChanged;
+            if (_isRecommendedMode)
+            {
+                parametersChanged = RecommendedUserId != _lastLoadedRecommendedUserId;
+            }
+            else if (_isPlaylistMode)
+            {
+                parametersChanged = PlaylistId != _lastLoadedPlaylistId;
+            }
+            else
+            {
+                parametersChanged = AlbumName != _lastLoadedAlbum;
+            }
             
             if (parametersChanged)
             {
@@ -109,7 +125,12 @@ namespace MusicSalesApp.Components.Pages
                 
                 try
                 {
-                    if (_isPlaylistMode)
+                    if (_isRecommendedMode)
+                    {
+                        _lastLoadedRecommendedUserId = RecommendedUserId;
+                        await LoadRecommendedPlaylistInfo();
+                    }
+                    else if (_isPlaylistMode)
                     {
                         _lastLoadedPlaylistId = PlaylistId;
                         await LoadPlaylistInfo();
@@ -513,6 +534,157 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        private async Task LoadRecommendedPlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            if (!RecommendedUserId.HasValue)
+            {
+                _error = "No user ID provided.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                // Check authentication status
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                if (!_isAuthenticated)
+                {
+                    _error = "You must be logged in to view recommended playlists.";
+                    _loading = false;
+                    return;
+                }
+
+                // Get the current user
+                var user = authState.User;
+                var appUser = await UserManager.GetUserAsync(user);
+                if (appUser == null)
+                {
+                    _error = "User not found.";
+                    _loading = false;
+                    return;
+                }
+
+                // Verify the recommended playlist is for the current user
+                if (RecommendedUserId.Value != appUser.Id)
+                {
+                    _error = "You can only view your own recommended playlist.";
+                    _loading = false;
+                    return;
+                }
+
+                _playlistName = "Recommended For You";
+
+                // Get recommended playlist from service
+                var recommendedSongs = await RecommendationService.GetRecommendedPlaylistAsync(appUser.Id);
+                if (recommendedSongs == null || !recommendedSongs.Any())
+                {
+                    _error = "No recommendations available yet. Like some songs to get personalized recommendations!";
+                    _loading = false;
+                    return;
+                }
+
+                // Build list of tracks from recommended songs
+                var tracks = new List<StorageFileInfo>();
+                var allMetadata = new List<Models.SongMetadata>();
+                
+                foreach (var recommendation in recommendedSongs.OrderBy(r => r.DisplayOrder))
+                {
+                    var songMetadata = recommendation.SongMetadata;
+                    if (songMetadata != null && !string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
+                    {
+                        tracks.Add(new StorageFileInfo
+                        {
+                            Name = songMetadata.Mp3BlobPath,
+                            Length = 0,
+                            ContentType = "audio/mpeg",
+                            LastModified = songMetadata.UpdatedAt,
+                            Tags = new Dictionary<string, string>()
+                        });
+                        allMetadata.Add(songMetadata);
+                    }
+                }
+
+                if (!tracks.Any())
+                {
+                    _error = "No playable tracks found in recommendations.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+                _metadataLookup = allMetadata
+                    .GroupBy(m => m.Mp3BlobPath)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in allMetadata)
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
+
+                var firstTrackMeta = allMetadata.First();
+                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
+                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
+                    : "";
+
+                _albumInfo = new AlbumInfo
+                {
+                    AlbumName = _playlistName,
+                    CoverArtUrl = coverImageUrl,
+                    CoverArtFileName = coverImagePath,
+                    Tracks = tracks,
+                    Price = 0, // Recommended playlists don't have a price
+                    MetadataId = firstTrackMeta.Id
+                };
+
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Store track images from metadata
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                        {
+                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                        }
+                    }
+                }
+
+                // Set up the first track
+                _currentTrackIndex = 0;
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+                // Check subscription status to determine if user can play full tracks
+                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
+                // Check if user owns any of the recommended songs
+                var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
+                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
+                _ownsAlbum = false; // Recommended playlists are not "owned" as a unit
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                Logger.LogError(ex, "Error loading recommended playlist for user {UserId}", RecommendedUserId);
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
         protected async Task ToggleCart()
         {
             if (_albumInfo == null) return;
@@ -690,6 +862,10 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetDisplayTitle()
         {
+            if (_isRecommendedMode)
+            {
+                return "Recommended For You";
+            }
             if (_isPlaylistMode)
             {
                 return _playlistName ?? "Unknown Playlist";
@@ -700,6 +876,11 @@ namespace MusicSalesApp.Components.Pages
         protected string GetShareUrl()
         {
             var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+            if (_isRecommendedMode)
+            {
+                // Recommended playlists are personal and shouldn't be shared
+                return $"{baseUrl}/recommended-playlist/{RecommendedUserId}";
+            }
             if (_isPlaylistMode)
             {
                 return $"{baseUrl}/playlist/{PlaylistId}";
