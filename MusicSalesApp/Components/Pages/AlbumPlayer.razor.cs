@@ -878,8 +878,9 @@ namespace MusicSalesApp.Components.Pages
             var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
             if (_isRecommendedMode)
             {
-                // Recommended playlists are personal and shouldn't be shared
-                return $"{baseUrl}/recommended-playlist/{RecommendedUserId}";
+                // Recommended playlists are personal and shouldn't be shared publicly
+                // Return empty string to disable sharing functionality
+                return string.Empty;
             }
             if (_isPlaylistMode)
             {
@@ -887,6 +888,12 @@ namespace MusicSalesApp.Components.Pages
             }
             return $"{baseUrl}/album/{Uri.EscapeDataString(AlbumName)}";
         }
+
+        /// <summary>
+        /// Indicates if the current content can be shared (albums and playlists can be shared, 
+        /// but recommended playlists are personal and cannot be shared)
+        /// </summary>
+        protected bool CanShare => !_isRecommendedMode;
 
         protected string GetTrackTitle(int index)
         {

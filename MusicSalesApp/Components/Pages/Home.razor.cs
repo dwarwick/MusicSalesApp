@@ -24,6 +24,9 @@ public partial class HomeModel : BlazorBase, IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Only load data on first render if we haven't already loaded it
+        // This pattern prevents duplicate data loading when the component re-renders
+        // and avoids DbContext threading issues in Blazor Server
         if (!firstRender || _hasLoadedData)
         {
             return;

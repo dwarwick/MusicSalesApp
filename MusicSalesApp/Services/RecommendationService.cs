@@ -8,7 +8,44 @@ using Supabase;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for generating song recommendations using collaborative filtering via Supabase + pgvector
+/// Service for generating song recommendations using collaborative filtering via Supabase + pgvector.
+/// 
+/// <para>
+/// <b>Supabase Setup Requirements:</b>
+/// When Supabase is configured, this service expects the following setup in your Supabase database:
+/// </para>
+/// 
+/// <para>
+/// <b>1. song_likes table:</b>
+/// <code>
+/// CREATE TABLE song_likes (
+///     user_id INTEGER NOT NULL,
+///     song_metadata_id INTEGER NOT NULL,
+///     is_like BOOLEAN NOT NULL,
+///     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+///     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+///     PRIMARY KEY (user_id, song_metadata_id)
+/// );
+/// </code>
+/// </para>
+/// 
+/// <para>
+/// <b>2. get_recommendations RPC function:</b>
+/// <code>
+/// CREATE OR REPLACE FUNCTION get_recommendations(p_user_id INTEGER, p_limit INTEGER, p_exclude_songs INTEGER[])
+/// RETURNS TABLE(song_id INTEGER, score DOUBLE PRECISION) AS $$
+/// BEGIN
+///     -- Implement your recommendation logic using pgvector here
+///     -- Return song_id and recommendation score
+/// END;
+/// $$ LANGUAGE plpgsql;
+/// </code>
+/// </para>
+/// 
+/// <para>
+/// If Supabase is not configured, the service falls back to local collaborative filtering 
+/// using the SQL Server database.
+/// </para>
 /// </summary>
 public class RecommendationService : IRecommendationService
 {
@@ -18,6 +55,7 @@ public class RecommendationService : IRecommendationService
     private readonly string _supabaseUrl;
     private readonly string _supabaseKey;
     private const int MaxRecommendations = 20;
+    private const string SupabaseRpcFunctionName = "get_recommendations";
 
     public RecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -192,7 +230,7 @@ public class RecommendationService : IRecommendationService
             await supabase.InitializeAsync();
 
             // Sync likes to Supabase song_likes table
-            // Note: This assumes a matching table structure exists in Supabase
+            // See class documentation for required Supabase table schema
             foreach (var like in allLikes)
             {
                 try
@@ -241,9 +279,9 @@ public class RecommendationService : IRecommendationService
             var supabase = new Client(_supabaseUrl, _supabaseKey, options);
             await supabase.InitializeAsync();
 
-            // Call a Supabase RPC function for collaborative filtering recommendations
-            // This assumes a stored procedure "get_recommendations" exists in Supabase
-            var result = await supabase.Rpc("get_recommendations", new Dictionary<string, object>
+            // Call the Supabase RPC function for collaborative filtering recommendations
+            // See class documentation for required Supabase setup
+            var result = await supabase.Rpc(SupabaseRpcFunctionName, new Dictionary<string, object>
             {
                 { "p_user_id", userId },
                 { "p_limit", MaxRecommendations },
@@ -255,7 +293,7 @@ public class RecommendationService : IRecommendationService
                 return new List<(int SongId, double Score)>();
             }
 
-            // Parse result - assuming the RPC returns a list of {song_id, score}
+            // Parse result - the RPC returns a list of {song_id, score}
             var recommendations = System.Text.Json.JsonSerializer.Deserialize<List<SupabaseRecommendation>>(
                 result.Content, 
                 new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -414,15 +452,20 @@ public class RecommendationService : IRecommendationService
     }
 
     /// <summary>
-    /// Model for syncing song likes to Supabase
+    /// Model for syncing song likes to Supabase.
+    /// Maps to the song_likes table with composite primary key (user_id, song_metadata_id).
+    /// See class documentation for the required Supabase table schema.
     /// </summary>
+    [Supabase.Postgrest.Attributes.Table("song_likes")]
     private class SupabaseSongLike : Supabase.Postgrest.Models.BaseModel
     {
-        [Supabase.Postgrest.Attributes.PrimaryKey("user_id", false)]
+        // Composite primary key: (user_id, song_metadata_id)
+        // The PrimaryKey attribute marks the first column of the composite key
+        [Supabase.Postgrest.Attributes.PrimaryKey("user_id")]
         [Supabase.Postgrest.Attributes.Column("user_id")]
         public int UserId { get; set; }
 
-        [Supabase.Postgrest.Attributes.PrimaryKey("song_metadata_id", false)]
+        // Second part of composite primary key
         [Supabase.Postgrest.Attributes.Column("song_metadata_id")]
         public int SongMetadataId { get; set; }
 
