@@ -316,4 +316,14 @@ public partial class MyPlaylistsModel : BlazorBase
     {
         NavigationManager.NavigateTo($"/playlist/{playlist.Id}");
     }
+
+    protected string GetPlaylistCardClass(Playlist playlist)
+    {
+        var baseClass = "playlists-page-card music-card";
+        if (playlist.IsSystemGenerated)
+        {
+            return $"{baseClass} liked-songs-playlist-card";
+        }
+        return baseClass;
+    }
 }

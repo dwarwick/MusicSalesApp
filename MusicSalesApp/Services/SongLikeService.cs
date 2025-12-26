@@ -129,4 +129,15 @@ public class SongLikeService : ISongLikeService
             return true;
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<List<int>> GetUserLikedSongIdsAsync(int userId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.SongLikes
+            .Where(sl => sl.UserId == userId && sl.IsLike)
+            .Select(sl => sl.SongMetadataId)
+            .ToListAsync();
+    }
 }

@@ -97,6 +97,9 @@ public partial class LikeDislikeButtonsModel : BlazorBase
             // Reload counts
             await LoadLikeCounts();
             
+            // Sync Liked Songs playlist
+            await PlaylistService.SyncLikedSongsPlaylistAsync(_currentUserId.Value);
+            
             // Notify parent component
             await OnLikeStatusChanged.InvokeAsync();
         }
@@ -125,6 +128,9 @@ public partial class LikeDislikeButtonsModel : BlazorBase
             
             // Reload counts
             await LoadLikeCounts();
+            
+            // Sync Liked Songs playlist (removing liked songs when disliked)
+            await PlaylistService.SyncLikedSongsPlaylistAsync(_currentUserId.Value);
             
             // Notify parent component
             await OnLikeStatusChanged.InvokeAsync();

@@ -11,27 +11,39 @@
 
     <p>Discover and enjoy unlimited music streaming!</p>
     
-    @if (_isAuthenticated && _recommendedPlaylist.Any())
+    @if (_isAuthenticated && (_recommendedPlaylist.Any() || _likedSongsPlaylist != null))
     {
         <div class="recommended-playlist-section">
-            <h2>Recommended For You</h2>
-            <p class="section-subtitle">Based on your likes and listening history</p>
+            <h2>Your Playlists</h2>
             <div class="playlists-page-grid">
-                <PlaylistCard 
-                    PlaylistName="Recommended For You"
-                    SongCount="@_recommendedPlaylist.Count"
-                    Description="Songs you might enjoy based on your preferences"
-                    ShowActions="false"
-                    CssClass="recommended-playlist-card"
-                    OnPlay="@PlayRecommendedPlaylist" />
+                @if (_recommendedPlaylist.Any())
+                {
+                    <PlaylistCard 
+                        PlaylistName="Recommended For You"
+                        SongCount="@_recommendedPlaylist.Count"
+                        Description="Songs you might enjoy based on your preferences"
+                        ShowActions="false"
+                        CssClass="recommended-playlist-card"
+                        OnPlay="@PlayRecommendedPlaylist" />
+                }
+                @if (_likedSongsPlaylist != null && _likedSongsCount > 0)
+                {
+                    <PlaylistCard 
+                        PlaylistName="Liked Songs"
+                        SongCount="@_likedSongsCount"
+                        Description="Songs you've liked"
+                        ShowActions="false"
+                        CssClass="liked-songs-playlist-card"
+                        OnPlay="@PlayLikedSongsPlaylist" />
+                }
             </div>
         </div>
     }
     else if (_isAuthenticated && _loadingRecommendations)
     {
         <div class="recommended-playlist-section">
-            <h2>Recommended For You</h2>
-            <p>Loading recommendations...</p>
+            <h2>Your Playlists</h2>
+            <p>Loading...</p>
         </div>
     }
     

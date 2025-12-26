@@ -13,6 +13,7 @@ public class PlaylistServiceTests
     private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
     private Mock<ILogger<PlaylistService>> _mockLogger;
     private Mock<ISubscriptionService> _mockSubscriptionService;
+    private Mock<ISongLikeService> _mockSongLikeService;
     private PlaylistService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -29,6 +30,7 @@ public class PlaylistServiceTests
 
         _mockLogger = new Mock<ILogger<PlaylistService>>();
         _mockSubscriptionService = new Mock<ISubscriptionService>();
+        _mockSongLikeService = new Mock<ISongLikeService>();
         
         // By default, mock subscription service to return false (no subscription)
         _mockSubscriptionService
@@ -40,7 +42,11 @@ public class PlaylistServiceTests
         _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
             .ReturnsAsync(() => new AppDbContext(_contextOptions));
 
-        _service = new PlaylistService(_mockContextFactory.Object, _mockLogger.Object, _mockSubscriptionService.Object);
+        _service = new PlaylistService(
+            _mockContextFactory.Object, 
+            _mockLogger.Object, 
+            _mockSubscriptionService.Object,
+            _mockSongLikeService.Object);
     }
 
     [TearDown]
@@ -600,5 +606,269 @@ public class PlaylistServiceTests
             .Where(os => os.UserId == userId && os.SongMetadataId == songMetadata.Id)
             .ToListAsync();
         Assert.That(allOwnedSongsForUser, Has.Count.EqualTo(1));
+    }
+}
+
+// Tests for Liked Songs Playlist functionality
+[TestFixture]
+public class LikedSongsPlaylistTests
+{
+    private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
+    private Mock<ILogger<PlaylistService>> _mockLogger;
+    private Mock<ISubscriptionService> _mockSubscriptionService;
+    private Mock<ISongLikeService> _mockSongLikeService;
+    private PlaylistService _playlistService;
+    private SongLikeService _songLikeService;
+    private AppDbContext _context;
+    private DbContextOptions<AppDbContext> _contextOptions;
+
+    [SetUp]
+    public void SetUp()
+    {
+        // Create in-memory database for testing
+        _contextOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"LikedSongsTestDb_{Guid.NewGuid()}")
+            .Options;
+
+        _context = new AppDbContext(_contextOptions);
+
+        _mockLogger = new Mock<ILogger<PlaylistService>>();
+        _mockSubscriptionService = new Mock<ISubscriptionService>();
+        _mockSongLikeService = new Mock<ISongLikeService>();
+        
+        // Mock the context factory to return our in-memory context
+        _mockContextFactory = new Mock<IDbContextFactory<AppDbContext>>();
+        _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
+            .ReturnsAsync(() => new AppDbContext(_contextOptions));
+
+        // Create real SongLikeService for integration testing
+        _songLikeService = new SongLikeService(_mockContextFactory.Object);
+
+        _playlistService = new PlaylistService(
+            _mockContextFactory.Object, 
+            _mockLogger.Object, 
+            _mockSubscriptionService.Object,
+            _songLikeService);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _context.Database.EnsureDeleted();
+        _context.Dispose();
+    }
+
+    [Test]
+    public async Task GetOrCreateLikedSongsPlaylistAsync_CreatesNewPlaylist_WhenNotExists()
+    {
+        // Arrange
+        var userId = 1;
+
+        // Act
+        var playlist = await _playlistService.GetOrCreateLikedSongsPlaylistAsync(userId);
+
+        // Assert
+        Assert.That(playlist, Is.Not.Null);
+        Assert.That(playlist.PlaylistName, Is.EqualTo("Liked Songs"));
+        Assert.That(playlist.UserId, Is.EqualTo(userId));
+        Assert.That(playlist.IsSystemGenerated, Is.True);
+        Assert.That(playlist.Id, Is.GreaterThan(0));
+    }
+
+    [Test]
+    public async Task GetOrCreateLikedSongsPlaylistAsync_ReturnsExistingPlaylist_WhenExists()
+    {
+        // Arrange
+        var userId = 1;
+        var existingPlaylist = new Playlist
+        {
+            UserId = userId,
+            PlaylistName = "Liked Songs",
+            IsSystemGenerated = true,
+            CreatedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        await _context.Playlists.AddAsync(existingPlaylist);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var playlist = await _playlistService.GetOrCreateLikedSongsPlaylistAsync(userId);
+
+        // Assert
+        Assert.That(playlist, Is.Not.Null);
+        Assert.That(playlist.Id, Is.EqualTo(existingPlaylist.Id));
+        Assert.That(playlist.CreatedAt, Is.EqualTo(existingPlaylist.CreatedAt));
+    }
+
+    [Test]
+    public async Task SyncLikedSongsPlaylistAsync_AddsLikedSongs_ForUserWithOwnedSongs()
+    {
+        // Arrange
+        var userId = 1;
+
+        // Create song metadata
+        var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
+        var song2 = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
+        await _context.SongMetadata.AddRangeAsync(song1, song2);
+        await _context.SaveChangesAsync();
+
+        // User owns these songs
+        var ownedSong1 = new OwnedSong
+        {
+            UserId = userId,
+            SongFileName = "song1.mp3",
+            SongMetadataId = song1.Id,
+            PayPalOrderId = "ORDER123"
+        };
+        var ownedSong2 = new OwnedSong
+        {
+            UserId = userId,
+            SongFileName = "song2.mp3",
+            SongMetadataId = song2.Id,
+            PayPalOrderId = "ORDER456"
+        };
+        await _context.OwnedSongs.AddRangeAsync(ownedSong1, ownedSong2);
+        await _context.SaveChangesAsync();
+
+        // User likes song1
+        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
+
+        // Act
+        await _playlistService.SyncLikedSongsPlaylistAsync(userId);
+
+        // Assert
+        var playlist = await _context.Playlists
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated);
+        Assert.That(playlist, Is.Not.Null);
+
+        var playlistSongs = await _context.UserPlaylists
+            .Include(up => up.OwnedSong)
+            .Where(up => up.PlaylistId == playlist.Id)
+            .ToListAsync();
+
+        Assert.That(playlistSongs, Has.Count.EqualTo(1));
+        Assert.That(playlistSongs[0].OwnedSong.SongMetadataId, Is.EqualTo(song1.Id));
+    }
+
+    [Test]
+    public async Task SyncLikedSongsPlaylistAsync_RemovesUnlikedSongs()
+    {
+        // Arrange
+        var userId = 1;
+
+        // Create song metadata
+        var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
+        await _context.SongMetadata.AddAsync(song1);
+        await _context.SaveChangesAsync();
+
+        // User owns the song
+        var ownedSong1 = new OwnedSong
+        {
+            UserId = userId,
+            SongFileName = "song1.mp3",
+            SongMetadataId = song1.Id,
+            PayPalOrderId = "ORDER123"
+        };
+        await _context.OwnedSongs.AddAsync(ownedSong1);
+        await _context.SaveChangesAsync();
+
+        // Like and sync
+        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
+        await _playlistService.SyncLikedSongsPlaylistAsync(userId);
+
+        // Verify song is in playlist
+        var playlist = await _context.Playlists
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated);
+        var playlistSongs = await _context.UserPlaylists
+            .Where(up => up.PlaylistId == playlist.Id)
+            .ToListAsync();
+        Assert.That(playlistSongs, Has.Count.EqualTo(1));
+
+        // Unlike the song
+        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
+
+        // Act
+        await _playlistService.SyncLikedSongsPlaylistAsync(userId);
+
+        // Assert
+        playlistSongs = await _context.UserPlaylists
+            .Where(up => up.PlaylistId == playlist.Id)
+            .ToListAsync();
+        Assert.That(playlistSongs, Has.Count.EqualTo(0));
+    }
+
+    [Test]
+    public async Task UpdatePlaylistAsync_ReturnsFalse_ForSystemGeneratedPlaylist()
+    {
+        // Arrange
+        var userId = 1;
+        var systemPlaylist = new Playlist
+        {
+            UserId = userId,
+            PlaylistName = "Liked Songs",
+            IsSystemGenerated = true
+        };
+        await _context.Playlists.AddAsync(systemPlaylist);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _playlistService.UpdatePlaylistAsync(systemPlaylist.Id, userId, "New Name");
+
+        // Assert
+        Assert.That(result, Is.False);
+
+        // Verify name didn't change
+        var playlist = await _context.Playlists.FindAsync(systemPlaylist.Id);
+        Assert.That(playlist.PlaylistName, Is.EqualTo("Liked Songs"));
+    }
+
+    [Test]
+    public async Task DeletePlaylistAsync_ReturnsFalse_ForSystemGeneratedPlaylist()
+    {
+        // Arrange
+        var userId = 1;
+        var systemPlaylist = new Playlist
+        {
+            UserId = userId,
+            PlaylistName = "Liked Songs",
+            IsSystemGenerated = true
+        };
+        await _context.Playlists.AddAsync(systemPlaylist);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _playlistService.DeletePlaylistAsync(systemPlaylist.Id, userId);
+
+        // Assert
+        Assert.That(result, Is.False);
+
+        // Verify playlist still exists
+        var playlist = await _context.Playlists.FindAsync(systemPlaylist.Id);
+        Assert.That(playlist, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task GetUserLikedSongIdsAsync_ReturnsOnlyLikedSongs()
+    {
+        // Arrange
+        var userId = 1;
+        var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3" };
+        var song2 = new SongMetadata { Mp3BlobPath = "song2.mp3" };
+        var song3 = new SongMetadata { Mp3BlobPath = "song3.mp3" };
+        await _context.SongMetadata.AddRangeAsync(song1, song2, song3);
+        await _context.SaveChangesAsync();
+
+        // Like song1 and song2, dislike song3
+        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
+        await _songLikeService.ToggleLikeAsync(userId, song2.Id);
+        await _songLikeService.ToggleDislikeAsync(userId, song3.Id);
+
+        // Act
+        var likedSongIds = await _songLikeService.GetUserLikedSongIdsAsync(userId);
+
+        // Assert
+        Assert.That(likedSongIds, Has.Count.EqualTo(2));
+        Assert.That(likedSongIds, Contains.Item(song1.Id));
+        Assert.That(likedSongIds, Contains.Item(song2.Id));
+        Assert.That(likedSongIds, Does.Not.Contain(song3.Id));
     }
 }

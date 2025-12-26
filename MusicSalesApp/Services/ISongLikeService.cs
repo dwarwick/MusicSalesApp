@@ -37,4 +37,11 @@ public interface ISongLikeService
     /// <param name="songMetadataId">The song metadata ID</param>
     /// <returns>True if the song is now disliked, false if the dislike was removed</returns>
     Task<bool> ToggleDislikeAsync(int userId, int songMetadataId);
+
+    /// <summary>
+    /// Get all songs that a user has liked (not disliked)
+    /// </summary>
+    /// <param name="userId">The user ID</param>
+    /// <returns>List of SongMetadata IDs that the user has liked</returns>
+    Task<List<int>> GetUserLikedSongIdsAsync(int userId);
 }

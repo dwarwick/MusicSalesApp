@@ -510,6 +510,9 @@ namespace MusicSalesApp.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsSystemGenerated")
+                        .HasColumnType("bit");
+
                     b.Property<string>("PlaylistName")
                         .IsRequired()
                         .HasMaxLength(200)

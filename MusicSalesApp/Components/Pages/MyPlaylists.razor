@@ -70,17 +70,27 @@
         <div class="playlists-page-grid">
             @foreach (var playlist in _playlists)
             {
-                <SfCard CssClass="playlists-page-card music-card">
+                <SfCard CssClass="@GetPlaylistCardClass(playlist)">
                     <CardHeader Title="@playlist.PlaylistName">
-                        <div class="playlists-page-actions">
-                            <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
-                            <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
-                        </div>                       
+                        @if (!playlist.IsSystemGenerated)
+                        {
+                            <div class="playlists-page-actions">
+                                <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
+                                <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                            </div>
+                        }
                     </CardHeader>
                     <CardContent>
                         <div class="playlists-page-info">
                             <p>@_playlistSongCounts.GetValueOrDefault(playlist.Id, 0) song(s)</p>
-                            <p class="playlists-page-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
+                            @if (!playlist.IsSystemGenerated)
+                            {
+                                <p class="playlists-page-date">Created: @playlist.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</p>
+                            }
+                            @if (playlist.IsSystemGenerated && playlist.PlaylistName == "Liked Songs")
+                            {
+                                <p class="playlist-description">Songs you've liked</p>
+                            }
                         </div>
                         <div class="card-actions">
                             <SfButton OnClick="@(() => PlayPlaylist(playlist))">

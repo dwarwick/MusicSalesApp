@@ -22,6 +22,12 @@ public class Playlist
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Indicates if this playlist is system-generated (e.g., "Liked Songs")
+    /// System-generated playlists cannot be edited or deleted by users
+    /// </summary>
+    public bool IsSystemGenerated { get; set; } = false;
+
     // Navigation property for playlist songs
     public ICollection<UserPlaylist> UserPlaylists { get; set; }
 }
