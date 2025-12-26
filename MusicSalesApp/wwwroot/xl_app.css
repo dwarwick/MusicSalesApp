@@ -48,7 +48,7 @@
     }
 
     .album-player-spotify-container .song-header {
-        padding: 24px;
+        padding: 0px 24px;
     }
 
     .album-player-spotify-container .player-bar {
@@ -114,10 +114,9 @@
     }
 
     .album-art {
-        width: 250px;
+        width: 140px;
         object-fit: cover;
-        box-shadow: 0 4px 60px rgba(0, 0, 0, 0.5);
-        border-radius: 4px;
+        border-radius: 8px;
     }
 
     .title-container {
