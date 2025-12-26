@@ -72,11 +72,19 @@
 
     /* AlbumPlayer - Container adjustments for small screens */
     .album-player-spotify-container {
-        grid-template-rows: auto 1fr 80px;
+        grid-template-rows: auto auto auto 1fr 80px;
     }
 
-    .album-player-spotify-container .song-header {
-        padding: 16px;
+    .album-player-spotify-container .album-image-title-row {
+        padding: 8px 16px;
+    }
+
+    .album-player-spotify-container .action-buttons-row {
+        padding: 8px 16px;
+    }
+
+    .album-player-spotify-container .status-info-row {
+        padding: 8px 16px;
     }
 
     .album-player-spotify-container .player-bar {

@@ -332,16 +332,25 @@
 
     /* AlbumPlayer - Container adjustments for extra small screens */
     .album-player-spotify-container {
-        grid-template-rows: auto 1fr 80px;
+        grid-template-rows: auto auto auto 1fr 70px;
+        height: 100vh;
     }
 
-        .album-player-spotify-container .song-header {
-            padding: 0px 0px;
+        .album-player-spotify-container .album-image-title-row {
+            padding: 8px 12px;
+        }
+
+        .album-player-spotify-container .action-buttons-row {
+            padding: 4px 12px;
+        }
+
+        .album-player-spotify-container .status-info-row {
+            padding: 4px 12px;
         }
 
         .album-player-spotify-container .player-bar {
-            padding: 8px 12px;
-            gap: 4px;
+            padding: 6px 8px;
+            gap: 2px;
         }
 
         /* AlbumPlayer - Player controls compact layout */
@@ -418,12 +427,91 @@
             height: 16px;
         }
 
+    /* AlbumPlayer - Make action buttons smaller on XS */
+    .album-player-spotify-container .play-button-large {
+        width: 36px;
+        height: 36px;
+    }
+
+    .album-player-spotify-container .play-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .album-player-spotify-container .cart-button-large {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+
+    .album-player-spotify-container .cart-button-large span {
+        display: none;
+    }
+
+    .album-player-spotify-container .cart-button-large.in-cart span {
+        display: inline;
+    }
+
+    .album-player-spotify-container .fb-share-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+        gap: 4px;
+    }
+
+    .album-player-spotify-container .fb-share-btn .fb-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .album-player-spotify-container .fb-share-btn .share-text {
+        display: none;
+    }
+
+    /* Make status text smaller */
+    .album-player-spotify-container .preview-label,
+    .album-player-spotify-container .subscription-badge {
+        font-size: 11px;
+    }
+
+    .album-player-spotify-container .subscription-badge svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    .album-player-spotify-container .album-track-info {
+        font-size: 11px;
+    }
+
+    /* Now Playing info smaller */
+    .album-player-spotify-container .now-playing-info {
+        font-size: 11px;
+        padding: 8px 0;
+    }
+
     .app-logo {
         height: 30px;
     }
 
     .action-controls {        
-        gap: 24px;
-        height: 44px;
+        gap: 8px;
+        height: auto;
+    }
+
+    /* Album image smaller on XS */
+    .album-player-spotify-container .album-art {
+        width: 70px;
+        height: 70px;
+    }
+
+    /* Title container adjustments */
+    .album-player-spotify-container .title-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .album-player-spotify-container .song-title {
+        font-size: 14px;
+        margin: 0;
     }   
 }

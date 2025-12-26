@@ -64,6 +64,26 @@ h1:focus {
     margin-left: 10px;
 }
 
+
+
+/* AlbumPlayer - New 5-row layout structure */
+.album-image-title-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.action-buttons-row {
+    display: flex;
+    align-items: center;
+}
+
+.status-info-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 .album-art-container {
     position: relative;
 }
