@@ -1164,6 +1164,7 @@ namespace MusicSalesApp.Components.Pages
                 if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
                 {
                     await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId());
+                    _isPlaying = true; // Set to true since changeTrack auto-plays the next song
                 }
                 await InvokeAsync(StateHasChanged);
             }
