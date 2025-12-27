@@ -85,6 +85,19 @@ public class AdminSongManagementModel : ComponentBase
             DisplayOnHomePage = m.DisplayOnHomePage,
             HasAlbumCover = m.IsAlbumCover
         }).ToList();
+        
+        // Generate SAS URLs for images
+        foreach (var song in _allSongs)
+        {
+            if (!string.IsNullOrEmpty(song.JpegFileName))
+            {
+                song.SongImageUrl = StorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+            }
+            if (!string.IsNullOrEmpty(song.AlbumCoverBlobName))
+            {
+                song.AlbumCoverImageUrl = StorageService.GetReadSasUri(song.AlbumCoverBlobName, TimeSpan.FromHours(1)).ToString();
+            }
+        }
     }
 
     protected Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
