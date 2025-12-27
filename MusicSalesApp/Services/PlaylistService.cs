@@ -405,11 +405,11 @@ public class PlaylistService : IPlaylistService
                         if (string.IsNullOrEmpty(metadata.Mp3BlobPath))
                             continue;
                             
-                        var fileName = Path.GetFileName(metadata.Mp3BlobPath);
+                        // Use full Mp3BlobPath to match how purchased songs are stored
                         var newOwnedSong = new OwnedSong
                         {
                             UserId = userId,
-                            SongFileName = fileName,
+                            SongFileName = metadata.Mp3BlobPath,
                             SongMetadataId = metadata.Id,
                             SongMetadata = metadata,
                             PurchasedAt = DateTime.UtcNow,
@@ -543,11 +543,11 @@ public class PlaylistService : IPlaylistService
 
                     // Create a virtual OwnedSong record for the liked song
                     // PayPalOrderId = null indicates this is not a purchased song
-                    var fileName = Path.GetFileName(songMetadata.Mp3BlobPath);
+                    // Use the full Mp3BlobPath to match how purchased songs are stored
                     ownedSong = new OwnedSong
                     {
                         UserId = userId,
-                        SongFileName = fileName,
+                        SongFileName = songMetadata.Mp3BlobPath,
                         SongMetadataId = songMetadataId,
                         PurchasedAt = DateTime.UtcNow,
                         PayPalOrderId = null // Null = not purchased
