@@ -110,4 +110,24 @@ public class HomeTests : BUnitTestBase
         // Assert - Liked Songs should not be shown when the playlist is empty
         Assert.That(cut.Markup, Does.Not.Contain("Liked Songs"));
     }
+
+    [Test]
+    public void Home_ContainsFeaturedMusicSection()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - should have Featured Music section
+        Assert.That(cut.Markup, Does.Contain("Featured Music"));
+    }
+
+    [Test]
+    public void Home_ContainsMusicLibraryComponent()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - should have the music-cards-grid which is from MusicLibrary component
+        Assert.That(cut.Markup, Does.Contain("music-cards-grid"));
+    }
 }
