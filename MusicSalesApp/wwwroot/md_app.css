@@ -285,4 +285,15 @@
         height: 12px;
         fill: currentColor;
     }
+
+    /* Featured Music Carousel - MD breakpoint: show ~3.2 cards */
+    .featured-music-carousel {
+        gap: 20px;
+        padding-right: 20px;
+    }
+
+    .featured-music-carousel .music-card {
+        width: calc(30vw - 20px); /* ~3.2 cards visible */
+        min-width: 200px;
+    }
 }

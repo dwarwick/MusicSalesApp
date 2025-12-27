@@ -43,6 +43,17 @@
         padding: 16px;
     }
 
+    /* Featured Music Carousel - XS breakpoint: show 1.2 cards with peek */
+    .featured-music-carousel {
+        gap: 12px;
+        padding-right: calc(100vw - 83.33%); /* Allow last card to have visible space */
+    }
+
+    .featured-music-carousel .music-card {
+        width: calc(83.33vw - 32px); /* ~1.2 cards visible (100% / 1.2 ≈ 83.33%) */
+        min-width: calc(83.33vw - 32px);
+    }
+
     /* NavMenu */
     .cart-link {
         margin-right: 70px;

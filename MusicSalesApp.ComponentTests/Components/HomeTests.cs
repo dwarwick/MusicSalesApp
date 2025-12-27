@@ -127,7 +127,7 @@ public class HomeTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - should have the music-cards-grid which is from MusicLibrary component
-        Assert.That(cut.Markup, Does.Contain("music-cards-grid"));
+        // Assert - should have the featured-music-carousel which is from MusicLibrary component when ShowHomePageFeatured=true
+        Assert.That(cut.Markup, Does.Contain("featured-music-carousel"));
     }
 }

@@ -137,6 +137,26 @@ h1:focus {
     width: 100%;
 }
 
+/* Featured Music Carousel - horizontal scrolling container */
+.featured-music-carousel {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.featured-music-carousel::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+
+.featured-music-carousel .music-card {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+}
+
 .music-card {
     border-radius: 8px;
     padding: 16px;

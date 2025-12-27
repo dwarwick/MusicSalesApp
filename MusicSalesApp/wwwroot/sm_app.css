@@ -172,6 +172,17 @@
         gap: 16px;
     }
 
+    /* Featured Music Carousel - SM breakpoint: show ~2.2 cards */
+    .featured-music-carousel {
+        gap: 16px;
+        padding-right: 16px;
+    }
+
+    .featured-music-carousel .music-card {
+        width: calc(45vw - 24px); /* ~2.2 cards visible */
+        min-width: calc(45vw - 24px);
+    }
+
     .music-card { padding: 12px; }
     .card-song-title { font-size: 13px; }
     .card-play-button, .card-view-button { width: 36px; height: 36px; }

@@ -33,7 +33,7 @@ else if (_error != null)
 }
 else
 {
-    <div class="music-cards-grid">
+    <div class="@(ShowHomePageFeatured ? "featured-music-carousel" : "music-cards-grid")">
         @* Album Cards *@
         @foreach (var album in GetFilteredAlbums())
         {
