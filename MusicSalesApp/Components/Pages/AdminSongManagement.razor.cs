@@ -26,15 +26,8 @@ public class AdminSongManagementModel : ComponentBase
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
-    protected List<SongAdminViewModel> _currentPageSongs = new();
     protected SfGrid<SongAdminViewModel> _grid;
     protected int _totalCount = 0;
-    protected int _totalPages = 1;
-    protected int _currentPage = 1;
-    protected string _currentSortColumn = string.Empty;
-    protected bool _currentSortAscending = true;
-
-    // Removed: Filter fields - now using Syncfusion's native filtering
 
     // Edit modal fields
     protected bool _showEditModal = false;
@@ -43,6 +36,7 @@ public class AdminSongManagementModel : ComponentBase
     protected decimal? _editSongPrice = null;
     protected string _editGenre = string.Empty;
     protected int? _editTrackNumber = null;
+    protected bool _editDisplayOnHomePage = false;
     protected IBrowserFile _songImageFile = null;
     protected IBrowserFile _albumImageFile = null;
     protected List<string> _validationErrors = new();
@@ -55,11 +49,10 @@ public class AdminSongManagementModel : ComponentBase
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
-            // Load first page
-            await LoadPageAsync(0, 10);
-            
-            // Load all songs for validation purposes (used in Edit)
+            // Load all songs for the grid
             await LoadSongsAsync();
+            
+            _totalCount = _allSongs.Count;
         }
         catch (Exception ex)
         {
@@ -71,22 +64,6 @@ public class AdminSongManagementModel : ComponentBase
         }
     }
 
-    protected async Task LoadPageAsync(int skip, int take)
-    {
-        var parameters = new SongQueryParameters
-        {
-            Skip = skip,
-            Take = take,
-            SortColumn = _currentSortColumn,
-            SortAscending = _currentSortAscending
-        };
-
-        var result = await SongAdminService.GetSongsAsync(parameters);
-        _currentPageSongs = result.Items.ToList();
-        _totalCount = result.TotalCount;
-        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
-    }
-
     protected async Task LoadSongsAsync()
     {
         // Load all metadata from database for validation purposes
@@ -95,41 +72,39 @@ public class AdminSongManagementModel : ComponentBase
         {
             Id = m.Id.ToString(),
             AlbumName = m.AlbumName ?? string.Empty,
-            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.BlobPath),
-            Mp3FileName = m.FileExtension == ".mp3" ? m.BlobPath : string.Empty,
-            JpegFileName = (m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") && !m.IsAlbumCover ? m.BlobPath : string.Empty,
-            AlbumCoverBlobName = m.IsAlbumCover ? m.BlobPath : string.Empty,
+            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+            Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
+            JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
+            AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
             IsAlbum = m.IsAlbumCover,
             AlbumPrice = m.AlbumPrice,
             SongPrice = m.SongPrice,
             Genre = m.Genre ?? string.Empty,
             TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
+            DisplayOnHomePage = m.DisplayOnHomePage,
             HasAlbumCover = m.IsAlbumCover
         }).ToList();
+        
+        // Generate SAS URLs for images
+        foreach (var song in _allSongs)
+        {
+            if (!string.IsNullOrEmpty(song.JpegFileName))
+            {
+                song.SongImageUrl = StorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+            }
+            if (!string.IsNullOrEmpty(song.AlbumCoverBlobName))
+            {
+                song.AlbumCoverImageUrl = StorageService.GetReadSasUri(song.AlbumCoverBlobName, TimeSpan.FromHours(1)).ToString();
+            }
+        }
     }
 
-    protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
+    protected Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
     {
-        if (args.RequestType == Syncfusion.Blazor.Grids.Action.Paging)
-        {
-            // Handle paging
-            var pageSize = 10;
-            var skip = (args.CurrentPage - 1) * pageSize;
-            _currentPage = args.CurrentPage;
-            await LoadPageAsync(skip, pageSize);
-            args.Cancel = true; // Cancel default paging behavior
-            StateHasChanged();
-        }
-        else if (args.RequestType == Syncfusion.Blazor.Grids.Action.Sorting && args.ColumnName != null)
-        {
-            // Handle sorting
-            _currentSortColumn = args.ColumnName;
-            _currentSortAscending = args.Direction == Syncfusion.Blazor.Grids.SortDirection.Ascending;
-            await LoadPageAsync((_currentPage - 1) * 10, 10);
-            args.Cancel = true; // Cancel default sorting behavior
-            StateHasChanged();
-        }
+        // Let Syncfusion handle paging, sorting, and filtering natively
+        // since we're now using _allSongs as the DataSource
+        return Task.CompletedTask;
     }
 
     protected void EditSong(SongAdminViewModel song)
@@ -139,6 +114,7 @@ public class AdminSongManagementModel : ComponentBase
         _editSongPrice = song.SongPrice;
         _editGenre = song.Genre;
         _editTrackNumber = song.TrackNumber;
+        _editDisplayOnHomePage = song.DisplayOnHomePage;
         _songImageFile = null;
         _albumImageFile = null;
         _validationErrors.Clear();
@@ -352,6 +328,9 @@ public class AdminSongManagementModel : ComponentBase
                 var isAlbumCover = metadata.IsAlbumCover;
                 var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
 
+                // Update DisplayOnHomePage for all file types
+                metadata.DisplayOnHomePage = _editDisplayOnHomePage;
+
                 // Update album cover metadata
                 if (isAlbumCover)
                 {
@@ -391,14 +370,15 @@ public class AdminSongManagementModel : ComponentBase
             _editingSong.SongPrice = _editSongPrice;
             _editingSong.Genre = _editGenre;
             _editingSong.TrackNumber = _editTrackNumber;
+            _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
 
             // Close modal and refresh
             _showEditModal = false;
             
-            // Refresh the cache, all songs, and current page
+            // Refresh the cache and reload all songs
             await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
-            await LoadPageAsync((_currentPage - 1) * 10, 10);
+            _totalCount = _allSongs.Count;
             StateHasChanged();
         }
         catch (Exception ex)

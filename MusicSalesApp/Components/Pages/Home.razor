@@ -1,5 +1,6 @@
 ﻿@page "/"
 @using MusicSalesApp.Components.Shared
+@using MusicSalesApp.Components.Pages
 @using Syncfusion.Blazor.Buttons
 @using Syncfusion.Blazor.Cards
 @inherits HomeModel
@@ -46,6 +47,14 @@
             <p>Loading...</p>
         </div>
     }
+    
+    <div class="featured-music-section">
+        <div class="featured-music-header">
+            <h2>Featured Music</h2>
+            <a href="/music-library" class="music-library-link">View All</a>
+        </div>
+        <MusicLibrary ShowHomePageFeatured="true" />
+    </div>
     
     @if (!_hasActiveSubscription)
     {

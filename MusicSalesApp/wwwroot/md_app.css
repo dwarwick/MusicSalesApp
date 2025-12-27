@@ -2,7 +2,7 @@
 @media (max-width: 992px) {
     /* AdminSongManagement container */
     #grid-container {
-        width: calc(100vw - 12rem);
+        width: 100%;
         height: calc(100vh - 8rem);
     }
 
@@ -284,5 +284,23 @@
         width: 12px;
         height: 12px;
         fill: currentColor;
+    }
+
+    /* Featured Music Carousel - MD breakpoint: show ~3.2 cards */
+    .featured-music-carousel {
+        gap: 20px;
+        padding-right: 20px;
+    }
+
+    .featured-music-carousel .music-card {
+        /* 3.2 cards visible: 100vw / 3.2 ≈ 31.25vw per card */
+        width: calc(100vw / 3.2 - 24px);
+        min-width: 200px;
+    }
+
+    .home-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
     }
 }

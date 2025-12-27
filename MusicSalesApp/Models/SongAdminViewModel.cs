@@ -18,6 +18,7 @@ public class SongAdminViewModel
     public string Genre { get; set; } = string.Empty;
     public int? TrackNumber { get; set; }
     public double? TrackLength { get; set; }
+    public bool DisplayOnHomePage { get; set; }
 
     // Additional properties for internal use
     public bool HasAlbumCover { get; set; }

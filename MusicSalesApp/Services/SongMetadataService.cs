@@ -66,6 +66,7 @@ namespace MusicSalesApp.Services
                 existing.TrackLength = metadata.TrackLength;
                 existing.Mp3BlobPath = metadata.Mp3BlobPath;
                 existing.ImageBlobPath = metadata.ImageBlobPath;
+                existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 context.SongMetadata.Update(existing);
@@ -187,6 +188,7 @@ namespace MusicSalesApp.Services
                 Genre = m.Genre ?? string.Empty,
                 TrackNumber = m.TrackNumber,
                 TrackLength = m.TrackLength,
+                DisplayOnHomePage = m.DisplayOnHomePage,
                 HasAlbumCover = m.IsAlbumCover
             }).ToList();
 

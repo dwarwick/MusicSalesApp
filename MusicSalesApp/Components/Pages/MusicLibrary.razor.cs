@@ -29,11 +29,18 @@ public class AlbumInfo
     public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
     public decimal Price { get; set; } = PriceDefaults.DefaultAlbumPrice;
     public int MetadataId { get; set; } // ID of the album cover's SongMetadata record
+    public bool DisplayOnHomePage { get; set; } // Whether this album should be displayed on the home page
 }
 
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
+
+    /// <summary>
+    /// When true, only shows items marked for display on home page and hides filter radio buttons.
+    /// </summary>
+    [Parameter]
+    public bool ShowHomePageFeatured { get; set; }
 
     protected bool _loading = true;
     protected string _error;
@@ -52,6 +59,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected HashSet<string> _cartSongs = new HashSet<string>();
     protected HashSet<string> _cartAlbums = new HashSet<string>();
     protected HashSet<string> _animatingCartButtons = new HashSet<string>();
+    
+    // Track DisplayOnHomePage status for standalone songs
+    private HashSet<string> _homePageSongs = new HashSet<string>();
 
     // Track which card is currently playing
     private string _playingCardId;
@@ -310,7 +320,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                             CoverArtFileName = imagePath,
                             Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
                             Price = albumPrice,
-                            MetadataId = coverMeta.Id
+                            MetadataId = coverMeta.Id,
+                            DisplayOnHomePage = coverMeta.DisplayOnHomePage
                         };
                         _albums.Add(album);
 
@@ -335,6 +346,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     Folder = (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").ToLowerInvariant()
                 })
                 .ToLookup(x => (x.BaseName, x.Folder));
+
+            // Clear home page songs tracking
+            _homePageSongs.Clear();
 
             // Build album art URL mappings and extract song prices for standalone tracks
             foreach (var audioFile in _files)
@@ -366,6 +380,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _songMetadataIds[audioFile.Name] = songMeta.Id;
                     // Store the stream count
                     _streamCounts[songMeta.Id] = songMeta.NumberOfStreams;
+                    // Track if this song should be displayed on the home page
+                    if (songMeta.DisplayOnHomePage)
+                    {
+                        _homePageSongs.Add(audioFile.Name);
+                    }
                 }
                 _songPrices[audioFile.Name] = songPrice;
             }
@@ -412,12 +431,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected IEnumerable<StorageFileInfo> GetFilteredFiles()
     {
-        return _filterMode switch
+        var files = _filterMode switch
         {
             FilterMode.Owned => _files.Where(f => _ownedSongs.Contains(f.Name)),
             FilterMode.NotOwned => _files.Where(f => !_ownedSongs.Contains(f.Name)),
             _ => _files
         };
+        
+        // When showing home page featured items, filter by DisplayOnHomePage
+        if (ShowHomePageFeatured)
+        {
+            files = files.Where(f => _homePageSongs.Contains(f.Name));
+        }
+        
+        return files;
     }
 
     protected void SetFilter(FilterMode mode)
@@ -961,12 +988,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Album-specific methods
     protected IEnumerable<AlbumInfo> GetFilteredAlbums()
     {
-        return _filterMode switch
+        var albums = _filterMode switch
         {
             FilterMode.Owned => _albums.Where(a => IsAlbumOwned(a)),
             FilterMode.NotOwned => _albums.Where(a => !IsAlbumOwned(a)),
             _ => _albums
         };
+        
+        // When showing home page featured items, filter by DisplayOnHomePage
+        if (ShowHomePageFeatured)
+        {
+            albums = albums.Where(a => a.DisplayOnHomePage);
+        }
+        
+        return albums;
     }
 
     protected string GetAlbumCardId(AlbumInfo album)

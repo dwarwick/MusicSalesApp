@@ -31,14 +31,14 @@ else
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
                 TValue="SongAdminViewModel"
-                DataSource="@_currentPageSongs"
+                DataSource="@_allSongs"
                 AllowPaging="true" 
                 AllowSorting="true" 
                 AllowFiltering="true"
                 Height='100%' Width='100%'
                 EnableAdaptiveUI="false"
                 RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
-            <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
+            <GridPageSettings PageSize="10"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridEvents TValue="SongAdminViewModel" OnActionBegin="OnActionBegin"></GridEvents>
             <GridColumns>
@@ -213,6 +213,21 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.DisplayOnHomePage)" HeaderText="Home Page" Width="100">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.DisplayOnHomePage)
+                            {
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
             </GridColumns>
         </SfGrid>
 
@@ -366,6 +381,12 @@ else
                             {
                                 <p class="text-muted">N/A (Not an album)</p>
                             }
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <SfCheckBox @bind-Checked="_editDisplayOnHomePage" Label="Display on Home Page" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
                 </div>

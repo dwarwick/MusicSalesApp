@@ -24,7 +24,7 @@
 @media (width >= 1200px) {
     /* AdminSongManagement container */
     #grid-container {
-        width: calc(100vw - 20rem);
+        width: 100%;
         height: calc(100vh - 10rem);
     }
 
@@ -399,6 +399,23 @@
             height: 24px;
             fill: #b3b3b3;
         }
+
+    /* Featured Music Carousel - XL breakpoint: show ~5 cards */
+    .featured-music-carousel {
+        gap: 24px;
+        padding-right: 24px;
+    }
+
+    .featured-music-carousel .music-card {
+        width: 220px; /* Fixed width for XL screens */
+        min-width: 220px;
+    }
+
+    .home-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
 }
 
 /* Playlists Page Spacing */

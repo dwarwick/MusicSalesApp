@@ -240,6 +240,134 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("$12.99"));
     }
 
+    [Test]
+    public void MusicLibrary_HidesTitle_WhenShowHomePageFeatured()
+    {
+        // Arrange - Set up empty metadata list
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert - should not show h3 title when ShowHomePageFeatured is true
+        Assert.That(cut.Markup, Does.Not.Contain("<h3"));
+    }
+
+    [Test]
+    public void MusicLibrary_HidesFilterRadioButtons_WhenShowHomePageFeatured()
+    {
+        // Arrange - authorize user so radio buttons would normally be visible
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert - should not show filter radio buttons when ShowHomePageFeatured is true
+        Assert.That(cut.Markup, Does.Not.Contain("All Music"));
+        Assert.That(cut.Markup, Does.Not.Contain("Not Owned"));
+    }
+
+    [Test]
+    public void MusicLibrary_OnlyShowsFeaturedSongs_WhenShowHomePageFeatured()
+    {
+        // Arrange - Set up metadata with featured and non-featured songs
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Id = 1,
+                Mp3BlobPath = "FeaturedSong.mp3",
+                SongPrice = 0.99m,
+                DisplayOnHomePage = true,
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata 
+            { 
+                Id = 2,
+                Mp3BlobPath = "RegularSong.mp3",
+                SongPrice = 0.99m,
+                DisplayOnHomePage = false,
+                UpdatedAt = DateTime.Now
+            }
+        };
+        
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert - should only show featured song
+        Assert.That(cut.Markup, Does.Contain("FeaturedSong"));
+        Assert.That(cut.Markup, Does.Not.Contain("RegularSong"));
+    }
+
+    [Test]
+    public void MusicLibrary_OnlyShowsFeaturedAlbums_WhenShowHomePageFeatured()
+    {
+        // Arrange - authorize user so cart button with price is visible
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized("testuser");
+        
+        // Set up metadata with featured and non-featured albums
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
+            {
+                // Featured album cover with track
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    Id = 1,
+                    BlobPath = "FeaturedAlbumCover.jpg", 
+                    ImageBlobPath = "FeaturedAlbumCover.jpg",
+                    IsAlbumCover = true, 
+                    AlbumName = "FeaturedAlbum",
+                    AlbumPrice = 9.99m,
+                    DisplayOnHomePage = true
+                },
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    Id = 2,
+                    BlobPath = "FeaturedTrack.mp3",
+                    Mp3BlobPath = "FeaturedTrack.mp3", 
+                    AlbumName = "FeaturedAlbum"
+                },
+                // Non-featured album cover with track
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    Id = 3,
+                    BlobPath = "RegularAlbumCover.jpg", 
+                    ImageBlobPath = "RegularAlbumCover.jpg",
+                    IsAlbumCover = true, 
+                    AlbumName = "RegularAlbum",
+                    AlbumPrice = 12.99m,
+                    DisplayOnHomePage = false
+                },
+                new MusicSalesApp.Models.SongMetadata 
+                { 
+                    Id = 4,
+                    BlobPath = "RegularTrack.mp3",
+                    Mp3BlobPath = "RegularTrack.mp3", 
+                    AlbumName = "RegularAlbum"
+                }
+            });
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert - should only show featured album
+        Assert.That(cut.Markup, Does.Contain("FeaturedAlbum"));
+        Assert.That(cut.Markup, Does.Not.Contain("RegularAlbum"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();
