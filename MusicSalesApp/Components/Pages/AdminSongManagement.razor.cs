@@ -26,15 +26,8 @@ public class AdminSongManagementModel : ComponentBase
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected List<SongAdminViewModel> _allSongs = new();
-    protected List<SongAdminViewModel> _currentPageSongs = new();
     protected SfGrid<SongAdminViewModel> _grid;
     protected int _totalCount = 0;
-    protected int _totalPages = 1;
-    protected int _currentPage = 1;
-    protected string _currentSortColumn = string.Empty;
-    protected bool _currentSortAscending = true;
-
-    // Removed: Filter fields - now using Syncfusion's native filtering
 
     // Edit modal fields
     protected bool _showEditModal = false;
@@ -56,11 +49,10 @@ public class AdminSongManagementModel : ComponentBase
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
-            // Load first page
-            await LoadPageAsync(0, 10);
-            
-            // Load all songs for validation purposes (used in Edit)
+            // Load all songs for the grid
             await LoadSongsAsync();
+            
+            _totalCount = _allSongs.Count;
         }
         catch (Exception ex)
         {
@@ -70,22 +62,6 @@ public class AdminSongManagementModel : ComponentBase
         {
             _isLoading = false;
         }
-    }
-
-    protected async Task LoadPageAsync(int skip, int take)
-    {
-        var parameters = new SongQueryParameters
-        {
-            Skip = skip,
-            Take = take,
-            SortColumn = _currentSortColumn,
-            SortAscending = _currentSortAscending
-        };
-
-        var result = await SongAdminService.GetSongsAsync(parameters);
-        _currentPageSongs = result.Items.ToList();
-        _totalCount = result.TotalCount;
-        _totalPages = (int)Math.Ceiling((double)_totalCount / take);
     }
 
     protected async Task LoadSongsAsync()
@@ -111,27 +87,11 @@ public class AdminSongManagementModel : ComponentBase
         }).ToList();
     }
 
-    protected async Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
+    protected Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
     {
-        if (args.RequestType == Syncfusion.Blazor.Grids.Action.Paging)
-        {
-            // Handle paging
-            var pageSize = 10;
-            var skip = (args.CurrentPage - 1) * pageSize;
-            _currentPage = args.CurrentPage;
-            await LoadPageAsync(skip, pageSize);
-            args.Cancel = true; // Cancel default paging behavior
-            StateHasChanged();
-        }
-        else if (args.RequestType == Syncfusion.Blazor.Grids.Action.Sorting && args.ColumnName != null)
-        {
-            // Handle sorting
-            _currentSortColumn = args.ColumnName;
-            _currentSortAscending = args.Direction == Syncfusion.Blazor.Grids.SortDirection.Ascending;
-            await LoadPageAsync((_currentPage - 1) * 10, 10);
-            args.Cancel = true; // Cancel default sorting behavior
-            StateHasChanged();
-        }
+        // Let Syncfusion handle paging, sorting, and filtering natively
+        // since we're now using _allSongs as the DataSource
+        return Task.CompletedTask;
     }
 
     protected void EditSong(SongAdminViewModel song)
@@ -402,10 +362,10 @@ public class AdminSongManagementModel : ComponentBase
             // Close modal and refresh
             _showEditModal = false;
             
-            // Refresh the cache, all songs, and current page
+            // Refresh the cache and reload all songs
             await SongAdminService.RefreshCacheAsync();
             await LoadSongsAsync();
-            await LoadPageAsync((_currentPage - 1) * 10, 10);
+            _totalCount = _allSongs.Count;
             StateHasChanged();
         }
         catch (Exception ex)

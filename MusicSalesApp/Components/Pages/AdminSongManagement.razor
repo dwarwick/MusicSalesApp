@@ -31,14 +31,14 @@ else
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
                 TValue="SongAdminViewModel"
-                DataSource="@_currentPageSongs"
+                DataSource="@_allSongs"
                 AllowPaging="true" 
                 AllowSorting="true" 
                 AllowFiltering="true"
                 Height='100%' Width='100%'
                 EnableAdaptiveUI="false"
                 RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
-            <GridPageSettings PageSize="10" PageCount="@_totalPages"></GridPageSettings>
+            <GridPageSettings PageSize="10"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridEvents TValue="SongAdminViewModel" OnActionBegin="OnActionBegin"></GridEvents>
             <GridColumns>

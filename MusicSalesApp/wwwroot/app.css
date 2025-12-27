@@ -144,12 +144,43 @@ h1:focus {
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
 }
 
-.featured-music-carousel::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+/* Hide scrollbar on touch devices (mobile), show on hover-enabled devices (desktop) */
+@media (hover: none) {
+    .featured-music-carousel {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+    }
+    
+    .featured-music-carousel::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+}
+
+/* Style the scrollbar for desktop devices */
+@media (hover: hover) {
+    .featured-music-carousel {
+        scrollbar-width: thin; /* Firefox */
+        scrollbar-color: rgba(255, 255, 255, 0.3) transparent; /* Firefox */
+    }
+    
+    .featured-music-carousel::-webkit-scrollbar {
+        height: 8px;
+    }
+    
+    .featured-music-carousel::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .featured-music-carousel::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+    }
+    
+    .featured-music-carousel::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.5);
+    }
 }
 
 .featured-music-carousel .music-card {

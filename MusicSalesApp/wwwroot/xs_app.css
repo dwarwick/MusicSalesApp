@@ -2,7 +2,7 @@
 @media (max-width: 576px) {
     /* AdminSongManagement container */
     #grid-container {
-        width: calc(100vw - 2rem);
+        width: 100%;
         height: calc(100vh - 6rem);
     }
 
