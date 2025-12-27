@@ -249,3 +249,104 @@ body {
     color: inherit;
 }
 
+/* Home Page - Dark Theme Colors */
+.hero-title {
+    color: #ffffff;
+}
+
+.hero-highlight {
+    color: #1db954;
+}
+
+.hero-subtitle {
+    color: #b3b3b3;
+}
+
+/* CTA Button Colors - Dark Theme */
+.cta-primary {
+    background-color: #1db954 !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.cta-primary:hover {
+    background-color: #1ed760 !important;
+    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
+}
+
+.cta-secondary {
+    background-color: transparent !important;
+    color: #ffffff !important;
+    border: 2px solid #ffffff !important;
+}
+
+.cta-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Section Colors - Dark Theme */
+.section-title {
+    color: #ffffff;
+}
+
+.section-subtitle {
+    color: #b3b3b3;
+}
+
+/* Feature Cards - Dark Theme */
+.feature-card {
+    background: #2a2a2a;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.feature-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.feature-icon {
+    background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+    color: #fff;
+}
+
+.feature-card h3 {
+    color: #ffffff;
+}
+
+.feature-card p {
+    color: #b3b3b3;
+}
+
+/* User Playlists Section - Dark Theme */
+.user-playlists-section .section-title {
+    color: #ffffff;
+}
+
+.loading-text {
+    color: #b3b3b3;
+}
+
+/* Subscription CTA Section - Dark Theme */
+.subscription-cta-section {
+    background: linear-gradient(135deg, #1db954 0%, #169c46 100%);
+}
+
+.subscription-cta-content h2 {
+    color: #fff;
+}
+
+.subscription-price-highlight {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.subscription-price-highlight .price {
+    color: #fff;
+}
+
+.subscription-benefits li {
+    color: #fff;
+}
+
+.subscription-benefits li svg {
+    color: #fff;
+}
+

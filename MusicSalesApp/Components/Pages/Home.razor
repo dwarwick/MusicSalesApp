@@ -5,18 +5,87 @@
 @using Syncfusion.Blazor.Cards
 @inherits HomeModel
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Stream Tunes - Unlimited Music Streaming</PageTitle>
 
 <div class="home-container">
-    
-    <h1>Welcome to Stream Tunes!</h1>
+    @* Hero Section *@
+    <section class="hero-section">
+        <div class="hero-content">
+            <h1 class="hero-title">
+                Your Music.<br />
+                <span class="hero-highlight">Unlimited.</span>
+            </h1>
+            <p class="hero-subtitle">
+                Stream thousands of songs, discover new artists, and create the perfect playlist for every moment. 
+                All for less than a cup of coffee per month.
+            </p>
+            @if (!_isAuthenticated)
+            {
+                <div class="hero-cta">
+                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/Account/Register"))">
+                        Start Free Trial
+                    </SfButton>
+                    <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/Account/Login"))">
+                        Sign In
+                    </SfButton>
+                </div>
+            }
+            else if (!_hasActiveSubscription)
+            {
+                <div class="hero-cta">
+                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                        Subscribe Now - $@_subscriptionPrice/mo
+                    </SfButton>
+                </div>
+            }
+        </div>
+        <div class="hero-visual">
+            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="hero-animation" autoplay loop></dotlottie-wc>
+        </div>
+    </section>
 
-    <p>Discover and enjoy unlimited music streaming!</p>
-    
-    @if (_isAuthenticated && (_recommendedPlaylist.Any() || _likedSongsPlaylist != null))
+    @* Value Proposition Section - Only show to non-subscribers *@
+    @if (!_hasActiveSubscription)
     {
-        <div class="recommended-playlist-section">
-            <h2>Your Playlists</h2>
+        <section class="features-section">
+            <h2 class="section-title">Why Stream Tunes?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                        </svg>
+                    </div>
+                    <h3>Unlimited Streaming</h3>
+                    <p>Access our entire catalog of songs with no limits. Play any track, any time, as many times as you want.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                    </div>
+                    <h3>Personal Playlists</h3>
+                    <p>Create custom playlists, like your favorite songs, and get personalized recommendations based on your taste.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/>
+                        </svg>
+                    </div>
+                    <h3>Cancel Anytime</h3>
+                    <p>No contracts, no commitments. Subscribe month-to-month and cancel whenever you want.</p>
+                </div>
+            </div>
+        </section>
+    }
+
+    @* User's Playlists Section - Only show when authenticated *@
+    @if (_isAuthenticated && (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0)))
+    {
+        <section class="user-playlists-section">
+            <h2 class="section-title">Your Playlists</h2>
             <div class="playlists-page-grid">
                 @if (_recommendedPlaylist.Any())
                 {
@@ -38,51 +107,80 @@
                         CssClass="liked-songs-playlist-card"
                         OnPlay="@PlayLikedSongsPlaylist" />
                 }
-
-                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" style="width: 200px;height: 200px" autoplay loop></dotlottie-wc>
             </div>
-        </div>
+        </section>
     }
     else if (_isAuthenticated && _loadingRecommendations)
     {
-        <div class="recommended-playlist-section">
-            <h2>Your Playlists</h2>
-            <p>Loading...</p>
-        </div>
+        <section class="user-playlists-section">
+            <h2 class="section-title">Your Playlists</h2>
+            <p class="loading-text">Loading your personalized content...</p>
+        </section>
     }
-    else if (!_isAuthenticated)
-    {
-        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" style="width: 200px;height: 200px" autoplay loop></dotlottie-wc>
-    }
-    
-    <div class="featured-music-section">
+
+    @* Featured Music Section *@
+    <section class="featured-music-section">
         <div class="featured-music-header">
-            <h2>Featured Music</h2>
-            <a href="/music-library" class="music-library-link">View All</a>
+            <h2 class="section-title">Featured Music</h2>
+            <a href="/music-library" class="music-library-link">
+                View All
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                </svg>
+            </a>
         </div>
+        <p class="section-subtitle">Listen to samples from our collection. Subscribe for unlimited access!</p>
         <MusicLibrary ShowHomePageFeatured="true" />
-    </div>
-    
+    </section>
+
+    @* Subscription CTA Section - Only show to non-subscribers *@
     @if (!_hasActiveSubscription)
     {
-        <div class="subscription-offer">
-            <SfCard>
-                <CardHeader Title="Unlimited Music Streaming" />
-                <CardContent>
-                    <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
-                    <p>Get unlimited access to all music on our platform.</p>
-                    <ul>
-                        <li>Stream any song, anytime</li>
-                        <li>No ads or interruptions</li>
-                        <li>Cancel anytime</li>
-                    </ul>
-                </CardContent>
-                <CardFooter>
-                    <SfButton OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))" CssClass="e-btn e-primary">
-                        Sign Up for Monthly Subscription
+        <section class="subscription-cta-section">
+            <div class="subscription-cta-content">
+                <h2>Ready to unlock unlimited music?</h2>
+                <p class="subscription-price-highlight">
+                    Just <span class="price">$@_subscriptionPrice</span> per month
+                </p>
+                <ul class="subscription-benefits">
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Full-length streaming of all songs
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Create unlimited playlists
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Personalized recommendations
+                    </li>
+                    <li>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        No ads, no interruptions
+                    </li>
+                </ul>
+                @if (!_isAuthenticated)
+                {
+                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/Account/Register"))">
+                        Get Started Free
                     </SfButton>
-                </CardFooter>
-            </SfCard>
-        </div>
+                }
+                else
+                {
+                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                        Subscribe Now
+                    </SfButton>
+                }
+            </div>
+        </section>
     }
 </div>

@@ -303,4 +303,134 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+
+    /* Hero Section - MD Breakpoint */
+    .hero-section {
+        gap: 1.5rem;
+        padding: 1.5rem 0;
+    }
+
+    .hero-title {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        max-width: 400px;
+        margin-bottom: 1.5rem;
+    }
+
+    .hero-cta {
+        gap: 0.875rem;
+    }
+
+    .cta-primary,
+    .cta-secondary {
+        padding: 12px 24px;
+        font-size: 0.95rem;
+    }
+
+    .cta-large {
+        padding: 14px 36px;
+        font-size: 1rem;
+    }
+
+    .hero-animation {
+        width: 220px;
+        height: 220px;
+    }
+
+    /* Features Section - MD Breakpoint */
+    .features-section {
+        padding: 2.5rem 0;
+    }
+
+    .features-section .section-title {
+        font-size: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .features-grid {
+        gap: 1.25rem;
+    }
+
+    .feature-card {
+        padding: 1.5rem;
+    }
+
+    .feature-icon {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 1rem;
+    }
+
+    .feature-icon svg {
+        width: 36px;
+        height: 36px;
+    }
+
+    .feature-card h3 {
+        font-size: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .feature-card p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* User Playlists Section - MD Breakpoint */
+    .user-playlists-section {
+        gap: 1rem;
+        padding: 1.5rem 0;
+    }
+
+    .user-playlists-section .section-title {
+        font-size: 1.75rem;
+    }
+
+    /* Featured Music Section - MD Breakpoint */
+    .featured-music-section {
+        padding: 1.5rem 0;
+    }
+
+    .featured-music-section .section-title {
+        font-size: 1.75rem;
+    }
+
+    .featured-music-section .section-subtitle {
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Subscription CTA Section - MD Breakpoint */
+    .subscription-cta-section {
+        padding: 3rem 2rem;
+        margin: 2rem 0;
+    }
+
+    .subscription-cta-content h2 {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .subscription-price-highlight {
+        font-size: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .subscription-price-highlight .price {
+        font-size: 2.5rem;
+    }
+
+    .subscription-benefits {
+        margin-bottom: 1.5rem;
+    }
+
+    .subscription-benefits li {
+        font-size: 1rem;
+        gap: 10px;
+        margin-bottom: 0.75rem;
+    }
 }

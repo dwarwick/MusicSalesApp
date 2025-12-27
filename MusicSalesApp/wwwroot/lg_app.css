@@ -308,4 +308,129 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+
+    /* Hero Section - LG Breakpoint */
+    .hero-section {
+        gap: 2rem;
+        padding: 2rem 0;
+    }
+
+    .hero-title {
+        font-size: 3.5rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1.125rem;
+        max-width: 450px;
+        margin-bottom: 1.75rem;
+    }
+
+    .hero-cta {
+        gap: 1rem;
+    }
+
+    .cta-primary,
+    .cta-secondary {
+        padding: 12px 28px;
+        font-size: 1rem;
+    }
+
+    .cta-large {
+        padding: 14px 40px;
+        font-size: 1rem;
+    }
+
+    .hero-animation {
+        width: 260px;
+        height: 260px;
+    }
+
+    /* Features Section - LG Breakpoint */
+    .features-section {
+        padding: 3rem 0;
+    }
+
+    .features-section .section-title {
+        font-size: 2.25rem;
+        margin-bottom: 2.5rem;
+    }
+
+    .features-grid {
+        gap: 1.5rem;
+    }
+
+    .feature-card {
+        padding: 1.75rem;
+    }
+
+    .feature-icon {
+        width: 72px;
+        height: 72px;
+        margin-bottom: 1.25rem;
+    }
+
+    .feature-card h3 {
+        font-size: 1.375rem;
+        margin-bottom: 0.875rem;
+    }
+
+    .feature-card p {
+        font-size: 0.95rem;
+        margin: 0;
+    }
+
+    /* User Playlists Section - LG Breakpoint */
+    .user-playlists-section {
+        gap: 1.25rem;
+        padding: 1.75rem 0;
+    }
+
+    .user-playlists-section .section-title {
+        font-size: 1.875rem;
+    }
+
+    /* Featured Music Section - LG Breakpoint */
+    .featured-music-section {
+        padding: 1.75rem 0;
+    }
+
+    .featured-music-section .section-title {
+        font-size: 1.875rem;
+    }
+
+    .featured-music-section .section-subtitle {
+        font-size: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    /* Subscription CTA Section - LG Breakpoint */
+    .subscription-cta-section {
+        padding: 3.5rem;
+        margin: 2.5rem 0;
+    }
+
+    .subscription-cta-content h2 {
+        font-size: 2.25rem;
+        margin-bottom: 0.875rem;
+    }
+
+    .subscription-price-highlight {
+        font-size: 1.375rem;
+        margin-bottom: 1.75rem;
+    }
+
+    .subscription-price-highlight .price {
+        font-size: 2.75rem;
+    }
+
+    .subscription-benefits {
+        margin-bottom: 1.75rem;
+    }
+
+    .subscription-benefits li {
+        font-size: 1.0625rem;
+        gap: 12px;
+        margin-bottom: 0.875rem;
+    }
 }
