@@ -297,4 +297,10 @@
         width: calc(100vw / 3.2 - 24px);
         min-width: 200px;
     }
+
+    .home-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
 }
