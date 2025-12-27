@@ -293,7 +293,8 @@
     }
 
     .featured-music-carousel .music-card {
-        width: calc(30vw - 20px); /* ~3.2 cards visible */
+        /* 3.2 cards visible: 100vw / 3.2 ≈ 31.25vw per card */
+        width: calc(100vw / 3.2 - 24px);
         min-width: 200px;
     }
 }

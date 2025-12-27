@@ -179,8 +179,9 @@
     }
 
     .featured-music-carousel .music-card {
-        width: calc(45vw - 24px); /* ~2.2 cards visible */
-        min-width: calc(45vw - 24px);
+        /* 2.2 cards visible: 100vw / 2.2 ≈ 45.45vw per card */
+        width: calc(100vw / 2.2 - 24px);
+        min-width: calc(100vw / 2.2 - 24px);
     }
 
     .music-card { padding: 12px; }
