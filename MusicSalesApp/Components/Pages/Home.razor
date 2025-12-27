@@ -39,7 +39,7 @@
                         OnPlay="@PlayLikedSongsPlaylist" />
                 }
 
-                <dotlottie-wc src="https://lottie.host/e510a49a-d29d-4d58-a38f-af302f80403a/wjhxg9OE35.lottie" style="width: 300px;height: 300px" autoplay loop></dotlottie-wc>
+                <dotlottie-wc src="https://lottie.host/e510a49a-d29d-4d58-a38f-af302f80403a/wjhxg9OE35.lottie" style="width: 200px;height: 200px" autoplay loop></dotlottie-wc>
             </div>
         </div>
     }
@@ -49,6 +49,10 @@
             <h2>Your Playlists</h2>
             <p>Loading...</p>
         </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <dotlottie-wc src="https://lottie.host/e510a49a-d29d-4d58-a38f-af302f80403a/wjhxg9OE35.lottie" style="width: 200px;height: 200px" autoplay loop></dotlottie-wc>
     }
     
     <div class="featured-music-section">
