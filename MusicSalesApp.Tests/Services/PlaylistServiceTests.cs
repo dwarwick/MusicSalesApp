@@ -871,4 +871,48 @@ public class LikedSongsPlaylistTests
         Assert.That(likedSongIds, Contains.Item(song2.Id));
         Assert.That(likedSongIds, Does.Not.Contain(song3.Id));
     }
+
+    [Test]
+    public async Task SyncLikedSongsPlaylistAsync_AddsNonOwnedSongs_ForUserWithoutSubscription()
+    {
+        // Arrange
+        var userId = 1;
+
+        // Setup subscription service to return false (no subscription)
+        _mockSubscriptionService
+            .Setup(s => s.HasActiveSubscriptionAsync(userId))
+            .ReturnsAsync(false);
+
+        // Create song metadata that user does NOT own
+        var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
+        var song2 = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
+        await _context.SongMetadata.AddRangeAsync(song1, song2);
+        await _context.SaveChangesAsync();
+
+        // User likes song1 but does NOT own it
+        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
+
+        // Act - Sync should work even without subscription
+        await _playlistService.SyncLikedSongsPlaylistAsync(userId);
+
+        // Assert
+        var playlist = await _context.Playlists
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated);
+        Assert.That(playlist, Is.Not.Null, "Liked Songs playlist should be created");
+
+        var playlistSongs = await _context.UserPlaylists
+            .Include(up => up.OwnedSong)
+            .Where(up => up.PlaylistId == playlist.Id)
+            .ToListAsync();
+
+        // The song should be added to the playlist even though user doesn't own it
+        Assert.That(playlistSongs, Has.Count.EqualTo(1), "Non-owned liked song should be in playlist");
+        Assert.That(playlistSongs[0].OwnedSong.SongMetadataId, Is.EqualTo(song1.Id));
+        
+        // Verify a virtual OwnedSong record was created
+        var virtualOwnedSong = await _context.OwnedSongs
+            .FirstOrDefaultAsync(os => os.UserId == userId && os.SongMetadataId == song1.Id);
+        Assert.That(virtualOwnedSong, Is.Not.Null, "Virtual OwnedSong record should be created");
+        Assert.That(virtualOwnedSong.PayPalOrderId, Is.Null, "PayPalOrderId should be null for non-purchased song");
+    }
 }

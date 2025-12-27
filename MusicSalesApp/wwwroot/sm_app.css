@@ -355,6 +355,13 @@
             fill: #b3b3b3;
         }
 
+    /* Track preview badge - smaller on SM screens */
+    .track-preview-badge {
+        font-size: 9px;
+        padding: 2px 5px;
+        margin-left: 6px;
+    }
+
     /* Stream Count on Card */
     .card-stream-count {
         display: flex;

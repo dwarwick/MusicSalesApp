@@ -405,11 +405,11 @@ public class PlaylistService : IPlaylistService
                         if (string.IsNullOrEmpty(metadata.Mp3BlobPath))
                             continue;
                             
-                        var fileName = Path.GetFileName(metadata.Mp3BlobPath);
+                        // Use full Mp3BlobPath to match how purchased songs are stored
                         var newOwnedSong = new OwnedSong
                         {
                             UserId = userId,
-                            SongFileName = fileName,
+                            SongFileName = metadata.Mp3BlobPath,
                             SongMetadataId = metadata.Id,
                             SongMetadata = metadata,
                             PurchasedAt = DateTime.UtcNow,
@@ -509,9 +509,6 @@ public class PlaylistService : IPlaylistService
                             !likedSongMetadataIds.Contains(up.OwnedSong.SongMetadataId.Value))
                 .ToList();
 
-            // Check subscription status to determine if we can create virtual OwnedSong records
-            var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId);
-
             // Get all existing OwnedSong records for this user to avoid creating duplicates
             var existingOwnedSongs = await context.OwnedSongs
                 .Where(os => os.UserId == userId && os.SongMetadataId != null)
@@ -533,40 +530,34 @@ public class PlaylistService : IPlaylistService
                 }
                 else
                 {
-                    // User doesn't own the song - only create virtual ownership if they have an active subscription
-                    if (hasActiveSubscription)
+                    // User doesn't own the song - create a virtual OwnedSong record for the Liked Songs playlist
+                    // The Liked Songs playlist should contain all songs the user has liked, regardless of ownership
+                    
+                    // Get the song metadata
+                    var songMetadata = await context.SongMetadata.FindAsync(songMetadataId);
+                    if (songMetadata == null || string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
                     {
-                        // Get the song metadata
-                        var songMetadata = await context.SongMetadata.FindAsync(songMetadataId);
-                        if (songMetadata == null || string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
-                        {
-                            _logger.LogWarning("Cannot add song {SongMetadataId} to Liked Songs - metadata not found or no MP3", songMetadataId);
-                            continue;
-                        }
-
-                        // Create a virtual OwnedSong record (subscription access)
-                        var fileName = Path.GetFileName(songMetadata.Mp3BlobPath);
-                        ownedSong = new OwnedSong
-                        {
-                            UserId = userId,
-                            SongFileName = fileName,
-                            SongMetadataId = songMetadataId,
-                            PurchasedAt = DateTime.UtcNow,
-                            PayPalOrderId = null // Null = subscription access
-                        };
-
-                        context.OwnedSongs.Add(ownedSong);
-                        await context.SaveChangesAsync(); // Save to get the ID
-
-                        // Cache it for future iterations
-                        existingOwnedSongsByMetadata[songMetadataId] = ownedSong;
-                    }
-                    else
-                    {
-                        // User doesn't own the song and has no subscription - skip it
-                        _logger.LogInformation("Skipping song {SongMetadataId} for Liked Songs - user doesn't own it and has no subscription", songMetadataId);
+                        _logger.LogWarning("Cannot add song {SongMetadataId} to Liked Songs - metadata not found or no MP3", songMetadataId);
                         continue;
                     }
+
+                    // Create a virtual OwnedSong record for the liked song
+                    // PayPalOrderId = null indicates this is not a purchased song
+                    // Use the full Mp3BlobPath to match how purchased songs are stored
+                    ownedSong = new OwnedSong
+                    {
+                        UserId = userId,
+                        SongFileName = songMetadata.Mp3BlobPath,
+                        SongMetadataId = songMetadataId,
+                        PurchasedAt = DateTime.UtcNow,
+                        PayPalOrderId = null // Null = not purchased
+                    };
+
+                    context.OwnedSongs.Add(ownedSong);
+                    await context.SaveChangesAsync(); // Save to get the ID
+
+                    // Cache it for future iterations
+                    existingOwnedSongsByMetadata[songMetadataId] = ownedSong;
                 }
 
                 // Add to the playlist if not already there

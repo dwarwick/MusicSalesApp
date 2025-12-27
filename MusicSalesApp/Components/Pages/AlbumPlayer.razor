@@ -210,6 +210,10 @@
                             <td class="track-title-cell">
                                 <div class="track-title-content">
                                     <span class="track-name @(isCurrentTrack ? "playing" : "")">@GetTrackTitle(index)</span>
+                                    @if (IsTrackRestricted(index))
+                                    {
+                                        <span class="track-preview-badge">Preview</span>
+                                    }
                                 </div>
                             </td>
                             <td class="track-streams">@GetTrackStreamCount(index).ToString("N0")</td>
