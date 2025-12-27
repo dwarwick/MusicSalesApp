@@ -2,6 +2,7 @@
   <Folder Name="/Solution Items/">
     <File Path="AGENTS.md" />
     <File Path="COPILOT_INSTRUCTIONS.md" />
+    <File Path="SUPABASE_CONFIG.md" />
   </Folder>
   <Project Path="MusicSalesApp.Common/MusicSalesApp.Common.csproj" />
   <Project Path="MusicSalesApp.ComponentTests/MusicSalesApp.ComponentTests.csproj" />
