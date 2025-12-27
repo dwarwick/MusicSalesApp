@@ -43,6 +43,7 @@ public class AdminSongManagementModel : ComponentBase
     protected decimal? _editSongPrice = null;
     protected string _editGenre = string.Empty;
     protected int? _editTrackNumber = null;
+    protected bool _editDisplayOnHomePage = false;
     protected IBrowserFile _songImageFile = null;
     protected IBrowserFile _albumImageFile = null;
     protected List<string> _validationErrors = new();
@@ -105,6 +106,7 @@ public class AdminSongManagementModel : ComponentBase
             Genre = m.Genre ?? string.Empty,
             TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
+            DisplayOnHomePage = m.DisplayOnHomePage,
             HasAlbumCover = m.IsAlbumCover
         }).ToList();
     }
@@ -139,6 +141,7 @@ public class AdminSongManagementModel : ComponentBase
         _editSongPrice = song.SongPrice;
         _editGenre = song.Genre;
         _editTrackNumber = song.TrackNumber;
+        _editDisplayOnHomePage = song.DisplayOnHomePage;
         _songImageFile = null;
         _albumImageFile = null;
         _validationErrors.Clear();
@@ -352,6 +355,9 @@ public class AdminSongManagementModel : ComponentBase
                 var isAlbumCover = metadata.IsAlbumCover;
                 var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
 
+                // Update DisplayOnHomePage for all file types
+                metadata.DisplayOnHomePage = _editDisplayOnHomePage;
+
                 // Update album cover metadata
                 if (isAlbumCover)
                 {
@@ -391,6 +397,7 @@ public class AdminSongManagementModel : ComponentBase
             _editingSong.SongPrice = _editSongPrice;
             _editingSong.Genre = _editGenre;
             _editingSong.TrackNumber = _editTrackNumber;
+            _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
 
             // Close modal and refresh
             _showEditModal = false;

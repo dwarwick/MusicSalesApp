@@ -88,4 +88,9 @@ public class SongMetadata
     /// The number of times this song has been streamed (played for at least 30 seconds)
     /// </summary>
     public int NumberOfStreams { get; set; }
+
+    /// <summary>
+    /// Indicates whether this song or album should be displayed on the home page
+    /// </summary>
+    public bool DisplayOnHomePage { get; set; }
 }

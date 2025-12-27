@@ -3,9 +3,12 @@
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
 
-<h3>Music Library</h3>
+@if (!ShowHomePageFeatured)
+{
+    <h3>Music Library</h3>
+}
 
-@if (!_hasActiveSubscription)
+@if (!_hasActiveSubscription && !ShowHomePageFeatured)
 {
     <AuthorizeView>
         <Authorized>

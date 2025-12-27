@@ -213,6 +213,21 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.DisplayOnHomePage)" HeaderText="Home Page" Width="100">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.DisplayOnHomePage)
+                            {
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
             </GridColumns>
         </SfGrid>
 
@@ -366,6 +381,12 @@ else
                             {
                                 <p class="text-muted">N/A (Not an album)</p>
                             }
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <SfCheckBox @bind-Checked="_editDisplayOnHomePage" Label="Display on Home Page" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
                 </div>
