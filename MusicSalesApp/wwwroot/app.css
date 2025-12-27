@@ -137,6 +137,31 @@ h1:focus {
     width: 100%;
 }
 
+/* Featured Music Header - flexbox layout for title and link */
+.featured-music-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.featured-music-header h2 {
+    margin: 0;
+}
+
+.music-library-link {
+    color: #1db954;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: color 0.2s ease;
+}
+
+.music-library-link:hover {
+    color: #1ed760;
+    text-decoration: underline;
+}
+
 /* Featured Music Carousel - horizontal scrolling container */
 .featured-music-carousel {
     display: flex;
