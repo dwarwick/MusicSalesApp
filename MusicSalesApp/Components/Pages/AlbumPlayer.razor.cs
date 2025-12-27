@@ -519,9 +519,16 @@ namespace MusicSalesApp.Components.Pages
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
 
-                // Since user owns all songs in playlist, mark as owned
-                _ownsAlbum = true;
-                _ownedSongs = new HashSet<string>(tracks.Select(t => t.Name));
+                // Check subscription status and actual ownership
+                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+
+                // Get the list of songs the user actually owns (purchased)
+                var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
+                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
+                
+                // Check if user owns all tracks in the playlist
+                _ownsAlbum = tracks.All(t => _ownedSongs.Contains(t.Name));
             }
             catch (Exception ex)
             {
@@ -753,16 +760,25 @@ namespace MusicSalesApp.Components.Pages
         }
 
         /// <summary>
-        /// Checks if the current track should be restricted (60 second preview).
-        /// Restricted for non-authenticated users OR authenticated users who don't own the current track and don't have an active subscription.
+        /// Checks if a specific track should be restricted (60 second preview).
+        /// Restricted for non-authenticated users OR authenticated users who don't own the track and don't have an active subscription.
         /// </summary>
-        protected bool IsCurrentTrackRestricted()
+        protected bool IsTrackRestricted(int trackIndex)
         {
             // If user has an active subscription, they can listen to everything
             if (_hasActiveSubscription)
                 return false;
 
-            return !_isAuthenticated || !OwnsTrack(_currentTrackIndex);
+            return !_isAuthenticated || !OwnsTrack(trackIndex);
+        }
+
+        /// <summary>
+        /// Checks if the current track should be restricted (60 second preview).
+        /// Restricted for non-authenticated users OR authenticated users who don't own the current track and don't have an active subscription.
+        /// </summary>
+        protected bool IsCurrentTrackRestricted()
+        {
+            return IsTrackRestricted(_currentTrackIndex);
         }
 
         protected bool IsProgressBarRestricted()
