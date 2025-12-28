@@ -18,6 +18,19 @@ public partial class HomeModel : BlazorBase, IDisposable
     private bool _isDisposed;
     private bool _hasLoadedData = false;
 
+    /// <summary>
+    /// Determines if the user has any playlists to show (recommended or liked songs).
+    /// Used to conditionally render the user playlists section.
+    /// </summary>
+    protected bool HasUserPlaylists => _isAuthenticated && 
+        (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0));
+
+    /// <summary>
+    /// Determines if the liked songs playlist should be shown.
+    /// Only shows when user has the playlist and it contains songs.
+    /// </summary>
+    protected bool HasLikedSongsToShow => _likedSongsPlaylist != null && _likedSongsCount > 0;
+
     protected override void OnInitialized()
     {
         _subscriptionPrice = Configuration["PayPal:SubscriptionPrice"] ?? "3.99";
