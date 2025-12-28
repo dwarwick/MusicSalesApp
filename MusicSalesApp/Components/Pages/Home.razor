@@ -22,10 +22,10 @@
             @if (!_isAuthenticated)
             {
                 <div class="hero-cta">
-                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/Account/Register"))">
-                        Start Free Trial
+                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                        Sign Up
                     </SfButton>
-                    <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/Account/Login"))">
+                    <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
                         Sign In
                     </SfButton>
                 </div>
@@ -170,7 +170,7 @@
                 </ul>
                 @if (!_isAuthenticated)
                 {
-                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/Account/Register"))">
+                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
                         Get Started Free
                     </SfButton>
                 }
