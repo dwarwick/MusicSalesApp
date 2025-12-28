@@ -33,7 +33,8 @@ public partial class HomeModel : BlazorBase, IDisposable
 
     protected override void OnInitialized()
     {
-        _subscriptionPrice = Configuration["PayPal:SubscriptionPrice"] ?? "3.99";
+        // Default price - will be updated from database in OnAfterRenderAsync
+        _subscriptionPrice = "3.99";
         AuthenticationStateProvider.AuthenticationStateChanged += HandleAuthenticationStateChanged;
     }
 
@@ -48,6 +49,9 @@ public partial class HomeModel : BlazorBase, IDisposable
         }
 
         _hasLoadedData = true;
+        
+        // Load subscription price from database for all users (authenticated or not)
+        await LoadSubscriptionPriceAsync();
         
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User?.Identity?.IsAuthenticated == true)
@@ -117,6 +121,20 @@ public partial class HomeModel : BlazorBase, IDisposable
         finally
         {
             _subscriptionStatusChecked = true;
+        }
+    }
+
+    private async Task LoadSubscriptionPriceAsync()
+    {
+        try
+        {
+            var price = await AppSettingsService.GetSubscriptionPriceAsync();
+            _subscriptionPrice = price.ToString("F2");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load subscription price from database.");
+            // Keep the default value
         }
     }
 
