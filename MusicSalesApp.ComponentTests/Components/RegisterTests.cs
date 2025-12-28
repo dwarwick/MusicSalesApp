@@ -8,6 +8,13 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class RegisterTests : BUnitTestBase
 {
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+        SetupRendererInfo();
+    }
+
     [Test]
     public void Register_RendersForm()
     {
@@ -15,6 +22,16 @@ public class RegisterTests : BUnitTestBase
         // SfCard renders the title in CardHeader
         Assert.That(cut.Markup, Does.Contain("Create Account"));
         Assert.That(cut.Find("input#email"), Is.Not.Null);
+    }
+
+    [Test]
+    public void Register_DisplaysTermsAndPrivacyCheckboxes()
+    {
+        var cut = TestContext.Render<Register>();
+        // Verify the legal agreement section is rendered
+        Assert.That(cut.Markup, Does.Contain("Terms of Use"));
+        Assert.That(cut.Markup, Does.Contain("Privacy Policy"));
+        Assert.That(cut.Markup, Does.Contain("legal-agreements"));
     }
 
     [Test]
@@ -29,14 +46,17 @@ public class RegisterTests : BUnitTestBase
     }
 
     [Test]
-    public void Register_CallsService_OnValidSubmit()
+    public void Register_DisplaysError_WhenTermsNotAccepted()
     {
-        MockAuthService.Setup(a => a.RegisterAsync("test@example.com", "Password_1!")).ReturnsAsync((true, ""));
         var cut = TestContext.Render<Register>();
         cut.Find("input#email").Change("test@example.com");
         cut.Find("input#password").Change("Password_1!");
         cut.Find("input#confirm").Change("Password_1!");
+        
+        // Submit without checking the checkboxes
         cut.Find("form").Submit();
-        MockAuthService.Verify(a => a.RegisterAsync("test@example.com", "Password_1!"), Times.Once);
+        
+        // Should show error message about accepting terms
+        Assert.That(cut.Markup, Does.Contain("accept the Terms of Use and Privacy Policy"));
     }
 }

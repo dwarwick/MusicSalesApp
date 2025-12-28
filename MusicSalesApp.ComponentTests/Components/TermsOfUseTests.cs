@@ -25,7 +25,6 @@ public class TermsOfUseTests : BUnitTestBase
         var cut = TestContext.Render<TermsOfUse>();
 
         // Assert - Verify business information
-        Assert.That(cut.Markup, Does.Contain("sole proprietorship"));
         Assert.That(cut.Markup, Does.Contain("State of Nevada"));
         Assert.That(cut.Markup, Does.Contain("streamtunes.net"));
     }

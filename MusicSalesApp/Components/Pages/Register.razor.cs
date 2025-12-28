@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
+using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -23,6 +24,17 @@ public partial class RegisterModel : BlazorBase, IDisposable
 
     public string NewEmail { get; set; } = string.Empty;
 
+    // Legal agreement checkboxes
+    public bool AcceptTermsOfUse { get; set; } = false;
+    public bool AcceptPrivacyPolicy { get; set; } = false;
+
+    // Computed property to check if user can register
+    protected bool CanRegister => AcceptTermsOfUse && AcceptPrivacyPolicy;
+
+    // Dialog references
+    protected SfDialog _termsDialog = default!;
+    protected SfDialog _privacyDialog = default!;
+
     protected string errorMessage = string.Empty;
     protected string successMessage = string.Empty;
     protected string infoMessage = string.Empty;
@@ -30,7 +42,7 @@ public partial class RegisterModel : BlazorBase, IDisposable
     protected bool showVerificationSection = false;
     protected bool canResendEmail = false;
     protected int secondsRemaining = 0;
-    private System.Timers.Timer countdownTimer;
+    private System.Timers.Timer countdownTimer = null!;
     private bool disposed = false;
 
     protected override async Task OnInitializedAsync()
@@ -68,6 +80,26 @@ public partial class RegisterModel : BlazorBase, IDisposable
         }
     }
 
+    protected async Task ShowTermsOfUse()
+    {
+        await _termsDialog.ShowAsync();
+    }
+
+    protected async Task CloseTermsDialog()
+    {
+        await _termsDialog.HideAsync();
+    }
+
+    protected async Task ShowPrivacyPolicy()
+    {
+        await _privacyDialog.ShowAsync();
+    }
+
+    protected async Task ClosePrivacyDialog()
+    {
+        await _privacyDialog.HideAsync();
+    }
+
     protected async Task HandleSubmit(EditContext context)
     {
         errorMessage = string.Empty;
@@ -91,6 +123,11 @@ public partial class RegisterModel : BlazorBase, IDisposable
             if (Password != ConfirmPassword)
             {
                 errorMessage = "Passwords do not match";
+                return;
+            }
+            if (!AcceptTermsOfUse || !AcceptPrivacyPolicy)
+            {
+                errorMessage = "You must accept the Terms of Use and Privacy Policy to register";
                 return;
             }
             // Call registration service
@@ -280,3 +317,4 @@ public partial class RegisterModel : BlazorBase, IDisposable
         }
     }
 }
+
