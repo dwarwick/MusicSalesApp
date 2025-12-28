@@ -100,7 +100,7 @@ public class ForgotPasswordTests : BUnitTestBase
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Check Your Email"));
-        Assert.That(cut.Markup, Does.Contain("15 minutes"));
+        Assert.That(cut.Markup, Does.Contain("10 minutes"));
         Assert.That(cut.Markup, Does.Contain("Return to Login"));
     }
 

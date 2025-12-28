@@ -84,10 +84,10 @@ try
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-    // Configure token lifespan to 15 minutes (for both email confirmation and password reset)
+    // Configure token lifespan to 10 minutes (for both email confirmation and password reset)
     builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
     {
-        options.TokenLifespan = TimeSpan.FromMinutes(15);
+        options.TokenLifespan = TimeSpan.FromMinutes(10);
     });
 
     builder.Services.ConfigureApplicationCookie(options =>

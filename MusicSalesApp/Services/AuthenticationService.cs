@@ -422,15 +422,13 @@ public class AuthenticationService : IAuthenticationService
                 return (false, "Invalid reset link.");
             }
 
-            // URL-decode the token
-            var decodedToken = HttpUtility.UrlDecode(token);
-            
-            // Verify the token is valid
+            // Token is already URL-decoded by ASP.NET Core when received from query string
+            // Verify the token is valid using the password reset token provider
             var isValid = await _userManager.VerifyUserTokenAsync(
                 user, 
                 _userManager.Options.Tokens.PasswordResetTokenProvider, 
                 "ResetPassword", 
-                decodedToken);
+                token);
 
             if (!isValid)
             {
@@ -463,10 +461,8 @@ public class AuthenticationService : IAuthenticationService
                 return (false, "Invalid reset link.");
             }
 
-            // URL-decode the token
-            var decodedToken = HttpUtility.UrlDecode(token);
-
-            var result = await _userManager.ResetPasswordAsync(user, decodedToken, newPassword);
+            // Token is already URL-decoded by ASP.NET Core when received from query string
+            var result = await _userManager.ResetPasswordAsync(user, token, newPassword);
             if (!result.Succeeded)
             {
                 var errors = string.Join("; ", result.Errors.Select(e => e.Description));

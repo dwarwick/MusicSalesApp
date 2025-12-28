@@ -93,7 +93,7 @@ namespace MusicSalesApp.Services
                 <h2>Reset Your Password</h2>
                 <p>You requested a password reset. Please click the link below to reset your password:</p>
                 <p><a href='{tokenUrl}' style='display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
-                <p style='color: #666; font-size: 14px;'>This link will expire in <strong>15 minutes</strong>.</p>
+                <p style='color: #666; font-size: 14px;'>This link will expire in <strong>10 minutes</strong>.</p>
                 <p>If you didn't request a password reset, please ignore this email.</p>
                 ";
 
