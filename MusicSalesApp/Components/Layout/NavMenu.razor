@@ -15,8 +15,8 @@
     {
         <img src="images/logo-light-small.png" alt="Website Logo" class="app-logo" />
     }
-    
-    <AppBarSpacer></AppBarSpacer>    
+
+    <AppBarSpacer></AppBarSpacer>
     <div class="theme-switcher">
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
@@ -38,14 +38,12 @@
            @bind-IsOpen="_isMenuOpen"
            Width="180px"
            Type="SidebarType.Over"
-           Position="SidebarPosition.Left" 
+           Position="SidebarPosition.Left"
            CloseOnDocumentClick="true">
     <ChildContent>
-
-
-        <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical" >
+        <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical">
             <MenuItems>
-                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>                
+                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
                 <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
                 <AuthorizeView Policy="@Permissions.ValidatedUser">
@@ -76,9 +74,10 @@
                         <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>
                     </NotAuthorized>
                 </AuthorizeView>
-                
+
                 <MenuItem Separator="true"></MenuItem>
                 <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="fas fa-file-contract"></MenuItem>
+                <MenuItem Url="mailto:customerservice@streamtunes.net" Text="Contact Us" IconCss="fas fa-solid fa-paper-plane"></MenuItem>
             </MenuItems>
             <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
         </SfMenu>
