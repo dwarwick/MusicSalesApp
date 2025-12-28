@@ -14,8 +14,25 @@ public partial class VerifyEmailModel : BlazorBase
     protected bool isLoading = true;
     protected bool isSuccess = false;
     protected string errorMessage = string.Empty;
+    private bool _hasLoadedData = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                await VerifyEmailAndSendWelcomeAsync();
+            }
+            finally
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task VerifyEmailAndSendWelcomeAsync()
     {
         if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(Token))
         {
