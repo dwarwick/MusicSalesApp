@@ -208,22 +208,20 @@ public partial class ManageAccountModel : BlazorBase
                 var userEmail = _currentUser.Email;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
-                    var baseUrl = NavigationManager.BaseUri;
-                    var userName = _currentUser.UserName ?? userEmail;
-                    _ = Task.Run(async () =>
+                    try
                     {
-                        try
-                        {
-                            await AccountEmailService.SendPasswordChangedEmailAsync(
-                                userEmail,
-                                userName,
-                                baseUrl);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogError(ex, "Failed to send password changed email to user {UserId}", _currentUser.Id);
-                        }
-                    });
+                        var baseUrl = NavigationManager.BaseUri;
+                        var userName = _currentUser.UserName ?? userEmail;
+                        await AccountEmailService.SendPasswordChangedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send password changed email to user {UserId}", _currentUser.Id);
+                        // Don't fail the password change if email sending fails
+                    }
                 }
             }
             else
@@ -407,22 +405,20 @@ public partial class ManageAccountModel : BlazorBase
                 var userEmail = _currentUser.Email;
                 if (!string.IsNullOrEmpty(userEmail))
                 {
-                    var baseUrl = NavigationManager.BaseUri;
-                    var userName = _currentUser.UserName ?? userEmail;
-                    _ = Task.Run(async () =>
+                    try
                     {
-                        try
-                        {
-                            await AccountEmailService.SendAccountClosedEmailAsync(
-                                userEmail,
-                                userName,
-                                baseUrl);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogError(ex, "Failed to send account suspended email to user {UserId}", _currentUser.Id);
-                        }
-                    });
+                        var baseUrl = NavigationManager.BaseUri;
+                        var userName = _currentUser.UserName ?? userEmail;
+                        await AccountEmailService.SendAccountClosedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account suspended email to user {UserId}", _currentUser.Id);
+                        // Don't fail the suspension if email sending fails
+                    }
                 }
                 
                 await CloseSuspendAccountDialog();
@@ -475,20 +471,18 @@ public partial class ManageAccountModel : BlazorBase
                 // Send account deleted email notification (only if email is available)
                 if (!string.IsNullOrEmpty(userEmail))
                 {
-                    _ = Task.Run(async () =>
+                    try
                     {
-                        try
-                        {
-                            await AccountEmailService.SendAccountDeletedEmailAsync(
-                                userEmail,
-                                userName,
-                                baseUrl);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.LogError(ex, "Failed to send account deleted email");
-                        }
-                    });
+                        await AccountEmailService.SendAccountDeletedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account deleted email");
+                        // Don't fail the deletion if email sending fails
+                    }
                 }
                 
                 await CloseDeleteAccountDialog();

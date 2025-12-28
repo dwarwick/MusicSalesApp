@@ -176,9 +176,6 @@ public class AdminUserManagementModel : BlazorBase
                 return;
             }
 
-            // Track if account is being reactivated (was suspended, now un-suspended)
-            var wasReactivated = user.IsSuspended && !_editIsSuspended;
-
             // Update user properties
             user.Email = _editEmail;
             user.NormalizedEmail = _editEmail.ToUpperInvariant();
@@ -211,25 +208,6 @@ public class AdminUserManagementModel : BlazorBase
             }
 
             await context.SaveChangesAsync();
-
-            // Send reactivation email if account was un-suspended
-            if (wasReactivated && !string.IsNullOrEmpty(_editEmail))
-            {
-                try
-                {
-                    var baseUrl = NavigationManager.BaseUri;
-                    var userName = user.UserName ?? _editEmail;
-                    await AccountEmailService.SendAccountReactivatedEmailAsync(
-                        _editEmail,
-                        userName,
-                        baseUrl);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to send account reactivated email to user {UserId}", user.Id);
-                    // Don't throw - email failure shouldn't fail the save operation
-                }
-            }
 
             // Update local model
             _editingUser.Email = _editEmail;

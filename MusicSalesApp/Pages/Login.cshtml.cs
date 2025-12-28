@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
+using MusicSalesApp.Services;
 using System.Web;
 
 namespace MusicSalesApp.Pages;
@@ -12,15 +13,18 @@ public class LoginPageModel : PageModel
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<LoginPageModel> _logger;
+    private readonly IAccountEmailService _accountEmailService;
 
     public LoginPageModel(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        ILogger<LoginPageModel> logger)
+        ILogger<LoginPageModel> logger,
+        IAccountEmailService accountEmailService)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _logger = logger;
+        _accountEmailService = accountEmailService;
     }
 
     public async Task<IActionResult> OnPostAsync([FromForm] string username, [FromForm] string password, [FromForm] bool reactivateAccount = false, [FromForm] string returnUrl = "/")
@@ -58,6 +62,25 @@ public class LoginPageModel : PageModel
                 user.SuspendedAt = null;
                 await _userManager.UpdateAsync(user);
                 _logger.LogInformation("Account reactivated for user: {Username}", username);
+
+                // Send account reactivated email notification
+                if (!string.IsNullOrEmpty(user.Email))
+                {
+                    try
+                    {
+                        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                        var userName = user.UserName ?? user.Email;
+                        await _accountEmailService.SendAccountReactivatedEmailAsync(
+                            user.Email,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send account reactivated email to user: {Username}", username);
+                        // Don't fail the login if email sending fails
+                    }
+                }
             }
             else
             {
