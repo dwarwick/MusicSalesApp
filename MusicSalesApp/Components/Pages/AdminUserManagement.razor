@@ -261,20 +261,37 @@ else
                         </div>
                         <div class="col-md-6">
                             <label class="e-label">Theme</label>
-                            <SfTextBox Value="@_editingUser.Theme" Enabled="false" CssClass="e-outline" />
+                            <SfDropDownList TValue="string" TItem="string" 
+                                          @bind-Value="_editTheme" 
+                                          DataSource="@_themeOptions"
+                                          Placeholder="Select Theme"
+                                          CssClass="e-outline">
+                            </SfDropDownList>
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label class="e-label">Roles</label>
-                            <SfMultiSelect TValue="List<string>" TItem="string" 
-                                          @bind-Value="_editSelectedRoles" 
-                                          DataSource="@_availableRoles"
-                                          Placeholder="Select Roles"
-                                          Mode="Syncfusion.Blazor.DropDowns.VisualMode.Box"
+                            <div class="d-flex flex-wrap gap-2 mb-2">
+                                @foreach (var role in _editSelectedRoles)
+                                {
+                                    <span class="badge bg-primary d-flex align-items-center gap-1">
+                                        @role
+                                        <button type="button" class="btn-close btn-close-white" 
+                                                style="font-size: 0.5rem;" 
+                                                @onclick="() => RemoveRole(role)"
+                                                aria-label="Remove @role"></button>
+                                    </span>
+                                }
+                            </div>
+                            <SfDropDownList TValue="string" TItem="string" 
+                                          Value="@_selectedRoleToAdd"
+                                          DataSource="@GetUnassignedRoles()"
+                                          Placeholder="Add Role"
                                           CssClass="e-outline">
-                            </SfMultiSelect>
+                                <DropDownListEvents TValue="string" TItem="string" ValueChange="@OnRoleSelected"></DropDownListEvents>
+                            </SfDropDownList>
                         </div>
                     </div>
                 </div>

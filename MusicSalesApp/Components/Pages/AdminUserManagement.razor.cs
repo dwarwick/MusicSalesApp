@@ -34,8 +34,11 @@ public class AdminUserManagementModel : BlazorBase
     protected bool _editLockoutEnabled = false;
     protected DateTimeOffset? _editLockoutEnd = null;
     protected bool _editIsSuspended = false;
+    protected string _editTheme = string.Empty;
     protected List<string> _editSelectedRoles = new();
     protected List<string> _availableRoles = new();
+    protected string? _selectedRoleToAdd = null;
+    protected List<string> _themeOptions = new() { "Light", "Dark" };
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     private bool _hasLoadedData = false;
@@ -108,9 +111,32 @@ public class AdminUserManagementModel : BlazorBase
         _editLockoutEnabled = user.LockoutEnabled;
         _editLockoutEnd = user.LockoutEnd;
         _editIsSuspended = user.IsSuspended;
+        _editTheme = user.Theme ?? "Light";
         _editSelectedRoles = user.Roles.Split(RolesDelimiter, StringSplitOptions.RemoveEmptyEntries).ToList();
+        _selectedRoleToAdd = null;
         _validationErrors.Clear();
         _showEditModal = true;
+    }
+
+    protected List<string> GetUnassignedRoles()
+    {
+        return _availableRoles.Where(r => !_editSelectedRoles.Contains(r)).ToList();
+    }
+
+    protected void OnRoleSelected(Syncfusion.Blazor.DropDowns.ChangeEventArgs<string, string> args)
+    {
+        if (!string.IsNullOrEmpty(args.Value) && !_editSelectedRoles.Contains(args.Value))
+        {
+            _editSelectedRoles.Add(args.Value);
+        }
+        _selectedRoleToAdd = null;
+        StateHasChanged();
+    }
+
+    protected void RemoveRole(string role)
+    {
+        _editSelectedRoles.Remove(role);
+        StateHasChanged();
     }
 
     protected void CancelEdit()
@@ -160,6 +186,7 @@ public class AdminUserManagementModel : BlazorBase
             user.LockoutEnd = _editLockoutEnd;
             user.IsSuspended = _editIsSuspended;
             user.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
+            user.Theme = _editTheme;
 
             // Update roles
             var existingRoles = await context.UserRoles
@@ -191,6 +218,7 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.LockoutEnd = _editLockoutEnd;
             _editingUser.IsSuspended = _editIsSuspended;
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
+            _editingUser.Theme = _editTheme;
             _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
 
             // Close modal and refresh
