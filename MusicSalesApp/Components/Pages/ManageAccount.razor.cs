@@ -404,6 +404,7 @@ public partial class ManageAccountModel : BlazorBase
         {
             _currentUser.IsSuspended = true;
             _currentUser.SuspendedAt = DateTime.UtcNow;
+            _currentUser.ReceiveNewSongEmails = false; // Ensure no communications when suspended
             
             var result = await UserManager.UpdateAsync(_currentUser);
             
