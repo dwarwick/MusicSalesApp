@@ -82,7 +82,7 @@
     }
 
     @* User's Playlists Section - Only show when authenticated *@
-    @if (_isAuthenticated && (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0)))
+    @if (HasUserPlaylists)
     {
         <section class="user-playlists-section">
             <h2 class="section-title">Your Playlists</h2>
@@ -97,7 +97,7 @@
                         CssClass="recommended-playlist-card"
                         OnPlay="@PlayRecommendedPlaylist" />
                 }
-                @if (_likedSongsPlaylist != null && _likedSongsCount > 0)
+                @if (HasLikedSongsToShow)
                 {
                     <PlaylistCard 
                         PlaylistName="Liked Songs"
