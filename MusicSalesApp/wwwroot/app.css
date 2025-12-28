@@ -1054,3 +1054,79 @@ h1:focus {
 .liked-songs-playlist-card {
     border-left: 4px solid #e91e63;
 }
+
+/* Terms of Use Page Styles */
+.terms-content {
+    max-width: 900px;
+    margin: 0 auto;
+    line-height: 1.8;
+}
+
+.terms-content h1 {
+    margin-bottom: 1.5rem;
+}
+
+.terms-content h2 {
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.terms-content h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.terms-content p {
+    margin-bottom: 1rem;
+}
+
+.terms-content ul {
+    margin-bottom: 1rem;
+    padding-left: 2rem;
+}
+
+.terms-content li {
+    margin-bottom: 0.5rem;
+}
+
+.terms-content section {
+    margin-bottom: 2rem;
+}
+
+/* Footer Styles */
+.footer {
+    border-top: 1px solid #dee2e6;
+    padding: 2rem 0;
+    margin-top: 4rem;
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+}
+
+.footer-links {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.footer-links a {
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+.footer-links a:hover {
+    opacity: 0.7;
+}
+
+.footer-copyright p {
+    margin: 0;
+    font-size: 0.9rem;
+}
