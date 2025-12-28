@@ -55,21 +55,16 @@
                     </Authorized>
                 </AuthorizeView>
 
-                <AuthorizeView Policy="@Permissions.UploadFiles">
-                    <Authorized>
-                        <MenuItem Url="/upload-files" Text="Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
-                    </Authorized>
-                </AuthorizeView>
-
                 <AuthorizeView Policy="@Permissions.ManageUsers">
                     <Authorized>
-                        <MenuItem Url="/admin/songs" Text="Song Management" IconCss="fas fa-file-audio"></MenuItem>
-                    </Authorized>
-                </AuthorizeView>
-
-                <AuthorizeView Policy="@Permissions.UseHangfire">
-                    <Authorized>
-                        <MenuItem Url="/hangfire" Text="Hangfire Dashboard" IconCss="fas fa-solid fa-gauge-high"></MenuItem>
+                        <MenuItem Text="Admin" IconCss="fas fa-shield-halved">
+                            <MenuItems>
+                                <MenuItem Url="/admin/users" Text="Manage Users" IconCss="fas fa-users-gear"></MenuItem>
+                                <MenuItem Url="/upload-files" Text="Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                                <MenuItem Url="/admin/songs" Text="Song Management" IconCss="fas fa-file-audio"></MenuItem>
+                                <MenuItem Url="/hangfire" Text="Hangfire Dashboard" IconCss="fas fa-gauge-high"></MenuItem>
+                            </MenuItems>
+                        </MenuItem>
                     </Authorized>
                 </AuthorizeView>
 
