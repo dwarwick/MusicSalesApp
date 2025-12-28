@@ -18,6 +18,7 @@ namespace MusicSalesApp.Controllers;
 public class SubscriptionController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
+    private readonly IAppSettingsService _appSettingsService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SubscriptionController> _logger;
@@ -30,18 +31,21 @@ public class SubscriptionController : ControllerBase
     /// Initializes a new instance of the SubscriptionController.
     /// </summary>
     /// <param name="subscriptionService">Service for managing subscription business logic.</param>
+    /// <param name="appSettingsService">Service for accessing application settings.</param>
     /// <param name="userManager">ASP.NET Identity user manager.</param>
     /// <param name="configuration">Application configuration for accessing PayPal settings.</param>
     /// <param name="logger">Logger for tracking subscription operations.</param>
     /// <param name="httpClientFactory">Factory for creating HTTP clients for PayPal API calls.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
+        IAppSettingsService appSettingsService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<SubscriptionController> logger,
         IHttpClientFactory httpClientFactory)
     {
         _subscriptionService = subscriptionService;
+        _appSettingsService = appSettingsService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -58,10 +62,11 @@ public class SubscriptionController : ControllerBase
         
         if (subscription == null)
         {
+            var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
             return Ok(new
             {
                 hasSubscription = false,
-                subscriptionPrice = _configuration["PayPal:SubscriptionPrice"] ?? "3.99"
+                subscriptionPrice = subscriptionPrice.ToString("F2")
             });
         }
 
@@ -97,12 +102,8 @@ public class SubscriptionController : ControllerBase
             return BadRequest("Failed to create PayPal subscription");
         }
 
-        // Save subscription to database
-        var priceString = _configuration["PayPal:SubscriptionPrice"] ?? "3.99";
-        if (!decimal.TryParse(priceString, out var monthlyPrice))
-        {
-            monthlyPrice = 3.99m; // Default fallback
-        }
+        // Save subscription to database - get price from database settings
+        var monthlyPrice = await _appSettingsService.GetSubscriptionPriceAsync();
         var subscription = await _subscriptionService.CreateSubscriptionAsync(user.Id, subscriptionId, monthlyPrice);
 
         _logger.LogInformation("User {UserId} created subscription {SubscriptionId}", user.Id, subscription.Id);
@@ -259,8 +260,12 @@ public class SubscriptionController : ControllerBase
 
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             
-            // First, try to find an existing plan
-            var existingPlan = await FindExistingPlanAsync(token, baseUrl);
+            // Get subscription price from database
+            var monthlyPrice = await _appSettingsService.GetSubscriptionPriceAsync();
+            var monthlyPriceStr = monthlyPrice.ToString("F2");
+
+            // First, try to find an existing plan with matching price
+            var existingPlan = await FindExistingPlanAsync(token, baseUrl, monthlyPriceStr);
             if (!string.IsNullOrEmpty(existingPlan))
             {
                 _logger.LogInformation("Using existing PayPal plan: {PlanId}", existingPlan);
@@ -275,19 +280,19 @@ public class SubscriptionController : ControllerBase
                 return null;
             }
 
-            // Now create the plan with the product ID
+            // Now create the plan with the product ID - include price in plan name
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             client.DefaultRequestHeaders.Add("Prefer", "return=representation");
 
-            var monthlyPrice = _configuration["PayPal:SubscriptionPrice"] ?? "3.99";
+            var planName = $"Music Streaming Monthly Subscription - ${monthlyPriceStr}";
 
             var planData = new
             {
                 product_id = productId,
-                name = "Music Streaming Monthly Subscription",
-                description = "Unlimited music streaming for $" + monthlyPrice + " per month",
+                name = planName,
+                description = $"Unlimited music streaming for ${monthlyPriceStr} per month",
                 status = "ACTIVE",
                 billing_cycles = new[]
                 {
@@ -305,7 +310,7 @@ public class SubscriptionController : ControllerBase
                         {
                             fixed_price = new
                             {
-                                value = monthlyPrice,
+                                value = monthlyPriceStr,
                                 currency_code = "USD"
                             }
                         }
@@ -327,7 +332,7 @@ public class SubscriptionController : ControllerBase
             {
                 using var doc = JsonDocument.Parse(body);
                 var planId = doc.RootElement.GetProperty("id").GetString();
-                _logger.LogInformation("Created new PayPal plan: {PlanId}", planId);
+                _logger.LogInformation("Created new PayPal plan: {PlanId} with price ${Price}", planId, monthlyPriceStr);
                 return planId;
             }
             else
@@ -407,7 +412,7 @@ public class SubscriptionController : ControllerBase
         }
     }
 
-    private async Task<string> FindExistingPlanAsync(string token, string baseUrl)
+    private async Task<string> FindExistingPlanAsync(string token, string baseUrl, string monthlyPrice)
     {
         try
         {
@@ -423,14 +428,24 @@ public class SubscriptionController : ControllerBase
                 using var doc = JsonDocument.Parse(body);
                 if (doc.RootElement.TryGetProperty("plans", out var plans))
                 {
+                    // Build the expected plan name including price
+                    var expectedPlanName = $"Music Streaming Monthly Subscription - ${monthlyPrice}";
+                    
                     foreach (var plan in plans.EnumerateArray())
                     {
-                        if (plan.TryGetProperty("name", out var name) && 
-                            name.GetString().Contains("Music Streaming"))
+                        if (plan.TryGetProperty("name", out var name))
                         {
-                            return plan.GetProperty("id").GetString();
+                            var planName = name.GetString();
+                            // Match exact plan name including price
+                            if (planName == expectedPlanName)
+                            {
+                                _logger.LogInformation("Found existing plan with matching price: {PlanName}", planName);
+                                return plan.GetProperty("id").GetString();
+                            }
                         }
                     }
+                    
+                    _logger.LogInformation("No existing plan found for price ${Price}", monthlyPrice);
                 }
             }
         }

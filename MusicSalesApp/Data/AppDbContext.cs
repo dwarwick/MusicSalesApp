@@ -23,6 +23,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Passkey> Passkeys { get; set; }
     public DbSet<SongLike> SongLikes { get; set; }
     public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
+    public DbSet<AppSettings> AppSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -210,5 +211,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Composite index for efficient querying by user and date
         builder.Entity<RecommendedPlaylist>()
             .HasIndex(rp => new { rp.UserId, rp.GeneratedAt });
+
+        // Configure AppSettings entity
+        builder.Entity<AppSettings>()
+            .HasIndex(s => s.Key)
+            .IsUnique();
+
+        // Seed default subscription price setting
+        builder.Entity<AppSettings>().HasData(
+            new AppSettings
+            {
+                Id = 1,
+                Key = "SubscriptionPrice",
+                Value = "3.99",
+                Description = "Monthly subscription price in USD",
+                UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            }
+        );
     }
 }
