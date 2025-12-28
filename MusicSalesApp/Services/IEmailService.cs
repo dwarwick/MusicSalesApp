@@ -10,8 +10,9 @@
         /// </summary>
         /// <param name="email">The recipient's email address.</param>
         /// <param name="tokenUrl">The complete verification URL including the token.</param>
+        /// <param name="baseUrl">The base URL for constructing the logo image URL.</param>
         /// <returns>True if the email was sent successfully, false otherwise.</returns>
-        bool SendEmailVerificationMessage(string email, string tokenUrl);
+        bool SendEmailVerificationMessage(string email, string tokenUrl, string baseUrl);
 
         /// <summary>
         /// Sends a password reset email with a link to reset the user's password.

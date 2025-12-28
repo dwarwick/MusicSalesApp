@@ -155,6 +155,7 @@ try
     builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
     builder.Services.AddScoped<IEmailService, EmailService>();
     builder.Services.AddScoped<IPurchaseEmailService, PurchaseEmailService>();
+    builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ICartService, CartService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();

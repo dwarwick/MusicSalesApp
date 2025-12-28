@@ -33,6 +33,13 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.SyncLikesToSupabaseAsync(),
                 Cron.Daily(2));
 
+            // Schedule nightly new song notification emails at 4 AM UTC
+            // This runs after song cleanup and sends emails to opted-in users about new songs added in the past 24 hours
+            RecurringJob.AddOrUpdate<INewSongNotificationService>(
+                "send-new-song-notification-emails",
+                service => service.SendNewSongNotificationsAsync(),
+                Cron.Daily(4));
+
             _logger.LogInformation("Hangfire recurring jobs initialized successfully");
         }
         catch (Exception ex)

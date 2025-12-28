@@ -37,7 +37,7 @@ namespace MusicSalesApp.Services
         }
 
         /// <inheritdoc />
-        public bool SendEmailVerificationMessage(string email, string tokenUrl)
+        public bool SendEmailVerificationMessage(string email, string tokenUrl, string baseUrl)
         {
             _logger.LogInformation("Sending email verification to: {Email}", email);
 
@@ -49,11 +49,16 @@ namespace MusicSalesApp.Services
                     return false;
                 }
 
+                var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
                 var subject = "Email Verification";
                 var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
                 <h2>Verify Your Email</h2>
-                <p>Thank you for registering. Please click the link below to verify your email address:</p>
-                <p><a href='{tokenUrl}'>Verify Email</a></p>
+                <p>Thank you for registering with StreamTunes. Please click the link below to verify your email address:</p>
+                <p><a href='{tokenUrl}' style='display: inline-block; padding: 10px 20px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px;'>Verify Email</a></p>
+                <p style='color: #666; font-size: 14px;'>This link will expire in <strong>10 minutes</strong>.</p>
                 <p>If you didn't request this verification, please ignore this email.</p>
                 ";
 

@@ -39,6 +39,12 @@ public class AuthenticationService : IAuthenticationService
     /// <inheritdoc />
     public async Task<(bool Success, string Error)> RegisterAsync(string email, string password)
     {
+        return await RegisterAsync(email, password, false);
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> RegisterAsync(string email, string password, bool receiveNewSongEmails)
+    {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             return (false, "Email and password are required");
@@ -66,7 +72,8 @@ public class AuthenticationService : IAuthenticationService
             {
                 UserName = email,
                 Email = email,
-                EmailConfirmed = false
+                EmailConfirmed = false,
+                ReceiveNewSongEmails = receiveNewSongEmails
             };
             var createResult = await _userManager.CreateAsync(user, password);
             if (!createResult.Succeeded)
@@ -142,7 +149,7 @@ public class AuthenticationService : IAuthenticationService
             var verificationUrl = $"{baseUrl.TrimEnd('/')}/verify-email?userId={user.Id}&token={encodedToken}";
 
             // Send verification email
-            var emailSent = _emailService.SendEmailVerificationMessage(email, verificationUrl);
+            var emailSent = _emailService.SendEmailVerificationMessage(email, verificationUrl, baseUrl);
             if (!emailSent)
             {
                 return (false, "Failed to send verification email. Please try again later.");
