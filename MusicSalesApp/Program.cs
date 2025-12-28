@@ -160,6 +160,7 @@ try
     builder.Services.AddScoped<IThemeService, ThemeService>();
     builder.Services.AddScoped<IPlaylistService, PlaylistService>();
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+    builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();

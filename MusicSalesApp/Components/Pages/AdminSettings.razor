@@ -1,0 +1,97 @@
+@page "/admin/settings"
+@inherits AdminSettingsModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Application Settings</PageTitle>
+
+<h3>Application Settings</h3>
+
+@if (_isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading settings...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        <strong>Error:</strong> @_errorMessage
+    </div>
+}
+else
+{
+    <div class="card settings-card">
+        <div class="card-header">
+            <h5 class="mb-0">PayPal Subscription Settings</h5>
+        </div>
+        <div class="card-body">
+            @if (_successMessage != null)
+            {
+                <SfMessage Severity="MessageSeverity.Success" ShowCloseIcon="true" Closed="() => _successMessage = null">
+                    @_successMessage
+                </SfMessage>
+            }
+            
+            @if (_validationErrors.Any())
+            {
+                <SfMessage Severity="MessageSeverity.Error">
+                    <strong>Validation Errors:</strong>
+                    <ul class="mb-0">
+                        @foreach (var error in _validationErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </SfMessage>
+            }
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Subscription Price (USD) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_subscriptionPrice" 
+                                     Format="C2"
+                                     Min="0.01m"
+                                     Max="999.99m"
+                                     Decimals="2"
+                                     Step="0.01m"
+                                     Placeholder="Enter subscription price"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Monthly subscription price for new subscribers. Existing subscribers will continue at their original rate.
+                    </small>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Note:</strong> When you change the subscription price:
+                <ul class="mb-0">
+                    <li><strong>Existing subscribers</strong> will continue to be charged at their original rate.</li>
+                    <li><strong>New subscribers</strong> will be charged at the new price.</li>
+                    <li>A new PayPal plan will be created automatically with the updated price.</li>
+                </ul>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <SfButton OnClick="CancelChanges" 
+                          Content="Cancel" 
+                          CssClass="e-btn e-outline" 
+                          Disabled="@(!_hasChanges || _isSaving)" />
+                <SfButton OnClick="SaveSettings" 
+                          IsPrimary="true" 
+                          Disabled="@(!_hasChanges || _isSaving)" 
+                          CssClass="e-btn e-primary">
+                    @if (_isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Save Changes
+                </SfButton>
+            </div>
+        </div>
+    </div>
+}

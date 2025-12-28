@@ -40,6 +40,7 @@ public abstract class BUnitTestBase
     protected Mock<IThemeService> MockThemeService { get; private set; } = default!;
     protected Mock<IPlaylistService> MockPlaylistService { get; private set; } = default!;
     protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
+    protected Mock<IAppSettingsService> MockAppSettingsService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
     protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
     protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
@@ -67,6 +68,7 @@ public abstract class BUnitTestBase
         MockThemeService = new Mock<IThemeService>();
         MockPlaylistService = new Mock<IPlaylistService>();
         MockSubscriptionService = new Mock<ISubscriptionService>();
+        MockAppSettingsService = new Mock<IAppSettingsService>();
         MockPasskeyService = new Mock<IPasskeyService>();
         MockOpenGraphService = new Mock<IOpenGraphService>();
         MockSongLikeService = new Mock<ISongLikeService>();
@@ -144,6 +146,16 @@ public abstract class BUnitTestBase
         MockSubscriptionService.Setup(x => x.GetActiveSubscriptionAsync(It.IsAny<int>()))
             .ReturnsAsync((Subscription)null);
 
+        // Setup default returns for IAppSettingsService methods
+        MockAppSettingsService.Setup(x => x.GetSubscriptionPriceAsync())
+            .ReturnsAsync(3.99m);
+        MockAppSettingsService.Setup(x => x.GetSettingAsync(It.IsAny<string>()))
+            .ReturnsAsync((string)null);
+        MockAppSettingsService.Setup(x => x.SetSubscriptionPriceAsync(It.IsAny<decimal>()))
+            .Returns(Task.CompletedTask);
+        MockAppSettingsService.Setup(x => x.SetSettingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
         // Setup default returns for IPasskeyService methods
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<Passkey>());
@@ -202,6 +214,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IThemeService>(MockThemeService.Object);
         TestContext.Services.AddSingleton<IPlaylistService>(MockPlaylistService.Object);
         TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
+        TestContext.Services.AddSingleton<IAppSettingsService>(MockAppSettingsService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
         TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
         TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
