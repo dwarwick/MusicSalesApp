@@ -208,7 +208,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         var sb = new StringBuilder();
 
         // Get album cover image from the first track that has an album cover reference
-        var albumCoverUrl = GetAlbumCoverUrl(albumName, tracks, baseUrl);
+        var albumCoverUrl = GetAlbumCoverUrl(tracks, baseUrl);
         var albumPrice = tracks.Sum(t => t.Price);
 
         sb.Append($@"
@@ -372,7 +372,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         }
     }
 
-    private string GetAlbumCoverUrl(string albumName, List<CartItemWithMetadata> tracks, string baseUrl)
+    private string GetAlbumCoverUrl(List<CartItemWithMetadata> tracks, string baseUrl)
     {
         // Try to find an album cover from the tracks' metadata
         // Album covers have IsAlbumCover = true, but track metadata won't have that
