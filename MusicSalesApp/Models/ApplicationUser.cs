@@ -15,4 +15,7 @@ public class ApplicationUser : IdentityUser<int>
     // Account suspension
     public bool IsSuspended { get; set; } = false;
     public DateTime? SuspendedAt { get; set; }
+
+    // Email preferences - user opt-in to receive new song notification emails
+    public bool ReceiveNewSongEmails { get; set; } = false;
 }

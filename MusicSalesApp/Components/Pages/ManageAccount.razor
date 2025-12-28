@@ -59,6 +59,18 @@
             </CardContent>
         </SfCard>
 
+        <!-- Email Preferences Section -->
+        <SfCard CssClass="mb-4">
+            <CardHeader Title="Email Preferences" />
+            <CardContent>
+                <div class="mb-3">
+                    <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" />
+                    <span class="ms-2">Receive email notifications when new music is added</span>
+                </div>
+                <SfButton IsPrimary="true" Content="Save Preferences" OnClick="SaveEmailPreferences" />
+            </CardContent>
+        </SfCard>
+
         <!-- Passkey Management Section -->
         <SfCard CssClass="mb-4">
             <CardHeader Title="Passkeys" />

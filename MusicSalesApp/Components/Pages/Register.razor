@@ -81,10 +81,16 @@
                                         I have read and agree to the <a href="javascript:void(0)" @onclick="ShowTermsOfUse" @onclick:preventDefault class="legal-link">Terms of Use</a>
                                     </span>
                                 </div>
-                                <div class="d-flex align-items-start">
+                                <div class="d-flex align-items-start mb-2">
                                     <SfCheckBox @bind-Checked="AcceptPrivacyPolicy" TChecked="bool" CssClass="me-2" />
                                     <span class="legal-text">
                                         I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
+                                    </span>
+                                </div>
+                                <div class="d-flex align-items-start">
+                                    <SfCheckBox @bind-Checked="ReceiveNewSongEmails" TChecked="bool" CssClass="me-2" />
+                                    <span class="legal-text">
+                                        I would like to receive email notifications when new music is added
                                     </span>
                                 </div>
                             </div>

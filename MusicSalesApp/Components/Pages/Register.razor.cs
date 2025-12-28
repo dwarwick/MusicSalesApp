@@ -28,6 +28,9 @@ public partial class RegisterModel : BlazorBase, IDisposable
     public bool AcceptTermsOfUse { get; set; } = false;
     public bool AcceptPrivacyPolicy { get; set; } = false;
 
+    // Email preference
+    public bool ReceiveNewSongEmails { get; set; } = false;
+
     // Computed property to check if user can register
     protected bool CanRegister => AcceptTermsOfUse && AcceptPrivacyPolicy;
 
@@ -148,7 +151,7 @@ public partial class RegisterModel : BlazorBase, IDisposable
                 return;
             }
             // Call registration service
-            var (success, err) = await AuthenticationService.RegisterAsync(Email, Password);
+            var (success, err) = await AuthenticationService.RegisterAsync(Email, Password, ReceiveNewSongEmails);
             if (!success)
             {
                 errorMessage = err;

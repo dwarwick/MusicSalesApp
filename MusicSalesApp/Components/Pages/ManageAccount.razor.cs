@@ -25,6 +25,9 @@ public partial class ManageAccountModel : BlazorBase
     protected string _currentPassword = string.Empty;
     protected string _newPassword = string.Empty;
     protected string _confirmPassword = string.Empty;
+
+    // Email preferences
+    protected bool _receiveNewSongEmails = false;
     
     // Passkey fields
     protected List<Passkey> _passkeys = new();
@@ -82,6 +85,9 @@ public partial class ManageAccountModel : BlazorBase
                     if (_currentUser != null)
                     {
                         _userEmail = _currentUser.Email ?? string.Empty;
+                        // Load email preferences
+                        _receiveNewSongEmails = _currentUser.ReceiveNewSongEmails;
+                        
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
@@ -233,6 +239,32 @@ public partial class ManageAccountModel : BlazorBase
         {
             Logger.LogError(ex, "Error changing password");
             _errorMessage = "An error occurred while changing your password.";
+        }
+    }
+
+    protected async Task SaveEmailPreferences()
+    {
+        _successMessage = string.Empty;
+        _errorMessage = string.Empty;
+
+        try
+        {
+            _currentUser.ReceiveNewSongEmails = _receiveNewSongEmails;
+            var result = await UserManager.UpdateAsync(_currentUser);
+            
+            if (result.Succeeded)
+            {
+                _successMessage = "Email preferences saved successfully.";
+            }
+            else
+            {
+                _errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving email preferences");
+            _errorMessage = "An error occurred while saving your email preferences.";
         }
     }
 
@@ -407,6 +439,7 @@ public partial class ManageAccountModel : BlazorBase
         {
             _currentUser.IsSuspended = true;
             _currentUser.SuspendedAt = DateTime.UtcNow;
+            _currentUser.ReceiveNewSongEmails = false; // Ensure no communications when suspended
             
             var result = await UserManager.UpdateAsync(_currentUser);
             

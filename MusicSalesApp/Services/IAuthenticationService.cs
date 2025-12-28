@@ -33,6 +33,15 @@ public interface IAuthenticationService
     Task<(bool Success, string Error)> RegisterAsync(string email, string password);
 
     /// <summary>
+    /// Registers a new user with the specified email, password, and email preferences.
+    /// </summary>
+    /// <param name="email">The user's email address.</param>
+    /// <param name="password">The user's password.</param>
+    /// <param name="receiveNewSongEmails">Whether to opt-in to receive new song notification emails.</param>
+    /// <returns>A tuple indicating success and an error message if applicable.</returns>
+    Task<(bool Success, string Error)> RegisterAsync(string email, string password, bool receiveNewSongEmails);
+
+    /// <summary>
     /// Sends a verification email to the specified address.
     /// </summary>
     /// <param name="email">The email address to send verification to.</param>

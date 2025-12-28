@@ -783,4 +783,47 @@ This application implements WebAuthn/FIDO2 passkey authentication using the Fido
 
 5. **Fallback**: Password authentication remains available alongside passkeys
 
+## Email Templates and Conventions
+
+### Logo in Emails
+**IMPORTANT:** All emails sent to users must include the StreamTunes logo for brand consistency. The logo should be placed at the top of the email body.
+
+**Logo URL Pattern:**
+```
+{baseUrl}/images/logo-light-small.png
+```
+
+**Example Email Header:**
+```html
+<div style='text-align: center; margin-bottom: 20px;'>
+    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+</div>
+```
+
+**Emails that include the logo:**
+- Email verification emails
+- Password reset emails
+- Purchase confirmation emails
+- Subscription confirmation emails
+- New song notification emails
+
+### Email Preferences Link
+All marketing/notification emails (not transactional like password reset) should include a "Manage email preferences" link in the footer that points to the Manage Account page.
+
+**Example Footer:**
+```html
+<p style='color: #999; font-size: 12px;'>
+    <a href='{baseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+</p>
+```
+
+### Avoiding Spam Filters
+To minimize the chance of notification emails being flagged as spam:
+- Send individual emails (not bulk BCC)
+- Send in small batches (10 emails at a time)
+- Add delays between individual emails (5 seconds)
+- Add delays between batches (60 seconds)
+- Only send to users who have opted in and confirmed their email
+- Include clear unsubscribe/preferences links
+
 ## References

@@ -109,6 +109,10 @@ public abstract class BUnitTestBase
             .ReturnsAsync(authState);
 
         // Setup default returns for IAuthenticationService methods
+        MockAuthService.Setup(x => x.RegisterAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, string.Empty));
+        MockAuthService.Setup(x => x.RegisterAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((true, string.Empty));
         MockAuthService.Setup(x => x.SendVerificationEmailAsync(It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, string.Empty));
         MockAuthService.Setup(x => x.CanResendVerificationEmailAsync(It.IsAny<string>()))
