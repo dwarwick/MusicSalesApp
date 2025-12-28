@@ -363,6 +363,7 @@ public partial class ManageAccountModel : BlazorBase
     protected async Task ShowAccountClosureDialog()
     {
         _accountActionConfirmEmail = string.Empty;
+        _errorMessage = string.Empty;
         await _accountClosureDialog.ShowAsync();
     }
 
@@ -371,8 +372,18 @@ public partial class ManageAccountModel : BlazorBase
         await _accountClosureDialog.HideAsync();
     }
 
+    /// <summary>
+    /// Returns true if the user has an active subscription that hasn't been cancelled yet.
+    /// </summary>
+    protected bool HasActiveSubscription => _hasSubscription && !_endDate.HasValue;
+
     protected async Task ShowSuspendConfirmDialog()
     {
+        if (HasActiveSubscription)
+        {
+            _errorMessage = "You cannot suspend your account with an active subscription. You must cancel your active subscription and then try again.";
+            return;
+        }
         await _accountClosureDialog.HideAsync();
         await _suspendAccountDialog.ShowAsync();
     }
@@ -438,6 +449,11 @@ public partial class ManageAccountModel : BlazorBase
 
     protected async Task ShowDeleteConfirmDialog()
     {
+        if (HasActiveSubscription)
+        {
+            _errorMessage = "You cannot delete your account with an active subscription. You must cancel your active subscription and then try again.";
+            return;
+        }
         await _accountClosureDialog.HideAsync();
         await _deleteAccountDialog.ShowAsync();
     }
