@@ -291,23 +291,27 @@ public class SubscriptionController : ControllerBase
         var updatedSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
 
         // Send subscription cancellation email (fire and forget - don't block the response)
-        _ = Task.Run(async () =>
+        var userEmail = user.Email;
+        if (!string.IsNullOrEmpty(userEmail))
         {
-            try
+            _ = Task.Run(async () =>
             {
-                var baseUrl = GetBaseUrl();
-                var userName = user.UserName ?? user.Email;
-                await _accountEmailService.SendSubscriptionCancelledEmailAsync(
-                    user.Email!,
-                    userName!,
-                    updatedSubscription?.EndDate,
-                    baseUrl);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send subscription cancellation email to user {UserId}", user.Id);
-            }
-        });
+                try
+                {
+                    var baseUrl = GetBaseUrl();
+                    var userName = user.UserName ?? userEmail;
+                    await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+                        userEmail,
+                        userName,
+                        updatedSubscription?.EndDate,
+                        baseUrl);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send subscription cancellation email to user {UserId}", user.Id);
+                }
+            });
+        }
 
         return Ok(new
         {
