@@ -15,8 +15,8 @@
     {
         <img src="images/logo-light-small.png" alt="Website Logo" class="app-logo" />
     }
-    
-    <AppBarSpacer></AppBarSpacer>    
+
+    <AppBarSpacer></AppBarSpacer>
     <div class="theme-switcher">
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
@@ -38,46 +38,60 @@
            @bind-IsOpen="_isMenuOpen"
            Width="180px"
            Type="SidebarType.Over"
-           Position="SidebarPosition.Left" 
+           Position="SidebarPosition.Left"
            CloseOnDocumentClick="true">
     <ChildContent>
+        <div class="sidebar-content">
+            <div class="sidebar-menu">
+                <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical">
+                    <MenuItems>
+                        <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
+                        <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
+                        <AuthorizeView Policy="@Permissions.ValidatedUser">
+                            <Authorized>
+                                <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="fas fa-list"></MenuItem>
+                                <MenuItem Url="/manage-account" Text="Manage Account" IconCss="fas fa-user-gear"></MenuItem>
+                            </Authorized>
+                        </AuthorizeView>
 
-        <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical" >
-            <MenuItems>
-                <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>                
-                <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
+                        <AuthorizeView Policy="@Permissions.ManageUsers">
+                            <Authorized>
+                                <MenuItem Separator="true"></MenuItem>
+                                <MenuItem Text="Admin" IconCss="fas fa-shield-halved" Disabled="true"></MenuItem>
+                                <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="fas fa-users-gear"></MenuItem>
+                                <MenuItem Url="/upload-files" Text="  Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                                <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="fas fa-file-audio"></MenuItem>
+                                <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="fas fa-gauge-high"></MenuItem>
+                                <MenuItem Separator="true"></MenuItem>
+                            </Authorized>
+                        </AuthorizeView>
 
-                <AuthorizeView Policy="@Permissions.ValidatedUser">
-                    <Authorized>
-                        <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="fas fa-list"></MenuItem>
-                        <MenuItem Url="/manage-account" Text="Manage Account" IconCss="fas fa-user-gear"></MenuItem>
-                    </Authorized>
-                </AuthorizeView>
-
-                <AuthorizeView Policy="@Permissions.ManageUsers">
-                    <Authorized>
-                        <MenuItem Separator="true"></MenuItem>
-                        <MenuItem Text="Admin" IconCss="fas fa-shield-halved" Disabled="true"></MenuItem>
-                        <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="fas fa-users-gear"></MenuItem>
-                        <MenuItem Url="/upload-files" Text="  Upload Files" IconCss="fas fa-cloud-arrow-up"></MenuItem>
-                        <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="fas fa-file-audio"></MenuItem>
-                        <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="fas fa-gauge-high"></MenuItem>
-                        <MenuItem Separator="true"></MenuItem>
-                    </Authorized>
-                </AuthorizeView>
-
-                <AuthorizeView>
-                    <Authorized>
-                        <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
-                    </Authorized>
-                    <NotAuthorized>
-                        <MenuItem Url="/login" Text="Login" IconCss="fas fa-arrow-right-to-bracket"></MenuItem>
-                        <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>
-                    </NotAuthorized>
-                </AuthorizeView>
-            </MenuItems>
-            <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
-        </SfMenu>
+                        <AuthorizeView>
+                            <Authorized>
+                                <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
+                            </Authorized>
+                            <NotAuthorized>
+                                <MenuItem Url="/login" Text="Login" IconCss="fas fa-arrow-right-to-bracket"></MenuItem>
+                                <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>
+                            </NotAuthorized>
+                        </AuthorizeView>
+                    </MenuItems>
+                    <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
+                </SfMenu>
+            </div>
+            <div class="sidebar-footer">
+                <SfMenu CssClass="e-inherit ms-2" TValue="MenuItem" Orientation="Orientation.Vertical">
+                    <MenuItems>
+                        <MenuItem Url="mailto:customerservice@streamtunes.net" Text="Contact Us" IconCss="fas fa-solid fa-paper-plane"></MenuItem>
+                        <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="fas fa-file-contract"></MenuItem>
+                    </MenuItems>
+                    <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
+                </SfMenu>
+                <div class="copyright-notice">
+                    © @DateTime.Now.Year Streamtunes
+                </div>
+            </div>
+        </div>
     </ChildContent>
 </SfSidebar>

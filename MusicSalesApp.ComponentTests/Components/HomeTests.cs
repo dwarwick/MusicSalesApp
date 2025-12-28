@@ -32,7 +32,7 @@ public class HomeTests : BUnitTestBase
         // Assert - Verify hero section content
         Assert.That(cut.Markup, Does.Contain("hero-section"));
         Assert.That(cut.Markup, Does.Contain("hero-title"));
-        Assert.That(cut.Markup, Does.Contain("Start Free Trial"));
+        Assert.That(cut.Markup, Does.Contain("Get Started Free"));
     }
 
     [Test]
