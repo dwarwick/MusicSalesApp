@@ -44,8 +44,25 @@ public partial class RegisterModel : BlazorBase, IDisposable
     protected int secondsRemaining = 0;
     private System.Timers.Timer countdownTimer = null!;
     private bool disposed = false;
+    private bool _hasLoadedData = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                await LoadDataAsync();
+            }
+            finally
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (auth.User.Identity != null && auth.User.Identity.IsAuthenticated)
