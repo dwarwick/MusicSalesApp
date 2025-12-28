@@ -687,4 +687,17 @@
         gap: 10px;
         margin-bottom: 0.75rem;
     }
+
+    /* Footer responsive - small */
+    .footer {
+        padding: 1.25rem 0;
+    }
+
+    .footer-links a {
+        font-size: 0.85rem;
+    }
+
+    .footer-copyright p {
+        font-size: 0.8rem;
+    }
 }

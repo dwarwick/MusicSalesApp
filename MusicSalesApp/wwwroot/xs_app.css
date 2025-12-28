@@ -543,4 +543,25 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+
+    /* Footer responsive - extra small */
+    .footer {
+        padding: 1rem 0;
+    }
+
+    .footer-content {
+        gap: 0.5rem;
+    }
+
+    .footer-links {
+        gap: 1rem;
+    }
+
+    .footer-links a {
+        font-size: 0.8rem;
+    }
+
+    .footer-copyright p {
+        font-size: 0.75rem;
+    }
 }
