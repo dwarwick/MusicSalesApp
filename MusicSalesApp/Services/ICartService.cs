@@ -9,6 +9,7 @@ public interface ICartService
     void NotifyCartUpdated();
 
     Task<IEnumerable<CartItem>> GetCartItemsAsync(int userId);
+    Task<IEnumerable<CartItemWithMetadata>> GetCartItemsWithMetadataAsync(int userId);
     Task<int> GetCartItemCountAsync(int userId);
     Task<CartItem> AddToCartAsync(int userId, string songFileName, decimal price, int? songMetadataId = null);
     Task<bool> RemoveFromCartAsync(int userId, string songFileName);

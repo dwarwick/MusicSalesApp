@@ -48,6 +48,7 @@ public abstract class BUnitTestBase
     protected Mock<IStreamCountService> MockStreamCountService { get; private set; } = default!;
     protected Mock<IStreamCountHubClient> MockStreamCountHubClient { get; private set; } = default!;
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
+    protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -75,6 +76,7 @@ public abstract class BUnitTestBase
         MockStreamCountService = new Mock<IStreamCountService>();
         MockStreamCountHubClient = new Mock<IStreamCountHubClient>();
         MockRecommendationService = new Mock<IRecommendationService>();
+        MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -198,6 +200,15 @@ public abstract class BUnitTestBase
         MockRecommendationService.Setup(x => x.HasFreshRecommendationsAsync(It.IsAny<int>()))
             .ReturnsAsync(false);
 
+        // Setup default returns for IPurchaseEmailService methods
+        MockPurchaseEmailService.Setup(x => x.SendSongPurchaseConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<IEnumerable<CartItemWithMetadata>>(), It.IsAny<decimal>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        MockPurchaseEmailService.Setup(x => x.SendSubscriptionConfirmationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Subscription>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -228,6 +239,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IStreamCountService>(MockStreamCountService.Object);
         TestContext.Services.AddSingleton<IStreamCountHubClient>(MockStreamCountHubClient.Object);
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
+        TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

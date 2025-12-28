@@ -30,6 +30,23 @@ public class CartService : ICartService
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<CartItemWithMetadata>> GetCartItemsWithMetadataAsync(int userId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var cartItems = await context.CartItems
+            .Include(c => c.SongMetadata)
+            .Where(c => c.UserId == userId)
+            .OrderByDescending(c => c.AddedAt)
+            .ToListAsync();
+
+        return cartItems.Select(c => new CartItemWithMetadata
+        {
+            SongFileName = c.SongFileName,
+            Price = c.Price,
+            SongMetadata = c.SongMetadata
+        });
+    }
+
     public async Task<int> GetCartItemCountAsync(int userId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
