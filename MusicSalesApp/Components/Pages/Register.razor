@@ -106,9 +106,7 @@
     <DialogTemplates>
         <Header>Terms of Use</Header>
         <Content>
-            <div class="legal-dialog-content">
-                @((MarkupString)_termsOfUseContent)
-            </div>
+            <iframe src="/terms-of-use" class="legal-iframe" title="Terms of Use"></iframe>
         </Content>
         <FooterTemplate>
             <SfButton IsPrimary="true" Content="Close" OnClick="CloseTermsDialog" />
@@ -121,9 +119,7 @@
     <DialogTemplates>
         <Header>Privacy Policy</Header>
         <Content>
-            <div class="legal-dialog-content">
-                @((MarkupString)_privacyPolicyContent)
-            </div>
+            <iframe src="/privacy-policy" class="legal-iframe" title="Privacy Policy"></iframe>
         </Content>
         <FooterTemplate>
             <SfButton IsPrimary="true" Content="Close" OnClick="ClosePrivacyDialog" />

@@ -1146,3 +1146,10 @@ h1:focus {
 .legal-link:hover {
     color: var(--bs-link-hover-color);
 }
+
+/* Legal iframe for displaying Terms and Privacy Policy in dialogs */
+.legal-iframe {
+    width: 100%;
+    height: calc(80vh - 120px);
+    border: none;
+}
