@@ -71,4 +71,29 @@ public interface IAuthenticationService
     /// <param name="email">The user's email address.</param>
     /// <returns>True if the email is verified, false otherwise.</returns>
     Task<bool> IsEmailVerifiedAsync(string email);
+
+    /// <summary>
+    /// Sends a password reset email to the specified address.
+    /// </summary>
+    /// <param name="email">The email address to send the reset link to.</param>
+    /// <param name="baseUrl">The base URL for constructing the reset link.</param>
+    /// <returns>A tuple indicating success and an error message if applicable.</returns>
+    Task<(bool Success, string Error)> SendPasswordResetEmailAsync(string email, string baseUrl);
+
+    /// <summary>
+    /// Verifies the password reset token is valid.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="token">The password reset token.</param>
+    /// <returns>A tuple indicating if the token is valid and an error message if not.</returns>
+    Task<(bool IsValid, string Error)> VerifyPasswordResetTokenAsync(string userId, string token);
+
+    /// <summary>
+    /// Resets the user's password using the provided token.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="token">The password reset token.</param>
+    /// <param name="newPassword">The new password.</param>
+    /// <returns>A tuple indicating success and an error message if applicable.</returns>
+    Task<(bool Success, string Error)> ResetPasswordAsync(string userId, string token, string newPassword);
 }

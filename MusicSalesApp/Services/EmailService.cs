@@ -72,7 +72,7 @@ namespace MusicSalesApp.Services
         }
 
         /// <inheritdoc />
-        public bool SendPasswordResetEmail(string email, string tokenUrl)
+        public bool SendPasswordResetEmail(string email, string tokenUrl, string baseUrl)
         {
             _logger.LogInformation("Sending password reset email to: {Email}", email);
 
@@ -84,11 +84,16 @@ namespace MusicSalesApp.Services
                     return false;
                 }
 
+                var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
                 var subject = "Password Reset Request";
                 var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='Logo' style='max-width: 150px; height: auto;' />
+                </div>
                 <h2>Reset Your Password</h2>
                 <p>You requested a password reset. Please click the link below to reset your password:</p>
-                <p><a href='{tokenUrl}'>Reset Password</a></p>
+                <p><a href='{tokenUrl}' style='display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
+                <p style='color: #666; font-size: 14px;'>This link will expire in <strong>15 minutes</strong>.</p>
                 <p>If you didn't request a password reset, please ignore this email.</p>
                 ";
 

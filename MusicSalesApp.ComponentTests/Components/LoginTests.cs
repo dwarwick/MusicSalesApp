@@ -123,4 +123,15 @@ public class LoginTests : BUnitTestBase
         // Assert
         Assert.That(cut.Markup, Does.Contain("Login with Password"));
     }
+
+    [Test]
+    public void Login_HasForgotPasswordLink()
+    {
+        // Act
+        var cut = TestContext.Render<Login>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Forgot Password?"));
+        Assert.That(cut.Markup, Does.Contain("href=\"/forgot-password\""));
+    }
 }
