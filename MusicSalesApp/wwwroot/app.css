@@ -64,7 +64,12 @@ h1:focus {
     margin-left: 10px;
 }
 
-
+/* Admin menu header styling */
+.e-menu-wrapper .e-menu .e-menu-item.e-disabled {
+    opacity: 1 !important;
+    font-weight: bold;
+    cursor: default;
+}
 
 /* AlbumPlayer - New 5-row layout structure */
 .album-image-title-row {
