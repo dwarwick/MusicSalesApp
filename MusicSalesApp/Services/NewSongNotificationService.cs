@@ -318,7 +318,9 @@ public class NewSongNotificationService : INewSongNotificationService
         {
             // Generate a SAS URL for the image that's valid for 7 days (for email viewing)
             var sasUri = _azureStorageService.GetReadSasUri(imageBlobPath, TimeSpan.FromDays(7));
-            return sasUri.ToString();
+            // Use AbsoluteUri to get properly percent-encoded URL (spaces as %20, not +)
+            // This is required for Gmail compatibility which doesn't handle + as space in URLs
+            return sasUri.AbsoluteUri;
         }
         catch (Exception ex)
         {
