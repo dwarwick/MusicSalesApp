@@ -1,4 +1,5 @@
 @page "/register"
+@using Syncfusion.Blazor.Popups
 @inherits RegisterModel
 
 <PageTitle>Register</PageTitle>
@@ -72,7 +73,23 @@
                                 <label for="confirm" class="e-label">Confirm Password</label>
                                 <InputText id="confirm" class="form-control" type="password" @bind-Value="ConfirmPassword" />
                             </div>
-                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@isSubmitting" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn e-primary w-100" />
+                            
+                            <div class="mb-3 legal-agreements">
+                                <div class="d-flex align-items-start mb-2">
+                                    <SfCheckBox @bind-Checked="AcceptTermsOfUse" TChecked="bool" CssClass="me-2" />
+                                    <span class="legal-text">
+                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowTermsOfUse" @onclick:preventDefault class="legal-link">Terms of Use</a>
+                                    </span>
+                                </div>
+                                <div class="d-flex align-items-start">
+                                    <SfCheckBox @bind-Checked="AcceptPrivacyPolicy" TChecked="bool" CssClass="me-2" />
+                                    <span class="legal-text">
+                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(isSubmitting || !CanRegister)" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn e-primary w-100" />
                         </EditForm>
                     }
                 </CardContent>
@@ -83,4 +100,34 @@
         </div>
     </div>
 </div>
+
+<!-- Terms of Use Dialog -->
+<SfDialog @ref="_termsDialog" Width="90%" Height="80%" IsModal="true" ShowCloseIcon="true" Visible="false" CssClass="legal-dialog">
+    <DialogTemplates>
+        <Header>Terms of Use</Header>
+        <Content>
+            <div class="legal-dialog-content">
+                @((MarkupString)_termsOfUseContent)
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Close" OnClick="CloseTermsDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Privacy Policy Dialog -->
+<SfDialog @ref="_privacyDialog" Width="90%" Height="80%" IsModal="true" ShowCloseIcon="true" Visible="false" CssClass="legal-dialog">
+    <DialogTemplates>
+        <Header>Privacy Policy</Header>
+        <Content>
+            <div class="legal-dialog-content">
+                @((MarkupString)_privacyPolicyContent)
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Close" OnClick="ClosePrivacyDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
 
