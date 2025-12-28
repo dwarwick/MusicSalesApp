@@ -21,6 +21,11 @@
     }
     else
     {
+        <!-- User Email Section -->
+        <div class="user-email-section mb-4">
+            <p class="user-email"><strong>Account Email:</strong> @_userEmail</p>
+        </div>
+
         @if (!string.IsNullOrEmpty(_successMessage))
         {
             <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
@@ -239,6 +244,10 @@
     <DialogTemplates>
         <Header>Close Account</Header>
         <Content>
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <SfMessage Severity="MessageSeverity.Error" CssClass="mb-3">@_errorMessage</SfMessage>
+            }
             @if (_hasPurchasedMusic)
             {
                 <div class="mb-3">

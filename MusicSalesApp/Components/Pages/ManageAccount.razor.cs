@@ -18,6 +18,9 @@ public partial class ManageAccountModel : BlazorBase
     protected string _successMessage = string.Empty;
     protected string _errorMessage = string.Empty;
     
+    // User email for display
+    protected string _userEmail = string.Empty;
+    
     // Password change fields
     protected string _currentPassword = string.Empty;
     protected string _newPassword = string.Empty;
@@ -78,6 +81,7 @@ public partial class ManageAccountModel : BlazorBase
                     _currentUser = await UserManager.GetUserAsync(user);
                     if (_currentUser != null)
                     {
+                        _userEmail = _currentUser.Email ?? string.Empty;
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
@@ -199,6 +203,26 @@ public partial class ManageAccountModel : BlazorBase
                 _currentPassword = string.Empty;
                 _newPassword = string.Empty;
                 _confirmPassword = string.Empty;
+                
+                // Send password changed email notification (only if email is available)
+                var userEmail = _currentUser.Email;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    try
+                    {
+                        var baseUrl = NavigationManager.BaseUri;
+                        var userName = _currentUser.UserName ?? userEmail;
+                        await AccountEmailService.SendPasswordChangedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send password changed email to user {UserId}", _currentUser.Id);
+                        // Don't fail the password change if email sending fails
+                    }
+                }
             }
             else
             {
@@ -339,6 +363,7 @@ public partial class ManageAccountModel : BlazorBase
     protected async Task ShowAccountClosureDialog()
     {
         _accountActionConfirmEmail = string.Empty;
+        _errorMessage = string.Empty;
         await _accountClosureDialog.ShowAsync();
     }
 
@@ -347,8 +372,18 @@ public partial class ManageAccountModel : BlazorBase
         await _accountClosureDialog.HideAsync();
     }
 
+    /// <summary>
+    /// Returns true if the user has an active subscription that hasn't been cancelled yet.
+    /// </summary>
+    protected bool HasActiveSubscription => _hasSubscription && !_endDate.HasValue;
+
     protected async Task ShowSuspendConfirmDialog()
     {
+        if (HasActiveSubscription)
+        {
+            _errorMessage = "You cannot suspend your account with an active subscription. You must cancel your active subscription and then try again.";
+            return;
+        }
         await _accountClosureDialog.HideAsync();
         await _suspendAccountDialog.ShowAsync();
     }
@@ -377,6 +412,26 @@ public partial class ManageAccountModel : BlazorBase
             
             if (result.Succeeded)
             {
+                // Send account suspended email notification (only if email is available)
+                var userEmail = _currentUser.Email;
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    try
+                    {
+                        var baseUrl = NavigationManager.BaseUri;
+                        var userName = _currentUser.UserName ?? userEmail;
+                        await AccountEmailService.SendAccountClosedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account suspended email to user {UserId}", _currentUser.Id);
+                        // Don't fail the suspension if email sending fails
+                    }
+                }
+                
                 await CloseSuspendAccountDialog();
                 NavigationManager.NavigateTo("/logout", forceLoad: true);
             }
@@ -394,6 +449,11 @@ public partial class ManageAccountModel : BlazorBase
 
     protected async Task ShowDeleteConfirmDialog()
     {
+        if (HasActiveSubscription)
+        {
+            _errorMessage = "You cannot delete your account with an active subscription. You must cancel your active subscription and then try again.";
+            return;
+        }
         await _accountClosureDialog.HideAsync();
         await _deleteAccountDialog.ShowAsync();
     }
@@ -413,12 +473,34 @@ public partial class ManageAccountModel : BlazorBase
             return;
         }
 
+        // Capture user info before deletion
+        var userEmail = _currentUser.Email;
+        var userName = _currentUser.UserName ?? userEmail ?? "User";
+        var baseUrl = NavigationManager.BaseUri;
+
         try
         {
             var result = await UserManager.DeleteAsync(_currentUser);
             
             if (result.Succeeded)
             {
+                // Send account deleted email notification (only if email is available)
+                if (!string.IsNullOrEmpty(userEmail))
+                {
+                    try
+                    {
+                        await AccountEmailService.SendAccountDeletedEmailAsync(
+                            userEmail,
+                            userName,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account deleted email");
+                        // Don't fail the deletion if email sending fails
+                    }
+                }
+                
                 await CloseDeleteAccountDialog();
                 NavigationManager.NavigateTo("/logout", forceLoad: true);
             }

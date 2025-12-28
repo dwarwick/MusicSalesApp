@@ -364,8 +364,10 @@ public class RecommendationService : IRecommendationService
                 result.Content, 
                 new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
+            // Filter out any recommendations with null scores
             return recommendations?
-                .Select(r => (r.SongId, r.Score))
+                .Where(r => r.Score.HasValue)
+                .Select(r => (r.SongId, r.Score!.Value))
                 .ToList() ?? new List<(int SongId, double Score)>();
         }
         catch (Exception ex)
@@ -515,7 +517,7 @@ public class RecommendationService : IRecommendationService
     {
         [JsonPropertyName("song_id")]
         public int SongId { get; set; }
-        public double Score { get; set; }
+        public double? Score { get; set; }
     }
 
     /// <summary>
