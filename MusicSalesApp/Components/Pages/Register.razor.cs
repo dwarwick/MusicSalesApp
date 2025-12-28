@@ -148,22 +148,6 @@ public partial class RegisterModel : BlazorBase, IDisposable
                 return;
             }
 
-            // Send welcome email notification (fire and forget)
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await AccountEmailService.SendAccountCreatedEmailAsync(
-                        Email,
-                        Email, // Use email as username since that's all we have at registration
-                        baseUrl);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to send welcome email to {Email}", Email);
-                }
-            });
-
             // Show verification section
             NewEmail = Email;
             showVerificationSection = true;
