@@ -225,7 +225,6 @@ public class PurchaseEmailService : IPurchaseEmailService
                         <tr style='background-color: #f5f5f5;'>
                             <th style='padding: 10px; text-align: left; border-bottom: 1px solid #ddd;'>#</th>
                             <th style='padding: 10px; text-align: left; border-bottom: 1px solid #ddd;'>Track</th>
-                            <th style='padding: 10px; text-align: right; border-bottom: 1px solid #ddd;'>Price</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -249,7 +248,6 @@ public class PurchaseEmailService : IPurchaseEmailService
                             <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(trackTitle)}</span>
                         </div>
                     </td>
-                    <td style='padding: 10px; text-align: right; border-bottom: 1px solid #eee; color: #333;'>${track.Price:F2}</td>
                 </tr>
             ");
         }
