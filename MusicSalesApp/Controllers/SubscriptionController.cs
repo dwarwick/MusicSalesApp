@@ -224,6 +224,31 @@ public class SubscriptionController : ControllerBase
 
             _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.PayPalSubscriptionId, user.Id);
 
+            // Refresh subscription to get updated details
+            var updatedSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId);
+            if (updatedSubscription != null)
+            {
+                // Send subscription confirmation email (fire and forget - don't block the response)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var baseUrl = GetBaseUrl();
+                        var userName = user.UserName ?? user.Email;
+                        await _purchaseEmailService.SendSubscriptionConfirmationAsync(
+                            user.Email,
+                            userName,
+                            updatedSubscription,
+                            subscription.PayPalSubscriptionId,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send subscription confirmation email to user {UserId}", user.Id);
+                    }
+                });
+            }
+
             return Ok(new { success = true });
         }
         catch (Exception ex)
