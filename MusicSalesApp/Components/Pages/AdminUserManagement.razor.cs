@@ -11,6 +11,8 @@ namespace MusicSalesApp.Components.Pages;
 
 public class AdminUserManagementModel : BlazorBase
 {
+    private const string RolesDelimiter = ", ";
+
     [Microsoft.AspNetCore.Components.Inject]
     protected IDbContextFactory<AppDbContext> DbContextFactory { get; set; } = default!;
 
@@ -83,7 +85,7 @@ public class AdminUserManagementModel : BlazorBase
             Theme = u.Theme,
             IsSuspended = u.IsSuspended,
             SuspendedAt = u.SuspendedAt,
-            Roles = string.Join(", ", userRoles
+            Roles = string.Join(RolesDelimiter, userRoles
                 .Where(ur => ur.UserId == u.Id)
                 .Join(roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
                 .Where(r => r != null))
@@ -106,7 +108,7 @@ public class AdminUserManagementModel : BlazorBase
         _editLockoutEnabled = user.LockoutEnabled;
         _editLockoutEnd = user.LockoutEnd;
         _editIsSuspended = user.IsSuspended;
-        _editSelectedRoles = user.Roles.Split(", ", StringSplitOptions.RemoveEmptyEntries).ToList();
+        _editSelectedRoles = user.Roles.Split(RolesDelimiter, StringSplitOptions.RemoveEmptyEntries).ToList();
         _validationErrors.Clear();
         _showEditModal = true;
     }
@@ -189,7 +191,7 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.LockoutEnd = _editLockoutEnd;
             _editingUser.IsSuspended = _editIsSuspended;
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
-            _editingUser.Roles = string.Join(", ", _editSelectedRoles);
+            _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
 
             // Close modal and refresh
             _showEditModal = false;
