@@ -259,6 +259,9 @@ try
     app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
     app.UseHttpsRedirection();
 
+    // required for /.well-known/* to be served from wwwroot
+    app.UseStaticFiles();
+
     app.UseAuthentication();
     app.UseAuthorization();
 
