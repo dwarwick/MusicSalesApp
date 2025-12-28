@@ -77,6 +77,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IAppSettingsService AppSettingsService { get; set; } = default!;
 
+    [Inject]
+    protected IAccountEmailService AccountEmailService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

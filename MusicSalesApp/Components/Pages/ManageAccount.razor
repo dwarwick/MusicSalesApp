@@ -21,6 +21,11 @@
     }
     else
     {
+        <!-- User Email Section -->
+        <div class="user-email-section mb-4">
+            <p class="user-email"><strong>Account Email:</strong> @_userEmail</p>
+        </div>
+
         @if (!string.IsNullOrEmpty(_successMessage))
         {
             <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>

@@ -27,6 +27,7 @@ public class SubscriptionController : ControllerBase
     /// </summary>
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPurchaseEmailService _purchaseEmailService;
+    private readonly IAccountEmailService _accountEmailService;
 
     /// <summary>
     /// Initializes a new instance of the SubscriptionController.
@@ -38,6 +39,7 @@ public class SubscriptionController : ControllerBase
     /// <param name="logger">Logger for tracking subscription operations.</param>
     /// <param name="httpClientFactory">Factory for creating HTTP clients for PayPal API calls.</param>
     /// <param name="purchaseEmailService">Service for sending purchase confirmation emails.</param>
+    /// <param name="accountEmailService">Service for sending account-related confirmation emails.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
         IAppSettingsService appSettingsService,
@@ -45,7 +47,8 @@ public class SubscriptionController : ControllerBase
         IConfiguration configuration,
         ILogger<SubscriptionController> logger,
         IHttpClientFactory httpClientFactory,
-        IPurchaseEmailService purchaseEmailService)
+        IPurchaseEmailService purchaseEmailService,
+        IAccountEmailService accountEmailService)
     {
         _subscriptionService = subscriptionService;
         _appSettingsService = appSettingsService;
@@ -54,6 +57,7 @@ public class SubscriptionController : ControllerBase
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _purchaseEmailService = purchaseEmailService;
+        _accountEmailService = accountEmailService;
     }
 
     [HttpGet("status")]
@@ -285,6 +289,25 @@ public class SubscriptionController : ControllerBase
 
         // Get updated subscription to return end date
         var updatedSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+
+        // Send subscription cancellation email (fire and forget - don't block the response)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var baseUrl = GetBaseUrl();
+                var userName = user.UserName ?? user.Email;
+                await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+                    user.Email!,
+                    userName!,
+                    updatedSubscription?.EndDate,
+                    baseUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send subscription cancellation email to user {UserId}", user.Id);
+            }
+        });
 
         return Ok(new
         {

@@ -18,6 +18,9 @@ public partial class ManageAccountModel : BlazorBase
     protected string _successMessage = string.Empty;
     protected string _errorMessage = string.Empty;
     
+    // User email for display
+    protected string _userEmail = string.Empty;
+    
     // Password change fields
     protected string _currentPassword = string.Empty;
     protected string _newPassword = string.Empty;
@@ -78,6 +81,7 @@ public partial class ManageAccountModel : BlazorBase
                     _currentUser = await UserManager.GetUserAsync(user);
                     if (_currentUser != null)
                     {
+                        _userEmail = _currentUser.Email ?? string.Empty;
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
@@ -199,6 +203,24 @@ public partial class ManageAccountModel : BlazorBase
                 _currentPassword = string.Empty;
                 _newPassword = string.Empty;
                 _confirmPassword = string.Empty;
+                
+                // Send password changed email notification
+                var baseUrl = NavigationManager.BaseUri;
+                var userName = _currentUser.UserName ?? _currentUser.Email;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await AccountEmailService.SendPasswordChangedEmailAsync(
+                            _currentUser.Email!,
+                            userName!,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send password changed email to user {UserId}", _currentUser.Id);
+                    }
+                });
             }
             else
             {
@@ -377,6 +399,25 @@ public partial class ManageAccountModel : BlazorBase
             
             if (result.Succeeded)
             {
+                // Send account suspended email notification
+                var baseUrl = NavigationManager.BaseUri;
+                var userName = _currentUser.UserName ?? _currentUser.Email;
+                var userEmail = _currentUser.Email;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await AccountEmailService.SendAccountClosedEmailAsync(
+                            userEmail!,
+                            userName!,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account suspended email to user {UserId}", _currentUser.Id);
+                    }
+                });
+                
                 await CloseSuspendAccountDialog();
                 NavigationManager.NavigateTo("/logout", forceLoad: true);
             }
@@ -413,12 +454,33 @@ public partial class ManageAccountModel : BlazorBase
             return;
         }
 
+        // Capture user info before deletion
+        var userEmail = _currentUser.Email;
+        var userName = _currentUser.UserName ?? _currentUser.Email;
+        var baseUrl = NavigationManager.BaseUri;
+
         try
         {
             var result = await UserManager.DeleteAsync(_currentUser);
             
             if (result.Succeeded)
             {
+                // Send account deleted email notification
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await AccountEmailService.SendAccountDeletedEmailAsync(
+                            userEmail!,
+                            userName!,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send account deleted email");
+                    }
+                });
+                
                 await CloseDeleteAccountDialog();
                 NavigationManager.NavigateTo("/logout", forceLoad: true);
             }
