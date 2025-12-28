@@ -215,22 +215,20 @@ public class AdminUserManagementModel : BlazorBase
             // Send reactivation email if account was un-suspended
             if (wasReactivated && !string.IsNullOrEmpty(_editEmail))
             {
-                var baseUrl = NavigationManager.BaseUri;
-                var userName = user.UserName ?? _editEmail;
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
-                    {
-                        await AccountEmailService.SendAccountReactivatedEmailAsync(
-                            _editEmail,
-                            userName,
-                            baseUrl);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogError(ex, "Failed to send account reactivated email to user {UserId}", user.Id);
-                    }
-                });
+                    var baseUrl = NavigationManager.BaseUri;
+                    var userName = user.UserName ?? _editEmail;
+                    await AccountEmailService.SendAccountReactivatedEmailAsync(
+                        _editEmail,
+                        userName,
+                        baseUrl);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to send account reactivated email to user {UserId}", user.Id);
+                    // Don't throw - email failure shouldn't fail the save operation
+                }
             }
 
             // Update local model
