@@ -64,27 +64,12 @@ h1:focus {
     margin-left: 10px;
 }
 
-/* Syncfusion Menu Submenu Fix - Position submenu directly adjacent to parent menu */
-.e-menu-wrapper .e-ul .e-menu-item .e-ul {
-    left: 100% !important;
-    margin-left: 0 !important;
+/* Admin menu header styling */
+.e-menu-wrapper .e-menu .e-menu-item.e-disabled {
+    opacity: 1 !important;
+    font-weight: bold;
+    cursor: default;
 }
-
-/* Ensure submenu stays visible when hovering between parent and submenu */
-.e-menu-wrapper .e-menu-item.e-menu-caret-icon {
-    position: relative;
-}
-
-/* Add invisible bridge between parent menu and submenu to prevent gap */
-.e-menu-wrapper .e-menu-item.e-menu-caret-icon::after {
-    content: '';
-    position: absolute;
-    right: -10px;
-    top: 0;
-    width: 10px;
-    height: 100%;
-}
-
 
 /* AlbumPlayer - New 5-row layout structure */
 .album-image-title-row {
