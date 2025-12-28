@@ -26,6 +26,9 @@
                         <div class="mb-3">
                             <label for="password" class="e-label">Password</label>
                             <SfTextBox ID="password" Name="password" Type="InputType.Password" Placeholder="Enter password" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
+                            <div class="text-end mt-1">
+                                <a href="/forgot-password" class="text-muted small">Forgot Password?</a>
+                            </div>
                         </div>
 
                         @if (showReactivateCheckbox)

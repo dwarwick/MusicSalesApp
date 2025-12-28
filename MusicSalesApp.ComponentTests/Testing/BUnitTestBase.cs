@@ -111,6 +111,12 @@ public abstract class BUnitTestBase
             .ReturnsAsync((true, 0));
         MockAuthService.Setup(x => x.IsEmailVerifiedAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
+        MockAuthService.Setup(x => x.SendPasswordResetEmailAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, string.Empty));
+        MockAuthService.Setup(x => x.VerifyPasswordResetTokenAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, string.Empty));
+        MockAuthService.Setup(x => x.ResetPasswordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, string.Empty));
 
         // Setup default returns for ICartService methods
         MockCartService.Setup(x => x.GetCartItemsAsync(It.IsAny<int>()))

@@ -363,4 +363,120 @@ public class AuthenticationService : IAuthenticationService
             ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
             : $"{seconds} second{(seconds != 1 ? "s" : "")}";
     }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> SendPasswordResetEmailAsync(string email, string baseUrl)
+    {
+        try
+        {
+            var user = await _userManager.FindByEmailAsync(email);
+            
+            // Always return success to not reveal if account exists
+            // But only send email if user exists
+            if (user == null)
+            {
+                _logger.LogInformation("Password reset requested for non-existent email: {Email}", email);
+                return (true, string.Empty);
+            }
+
+            // Generate password reset token
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            
+            // URL-encode the token to handle special characters
+            var encodedToken = HttpUtility.UrlEncode(token);
+            var resetUrl = $"{baseUrl.TrimEnd('/')}/reset-password?userId={user.Id}&token={encodedToken}";
+
+            // Send password reset email
+            var emailSent = _emailService.SendPasswordResetEmail(email, resetUrl, baseUrl);
+            if (!emailSent)
+            {
+                _logger.LogError("Failed to send password reset email to {Email}", email);
+                // Still return success to not reveal if account exists
+                return (true, string.Empty);
+            }
+
+            _logger.LogInformation("Password reset email sent to {Email}", email);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending password reset email to {Email}", email);
+            // Return success to not reveal any information
+            return (true, string.Empty);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool IsValid, string Error)> VerifyPasswordResetTokenAsync(string userId, string token)
+    {
+        try
+        {
+            if (!int.TryParse(userId, out _))
+            {
+                return (false, "Invalid reset link.");
+            }
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return (false, "Invalid reset link.");
+            }
+
+            // Token is already URL-decoded by ASP.NET Core when received from query string
+            // Verify the token is valid using the password reset token provider
+            var isValid = await _userManager.VerifyUserTokenAsync(
+                user, 
+                _userManager.Options.Tokens.PasswordResetTokenProvider, 
+                "ResetPassword", 
+                token);
+
+            if (!isValid)
+            {
+                _logger.LogWarning("Invalid or expired password reset token for user {UserId}", userId);
+                return (false, "This password reset link has expired or is invalid. Please request a new one.");
+            }
+
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying password reset token for user {UserId}", userId);
+            return (false, "An error occurred. Please try again.");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> ResetPasswordAsync(string userId, string token, string newPassword)
+    {
+        try
+        {
+            if (!int.TryParse(userId, out _))
+            {
+                return (false, "Invalid reset link.");
+            }
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return (false, "Invalid reset link.");
+            }
+
+            // Token is already URL-decoded by ASP.NET Core when received from query string
+            var result = await _userManager.ResetPasswordAsync(user, token, newPassword);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Password reset failed for user {UserId}: {Errors}", userId, errors);
+                return (false, errors);
+            }
+
+            _logger.LogInformation("Password successfully reset for user {UserId}", userId);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting password for user {UserId}", userId);
+            return (false, "An error occurred. Please try again.");
+        }
+    }
 }

@@ -18,8 +18,9 @@
         /// </summary>
         /// <param name="email">The recipient's email address.</param>
         /// <param name="tokenUrl">The complete password reset URL including the token.</param>
+        /// <param name="baseUrl">The base URL for constructing the logo image URL.</param>
         /// <returns>True if the email was sent successfully, false otherwise.</returns>
-        bool SendPasswordResetEmail(string email, string tokenUrl);
+        bool SendPasswordResetEmail(string email, string tokenUrl, string baseUrl);
 
         /// <summary>
         /// Sends an email asynchronously with the specified subject and body.
