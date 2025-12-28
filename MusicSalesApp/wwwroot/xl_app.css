@@ -416,6 +416,131 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+
+    /* Hero Section - XL Breakpoint */
+    .hero-section {
+        gap: 3rem;
+        padding: 3rem 0;
+    }
+
+    .hero-title {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1.25rem;
+        max-width: 500px;
+        margin-bottom: 2rem;
+    }
+
+    .hero-cta {
+        gap: 1rem;
+    }
+
+    .cta-primary,
+    .cta-secondary {
+        padding: 14px 32px;
+        font-size: 1rem;
+    }
+
+    .cta-large {
+        padding: 16px 48px;
+        font-size: 1.125rem;
+    }
+
+    .hero-animation {
+        width: 300px;
+        height: 300px;
+    }
+
+    /* Features Section - XL Breakpoint */
+    .features-section {
+        padding: 4rem 0;
+    }
+
+    .features-section .section-title {
+        font-size: 2.5rem;
+        margin-bottom: 3rem;
+    }
+
+    .features-grid {
+        gap: 2rem;
+    }
+
+    .feature-card {
+        padding: 2rem;
+    }
+
+    .feature-icon {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 1.5rem;
+    }
+
+    .feature-card h3 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .feature-card p {
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    /* User Playlists Section - XL Breakpoint */
+    .user-playlists-section {
+        gap: 1.5rem;
+        padding: 2rem 0;
+    }
+
+    .user-playlists-section .section-title {
+        font-size: 2rem;
+    }
+
+    /* Featured Music Section - XL Breakpoint */
+    .featured-music-section {
+        padding: 2rem 0;
+    }
+
+    .featured-music-section .section-title {
+        font-size: 2rem;
+    }
+
+    .featured-music-section .section-subtitle {
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Subscription CTA Section - XL Breakpoint */
+    .subscription-cta-section {
+        padding: 4rem;
+        margin: 3rem 0;
+    }
+
+    .subscription-cta-content h2 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .subscription-price-highlight {
+        font-size: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .subscription-price-highlight .price {
+        font-size: 3rem;
+    }
+
+    .subscription-benefits {
+        margin-bottom: 2rem;
+    }
+
+    .subscription-benefits li {
+        font-size: 1.125rem;
+        gap: 12px;
+        margin-bottom: 1rem;
+    }
 }
 
 /* Playlists Page Spacing */

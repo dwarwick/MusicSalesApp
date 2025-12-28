@@ -550,4 +550,141 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+
+    /* Hero Section - SM Breakpoint */
+    .hero-section {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.5rem;
+        padding: 1.5rem 0;
+    }
+
+    .hero-content {
+        min-width: 100%;
+    }
+
+    .hero-title {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        max-width: 100%;
+        margin-bottom: 1.5rem;
+    }
+
+    .hero-cta {
+        justify-content: center;
+        gap: 0.75rem;
+    }
+
+    .cta-primary,
+    .cta-secondary {
+        padding: 12px 24px;
+        font-size: 0.9rem;
+    }
+
+    .cta-large {
+        padding: 14px 32px;
+        font-size: 1rem;
+    }
+
+    .hero-animation {
+        width: 180px;
+        height: 180px;
+    }
+
+    /* Features Section - SM Breakpoint */
+    .features-section {
+        padding: 2rem 0;
+    }
+
+    .features-section .section-title {
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .features-grid {
+        gap: 1rem;
+    }
+
+    .feature-card {
+        padding: 1.5rem;
+    }
+
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        margin-bottom: 1rem;
+    }
+
+    .feature-icon svg {
+        width: 32px;
+        height: 32px;
+    }
+
+    .feature-card h3 {
+        font-size: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .feature-card p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* User Playlists Section - SM Breakpoint */
+    .user-playlists-section {
+        gap: 1rem;
+        padding: 1.5rem 0;
+    }
+
+    .user-playlists-section .section-title {
+        font-size: 1.5rem;
+    }
+
+    /* Featured Music Section - SM Breakpoint */
+    .featured-music-section {
+        padding: 1.5rem 0;
+    }
+
+    .featured-music-section .section-title {
+        font-size: 1.5rem;
+    }
+
+    .featured-music-section .section-subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Subscription CTA Section - SM Breakpoint */
+    .subscription-cta-section {
+        padding: 2rem 1.5rem;
+        margin: 2rem 0;
+    }
+
+    .subscription-cta-content h2 {
+        font-size: 1.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .subscription-price-highlight {
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .subscription-price-highlight .price {
+        font-size: 2.25rem;
+    }
+
+    .subscription-benefits {
+        margin-bottom: 1.5rem;
+    }
+
+    .subscription-benefits li {
+        font-size: 1rem;
+        gap: 10px;
+        margin-bottom: 0.75rem;
+    }
 }

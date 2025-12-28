@@ -17,8 +17,60 @@ public class HomeTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Welcome to Stream Tunes!"));
+        // Assert - Check for key elements in the redesigned home page
+        Assert.That(cut.Markup, Does.Contain("Your Music."));
+        Assert.That(cut.Markup, Does.Contain("Unlimited."));
+        Assert.That(cut.Markup, Does.Contain("Stream Tunes"));
+    }
+
+    [Test]
+    public void Home_ShowsHeroSection_WithCallToAction()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify hero section content
+        Assert.That(cut.Markup, Does.Contain("hero-section"));
+        Assert.That(cut.Markup, Does.Contain("hero-title"));
+        Assert.That(cut.Markup, Does.Contain("Start Free Trial"));
+    }
+
+    [Test]
+    public void Home_ShowsFeaturesSection_ForNonSubscribers()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify features section is present
+        Assert.That(cut.Markup, Does.Contain("Why Stream Tunes?"));
+        Assert.That(cut.Markup, Does.Contain("Unlimited Streaming"));
+        Assert.That(cut.Markup, Does.Contain("Personal Playlists"));
+        Assert.That(cut.Markup, Does.Contain("Cancel Anytime"));
+    }
+
+    [Test]
+    public void Home_ShowsFeaturedMusicSection()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify featured music section is present
+        Assert.That(cut.Markup, Does.Contain("Featured Music"));
+        Assert.That(cut.Markup, Does.Contain("Listen to samples"));
+        Assert.That(cut.Markup, Does.Contain("View All"));
+    }
+
+    [Test]
+    public void Home_ShowsSubscriptionCtaSection_ForNonSubscribers()
+    {
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify subscription CTA section is present
+        Assert.That(cut.Markup, Does.Contain("Ready to unlock unlimited music?"));
+        Assert.That(cut.Markup, Does.Contain("subscription-benefits"));
+        Assert.That(cut.Markup, Does.Contain("Full-length streaming"));
+        Assert.That(cut.Markup, Does.Contain("Get Started Free"));
     }
 
     [Test]
