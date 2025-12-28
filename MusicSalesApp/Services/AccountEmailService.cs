@@ -188,6 +188,40 @@ public class AccountEmailService : IAccountEmailService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<bool> SendAccountReactivatedEmailAsync(string userEmail, string userName, string baseUrl)
+    {
+        try
+        {
+            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+
+            var body = new StringBuilder();
+            body.Append(BuildEmailHeader(logoUrl, "Account Reactivated"));
+            body.Append(BuildGreeting(userName));
+            body.Append(@"
+                <p style='font-size: 16px; color: #333;'>Great news! Your StreamTunes account has been reactivated.</p>
+                <p style='font-size: 16px; color: #333;'>You can now:</p>
+                <ul style='font-size: 16px; color: #333;'>
+                    <li>Log in to your account</li>
+                    <li>Access all your previously purchased music</li>
+                    <li>Continue enjoying your playlists</li>
+                    <li>Subscribe for unlimited streaming access</li>
+                </ul>
+                <p style='font-size: 16px; color: #333;'>Welcome back to StreamTunes!</p>
+                <p style='font-size: 16px; color: #333;'>If you did not request this reactivation, please contact our support team immediately.</p>
+            ");
+            body.Append(BuildEmailFooter());
+
+            var subject = "StreamTunes - Account Reactivated";
+            return await _emailService.SendEmailAsync(userEmail, subject, body.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending account reactivated email to {Email}", userEmail);
+            return false;
+        }
+    }
+
     private string BuildEmailHeader(string logoUrl, string title)
     {
         return $@"

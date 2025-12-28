@@ -227,6 +227,9 @@ public abstract class BUnitTestBase
         MockAccountEmailService.Setup(x => x.SendSubscriptionCancelledEmailAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        MockAccountEmailService.Setup(x => x.SendAccountReactivatedEmailAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
 
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()

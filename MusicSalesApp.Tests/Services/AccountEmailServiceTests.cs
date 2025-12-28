@@ -398,5 +398,61 @@ public class AccountEmailServiceTests
                 It.IsAny<string>(),
                 It.Is<string>(body => body.Contains("images/logo-light-small.png"))),
             Times.Once);
+
+        // Reset
+        _mockEmailService.Invocations.Clear();
+
+        // Act & Assert - Account Reactivated
+        await _service.SendAccountReactivatedEmailAsync(userEmail, userName, baseUrl);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.Is<string>(body => body.Contains("images/logo-light-small.png"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendAccountReactivatedEmailAsync_SendsEmailWithCorrectDetails()
+    {
+        // Arrange
+        var userEmail = "test@example.com";
+        var userName = "Test User";
+        var baseUrl = "https://streamtunes.net";
+
+        // Act
+        var result = await _service.SendAccountReactivatedEmailAsync(userEmail, userName, baseUrl);
+
+        // Assert
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                userEmail,
+                It.Is<string>(s => s.Contains("Account Reactivated")),
+                It.Is<string>(body =>
+                    body.Contains("logo-light-small.png") &&
+                    body.Contains("Account Reactivated") &&
+                    body.Contains("Test User") &&
+                    body.Contains("reactivated") &&
+                    body.Contains("Welcome back"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendAccountReactivatedEmailAsync_WhenEmailServiceFails_ReturnsFalse()
+    {
+        // Arrange
+        _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        var userEmail = "test@example.com";
+        var userName = "Test User";
+        var baseUrl = "https://streamtunes.net";
+
+        // Act
+        var result = await _service.SendAccountReactivatedEmailAsync(userEmail, userName, baseUrl);
+
+        // Assert
+        Assert.That(result, Is.False);
     }
 }
