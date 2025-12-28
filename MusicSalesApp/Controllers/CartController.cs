@@ -19,19 +19,22 @@ public class CartController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly ILogger<CartController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPurchaseEmailService _purchaseEmailService;
 
     public CartController(
         ICartService cartService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<CartController> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IPurchaseEmailService purchaseEmailService)
     {
         _cartService = cartService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _purchaseEmailService = purchaseEmailService;
     }
 
     [HttpGet]
@@ -277,9 +280,10 @@ public class CartController : ControllerBase
             return BadRequest(new { success = false, error = errorMessage ?? "Failed to capture PayPal order. Payment may not have been completed." });
         }
 
-        // Get cart items before clearing
-        var cartItems = await _cartService.GetCartItemsAsync(user.Id);
-        var songFileNames = cartItems.Select(c => c.SongFileName).ToList();
+        // Get cart items with metadata before clearing (for email)
+        var cartItemsWithMetadata = (await _cartService.GetCartItemsWithMetadataAsync(user.Id)).ToList();
+        var songFileNames = cartItemsWithMetadata.Select(c => c.SongFileName).ToList();
+        var totalAmount = cartItemsWithMetadata.Sum(c => c.Price);
 
         // Add songs to owned songs
         await _cartService.AddOwnedSongsAsync(user.Id, songFileNames, request.OrderId);
@@ -292,7 +296,40 @@ public class CartController : ControllerBase
 
         _logger.LogInformation("User {UserId} completed purchase of {Count} songs", user.Id, songFileNames.Count);
 
+        // Send purchase confirmation email (fire and forget - don't block the response)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var baseUrl = GetBaseUrl();
+                var userName = user.UserName ?? user.Email;
+                await _purchaseEmailService.SendSongPurchaseConfirmationAsync(
+                    user.Email,
+                    userName,
+                    request.OrderId,
+                    request.PayPalOrderId,
+                    cartItemsWithMetadata,
+                    totalAmount,
+                    baseUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send purchase confirmation email to user {UserId}", user.Id);
+            }
+        });
+
         return Ok(new { success = true, purchasedCount = songFileNames.Count });
+    }
+
+    private string GetBaseUrl()
+    {
+        // Use configured return URL if available, otherwise construct from request
+        var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"];
+        if (!string.IsNullOrEmpty(returnBaseUrl))
+        {
+            return returnBaseUrl;
+        }
+        return $"{Request.Scheme}://{Request.Host}";
     }
 
     private async Task<(bool success, string errorMessage)> CaptureWithPayPalAsync(string payPalOrderId)

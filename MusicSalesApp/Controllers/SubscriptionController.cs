@@ -26,6 +26,7 @@ public class SubscriptionController : ControllerBase
     /// HTTP client factory for making PayPal API requests.
     /// </summary>
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IPurchaseEmailService _purchaseEmailService;
 
     /// <summary>
     /// Initializes a new instance of the SubscriptionController.
@@ -36,13 +37,15 @@ public class SubscriptionController : ControllerBase
     /// <param name="configuration">Application configuration for accessing PayPal settings.</param>
     /// <param name="logger">Logger for tracking subscription operations.</param>
     /// <param name="httpClientFactory">Factory for creating HTTP clients for PayPal API calls.</param>
+    /// <param name="purchaseEmailService">Service for sending purchase confirmation emails.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
         IAppSettingsService appSettingsService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<SubscriptionController> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IPurchaseEmailService purchaseEmailService)
     {
         _subscriptionService = subscriptionService;
         _appSettingsService = appSettingsService;
@@ -50,6 +53,7 @@ public class SubscriptionController : ControllerBase
         _configuration = configuration;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _purchaseEmailService = purchaseEmailService;
     }
 
     [HttpGet("status")]
@@ -145,6 +149,30 @@ public class SubscriptionController : ControllerBase
 
             _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", request.SubscriptionId, user.Id);
 
+            // Send subscription confirmation email (fire and forget - don't block the response)
+            var subscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(request.SubscriptionId);
+            if (subscription != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var baseUrl = GetBaseUrl();
+                        var userName = user.UserName ?? user.Email;
+                        await _purchaseEmailService.SendSubscriptionConfirmationAsync(
+                            user.Email,
+                            userName,
+                            subscription,
+                            request.SubscriptionId,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send subscription confirmation email to user {UserId}", user.Id);
+                    }
+                });
+            }
+
             return Ok(new { success = true });
         }
         catch (Exception ex)
@@ -152,6 +180,17 @@ public class SubscriptionController : ControllerBase
             _logger.LogError(ex, "Error activating subscription {SubscriptionId}", request.SubscriptionId);
             return StatusCode(500, "Failed to activate subscription");
         }
+    }
+
+    private string GetBaseUrl()
+    {
+        // Use configured return URL if available, otherwise construct from request
+        var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"];
+        if (!string.IsNullOrEmpty(returnBaseUrl))
+        {
+            return returnBaseUrl;
+        }
+        return $"{Request.Scheme}://{Request.Host}";
     }
 
     [HttpPost("activate-current")]
@@ -184,6 +223,31 @@ public class SubscriptionController : ControllerBase
             );
 
             _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.PayPalSubscriptionId, user.Id);
+
+            // Refresh subscription to get updated details
+            var updatedSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId);
+            if (updatedSubscription != null)
+            {
+                // Send subscription confirmation email (fire and forget - don't block the response)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var baseUrl = GetBaseUrl();
+                        var userName = user.UserName ?? user.Email;
+                        await _purchaseEmailService.SendSubscriptionConfirmationAsync(
+                            user.Email,
+                            userName,
+                            updatedSubscription,
+                            subscription.PayPalSubscriptionId,
+                            baseUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send subscription confirmation email to user {UserId}", user.Id);
+                    }
+                });
+            }
 
             return Ok(new { success = true });
         }
