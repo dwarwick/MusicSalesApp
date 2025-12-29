@@ -40,6 +40,13 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.SendNewSongNotificationsAsync(),
                 Cron.Daily(4));
 
+            // Schedule nightly sitemap generation at 5 AM UTC
+            // This runs after all other jobs to ensure sitemap reflects current state
+            RecurringJob.AddOrUpdate<ISitemapService>(
+                "generate-sitemap",
+                service => service.GenerateSitemapAsync(),
+                Cron.Daily(5));
+
             _logger.LogInformation("Hangfire recurring jobs initialized successfully");
         }
         catch (Exception ex)
