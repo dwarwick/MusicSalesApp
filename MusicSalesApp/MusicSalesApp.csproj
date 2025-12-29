@@ -42,6 +42,10 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
+    <!-- Exclude sitemap.xml from publish - it is generated dynamically -->
+    <Content Update="wwwroot\sitemap.xml">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <Target Name="PruneLogsFromPublish" AfterTargets="Publish">
