@@ -82,7 +82,7 @@ public class SitemapService : ISitemapService
             Encoding = Encoding.UTF8
         };
 
-        using var stringWriter = new StringWriter();
+        using var stringWriter = new Utf8StringWriter();
         using var xmlWriter = XmlWriter.Create(stringWriter, settings);
 
         xmlWriter.WriteStartDocument();
@@ -150,5 +150,14 @@ public class SitemapService : ISitemapService
 
         // Remove extension (e.g., "My Song.mp3" -> "My Song")
         return Path.GetFileNameWithoutExtension(fileName);
+    }
+
+    /// <summary>
+    /// A StringWriter that reports UTF-8 encoding instead of UTF-16.
+    /// This is needed so that XmlWriter generates the correct encoding declaration.
+    /// </summary>
+    private class Utf8StringWriter : StringWriter
+    {
+        public override Encoding Encoding => Encoding.UTF8;
     }
 }

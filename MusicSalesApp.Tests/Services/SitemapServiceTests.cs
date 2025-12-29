@@ -321,4 +321,23 @@ public class SitemapServiceTests
         Assert.That(content, Does.Contain("https://custom-domain.com"), "Should use configured base URL");
         Assert.That(content, Does.Not.Contain("https://streamtunes.net"), "Should not use default URL");
     }
+
+    [Test]
+    public async Task GenerateSitemapAsync_IncludesXmlDeclarationWithUtf8Encoding()
+    {
+        // Arrange
+        _mockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<SongMetadata>());
+
+        // Act
+        await _service.GenerateSitemapAsync();
+
+        // Assert
+        var sitemapPath = Path.Combine(_tempDirectory, "sitemap.xml");
+        var content = await File.ReadAllTextAsync(sitemapPath);
+
+        // Verify the XML declaration is present with UTF-8 encoding
+        Assert.That(content, Does.StartWith("<?xml version=\"1.0\" encoding=\"utf-8\"?>"),
+            "Sitemap should include XML declaration with UTF-8 encoding");
+    }
 }
