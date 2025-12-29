@@ -173,6 +173,7 @@ try
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
+    builder.Services.AddScoped<ISitemapService, SitemapService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
