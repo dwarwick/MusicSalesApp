@@ -1,6 +1,5 @@
 using System.Text;
 using System.Xml;
-using Microsoft.AspNetCore.WebUtilities;
 
 namespace MusicSalesApp.Services;
 
@@ -80,8 +79,7 @@ public class SitemapService : ISitemapService
         {
             Indent = true,
             IndentChars = "  ",
-            Encoding = Encoding.UTF8,
-            Async = true
+            Encoding = Encoding.UTF8
         };
 
         using var stringWriter = new StringWriter();
