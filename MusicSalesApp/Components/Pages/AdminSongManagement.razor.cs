@@ -242,7 +242,8 @@ public class AdminSongManagementModel : ComponentBase
                 var fileExtension = Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
                 var contentType = GetImageContentType(fileExtension);
                 
-                var newFileName = _editingSong.JpegFileName;
+                var oldFileName = _editingSong.JpegFileName;
+                var newFileName = oldFileName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
                     newFileName = $"{_editingSong.SongTitle}{fileExtension}";
@@ -253,19 +254,56 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
+                // Delete old blob before uploading new one (always delete when replacing)
+                if (!string.IsNullOrEmpty(oldFileName))
+                {
+                    await StorageService.DeleteAsync(oldFileName);
+                }
+
                 await StorageService.UploadAsync(newFileName, stream, contentType);
                 _editingSong.JpegFileName = newFileName;
 
-                // Create/update metadata in database
-                await MetadataService.UpsertAsync(new SongMetadata
+                // Get existing metadata by old filename and update it, or by the associated MP3 file
+                SongMetadata existingMetadata = null;
+                if (!string.IsNullOrEmpty(oldFileName))
                 {
-                    BlobPath = newFileName,
-                    FileExtension = fileExtension,
-                    AlbumName = _editingSong.AlbumName ?? string.Empty,
-                    IsAlbumCover = false,
-                    Genre = _editGenre,
-                    SongPrice = _editSongPrice
-                });
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(oldFileName);
+                }
+                
+                // If no existing metadata found by old image path, try to find it by MP3 path
+                // This handles the case where a standalone song already has metadata for its MP3
+                if (existingMetadata == null && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
+                {
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(_editingSong.Mp3FileName);
+                }
+
+                if (existingMetadata != null)
+                {
+                    // Update existing record with new image path
+                    existingMetadata.ImageBlobPath = newFileName;
+                    existingMetadata.FileExtension = fileExtension;
+                    existingMetadata.AlbumName = _editingSong.AlbumName ?? string.Empty;
+                    existingMetadata.IsAlbumCover = false;
+                    existingMetadata.Genre = _editGenre;
+                    existingMetadata.SongPrice = _editSongPrice;
+                    existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    await MetadataService.UpsertAsync(existingMetadata);
+                }
+                else
+                {
+                    // Create new metadata if none exists
+                    await MetadataService.UpsertAsync(new SongMetadata
+                    {
+                        BlobPath = newFileName,
+                        ImageBlobPath = newFileName,
+                        FileExtension = fileExtension,
+                        AlbumName = _editingSong.AlbumName ?? string.Empty,
+                        IsAlbumCover = false,
+                        Genre = _editGenre,
+                        SongPrice = _editSongPrice,
+                        DisplayOnHomePage = _editDisplayOnHomePage
+                    });
+                }
             }
 
             if (_albumImageFile != null && _editingSong.IsAlbum)
@@ -276,7 +314,8 @@ public class AdminSongManagementModel : ComponentBase
                 var fileExtension = Path.GetExtension(_albumImageFile.Name).ToLowerInvariant();
                 var contentType = GetImageContentType(fileExtension);
                 
-                var newFileName = _editingSong.AlbumCoverBlobName;
+                var oldFileName = _editingSong.AlbumCoverBlobName;
+                var newFileName = oldFileName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
                     newFileName = $"{_editingSong.AlbumName}_cover{fileExtension}";
@@ -287,18 +326,48 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
+                // Delete old blob before uploading new one (always delete when replacing)
+                if (!string.IsNullOrEmpty(oldFileName))
+                {
+                    await StorageService.DeleteAsync(oldFileName);
+                }
+
                 await StorageService.UploadAsync(newFileName, stream, contentType);
                 _editingSong.AlbumCoverBlobName = newFileName;
 
-                // Create/update metadata in database
-                await MetadataService.UpsertAsync(new SongMetadata
+                // Get existing metadata by old filename and update it
+                SongMetadata existingMetadata = null;
+                if (!string.IsNullOrEmpty(oldFileName))
                 {
-                    BlobPath = newFileName,
-                    FileExtension = fileExtension,
-                    AlbumName = _editingSong.AlbumName,
-                    IsAlbumCover = true,
-                    AlbumPrice = _editAlbumPrice
-                });
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(oldFileName);
+                }
+
+                if (existingMetadata != null)
+                {
+                    // Update existing record with new image path
+                    existingMetadata.ImageBlobPath = newFileName;
+                    existingMetadata.BlobPath = newFileName; // Also update legacy BlobPath for album covers
+                    existingMetadata.FileExtension = fileExtension;
+                    existingMetadata.AlbumName = _editingSong.AlbumName;
+                    existingMetadata.IsAlbumCover = true;
+                    existingMetadata.AlbumPrice = _editAlbumPrice;
+                    existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    await MetadataService.UpsertAsync(existingMetadata);
+                }
+                else
+                {
+                    // Create new metadata if none exists
+                    await MetadataService.UpsertAsync(new SongMetadata
+                    {
+                        BlobPath = newFileName,
+                        ImageBlobPath = newFileName,
+                        FileExtension = fileExtension,
+                        AlbumName = _editingSong.AlbumName,
+                        IsAlbumCover = true,
+                        AlbumPrice = _editAlbumPrice,
+                        DisplayOnHomePage = _editDisplayOnHomePage
+                    });
+                }
             }
 
             // Update metadata in database for existing files
