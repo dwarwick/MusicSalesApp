@@ -254,8 +254,8 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
-                // Delete old blob if filename changed (e.g., extension changed)
-                if (!string.IsNullOrEmpty(oldFileName) && !string.Equals(oldFileName, newFileName, StringComparison.OrdinalIgnoreCase))
+                // Delete old blob before uploading new one (always delete when replacing)
+                if (!string.IsNullOrEmpty(oldFileName))
                 {
                     await StorageService.DeleteAsync(oldFileName);
                 }
@@ -326,8 +326,8 @@ public class AdminSongManagementModel : ComponentBase
                     newFileName = Path.ChangeExtension(newFileName, fileExtension);
                 }
 
-                // Delete old blob if filename changed (e.g., extension changed)
-                if (!string.IsNullOrEmpty(oldFileName) && !string.Equals(oldFileName, newFileName, StringComparison.OrdinalIgnoreCase))
+                // Delete old blob before uploading new one (always delete when replacing)
+                if (!string.IsNullOrEmpty(oldFileName))
                 {
                     await StorageService.DeleteAsync(oldFileName);
                 }
