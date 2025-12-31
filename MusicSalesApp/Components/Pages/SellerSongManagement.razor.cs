@@ -83,7 +83,7 @@ public partial class SellerSongManagementModel : BlazorBase
         {
             Id = m.Id.ToString(),
             AlbumName = m.AlbumName ?? string.Empty,
-            SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+            SongTitle = GetSongTitleFromMetadata(m),
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
             AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
@@ -111,6 +111,33 @@ public partial class SellerSongManagementModel : BlazorBase
                 song.AlbumCoverImageUrl = AzureStorageService.GetReadSasUri(song.AlbumCoverBlobName, TimeSpan.FromHours(1)).ToString();
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts the song title from metadata by looking at various blob path fields.
+    /// Priority: Mp3BlobPath > ImageBlobPath > BlobPath (deprecated)
+    /// </summary>
+    private static string GetSongTitleFromMetadata(SongMetadata metadata)
+    {
+        // Try MP3 path first (most common for songs)
+        if (!string.IsNullOrEmpty(metadata.Mp3BlobPath))
+        {
+            return System.IO.Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath);
+        }
+        
+        // Then try image path (for album covers)
+        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+        {
+            return System.IO.Path.GetFileNameWithoutExtension(metadata.ImageBlobPath);
+        }
+        
+        // Fall back to deprecated BlobPath
+        if (!string.IsNullOrEmpty(metadata.BlobPath))
+        {
+            return System.IO.Path.GetFileNameWithoutExtension(metadata.BlobPath);
+        }
+
+        return "Unknown";
     }
 
     protected void NavigateToUpload()
@@ -223,11 +250,10 @@ public partial class SellerSongManagementModel : BlazorBase
                 return;
             }
 
-            // Get the metadata and update it
+            // Get the metadata by ID directly (more reliable than blob path)
             if (int.TryParse(_editingSong.Id, out var metadataId))
             {
-                var metadata = await SongMetadataService.GetByBlobPathAsync(
-                    _editingSong.IsAlbum ? _editingSong.AlbumCoverBlobName : _editingSong.Mp3FileName);
+                var metadata = await SongMetadataService.GetByIdAsync(metadataId);
 
                 if (metadata != null)
                 {

@@ -30,6 +30,12 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata.Where(s => s.IsActive).ToListAsync();
         }
 
+        public async Task<SongMetadata> GetByIdAsync(int id)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata.FirstOrDefaultAsync(s => s.Id == id);
+        }
+
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();

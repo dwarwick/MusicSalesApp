@@ -255,12 +255,10 @@ public class CartController : ControllerBase
         // Save the order to database
         await _cartService.CreatePayPalOrderAsync(user.Id, orderId, total);
 
-        // If all content is from sellers, we need multi-party orders
-        // If mixed or all platform content, use standard order
-        // For simplicity, we currently support: all platform, all single seller, or mixed
-        // Mixed orders use standard checkout (platform collects all, then pays sellers manually)
-        
-        if (hasSellerContent && !hasPlatformContent && itemsBySeller.Count == 1)
+        // Check if order should use multi-party payment
+        // Multi-party is used only when all items are from a single seller
+        // Mixed orders (multiple sellers or platform + seller) use standard checkout
+        if (ShouldUseMultiPartyPayment(hasSellerContent, hasPlatformContent, itemsBySeller.Count))
         {
             // All items from a single seller - use multi-party order
             var sellerGroup = itemsBySeller.First();
@@ -287,7 +285,9 @@ public class CartController : ControllerBase
                 });
             }
 
-            // Calculate platform fee
+            // Calculate platform fee (commission taken by the platform)
+            // seller.CommissionRate represents the platform's percentage (e.g., 0.15 = 15%)
+            // Example: $10 total * 0.15 = $1.50 platform fee, seller receives $8.50
             var platformFee = Math.Round(total * seller.CommissionRate, 2);
 
             return Ok(new
@@ -545,6 +545,23 @@ public class CartController : ControllerBase
             _logger.LogError(ex, "Error getting PayPal access token");
             return string.Empty;
         }
+    }
+
+    /// <summary>
+    /// Determines if a multi-party payment should be used for the order.
+    /// Multi-party payments are used only when all items are from a single seller.
+    /// </summary>
+    /// <param name="hasSellerContent">Whether the cart contains any seller content</param>
+    /// <param name="hasPlatformContent">Whether the cart contains any platform content</param>
+    /// <param name="sellerGroupCount">Number of distinct sellers in the cart</param>
+    /// <returns>True if multi-party payment should be used</returns>
+    private static bool ShouldUseMultiPartyPayment(bool hasSellerContent, bool hasPlatformContent, int sellerGroupCount)
+    {
+        // Multi-party payment is only used when:
+        // 1. There is seller content in the cart
+        // 2. There is NO platform content (all items are from sellers)
+        // 3. All items are from exactly ONE seller (single seller group)
+        return hasSellerContent && !hasPlatformContent && sellerGroupCount == 1;
     }
 }
 

@@ -15,6 +15,11 @@ namespace MusicSalesApp.Services
         Task<List<SongMetadata>> GetAllAsync();
 
         /// <summary>
+        /// Get metadata by ID
+        /// </summary>
+        Task<SongMetadata> GetByIdAsync(int id);
+
+        /// <summary>
         /// Get metadata by blob path
         /// </summary>
         Task<SongMetadata> GetByBlobPathAsync(string blobPath);
