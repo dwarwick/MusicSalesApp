@@ -9,6 +9,11 @@ namespace MusicSalesApp.Services;
 public interface ISellerService
 {
     /// <summary>
+    /// Gets a seller by their ID.
+    /// </summary>
+    Task<Seller?> GetSellerByIdAsync(int sellerId);
+
+    /// <summary>
     /// Gets a seller by their user ID.
     /// </summary>
     Task<Seller?> GetSellerByUserIdAsync(int userId);

@@ -30,6 +30,15 @@ public class SellerService : ISellerService
     }
 
     /// <inheritdoc />
+    public async Task<Seller?> GetSellerByIdAsync(int sellerId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.Sellers
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.Id == sellerId);
+    }
+
+    /// <inheritdoc />
     public async Task<Seller?> GetSellerByUserIdAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

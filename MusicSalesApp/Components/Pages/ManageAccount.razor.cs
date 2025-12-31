@@ -832,7 +832,7 @@ public partial class ManageAccountModel : BlazorBase
 
     protected void NavigateToManageSongs()
     {
-        NavigationManager.NavigateTo("/admin/songs");
+        NavigationManager.NavigateTo("/seller/songs");
     }
 
     protected async Task ShowStopSellingConfirmation()
