@@ -15,6 +15,11 @@ public class PayPalPartnerService : IPayPalPartnerService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PayPalPartnerService> _logger;
+    
+    /// <summary>
+    /// Placeholder value used in configuration to indicate credentials need to be replaced.
+    /// </summary>
+    private const string ConfigPlaceholder = "REPLACE";
 
     public PayPalPartnerService(
         IHttpClientFactory httpClientFactory,
@@ -331,7 +336,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                 {
                     amount = new
                     {
-                        value = amount.Value.ToString("F2"),
+                        value = amount.Value.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
                         currency_code = "USD"
                     },
                     note_to_payer = reason ?? "Refund from StreamTunes"
@@ -405,7 +410,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                 unit_amount = new
                 {
                     currency_code = "USD",
-                    value = item.UnitAmount.ToString("F2")
+                    value = item.UnitAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                 },
                 quantity = item.Quantity.ToString()
             }).ToArray();
@@ -420,13 +425,13 @@ public class PayPalPartnerService : IPayPalPartnerService
                         amount = new
                         {
                             currency_code = "USD",
-                            value = totalAmount.ToString("F2"),
+                            value = totalAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
                             breakdown = new
                             {
                                 item_total = new
                                 {
                                     currency_code = "USD",
-                                    value = totalAmount.ToString("F2")
+                                    value = totalAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                                 }
                             }
                         },
@@ -444,7 +449,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                                     amount = new
                                     {
                                         currency_code = "USD",
-                                        value = platformFee.ToString("F2")
+                                        value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                                     }
                                 }
                             }
@@ -586,7 +591,8 @@ public class PayPalPartnerService : IPayPalPartnerService
         var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
         
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret) || 
-            clientId.Contains("REPLACE") || secret.Contains("REPLACE"))
+            clientId.Contains(ConfigPlaceholder, StringComparison.OrdinalIgnoreCase) || 
+            secret.Contains(ConfigPlaceholder, StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogError("PayPal ClientId/Secret not configured");
             return string.Empty;

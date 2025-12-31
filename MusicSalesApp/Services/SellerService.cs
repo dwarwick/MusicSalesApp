@@ -389,8 +389,8 @@ public class SellerService : ISellerService
 
             // Also try deleting from deprecated BlobPath
             if (!string.IsNullOrWhiteSpace(song.BlobPath) && 
-                song.BlobPath != song.Mp3BlobPath && 
-                song.BlobPath != song.ImageBlobPath)
+                !string.Equals(song.BlobPath, song.Mp3BlobPath, StringComparison.Ordinal) && 
+                !string.Equals(song.BlobPath, song.ImageBlobPath, StringComparison.Ordinal))
             {
                 await _storageService.DeleteAsync(song.BlobPath);
                 _logger.LogInformation("Deleted blob file: {Path}", song.BlobPath);
