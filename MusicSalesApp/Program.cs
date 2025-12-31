@@ -174,6 +174,8 @@ try
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
+    builder.Services.AddScoped<ISellerService, SellerService>();
+    builder.Services.AddScoped<IPayPalPartnerService, PayPalPartnerService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>

@@ -23,4 +23,8 @@ public class SongAdminViewModel
     // Additional properties for internal use
     public bool HasAlbumCover { get; set; }
     public string AlbumCoverBlobName { get; set; } = string.Empty;
+
+    // Seller-related properties
+    public int? SellerId { get; set; }
+    public bool IsActive { get; set; } = true;
 }

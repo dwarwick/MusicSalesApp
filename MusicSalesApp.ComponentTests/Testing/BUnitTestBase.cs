@@ -50,6 +50,7 @@ public abstract class BUnitTestBase
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
+    protected Mock<ISellerService> MockSellerService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -79,6 +80,7 @@ public abstract class BUnitTestBase
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
+        MockSellerService = new Mock<ISellerService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -235,6 +237,14 @@ public abstract class BUnitTestBase
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        // Setup default returns for ISellerService methods
+        MockSellerService.Setup(x => x.GetSellerByUserIdAsync(It.IsAny<int>()))
+            .ReturnsAsync((Seller)null);
+        MockSellerService.Setup(x => x.IsActiveSellerAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+        MockSellerService.Setup(x => x.GetSellerIdForUserAsync(It.IsAny<int>()))
+            .ReturnsAsync((int?)null);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -267,6 +277,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
+        TestContext.Services.AddSingleton<ISellerService>(MockSellerService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

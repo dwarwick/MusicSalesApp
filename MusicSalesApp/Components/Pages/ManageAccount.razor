@@ -191,6 +191,176 @@
             </CardContent>
         </SfCard>
 
+        <!-- Become a Seller Section (only shown if user is not already an active seller) -->
+        @if (!_isActiveSeller)
+        {
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="Become a Seller" />
+                <CardContent>
+                    @if (_sellerOnboardingStatus == "NotStarted" || _sellerOnboardingStatus == null)
+                    {
+                        <div class="seller-description">
+                            <h4>Sell Your Music on StreamTunes!</h4>
+                            <p>Join our community of artists and start earning money from your music today.</p>
+                            
+                            <div class="seller-benefits mt-3">
+                                <h5>Benefits of becoming a seller:</h5>
+                                <ul>
+                                    <li>Upload and sell your original music</li>
+                                    <li>Reach a global audience of music lovers</li>
+                                    <li>Get paid directly to your PayPal business account</li>
+                                    <li>You control the pricing of your music</li>
+                                    <li>Keep @((1 - _platformCommissionRate) * 100)% of each sale</li>
+                                </ul>
+                            </div>
+
+                            <div class="seller-requirements mt-3">
+                                <h5>Requirements:</h5>
+                                <ul>
+                                    <li>A PayPal Business account (will be created during signup if you don't have one)</li>
+                                    <li>Original music that you have the rights to sell</li>
+                                    <li>Agreement to <a href="https://www.paypal.com/us/webapps/mpp/security/seller-protection" target="_blank" rel="noopener noreferrer">PayPal's Seller Protection policy</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="seller-commission mt-3">
+                                <p><strong>Platform Commission:</strong> StreamTunes takes a @(_platformCommissionRate * 100)% commission on each sale. The remaining @((1 - _platformCommissionRate) * 100)% goes directly to you. PayPal fees are additional.</p>
+                            </div>
+
+                            <div class="seller-signup-form mt-4">
+                                <div class="mb-3">
+                                    <label for="sellerDisplayName" class="e-label">Display Name (optional)</label>
+                                    <SfTextBox @bind-Value="_sellerDisplayName" ID="sellerDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
+                                    <small class="form-text text-muted">This name will be shown to buyers on your music listings.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="sellerBio" class="e-label">Bio (optional)</label>
+                                    <SfTextBox @bind-Value="_sellerBio" ID="sellerBio" Multiline="true" Placeholder="Tell buyers about yourself and your music" CssClass="e-outline" />
+                                </div>
+
+                                @if (!_startingOnboarding)
+                                {
+                                    <SfButton IsPrimary="true" Content="Start Seller Signup" OnClick="StartSellerOnboarding" />
+                                }
+                                else
+                                {
+                                    <p>Preparing your signup...</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (_sellerOnboardingStatus == "Pending")
+                    {
+                        <div class="seller-pending">
+                            <h4>Complete Your PayPal Signup</h4>
+                            <p>You've started the seller signup process. Please complete your PayPal Business account setup to start selling.</p>
+                            
+                            @if (!string.IsNullOrEmpty(_sellerReferralUrl))
+                            {
+                                <p><a href="@_sellerReferralUrl" target="_blank" class="btn btn-primary">Continue with PayPal</a></p>
+                            }
+                            
+                            <p class="mt-3">After completing PayPal setup, return here and click the button below:</p>
+                            @if (!_completingOnboarding)
+                            {
+                                <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteSellerOnboarding" />
+                            }
+                            else
+                            {
+                                <p>Verifying your PayPal setup...</p>
+                            }
+                        </div>
+                    }
+                    else if (_sellerOnboardingStatus == "InProgress")
+                    {
+                        <div class="seller-in-progress">
+                            <h4>Verification In Progress</h4>
+                            <p>Your PayPal account is being verified. This may take a few minutes to a few hours.</p>
+                            <p>Once verified, you'll be able to start uploading and selling your music.</p>
+                            
+                            @if (!_completingOnboarding)
+                            {
+                                <SfButton Content="Check Status" OnClick="CompleteSellerOnboarding" />
+                            }
+                            else
+                            {
+                                <p>Checking status...</p>
+                            }
+                        </div>
+                    }
+                    else if (_sellerOnboardingStatus == "Failed")
+                    {
+                        <div class="seller-failed">
+                            <h4>Onboarding Failed</h4>
+                            <p class="text-danger">Unfortunately, your seller onboarding could not be completed. This may be due to PayPal verification issues.</p>
+                            <p>Please contact support for assistance or try again:</p>
+                            
+                            @if (!_startingOnboarding)
+                            {
+                                <SfButton IsPrimary="true" Content="Try Again" OnClick="StartSellerOnboarding" />
+                            }
+                            else
+                            {
+                                <p>Preparing your signup...</p>
+                            }
+                        </div>
+                    }
+                </CardContent>
+            </SfCard>
+        }
+        else
+        {
+            <!-- Seller Profile Section (shown for active sellers) -->
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="Seller Profile" />
+                <CardContent>
+                    <div class="seller-active-info">
+                        <p class="text-success"><strong>✓ You are an active seller!</strong></p>
+                        <p>You can upload and sell your music on StreamTunes.</p>
+                        
+                        <div class="mt-3">
+                            <p><strong>Display Name:</strong> @(_sellerDisplayName ?? "Not set")</p>
+                            <p><strong>Commission Rate:</strong> @(_platformCommissionRate * 100)% platform fee</p>
+                        </div>
+
+                        <div class="mt-3">
+                            <SfButton IsPrimary="true" Content="Upload Music" OnClick="NavigateToUpload" />
+                            <SfButton Content="Manage My Songs" OnClick="NavigateToManageSongs" CssClass="ms-2" />
+                        </div>
+
+                        <hr class="my-4" />
+
+                        <div class="stop-selling-section">
+                            <h5 class="text-danger">Stop Being a Seller</h5>
+                            <p class="text-muted">
+                                If you no longer want to sell music on StreamTunes, you can stop being a seller. 
+                                <strong>Warning:</strong> This action will:
+                            </p>
+                            <ul class="text-muted">
+                                <li>Remove all your uploaded music from the platform</li>
+                                <li>Delete all your song files from storage</li>
+                                <li>Your music will no longer be available for purchase or streaming</li>
+                                <li>You will need to go through the seller onboarding process again if you want to sell in the future</li>
+                            </ul>
+                            <p class="text-muted">
+                                See our <a href="/terms-of-service" target="_blank">Terms of Service</a> for more details.
+                            </p>
+                            
+                            @if (!_stoppingSellerStatus)
+                            {
+                                <SfButton CssClass="e-danger" Content="Stop Being a Seller" OnClick="ShowStopSellingConfirmation" />
+                            }
+                            else
+                            {
+                                <p>Processing...</p>
+                            }
+                        </div>
+                    </div>
+                </CardContent>
+            </SfCard>
+        }
+
         <!-- Account Closure Section -->
         <SfCard CssClass="mb-4">
             <CardHeader Title="Close Account" />
@@ -332,6 +502,28 @@
         <FooterTemplate>
             <SfButton CssClass="e-danger" Content="Delete My Account" OnClick="DeleteAccount" />
             <SfButton Content="Cancel" OnClick="CloseDeleteAccountDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Stop Selling Confirmation Dialog -->
+<SfDialog @ref="_stopSellingDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Header="Stop Being a Seller">
+    <DialogTemplates>
+        <Content>
+            <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+            <p>By stopping your seller account:</p>
+            <ul>
+                <li>All your uploaded music will be permanently removed from the platform</li>
+                <li>All your song files will be deleted from storage</li>
+                <li>Your music will no longer be available for purchase or streaming</li>
+                <li>Any customers who purchased your music will still have access to their downloads</li>
+            </ul>
+            <p>To confirm, please type your email address below:</p>
+            <SfTextBox @bind-Value="_stopSellingConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Stop Being a Seller" OnClick="ConfirmStopSelling" Disabled="@(_stopSellingConfirmEmail != _userEmail)" />
+            <SfButton Content="Cancel" OnClick="CloseStopSellingDialog" />
         </FooterTemplate>
     </DialogTemplates>
 </SfDialog>

@@ -93,4 +93,22 @@ public class SongMetadata
     /// Indicates whether this song or album should be displayed on the home page
     /// </summary>
     public bool DisplayOnHomePage { get; set; }
+
+    /// <summary>
+    /// Indicates whether this song is active and available for playback.
+    /// Inactive songs are not displayed anywhere on the website and cannot be played.
+    /// Songs are set to inactive when a seller deletes them or closes their account.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Foreign key to the Seller who uploaded this song.
+    /// If null, the song was uploaded by the platform admin.
+    /// </summary>
+    public int? SellerId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the Seller who owns this song.
+    /// </summary>
+    public virtual Seller Seller { get; set; }
 }

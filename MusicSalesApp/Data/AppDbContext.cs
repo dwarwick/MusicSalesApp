@@ -24,6 +24,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongLike> SongLikes { get; set; }
     public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
     public DbSet<AppSettings> AppSettings { get; set; }
+    public DbSet<Seller> Sellers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -32,6 +33,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Seed roles
         var adminRoleId = 1;
         var userRoleId = 2;
+        var sellerRoleId = 3;
 
         builder.Entity<IdentityRole<int>>().HasData(
             new IdentityRole<int>
@@ -47,6 +49,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 Name = Common.Helpers.Roles.User,
                 NormalizedName = Common.Helpers.Roles.User.ToUpper(),
                 ConcurrencyStamp = "b2c3d4e5-f6a7-5b6c-9d0e-1f2a3b4c5d6e"
+            },
+            new IdentityRole<int>
+            {
+                Id = sellerRoleId,
+                Name = Common.Helpers.Roles.Seller,
+                NormalizedName = Common.Helpers.Roles.Seller.ToUpper(),
+                ConcurrencyStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f"
             }
         );
 
@@ -126,6 +135,29 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             RoleId = userRoleId,
             ClaimType = CustomClaimTypes.Permission,
             ClaimValue = Permissions.ValidatedUser
+        });
+
+        // Seller role gets ValidatedUser, UploadFiles, and ManageOwnSongs permissions
+        roleClaims.Add(new IdentityRoleClaim<int>
+        {
+            Id = nextId++,
+            RoleId = sellerRoleId,
+            ClaimType = CustomClaimTypes.Permission,
+            ClaimValue = Permissions.ValidatedUser
+        });
+        roleClaims.Add(new IdentityRoleClaim<int>
+        {
+            Id = nextId++,
+            RoleId = sellerRoleId,
+            ClaimType = CustomClaimTypes.Permission,
+            ClaimValue = Permissions.UploadFiles
+        });
+        roleClaims.Add(new IdentityRoleClaim<int>
+        {
+            Id = nextId++,
+            RoleId = sellerRoleId,
+            ClaimType = CustomClaimTypes.Permission,
+            ClaimValue = Permissions.ManageOwnSongs
         });
 
         builder.Entity<IdentityRoleClaim<int>>().HasData(roleClaims);
@@ -228,5 +260,32 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
+
+        // Configure Seller entity
+        builder.Entity<Seller>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Unique index on UserId - each user can only be one seller
+        builder.Entity<Seller>()
+            .HasIndex(s => s.UserId)
+            .IsUnique();
+
+        // Index on PayPalMerchantId for lookups
+        builder.Entity<Seller>()
+            .HasIndex(s => s.PayPalMerchantId);
+
+        // Index on PayPalTrackingId for webhook handling
+        builder.Entity<Seller>()
+            .HasIndex(s => s.PayPalTrackingId);
+
+        // Configure SongMetadata-Seller relationship
+        builder.Entity<SongMetadata>()
+            .HasOne(sm => sm.Seller)
+            .WithMany()
+            .HasForeignKey(sm => sm.SellerId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
