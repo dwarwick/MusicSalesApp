@@ -133,5 +133,11 @@ public enum SellerOnboardingStatus
     /// <summary>
     /// Seller account has been suspended.
     /// </summary>
-    Suspended = 5
+    Suspended = 5,
+
+    /// <summary>
+    /// Seller has revoked their consent to the platform via PayPal.
+    /// This typically happens when the seller removes the platform's permissions in their PayPal account.
+    /// </summary>
+    ConsentRevoked = 6
 }

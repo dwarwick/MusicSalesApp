@@ -116,4 +116,15 @@ public interface ISellerService
     /// <param name="sellerId">The seller ID</param>
     /// <returns>Number of songs deactivated</returns>
     Task<int> DeactivateAllSellerSongsAsync(int sellerId);
+
+    /// <summary>
+    /// Revokes a seller's consent to the platform. This is called when PayPal sends a
+    /// MERCHANT.PARTNER-CONSENT.REVOKED webhook. This will:
+    /// - Mark all their songs as inactive
+    /// - Remove all their music from Azure storage
+    /// - Mark the seller as inactive with ConsentRevoked status
+    /// </summary>
+    /// <param name="sellerId">The seller ID</param>
+    /// <returns>True if successful</returns>
+    Task<bool> RevokeSellerConsentAsync(int sellerId);
 }

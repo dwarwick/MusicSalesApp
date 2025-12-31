@@ -375,6 +375,33 @@ public class SellerService : ISellerService
         return songs.Count;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> RevokeSellerConsentAsync(int sellerId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var seller = await context.Sellers.FindAsync(sellerId);
+        if (seller == null)
+        {
+            _logger.LogWarning("Seller {SellerId} not found for consent revocation", sellerId);
+            return false;
+        }
+
+        // Deactivate all seller's songs (marks inactive + removes from Azure storage)
+        var deactivatedCount = await DeactivateAllSellerSongsAsync(sellerId);
+        _logger.LogInformation("Deactivated {Count} songs for seller {SellerId} due to consent revocation", deactivatedCount, sellerId);
+
+        // Mark seller as inactive with consent revoked status
+        seller.IsActive = false;
+        seller.OnboardingStatus = SellerOnboardingStatus.ConsentRevoked;
+        seller.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Revoked consent for seller {SellerId}", sellerId);
+        return true;
+    }
+
     /// <summary>
     /// Deletes a song's files from Azure storage.
     /// </summary>
