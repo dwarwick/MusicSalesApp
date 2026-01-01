@@ -51,16 +51,16 @@ function scheduleAutoRetry() {
     
     console.log(`Scheduling auto-retry attempt ${retryAttempts + 1} in ${delay}ms...`);
     
+    // Increment counter now before the attempt
+    retryAttempts++;
+    
     // Schedule the retry with error handling
     autoRetryTimeout = setTimeout(async () => {
         try {
             await retry();
-            // Increment retry counter after attempt (whether successful or not, retry() handles success)
-            retryAttempts++;
         } catch (err) {
             console.error("Unhandled error in retry:", err);
-            // Increment counter even on error, then schedule another retry
-            retryAttempts++;
+            // Schedule another retry (retry counter already incremented above)
             scheduleAutoRetry();
         }
     }, delay);
