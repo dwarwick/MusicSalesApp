@@ -13,6 +13,28 @@ The application uses SQL Server LocalDB for development. You need to create an `
 
 **Note:** `appsettings.Development.json` is not checked into source control for security reasons.
 
+### SignalR Connection Management
+
+The application uses SignalR for real-time features and implements automatic connection management to provide a seamless user experience:
+
+#### Keep-Alive Configuration
+- **Keep-alive interval**: 15 seconds - Server sends ping to keep connection active
+- **Client timeout**: 60 seconds - Connection considered dead if no response
+- **Circuit retention**: 3 minutes - Server retains inactive circuit state
+- **Handshake timeout**: 15 seconds - Time allowed for initial connection
+
+#### Automatic Reconnection
+- **Silent reconnection**: No modal dialogs shown to users
+- **Exponential backoff**: Retries at 2s, 5s, and 10s intervals
+- **Auto-reload**: Page automatically reloads after 3 failed attempts
+- **SEO friendly**: Reconnection UI hidden from search engines
+
+This configuration ensures:
+- Connections stay alive during normal usage
+- Minimal disruption during temporary network issues
+- Automatic recovery without user intervention
+- No reconnection text appearing in search engine results
+
 ### Running the Application
 
 ```bash
