@@ -10,19 +10,24 @@ let autoRetryTimeout = null;
 
 function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
-        // Don't show the modal, start automatic retry process instead
-        retryAttempts = 0;
-        scheduleAutoRetry();
+        // Blazor has detected connection loss and is attempting to reconnect automatically
+        // We don't need to do anything here - just let Blazor handle initial reconnection attempts
+        console.log("Connection lost. Blazor is attempting to reconnect...");
     } else if (event.detail.state === "hide") {
-        // Connection restored, cancel any pending retries
+        // Connection restored successfully, cancel any pending retries
         cancelAutoRetry();
         retryAttempts = 0;
         reconnectModal.close();
+        console.log("Connection restored successfully.");
     } else if (event.detail.state === "failed") {
-        // Connection failed, but keep retrying automatically
+        // All of Blazor's automatic reconnection attempts have failed
+        // Now we take over with our own retry logic
+        console.log("Blazor reconnection failed. Starting custom retry logic...");
+        retryAttempts = 0; // Reset counter at start of our retry sequence
         scheduleAutoRetry();
     } else if (event.detail.state === "rejected") {
         // Server rejected the connection, reload immediately
+        console.log("Connection rejected by server. Reloading page...");
         location.reload();
     }
 }
@@ -70,15 +75,18 @@ async function retry() {
             const resumeSuccessful = await Blazor.resumeCircuit();
             if (!resumeSuccessful) {
                 // Resume failed, reload the page
+                console.log("Circuit resume failed. Reloading page...");
                 location.reload();
             } else {
                 // Resume successful, reset retry counter
+                console.log("Circuit resumed successfully.");
                 retryAttempts = 0;
                 cancelAutoRetry();
                 reconnectModal.close();
             }
         } else {
             // Reconnect successful, reset retry counter
+            console.log("Reconnection successful.");
             retryAttempts = 0;
             cancelAutoRetry();
         }
