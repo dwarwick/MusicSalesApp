@@ -59,6 +59,13 @@ try
         .AddInteractiveServerComponents(options =>
         {
             options.DetailedErrors = true;
+            
+            // Configure SignalR circuit options to keep connections alive
+            // Disconnect timeout: Time to wait before disconnecting an inactive circuit
+            options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
+            
+            // Increase JSInterop default timeout
+            options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(1);
         });
 
     builder.Services.AddRazorPages();
@@ -101,7 +108,26 @@ try
     builder.Services.AddControllers();
 
     // Add SignalR for real-time stream count updates
-    builder.Services.AddSignalR();
+    const int SignalRMaxMessageSizeKB = 32;
+    builder.Services.AddSignalR(options =>
+    {
+        // Configure SignalR to keep connections alive
+        // Keep-alive interval - send pings every 15 seconds to keep connection alive
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        
+        // Client timeout - server will consider client disconnected if no messages received in this time
+        // Should be at least 2x the keep-alive interval
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+        
+        // Handshake timeout - time to wait for handshake to complete
+        options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+        
+        // Max message size
+        options.MaximumReceiveMessageSize = SignalRMaxMessageSizeKB * 1024;
+        
+        // Enable detailed errors in development
+        options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    });
 
     // Provide HttpClient with base address and cookies configured.
     // For Blazor Server, we need to forward the authentication cookies from the HttpContext.
