@@ -1,12 +1,6 @@
-// Set up event handlers
+// Set up event handlers for Blazor reconnection events
 const reconnectModal = document.getElementById("components-reconnect-modal");
 reconnectModal.addEventListener("components-reconnect-state-changed", handleReconnectStateChanged);
-
-const retryButton = document.getElementById("components-reconnect-button");
-retryButton.addEventListener("click", retry);
-
-const resumeButton = document.getElementById("components-resume-button");
-resumeButton.addEventListener("click", resume);
 
 // Auto-retry configuration
 let retryAttempts = 0;
@@ -93,16 +87,5 @@ async function retry() {
         // Schedule another retry
         console.error("Retry failed:", err);
         scheduleAutoRetry();
-    }
-}
-
-async function resume() {
-    try {
-        const successful = await Blazor.resumeCircuit();
-        if (!successful) {
-            location.reload();
-        }
-    } catch {
-        location.reload();
     }
 }
