@@ -45,18 +45,22 @@ function scheduleAutoRetry() {
     }
     
     // Get delay for current attempt (use last delay if we exceed array length)
-    const delay = RETRY_DELAYS[Math.min(retryAttempts, RETRY_DELAYS.length - 1)];
+    const delay = retryAttempts < RETRY_DELAYS.length 
+        ? RETRY_DELAYS[retryAttempts] 
+        : RETRY_DELAYS[RETRY_DELAYS.length - 1];
     
     console.log(`Scheduling auto-retry attempt ${retryAttempts + 1} in ${delay}ms...`);
     
     // Schedule the retry with error handling
     autoRetryTimeout = setTimeout(async () => {
-        retryAttempts++;
         try {
             await retry();
+            // Increment retry counter after attempt (whether successful or not, retry() handles success)
+            retryAttempts++;
         } catch (err) {
             console.error("Unhandled error in retry:", err);
-            // Try scheduling another retry or reload if max attempts reached
+            // Increment counter even on error, then schedule another retry
+            retryAttempts++;
             scheduleAutoRetry();
         }
     }, delay);
