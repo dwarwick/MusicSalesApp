@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251231020637_AddSellerTableAndSongMetadataChanges")]
+    [Migration("20260101213824_AddSellerTableAndSongMetadataChanges")]
     partial class AddSellerTableAndSongMetadataChanges
     {
         /// <inheritdoc />
@@ -71,7 +71,7 @@ namespace MusicSalesApp.Migrations
                         },
                         new
                         {
-                            Id = 3,
+                            Id = 4,
                             ConcurrencyStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f",
                             Name = "Seller",
                             NormalizedName = "SELLER"
@@ -106,35 +106,35 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 1,
                             ClaimType = "Permission",
-                            ClaimValue = "ManageOwnSongs",
+                            ClaimValue = "ManageSongs",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 2,
                             ClaimType = "Permission",
-                            ClaimValue = "ManageSongs",
+                            ClaimValue = "ManageUsers",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 3,
                             ClaimType = "Permission",
-                            ClaimValue = "ManageUsers",
+                            ClaimValue = "UploadFiles",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 4,
                             ClaimType = "Permission",
-                            ClaimValue = "UploadFiles",
+                            ClaimValue = "UseHangfire",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 5,
                             ClaimType = "Permission",
-                            ClaimValue = "UseHangfire",
+                            ClaimValue = "ValidatedUser",
                             RoleId = 1
                         },
                         new
@@ -142,35 +142,28 @@ namespace MusicSalesApp.Migrations
                             Id = 6,
                             ClaimType = "Permission",
                             ClaimValue = "ValidatedUser",
-                            RoleId = 1
+                            RoleId = 2
                         },
                         new
                         {
                             Id = 7,
                             ClaimType = "Permission",
                             ClaimValue = "ValidatedUser",
-                            RoleId = 2
+                            RoleId = 4
                         },
                         new
                         {
                             Id = 8,
                             ClaimType = "Permission",
-                            ClaimValue = "ValidatedUser",
-                            RoleId = 3
+                            ClaimValue = "UploadFiles",
+                            RoleId = 4
                         },
                         new
                         {
                             Id = 9,
                             ClaimType = "Permission",
-                            ClaimValue = "UploadFiles",
-                            RoleId = 3
-                        },
-                        new
-                        {
-                            Id = 10,
-                            ClaimType = "Permission",
                             ClaimValue = "ManageOwnSongs",
-                            RoleId = 3
+                            RoleId = 4
                         });
                 });
 

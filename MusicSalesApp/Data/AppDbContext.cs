@@ -33,7 +33,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Seed roles
         var adminRoleId = 1;
         var userRoleId = 2;
-        var sellerRoleId = 3;
+        var sellerRoleId = 4;
 
         builder.Entity<IdentityRole<int>>().HasData(
             new IdentityRole<int>
