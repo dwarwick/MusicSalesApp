@@ -111,7 +111,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .GetFields()
             .Select(f => f.GetValue(null)?.ToString())
             .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Where(v => !string.Equals(v, Permissions.NonValidatedUser, StringComparison.OrdinalIgnoreCase))
+            .Where(v => 
+            !string.Equals(v, Permissions.NonValidatedUser, StringComparison.OrdinalIgnoreCase) && 
+            !string.Equals(v, Permissions.ManageOwnSongs, StringComparison.OrdinalIgnoreCase))
             .OrderBy(v => v)
             .ToList();
 
