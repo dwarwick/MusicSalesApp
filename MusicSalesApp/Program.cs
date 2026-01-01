@@ -108,6 +108,7 @@ try
     builder.Services.AddControllers();
 
     // Add SignalR for real-time stream count updates
+    const int SignalRMaxMessageSizeKB = 32;
     builder.Services.AddSignalR(options =>
     {
         // Configure SignalR to keep connections alive
@@ -122,7 +123,7 @@ try
         options.HandshakeTimeout = TimeSpan.FromSeconds(15);
         
         // Max message size
-        options.MaximumReceiveMessageSize = 32 * 1024; // 32 KB
+        options.MaximumReceiveMessageSize = SignalRMaxMessageSizeKB * 1024;
         
         // Enable detailed errors in development
         options.EnableDetailedErrors = builder.Environment.IsDevelopment();

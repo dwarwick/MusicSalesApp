@@ -5,7 +5,8 @@ reconnectModal.addEventListener("components-reconnect-state-changed", handleReco
 // Auto-retry configuration
 let retryAttempts = 0;
 const MAX_RETRY_ATTEMPTS = 3;
-const RETRY_DELAYS = [2000, 5000, 10000]; // Exponential backoff in milliseconds
+// Retry delays with exponential-like backoff (2s, 5s, 10s)
+const RETRY_DELAYS = [2000, 5000, 10000];
 let autoRetryTimeout = null;
 
 function handleReconnectStateChanged(event) {
@@ -48,10 +49,16 @@ function scheduleAutoRetry() {
     
     console.log(`Scheduling auto-retry attempt ${retryAttempts + 1} in ${delay}ms...`);
     
-    // Schedule the retry
+    // Schedule the retry with error handling
     autoRetryTimeout = setTimeout(async () => {
         retryAttempts++;
-        await retry();
+        try {
+            await retry();
+        } catch (err) {
+            console.error("Unhandled error in retry:", err);
+            // Try scheduling another retry or reload if max attempts reached
+            scheduleAutoRetry();
+        }
     }, delay);
 }
 
