@@ -2,6 +2,18 @@
 
 This guide explains how to test the SignalR reconnection improvements before deploying to production.
 
+## ⚠️ Important: Understanding SignalR Keep-Alive
+
+**SignalR keep-alive pings are NOT visible as console.log messages!**
+
+The keep-alive mechanism works at the WebSocket protocol level. You won't see individual ping/pong log messages in the browser console. Instead:
+
+1. **Ping/pong frames** are visible in DevTools → Network tab → WS → Messages/Frames
+2. **Connection health monitor** (added in latest update) logs every 30 seconds to confirm the connection is alive
+3. **No disconnection** means it's working - if you don't see "Connection lost" messages, the keep-alive is doing its job
+
+See Test 2 below for detailed verification steps.
+
 ## Prerequisites
 
 - Visual Studio 2022 (or Visual Studio Code with C# extension)
@@ -53,15 +65,42 @@ The application will be available at:
 
 ### Test 2: Verify Keep-Alive is Working
 
-1. **Open Developer Tools Console** (F12)
-2. **Enable verbose logging:**
-   - Go to Console tab
-   - Right-click and enable "Verbose" or "All levels"
-3. **Look for SignalR messages:**
-   - You should see ping/pong messages every 15 seconds
-   - Messages like: "SignalR: Sending ping"
+**Important:** SignalR keep-alive pings happen at the WebSocket protocol level and are NOT visible as console.log messages by default. Here's how to verify they're working:
 
-✅ **Expected Result:** Connection stays alive with regular ping messages
+**Method 1: Check WebSocket Frames (Most Accurate)**
+1. **Open Developer Tools** (F12)
+2. **Go to Network tab**
+3. **Filter by WS (WebSocket)** - click the "WS" button in the filter bar
+4. **Refresh the page** to see new connections
+5. **Click on a websocket connection** (usually named like `blazor?id=...`)
+6. **Go to the "Messages" or "Frames" tab**
+7. **Watch for ping/pong frames:**
+   - You should see Type: "ping" or "pong" frames every 15 seconds
+   - In Chrome/Edge: Green arrows indicate ping/pong
+   - In Firefox: Look for "Ping" and "Pong" frame types
+
+✅ **Expected Result:** Ping/pong frames appear every 15 seconds in WebSocket messages
+
+**Method 2: Connection Health Monitor (New)**
+With the latest update, the page now logs connection health to the console:
+
+1. **Open Browser Console** (F12)
+2. **Look for health check messages every 30 seconds:**
+   ```
+   [SignalR Health] Connection active. Last activity: 15s ago
+   [SignalR Health] Connection active. Last activity: 30s ago
+   ```
+3. **These messages confirm** the connection is alive even if you don't see individual pings
+
+✅ **Expected Result:** Health check logs appear every 30 seconds showing connection is active
+
+**Method 3: No Disconnection Messages**
+The simplest test - if the connection is working:
+- You should NOT see "Connection lost" messages
+- You should NOT see "Blazor is attempting to reconnect" messages
+- The page should work normally for extended periods
+
+✅ **Expected Result:** No disconnection messages after sitting idle for 5+ minutes
 
 ### Test 3: Simulate Connection Loss (Server Stop)
 
@@ -130,10 +169,18 @@ Tests that connections stay alive during normal usage.
 ## Expected Console Logs
 
 ### Normal Operation (Keep-Alive Working)
+
+**New: Connection Health Monitor**
 ```
-[Info] SignalR: Sending ping
-[Info] SignalR: Received pong
+[SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.
+[SignalR Health] Connection active. Last activity: 0s ago
+[SignalR Health] Connection active. Last activity: 15s ago
+[SignalR Health] Connection active. Last activity: 30s ago
 ```
+
+**Note:** Individual ping/pong messages are NOT logged to console. They happen at the WebSocket protocol level and can only be seen in the Network tab → WebSocket → Messages/Frames.
+
+If you see the health monitor reporting "Connection active" every 30 seconds, your keep-alive is working correctly.
 
 ### Connection Lost → Blazor Retrying
 ```
