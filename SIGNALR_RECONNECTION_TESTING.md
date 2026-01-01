@@ -9,8 +9,10 @@ This guide explains how to test the SignalR reconnection improvements before dep
 The keep-alive mechanism works at the WebSocket protocol level. You won't see individual ping/pong log messages in the browser console. Instead:
 
 1. **Ping/pong frames** are visible in DevTools → Network tab → WS → Messages/Frames
-2. **Connection health monitor** (added in latest update) logs every 30 seconds to confirm the connection is alive
+2. **Connection health monitor** (development only) logs every 30 seconds to confirm the connection is alive
 3. **No disconnection** means it's working - if you don't see "Connection lost" messages, the keep-alive is doing its job
+
+**Note:** The connection health monitor and other debug logs only appear when running on localhost (development mode). In production, these logs are suppressed to keep the console clean.
 
 See Test 2 below for detailed verification steps.
 
@@ -81,16 +83,18 @@ The application will be available at:
 
 ✅ **Expected Result:** Ping/pong frames appear every 15 seconds in WebSocket messages
 
-**Method 2: Connection Health Monitor (New)**
-With the latest update, the page now logs connection health to the console:
+**Method 2: Connection Health Monitor (Development Only)**
+With the latest update, the page now logs connection health to the console when running in development mode (localhost):
 
 1. **Open Browser Console** (F12)
 2. **Look for health check messages every 30 seconds:**
    ```
+   [SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.
    [SignalR Health] Connection active. Last activity: 15s ago
    [SignalR Health] Connection active. Last activity: 30s ago
    ```
 3. **These messages confirm** the connection is alive even if you don't see individual pings
+4. **Note:** These logs only appear when running on localhost (127.0.0.1 or localhost). In production, they are suppressed.
 
 ✅ **Expected Result:** Health check logs appear every 30 seconds showing connection is active
 
@@ -168,9 +172,11 @@ Tests that connections stay alive during normal usage.
 
 ## Expected Console Logs
 
+**Note:** All debug logs below only appear in development mode (running on localhost). In production, these logs are suppressed to keep the console clean. Only errors (console.error) will appear in production.
+
 ### Normal Operation (Keep-Alive Working)
 
-**New: Connection Health Monitor**
+**New: Connection Health Monitor (Development Only)**
 ```
 [SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.
 [SignalR Health] Connection active. Last activity: 0s ago
@@ -182,29 +188,29 @@ Tests that connections stay alive during normal usage.
 
 If you see the health monitor reporting "Connection active" every 30 seconds, your keep-alive is working correctly.
 
-### Connection Lost → Blazor Retrying
+### Connection Lost → Blazor Retrying (Development Only)
 ```
 Connection lost. Blazor is attempting to reconnect...
 ```
 
-### Blazor Failed → Custom Retry Logic
+### Blazor Failed → Custom Retry Logic (Development Only)
 ```
 Blazor reconnection failed. Starting custom retry logic...
 Scheduling retry attempt 1 of 3 in 2000ms...
-Retry failed: [Error details]
 Scheduling retry attempt 2 of 3 in 5000ms...
-Retry failed: [Error details]
 Scheduling retry attempt 3 of 3 in 10000ms...
 Max retry attempts reached. Reloading page...
 ```
 
-### Successful Reconnection
+**Note:** Error messages (console.error) will still appear in production if retries fail.
+
+### Successful Reconnection (Development Only)
 ```
 Reconnection successful.
 Connection restored successfully.
 ```
 
-### Successful Circuit Resume
+### Successful Circuit Resume (Development Only)
 ```
 Circuit resumed successfully.
 Connection restored successfully.
@@ -223,7 +229,11 @@ Connection restored successfully.
 - **Check:** No firewall blocking localhost connections
 
 ### No Console Logs Appearing
-- **Enable verbose logging** in DevTools Console settings
+- **Development mode check:** Debug logs only appear when running on localhost (127.0.0.1 or localhost)
+- **Production deployment:** If deployed to a server, debug logs are intentionally suppressed
+- **Enable verbose logging** in DevTools Console settings if needed
+- **Check:** Console filter isn't hiding messages
+- **Verify:** Application is running in Development mode for debug logs
 - **Check:** Console filter isn't hiding messages
 - **Verify:** Application is running in Development mode
 

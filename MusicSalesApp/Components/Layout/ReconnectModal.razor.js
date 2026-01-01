@@ -9,12 +9,26 @@ const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAYS = [2000, 5000, 10000];
 let autoRetryTimeout = null;
 
-// Connection health monitoring (optional logging)
+// Connection health monitoring (optional logging - development only)
 let lastActivityTime = Date.now();
 let connectionHealthInterval = null;
+let isDevelopment = false;
 
-// Start monitoring connection health
+// Detect if we're in development mode
+// Check for common development indicators
+try {
+    isDevelopment = window.location.hostname === 'localhost' || 
+                   window.location.hostname === '127.0.0.1' ||
+                   window.location.hostname.includes('local') ||
+                   document.documentElement.hasAttribute('data-development');
+} catch (e) {
+    // If detection fails, assume production (safer default)
+    isDevelopment = false;
+}
+
+// Start monitoring connection health (development only)
 function startConnectionHealthMonitor() {
+    if (!isDevelopment) return; // Only run in development
     if (connectionHealthInterval) return;
     
     connectionHealthInterval = setInterval(() => {
@@ -37,9 +51,11 @@ function updateLastActivity() {
 
 // Monitor Blazor connection events to track activity
 if (typeof Blazor !== 'undefined') {
-    // Start monitoring on page load
+    // Start monitoring on page load (development only)
     startConnectionHealthMonitor();
-    console.log('[SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.');
+    if (isDevelopment) {
+        console.log('[SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.');
+    }
     
     // Try to hook into Blazor's event system to track actual activity
     // This is a best-effort approach as Blazor's internals may change
@@ -59,22 +75,30 @@ function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
         // Blazor has detected connection loss and is attempting to reconnect automatically
         // We don't need to do anything here - just let Blazor handle initial reconnection attempts
-        console.log("Connection lost. Blazor is attempting to reconnect...");
+        if (isDevelopment) {
+            console.log("Connection lost. Blazor is attempting to reconnect...");
+        }
     } else if (event.detail.state === "hide") {
         // Connection restored successfully, cancel any pending retries
         cancelAutoRetry();
         scheduledRetryAttempts = 0;
         reconnectModal.close();
-        console.log("Connection restored successfully.");
+        if (isDevelopment) {
+            console.log("Connection restored successfully.");
+        }
     } else if (event.detail.state === "failed") {
         // All of Blazor's automatic reconnection attempts have failed
         // Now we take over with our own retry logic
-        console.log("Blazor reconnection failed. Starting custom retry logic...");
+        if (isDevelopment) {
+            console.log("Blazor reconnection failed. Starting custom retry logic...");
+        }
         scheduledRetryAttempts = 0; // Reset counter at start of our retry sequence
         scheduleAutoRetry();
     } else if (event.detail.state === "rejected") {
         // Server rejected the connection, reload immediately
-        console.log("Connection rejected by server. Reloading page...");
+        if (isDevelopment) {
+            console.log("Connection rejected by server. Reloading page...");
+        }
         location.reload();
     }
 }
@@ -85,7 +109,9 @@ function scheduleAutoRetry() {
     
     // If we've exceeded max attempts, reload the page
     if (scheduledRetryAttempts >= MAX_RETRY_ATTEMPTS) {
-        console.log("Max retry attempts reached. Reloading page...");
+        if (isDevelopment) {
+            console.log("Max retry attempts reached. Reloading page...");
+        }
         location.reload();
         return;
     }
@@ -97,13 +123,16 @@ function scheduleAutoRetry() {
     
     // Increment counter before scheduling
     scheduledRetryAttempts++;
-    console.log(`Scheduling retry attempt ${scheduledRetryAttempts} of ${MAX_RETRY_ATTEMPTS} in ${delay}ms...`);
+    if (isDevelopment) {
+        console.log(`Scheduling retry attempt ${scheduledRetryAttempts} of ${MAX_RETRY_ATTEMPTS} in ${delay}ms...`);
+    }
     
     // Schedule the retry with error handling
     autoRetryTimeout = setTimeout(async () => {
         try {
             await retry();
         } catch (err) {
+            // Always log errors, even in production (they're important)
             console.error("Unhandled error in retry:", err);
             // Schedule another retry (retry counter already incremented above)
             scheduleAutoRetry();
@@ -131,24 +160,31 @@ async function retry() {
             const resumeSuccessful = await Blazor.resumeCircuit();
             if (!resumeSuccessful) {
                 // Resume failed, reload the page
-                console.log("Circuit resume failed. Reloading page...");
+                if (isDevelopment) {
+                    console.log("Circuit resume failed. Reloading page...");
+                }
                 location.reload();
             } else {
                 // Resume successful, reset retry counter
-                console.log("Circuit resumed successfully.");
+                if (isDevelopment) {
+                    console.log("Circuit resumed successfully.");
+                }
                 scheduledRetryAttempts = 0;
                 cancelAutoRetry();
                 reconnectModal.close();
             }
         } else {
             // Reconnect successful, reset retry counter
-            console.log("Reconnection successful.");
+            if (isDevelopment) {
+                console.log("Reconnection successful.");
+            }
             scheduledRetryAttempts = 0;
             cancelAutoRetry();
         }
     } catch (err) {
         // We got an exception, server is currently unavailable
         // Schedule another retry
+        // Always log errors, even in production
         console.error("Retry failed:", err);
         scheduleAutoRetry();
     }
