@@ -49,6 +49,42 @@ function updateLastActivity() {
     lastActivityTime = Date.now();
 }
 
+// Track user interactions and Blazor activity
+function setupActivityTracking() {
+    // Update activity on any user interaction
+    const interactionEvents = ['click', 'keydown', 'touchstart', 'scroll'];
+    interactionEvents.forEach(eventType => {
+        document.addEventListener(eventType, updateLastActivity, { passive: true });
+    });
+    
+    // Track Blazor navigation events
+    if (typeof Blazor !== 'undefined') {
+        // Blazor fires events on the document when circuit state changes
+        document.addEventListener('DOMContentLoaded', updateLastActivity);
+        
+        // Monitor for Blazor-specific events
+        const originalAddEventListener = reconnectModal.addEventListener;
+        reconnectModal.addEventListener = function(type, listener, options) {
+            if (type === 'components-reconnect-state-changed') {
+                // Wrap the listener to update activity
+                const wrappedListener = function(event) {
+                    updateLastActivity();
+                    return listener.call(this, event);
+                };
+                return originalAddEventListener.call(this, type, wrappedListener, options);
+            }
+            return originalAddEventListener.call(this, type, listener, options);
+        };
+    }
+    
+    // Track page visibility changes - reset activity when page becomes visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateLastActivity();
+        }
+    });
+}
+
 // Monitor Blazor connection events to track activity
 if (typeof Blazor !== 'undefined') {
     // Start monitoring on page load (development only)
@@ -57,16 +93,8 @@ if (typeof Blazor !== 'undefined') {
         console.log('[SignalR Health] Connection health monitoring started. Logs will appear every 30 seconds.');
     }
     
-    // Try to hook into Blazor's event system to track actual activity
-    // This is a best-effort approach as Blazor's internals may change
-    const originalConsoleLog = console.log;
-    console.log = function(...args) {
-        const message = args.join(' ');
-        if (message.includes('SignalR') || message.includes('blazor')) {
-            updateLastActivity();
-        }
-        originalConsoleLog.apply(console, args);
-    };
+    // Set up activity tracking
+    setupActivityTracking();
 }
 
 function handleReconnectStateChanged(event) {
