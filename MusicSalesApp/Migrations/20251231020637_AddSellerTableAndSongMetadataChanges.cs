@@ -96,29 +96,84 @@ namespace MusicSalesApp.Migrations
                 columns: new[] { "ClaimValue", "RoleId" },
                 values: new object[] { "UseHangfire", 1 });
 
-            migrationBuilder.InsertData(
-                table: "AspNetRoleClaims",
-                columns: new[] { "Id", "ClaimType", "ClaimValue", "RoleId" },
-                values: new object[,]
-                {
-                    { 6, "Permission", "ValidatedUser", 1 },
-                    { 7, "Permission", "ValidatedUser", 2 }
-                });
+            // Use SQL to insert role claims only if they don't already exist
+            // This avoids primary key conflicts if the database already has these IDs
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE Id = 6)
+                BEGIN
+                    SET IDENTITY_INSERT [AspNetRoleClaims] ON;
+                    INSERT INTO [AspNetRoleClaims] ([Id], [ClaimType], [ClaimValue], [RoleId])
+                    VALUES (6, N'Permission', N'ValidatedUser', 1);
+                    SET IDENTITY_INSERT [AspNetRoleClaims] OFF;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE RoleId = 1 AND ClaimType = N'Permission' AND ClaimValue = N'ValidatedUser')
+                BEGIN
+                    INSERT INTO [AspNetRoleClaims] ([ClaimType], [ClaimValue], [RoleId])
+                    VALUES (N'Permission', N'ValidatedUser', 1);
+                END
+            ");
 
-            migrationBuilder.InsertData(
-                table: "AspNetRoles",
-                columns: new[] { "Id", "ConcurrencyStamp", "Name", "NormalizedName" },
-                values: new object[] { 3, "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f", "Seller", "SELLER" });
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE Id = 7)
+                BEGIN
+                    SET IDENTITY_INSERT [AspNetRoleClaims] ON;
+                    INSERT INTO [AspNetRoleClaims] ([Id], [ClaimType], [ClaimValue], [RoleId])
+                    VALUES (7, N'Permission', N'ValidatedUser', 2);
+                    SET IDENTITY_INSERT [AspNetRoleClaims] OFF;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE RoleId = 2 AND ClaimType = N'Permission' AND ClaimValue = N'ValidatedUser')
+                BEGIN
+                    INSERT INTO [AspNetRoleClaims] ([ClaimType], [ClaimValue], [RoleId])
+                    VALUES (N'Permission', N'ValidatedUser', 2);
+                END
+            ");
 
-            migrationBuilder.InsertData(
-                table: "AspNetRoleClaims",
-                columns: new[] { "Id", "ClaimType", "ClaimValue", "RoleId" },
-                values: new object[,]
-                {
-                    { 8, "Permission", "ValidatedUser", 3 },
-                    { 9, "Permission", "UploadFiles", 3 },
-                    { 10, "Permission", "ManageOwnSongs", 3 }
-                });
+            // Insert Seller role if it doesn't exist
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (SELECT 1 FROM AspNetRoles WHERE Id = 3)
+                BEGIN
+                    SET IDENTITY_INSERT [AspNetRoles] ON;
+                    INSERT INTO [AspNetRoles] ([Id], [ConcurrencyStamp], [Name], [NormalizedName])
+                    VALUES (3, N'c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f', N'Seller', N'SELLER');
+                    SET IDENTITY_INSERT [AspNetRoles] OFF;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM AspNetRoles WHERE Name = N'Seller')
+                BEGIN
+                    INSERT INTO [AspNetRoles] ([ConcurrencyStamp], [Name], [NormalizedName])
+                    VALUES (N'c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f', N'Seller', N'SELLER');
+                END
+            ");
+
+            // Get the Seller role ID (could be 3 or auto-generated)
+            // Insert Seller role claims
+            migrationBuilder.Sql(@"
+                DECLARE @SellerRoleId INT;
+                SELECT @SellerRoleId = Id FROM AspNetRoles WHERE Name = N'Seller';
+
+                IF @SellerRoleId IS NOT NULL
+                BEGIN
+                    -- ValidatedUser permission for Seller role
+                    IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE RoleId = @SellerRoleId AND ClaimType = N'Permission' AND ClaimValue = N'ValidatedUser')
+                    BEGIN
+                        INSERT INTO [AspNetRoleClaims] ([ClaimType], [ClaimValue], [RoleId])
+                        VALUES (N'Permission', N'ValidatedUser', @SellerRoleId);
+                    END
+
+                    -- UploadFiles permission for Seller role
+                    IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE RoleId = @SellerRoleId AND ClaimType = N'Permission' AND ClaimValue = N'UploadFiles')
+                    BEGIN
+                        INSERT INTO [AspNetRoleClaims] ([ClaimType], [ClaimValue], [RoleId])
+                        VALUES (N'Permission', N'UploadFiles', @SellerRoleId);
+                    END
+
+                    -- ManageOwnSongs permission for Seller role
+                    IF NOT EXISTS (SELECT 1 FROM AspNetRoleClaims WHERE RoleId = @SellerRoleId AND ClaimType = N'Permission' AND ClaimValue = N'ManageOwnSongs')
+                    BEGIN
+                        INSERT INTO [AspNetRoleClaims] ([ClaimType], [ClaimValue], [RoleId])
+                        VALUES (N'Permission', N'ManageOwnSongs', @SellerRoleId);
+                    END
+                END
+            ");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SongMetadata_SellerId",
@@ -164,35 +219,31 @@ namespace MusicSalesApp.Migrations
                 name: "IX_SongMetadata_SellerId",
                 table: "SongMetadata");
 
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 6);
+            // Remove Seller role claims using dynamic SQL to handle different IDs
+            migrationBuilder.Sql(@"
+                DECLARE @SellerRoleId INT;
+                SELECT @SellerRoleId = Id FROM AspNetRoles WHERE Name = N'Seller';
 
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 7);
+                IF @SellerRoleId IS NOT NULL
+                BEGIN
+                    DELETE FROM [AspNetRoleClaims] WHERE RoleId = @SellerRoleId;
+                END
+            ");
 
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 8);
+            // Delete ValidatedUser claims added by this migration (for Admin and User roles)
+            migrationBuilder.Sql(@"
+                -- Only delete if these exact records exist
+                DELETE FROM [AspNetRoleClaims] WHERE Id = 6 AND ClaimValue = N'ValidatedUser' AND RoleId = 1;
+                DELETE FROM [AspNetRoleClaims] WHERE Id = 7 AND ClaimValue = N'ValidatedUser' AND RoleId = 2;
+                -- Also clean up any ValidatedUser claims with auto-generated IDs
+                DELETE FROM [AspNetRoleClaims] WHERE ClaimValue = N'ValidatedUser' AND RoleId = 1 AND Id > 5;
+                DELETE FROM [AspNetRoleClaims] WHERE ClaimValue = N'ValidatedUser' AND RoleId = 2 AND Id > 5;
+            ");
 
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 9);
-
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 10);
-
-            migrationBuilder.DeleteData(
-                table: "AspNetRoles",
-                keyColumn: "Id",
-                keyValue: 3);
+            // Remove Seller role
+            migrationBuilder.Sql(@"
+                DELETE FROM [AspNetRoles] WHERE Name = N'Seller';
+            ");
 
             migrationBuilder.DropColumn(
                 name: "IsActive",
