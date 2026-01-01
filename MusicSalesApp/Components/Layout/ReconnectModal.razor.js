@@ -64,8 +64,6 @@ function cancelAutoRetry() {
 }
 
 async function retry() {
-    document.removeEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
-
     try {
         // Reconnect will asynchronously return:
         // - true to mean success
@@ -106,11 +104,5 @@ async function resume() {
         }
     } catch {
         location.reload();
-    }
-}
-
-async function retryWhenDocumentBecomesVisible() {
-    if (document.visibilityState === "visible") {
-        await retry();
     }
 }
