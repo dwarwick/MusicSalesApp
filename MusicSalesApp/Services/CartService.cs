@@ -43,6 +43,7 @@ public class CartService : ICartService
         {
             SongFileName = c.SongFileName,
             Price = c.Price,
+            AddedAt = c.AddedAt,
             SongMetadata = c.SongMetadata
         });
     }

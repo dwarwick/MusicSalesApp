@@ -11,7 +11,7 @@ namespace MusicSalesApp.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(Roles = "Admin,User")]
+[Authorize(Roles = "Admin,User,Seller")]
 public class CartController : ControllerBase
 {
     private readonly ICartService _cartService;
@@ -20,6 +20,8 @@ public class CartController : ControllerBase
     private readonly ILogger<CartController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPurchaseEmailService _purchaseEmailService;
+    private readonly IPayPalPartnerService _payPalPartnerService;
+    private readonly ISellerService _sellerService;
 
     public CartController(
         ICartService cartService,
@@ -27,7 +29,9 @@ public class CartController : ControllerBase
         IConfiguration configuration,
         ILogger<CartController> logger,
         IHttpClientFactory httpClientFactory,
-        IPurchaseEmailService purchaseEmailService)
+        IPurchaseEmailService purchaseEmailService,
+        IPayPalPartnerService payPalPartnerService,
+        ISellerService sellerService)
     {
         _cartService = cartService;
         _userManager = userManager;
@@ -35,6 +39,8 @@ public class CartController : ControllerBase
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _purchaseEmailService = purchaseEmailService;
+        _payPalPartnerService = payPalPartnerService;
+        _sellerService = sellerService;
     }
 
     [HttpGet]
@@ -43,7 +49,7 @@ public class CartController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var items = await _cartService.GetCartItemsAsync(user.Id);
+        var items = await _cartService.GetCartItemsWithMetadataAsync(user.Id);
         var total = await _cartService.GetCartTotalAsync(user.Id);
 
         return Ok(new
@@ -51,13 +57,29 @@ public class CartController : ControllerBase
             items = items.Select(i => new
             {
                 songFileName = i.SongFileName,
-                songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                songTitle = GetSongTitle(i),
                 price = i.Price,
                 addedAt = i.AddedAt
             }),
             albums = Array.Empty<object>(), // Albums are stored as individual tracks
             total
         });
+    }
+    
+    /// <summary>
+    /// Gets the song title from CartItemWithMetadata.
+    /// Prefers stored SongTitle, falls back to extracting from file name.
+    /// </summary>
+    private static string GetSongTitle(CartItemWithMetadata item)
+    {
+        // Prefer stored SongTitle from metadata
+        if (!string.IsNullOrEmpty(item.SongMetadata?.SongTitle))
+        {
+            return item.SongMetadata.SongTitle;
+        }
+        
+        // Fall back to extracting from file name
+        return Path.GetFileNameWithoutExtension(Path.GetFileName(item.SongFileName));
     }
 
     [HttpGet("count")]
@@ -228,11 +250,20 @@ public class CartController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var items = await _cartService.GetCartItemsAsync(user.Id);
-        if (!items.Any())
+        var cartItemsWithMetadata = (await _cartService.GetCartItemsWithMetadataAsync(user.Id)).ToList();
+        if (!cartItemsWithMetadata.Any())
             return BadRequest("Cart is empty");
 
-        var total = await _cartService.GetCartTotalAsync(user.Id);
+        var total = cartItemsWithMetadata.Sum(c => c.Price);
+
+        // Group items by seller (null = platform content)
+        var itemsBySeller = cartItemsWithMetadata
+            .GroupBy(c => c.SongMetadata?.SellerId)
+            .ToList();
+
+        // Check if there's any seller content
+        var hasSellerContent = itemsBySeller.Any(g => g.Key != null);
+        var hasPlatformContent = itemsBySeller.Any(g => g.Key == null);
 
         // Generate a unique order ID
         var orderId = Guid.NewGuid().ToString();
@@ -240,11 +271,66 @@ public class CartController : ControllerBase
         // Save the order to database
         await _cartService.CreatePayPalOrderAsync(user.Id, orderId, total);
 
+        // Check if order should use multi-party payment
+        // Multi-party is used only when all items are from a single seller
+        // Mixed orders (multiple sellers or platform + seller) use standard checkout
+        if (ShouldUseMultiPartyPayment(hasSellerContent, hasPlatformContent, itemsBySeller.Count))
+        {
+            // All items from a single seller - use multi-party order
+            var sellerGroup = itemsBySeller.First();
+            var sellerId = sellerGroup.Key!.Value;
+            
+            // Get seller from database by seller ID
+            var seller = await _sellerService.GetSellerByIdAsync(sellerId);
+            
+            if (seller == null || !seller.IsActive || string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+            {
+                _logger.LogWarning("Seller {SellerId} is not active or has no PayPal merchant ID", sellerId);
+                // Fall back to standard order
+                return Ok(new
+                {
+                    orderId,
+                    amount = total.ToString("F2"),
+                    isMultiParty = false,
+                    items = cartItemsWithMetadata.Select(i => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                        unit_amount = i.Price.ToString("F2"),
+                        quantity = 1
+                    })
+                });
+            }
+
+            // Calculate platform fee (commission taken by the platform)
+            // seller.CommissionRate represents the platform's percentage (e.g., 0.15 = 15%)
+            // Example: $10 total * 0.15 = $1.50 platform fee, seller receives $8.50
+            var platformFee = Math.Round(total * seller.CommissionRate, 2);
+
+            return Ok(new
+            {
+                orderId,
+                amount = total.ToString("F2"),
+                isMultiParty = true,
+                sellerId = seller.Id,
+                sellerMerchantId = seller.PayPalMerchantId,
+                platformFee = platformFee.ToString("F2"),
+                sellerAmount = (total - platformFee).ToString("F2"),
+                items = cartItemsWithMetadata.Select(i => new
+                {
+                    name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                    unit_amount = i.Price.ToString("F2"),
+                    quantity = 1
+                })
+            });
+        }
+
+        // Standard order (platform content or mixed content)
         return Ok(new
         {
             orderId,
             amount = total.ToString("F2"),
-            items = items.Select(i => new
+            isMultiParty = false,
+            items = cartItemsWithMetadata.Select(i => new
             {
                 name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
                 unit_amount = i.Price.ToString("F2"),
@@ -271,8 +357,23 @@ public class CartController : ControllerBase
         if (order.UserId != user.Id)
             return Forbid();
 
-        // Capture the payment with PayPal (3D Secure authentication already completed during approval)
-        var (captured, errorMessage) = await CaptureWithPayPalAsync(request.PayPalOrderId);
+        bool captured;
+        string errorMessage;
+
+        // Check if this is a multi-party order
+        if (request.IsMultiParty)
+        {
+            // Use multi-party capture
+            var result = await _payPalPartnerService.CaptureMultiPartyOrderAsync(request.PayPalOrderId);
+            captured = result.Success;
+            errorMessage = result.ErrorMessage ?? "Failed to capture multi-party order";
+        }
+        else
+        {
+            // Use standard capture
+            (captured, errorMessage) = await CaptureWithPayPalAsync(request.PayPalOrderId);
+        }
+
         if (!captured)
         {
             _logger.LogWarning("PayPal capture failed for PayPalOrderId {PayPalOrderId} and internal order {OrderId}: {ErrorMessage}", 
@@ -294,7 +395,8 @@ public class CartController : ControllerBase
         // Clear the cart
         await _cartService.ClearCartAsync(user.Id);
 
-        _logger.LogInformation("User {UserId} completed purchase of {Count} songs", user.Id, songFileNames.Count);
+        _logger.LogInformation("User {UserId} completed purchase of {Count} songs (multi-party: {IsMultiParty})", 
+            user.Id, songFileNames.Count, request.IsMultiParty);
 
         // Send purchase confirmation email (fire and forget - don't block the response)
         _ = Task.Run(async () =>
@@ -460,6 +562,23 @@ public class CartController : ControllerBase
             return string.Empty;
         }
     }
+
+    /// <summary>
+    /// Determines if a multi-party payment should be used for the order.
+    /// Multi-party payments are used only when all items are from a single seller.
+    /// </summary>
+    /// <param name="hasSellerContent">Whether the cart contains any seller content</param>
+    /// <param name="hasPlatformContent">Whether the cart contains any platform content</param>
+    /// <param name="sellerGroupCount">Number of distinct sellers in the cart</param>
+    /// <returns>True if multi-party payment should be used</returns>
+    private static bool ShouldUseMultiPartyPayment(bool hasSellerContent, bool hasPlatformContent, int sellerGroupCount)
+    {
+        // Multi-party payment is only used when:
+        // 1. There is seller content in the cart
+        // 2. There is NO platform content (all items are from sellers)
+        // 3. All items are from exactly ONE seller (single seller group)
+        return hasSellerContent && !hasPlatformContent && sellerGroupCount == 1;
+    }
 }
 
 public class AddToCartRequest
@@ -486,4 +605,5 @@ public class CaptureOrderRequest
 {
     public string OrderId { get; set; }
     public string PayPalOrderId { get; set; }
+    public bool IsMultiParty { get; set; } = false;
 }

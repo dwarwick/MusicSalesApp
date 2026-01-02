@@ -24,6 +24,8 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<CheckoutModel> _dotNetRef;
     private bool startedPaypalInitialization;
+    private bool _currentOrderIsMultiParty;
+    private string _currentSellerMerchantId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -124,7 +126,12 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
-                Logger.LogInformation("Created PayPal order {OrderId}", result?.OrderId);
+                Logger.LogInformation("Created PayPal order {OrderId}, isMultiParty: {IsMultiParty}", result?.OrderId, result?.IsMultiParty);
+                
+                // Store multi-party information for later
+                _currentOrderIsMultiParty = result?.IsMultiParty ?? false;
+                _currentSellerMerchantId = result?.SellerMerchantId;
+                
                 return result?.OrderId ?? string.Empty;
             }
             else
@@ -139,6 +146,18 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         }
 
         return string.Empty;
+    }
+
+    [JSInvokable]
+    public bool GetIsMultiParty()
+    {
+        return _currentOrderIsMultiParty;
+    }
+
+    [JSInvokable]
+    public string GetSellerMerchantId()
+    {
+        return _currentSellerMerchantId ?? string.Empty;
     }
 
     [JSInvokable]
@@ -172,11 +191,16 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             Logger.LogWarning(ex, "Unable to parse PayPal approval payload");
         }
 
-        Logger.LogInformation("OnApprove invoked for orderId {OrderId} / PayPal order {PayPalOrderId}", orderId, payPalOrderId);
+        Logger.LogInformation("OnApprove invoked for orderId {OrderId} / PayPal order {PayPalOrderId}, isMultiParty: {IsMultiParty}", 
+            orderId, payPalOrderId, _currentOrderIsMultiParty);
         
         try
         {
-            var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { OrderId = orderId, PayPalOrderId = payPalOrderId });
+            var response = await Http.PostAsJsonAsync("api/cart/capture-order", new { 
+                OrderId = orderId, 
+                PayPalOrderId = payPalOrderId,
+                IsMultiParty = _currentOrderIsMultiParty
+            });
             Logger.LogInformation("capture-order response status: {StatusCode}", response.StatusCode);
             
             if (response.IsSuccessStatusCode)
@@ -307,6 +331,11 @@ public class CreateOrderResponse
 {
     public string OrderId { get; set; }
     public string Amount { get; set; }
+    public bool IsMultiParty { get; set; }
+    public int? SellerId { get; set; }
+    public string SellerMerchantId { get; set; }
+    public string PlatformFee { get; set; }
+    public string SellerAmount { get; set; }
 }
 
 public class CaptureOrderResponse

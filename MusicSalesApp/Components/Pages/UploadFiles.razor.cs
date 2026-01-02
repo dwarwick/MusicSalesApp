@@ -32,9 +32,41 @@ public class UploadFilesModel : BlazorBase
     protected bool _isAlbumCoverUploadMode = false;
     protected bool _showAlbumCoverPrompt = false;
     protected string _pendingAlbumName = string.Empty;
+    
+    // Seller ID - will be populated if the current user is a seller
+    private int? _currentSellerId = null;
+    private bool _hasLoadedSellerId = false;
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg", ".png" };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedSellerId)
+        {
+            _hasLoadedSellerId = true;
+            try
+            {
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var appUser = await UserManager.GetUserAsync(user);
+                    if (appUser != null)
+                    {
+                        // Check if the user is a seller and get their seller ID
+                        _currentSellerId = await SellerService.GetSellerIdForUserAsync(appUser.Id);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // If we can't determine seller status, uploads will be assigned to admin
+                _currentSellerId = null;
+            }
+        }
+    }
 
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
@@ -154,6 +186,7 @@ public class UploadFilesModel : BlazorBase
                 albumArtMemoryStream,
                 albumArtFile.Name,
                 _albumName,
+                _currentSellerId,
                 _cancellationToken);
 
             uploadItem.Progress = 100;
@@ -306,6 +339,7 @@ public class UploadFilesModel : BlazorBase
                 albumArtMemoryStream,
                 albumArtFile.Name,
                 _pendingAlbumName,
+                _currentSellerId,
                 _cancellationToken);
 
             uploadItem.Progress = 100;

@@ -37,6 +37,7 @@ namespace MusicSalesApp.Services
         /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
         /// <param name="albumArtFileName">Original filename of the album art file.</param>
         /// <param name="albumName">Optional album name to store as metadata.</param>
+        /// <param name="sellerId">Optional seller ID if uploaded by a seller.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The folder path where files were stored.</returns>
         Task<string> UploadMusicWithAlbumArtAsync(
@@ -45,6 +46,7 @@ namespace MusicSalesApp.Services
             Stream albumArtStream,
             string albumArtFileName,
             string albumName = null,
+            int? sellerId = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -53,12 +55,14 @@ namespace MusicSalesApp.Services
         /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
         /// <param name="albumArtFileName">Original filename of the album art file.</param>
         /// <param name="albumName">The album name to store as metadata.</param>
+        /// <param name="sellerId">Optional seller ID if uploaded by a seller.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The path where the album cover was stored.</returns>
         Task<string> UploadAlbumCoverAsync(
             Stream albumArtStream,
             string albumArtFileName,
             string albumName,
+            int? sellerId = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>

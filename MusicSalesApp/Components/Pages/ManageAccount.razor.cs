@@ -51,6 +51,18 @@ public partial class ManageAccountModel : BlazorBase
     // Account closure
     protected bool _hasPurchasedMusic = false;
     protected string _accountActionConfirmEmail = string.Empty;
+
+    // Seller fields
+    protected bool _isActiveSeller = false;
+    protected string _sellerOnboardingStatus = null;
+    protected string _sellerReferralUrl = null;
+    protected string _sellerDisplayName = string.Empty;
+    protected string _sellerBio = string.Empty;
+    protected decimal _platformCommissionRate = 0.15m;
+    protected bool _startingOnboarding = false;
+    protected bool _completingOnboarding = false;
+    protected bool _stoppingSellerStatus = false;
+    protected string _stopSellingConfirmEmail = string.Empty;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
@@ -59,6 +71,7 @@ public partial class ManageAccountModel : BlazorBase
     protected SfDialog _accountClosureDialog;
     protected SfDialog _suspendAccountDialog;
     protected SfDialog _deleteAccountDialog;
+    protected SfDialog _stopSellingDialog;
     
     private ApplicationUser _currentUser;
 
@@ -67,6 +80,12 @@ public partial class ManageAccountModel : BlazorBase
 
     [SupplyParameterFromQuery(Name = "success")]
     public bool? Success { get; set; }
+
+    [SupplyParameterFromQuery(Name = "seller_onboarding")]
+    public string SellerOnboardingResult { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tracking_id")]
+    public string SellerTrackingId { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -91,8 +110,15 @@ public partial class ManageAccountModel : BlazorBase
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
+                        await LoadSellerStatus();
+
+                        // Handle return from PayPal seller onboarding
+                        if (!string.IsNullOrEmpty(SellerOnboardingResult) && SellerOnboardingResult == "complete")
+                        {
+                            await CompleteSellerOnboarding();
+                        }
                         
-                        // Handle return from PayPal
+                        // Handle return from PayPal subscription
                         if (Success.HasValue)
                         {
                             if (Success.Value)
@@ -666,6 +692,203 @@ public partial class ManageAccountModel : BlazorBase
             await InvokeAsync(StateHasChanged);
         }
     }
+
+    protected async Task LoadSellerStatus()
+    {
+        try
+        {
+            var seller = await SellerService.GetSellerByUserIdAsync(_currentUser.Id);
+            if (seller != null)
+            {
+                _isActiveSeller = seller.IsActive;
+                _sellerOnboardingStatus = seller.OnboardingStatus.ToString();
+                _sellerReferralUrl = seller.PayPalReferralUrl;
+                _sellerDisplayName = seller.DisplayName ?? string.Empty;
+                _sellerBio = seller.Bio ?? string.Empty;
+                _platformCommissionRate = seller.CommissionRate;
+            }
+            else
+            {
+                _isActiveSeller = false;
+                _sellerOnboardingStatus = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading seller status");
+        }
+    }
+
+    protected async Task StartSellerOnboarding()
+    {
+        _startingOnboarding = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/seller/start-onboarding", new
+            {
+                DisplayName = _sellerDisplayName,
+                Bio = _sellerBio
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<StartSellerOnboardingResponse>();
+                if (result != null && result.Success && !string.IsNullOrEmpty(result.ReferralUrl))
+                {
+                    // Redirect to PayPal for onboarding
+                    NavigationManager.NavigateTo(result.ReferralUrl, forceLoad: true);
+                }
+                else
+                {
+                    _errorMessage = "Failed to start seller onboarding. Please try again.";
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to start seller onboarding: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error starting seller onboarding");
+            _errorMessage = $"Error starting seller onboarding: {ex.Message}";
+        }
+        finally
+        {
+            _startingOnboarding = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected async Task CompleteSellerOnboarding()
+    {
+        _completingOnboarding = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/seller/complete-onboarding", new
+            {
+                MerchantId = (string)null // Will be retrieved from PayPal
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CompleteSellerOnboardingResponse>();
+                if (result != null && result.Success)
+                {
+                    if (result.IsActive)
+                    {
+                        _successMessage = "Congratulations! Your seller account is now active. You can start uploading and selling your music!";
+                        _isActiveSeller = true;
+                        _sellerOnboardingStatus = "Completed";
+                    }
+                    else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
+                    {
+                        _successMessage = "Your PayPal account is being verified. Please check back soon.";
+                        _sellerOnboardingStatus = "InProgress";
+                    }
+                    else
+                    {
+                        _errorMessage = "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.";
+                    }
+                }
+                else
+                {
+                    _errorMessage = "Could not verify your PayPal setup. Please try again.";
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to complete seller onboarding: {error}";
+            }
+
+            await LoadSellerStatus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error completing seller onboarding");
+            _errorMessage = $"Error completing seller onboarding: {ex.Message}";
+        }
+        finally
+        {
+            _completingOnboarding = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected void NavigateToUpload()
+    {
+        NavigationManager.NavigateTo("/upload-files");
+    }
+
+    protected void NavigateToManageSongs()
+    {
+        NavigationManager.NavigateTo("/seller/songs");
+    }
+
+    protected async Task ShowStopSellingConfirmation()
+    {
+        _stopSellingConfirmEmail = string.Empty;
+        await _stopSellingDialog.ShowAsync();
+    }
+
+    protected async Task CloseStopSellingDialog()
+    {
+        await _stopSellingDialog.HideAsync();
+    }
+
+    protected async Task ConfirmStopSelling()
+    {
+        if (_stopSellingConfirmEmail != _userEmail)
+        {
+            _errorMessage = "Please enter your email address to confirm.";
+            return;
+        }
+
+        _stoppingSellerStatus = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsync("api/seller/stop-selling", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _successMessage = "You are no longer a seller. All your music has been removed from the platform.";
+                _isActiveSeller = false;
+                _sellerOnboardingStatus = "Suspended";
+                await _stopSellingDialog.HideAsync();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to stop being a seller: {error}";
+            }
+
+            await LoadSellerStatus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error stopping seller status");
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _stoppingSellerStatus = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 }
 
 public class SubscriptionStatusResponse
@@ -691,4 +914,19 @@ public class CancelSubscriptionResponse
 {
     public bool Success { get; set; }
     public DateTime? EndDate { get; set; }
+}
+
+public class StartSellerOnboardingResponse
+{
+    public bool Success { get; set; }
+    public string ReferralUrl { get; set; } = string.Empty;
+    public string TrackingId { get; set; } = string.Empty;
+}
+
+public class CompleteSellerOnboardingResponse
+{
+    public bool Success { get; set; }
+    public bool IsActive { get; set; }
+    public bool PaymentsReceivable { get; set; }
+    public bool PrimaryEmailConfirmed { get; set; }
 }

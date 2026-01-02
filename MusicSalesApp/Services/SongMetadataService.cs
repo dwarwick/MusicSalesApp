@@ -26,23 +26,32 @@ namespace MusicSalesApp.Services
         public async Task<List<SongMetadata>> GetAllAsync()
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata.ToListAsync();
+            // Only return active songs
+            return await context.SongMetadata.Where(s => s.IsActive).ToListAsync();
+        }
+
+        public async Task<SongMetadata> GetByIdAsync(int id)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata.FirstOrDefaultAsync(s => s.Id == id);
         }
 
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            // Only return active songs
             return await context.SongMetadata
-                .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
+                .FirstOrDefaultAsync(s => s.IsActive && (s.BlobPath == blobPath || 
                                          s.Mp3BlobPath == blobPath || 
-                                         s.ImageBlobPath == blobPath);
+                                         s.ImageBlobPath == blobPath));
         }
 
         public async Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            // Only return active songs
             return await context.SongMetadata
-                .Where(s => s.AlbumName == albumName)
+                .Where(s => s.IsActive && s.AlbumName == albumName)
                 .ToListAsync();
         }
 
@@ -62,18 +71,21 @@ namespace MusicSalesApp.Services
                 existing.AlbumPrice = metadata.AlbumPrice;
                 existing.SongPrice = metadata.SongPrice;
                 existing.Genre = metadata.Genre;
+                existing.SongTitle = metadata.SongTitle;
                 existing.TrackNumber = metadata.TrackNumber;
                 existing.TrackLength = metadata.TrackLength;
                 existing.Mp3BlobPath = metadata.Mp3BlobPath;
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
+                existing.SellerId = metadata.SellerId ?? existing.SellerId; // Only update if provided
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 context.SongMetadata.Update(existing);
             }
             else
             {
-                // Create new
+                // Create new - ensure IsActive is true by default
+                metadata.IsActive = true;
                 context.SongMetadata.Add(metadata);
             }
 
@@ -101,6 +113,12 @@ namespace MusicSalesApp.Services
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
             var query = context.SongMetadata.AsQueryable();
+
+            // Only include active songs by default (unless specifically querying for inactive)
+            if (!parameters.IncludeInactive)
+            {
+                query = query.Where(s => s.IsActive);
+            }
 
             // Apply filters
             if (!string.IsNullOrWhiteSpace(parameters.FilterAlbumName))
@@ -131,6 +149,12 @@ namespace MusicSalesApp.Services
                 {
                     query = query.Where(s => !s.IsAlbumCover && s.FileExtension == ".mp3");
                 }
+            }
+
+            // Filter by seller ID if specified
+            if (parameters.SellerId.HasValue)
+            {
+                query = query.Where(s => s.SellerId == parameters.SellerId.Value);
             }
 
             // Apply sorting - always have a default order for consistent pagination
@@ -189,7 +213,9 @@ namespace MusicSalesApp.Services
                 TrackNumber = m.TrackNumber,
                 TrackLength = m.TrackLength,
                 DisplayOnHomePage = m.DisplayOnHomePage,
-                HasAlbumCover = m.IsAlbumCover
+                HasAlbumCover = m.IsAlbumCover,
+                SellerId = m.SellerId,
+                IsActive = m.IsActive
             }).ToList();
 
             return new PaginatedSongResult
