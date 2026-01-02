@@ -96,6 +96,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // Map song metadata IDs to stream counts
     private Dictionary<int, int> _streamCounts = new Dictionary<int, int>();
+    
+    // Map file names to stored song titles
+    private Dictionary<string, string> _songTitles = new Dictionary<string, string>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -634,9 +637,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         // Fall back to extracting from file name
         return Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
     }
-    
-    // Map file names to stored song titles
-    private Dictionary<string, string> _songTitles = new Dictionary<string, string>();
     
     protected string GetStoredSongTitle(string fileName)
     {

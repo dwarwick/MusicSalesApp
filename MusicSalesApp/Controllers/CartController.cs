@@ -58,7 +58,8 @@ public class CartController : ControllerBase
             {
                 songFileName = i.SongFileName,
                 songTitle = GetSongTitle(i),
-                price = i.Price
+                price = i.Price,
+                addedAt = i.AddedAt
             }),
             albums = Array.Empty<object>(), // Albums are stored as individual tracks
             total

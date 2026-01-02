@@ -58,6 +58,11 @@ public class CartItemWithMetadata
     /// The price of the item.
     /// </summary>
     public decimal Price { get; set; }
+    
+    /// <summary>
+    /// When the item was added to the cart.
+    /// </summary>
+    public DateTime AddedAt { get; set; }
 
     /// <summary>
     /// The song metadata (may be null if not found).

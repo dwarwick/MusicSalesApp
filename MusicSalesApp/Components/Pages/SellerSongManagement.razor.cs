@@ -26,6 +26,7 @@ public partial class SellerSongManagementModel : BlazorBase
     protected decimal? _editAlbumPrice;
     protected string _editGenre = string.Empty;
     protected string _editSongTitle = string.Empty;
+    protected string _editAlbumName = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
 
@@ -213,6 +214,7 @@ public partial class SellerSongManagementModel : BlazorBase
         _editAlbumPrice = song.AlbumPrice;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
+        _editAlbumName = song.AlbumName;
         _validationErrors.Clear();
         _showEditDialog = true;
     }
@@ -222,6 +224,7 @@ public partial class SellerSongManagementModel : BlazorBase
         _editingSong = null;
         _showEditDialog = false;
         _validationErrors.Clear();
+        _editAlbumName = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -238,6 +241,12 @@ public partial class SellerSongManagementModel : BlazorBase
             if (string.IsNullOrWhiteSpace(_editSongTitle))
             {
                 _validationErrors.Add("Song title is required.");
+            }
+
+            // Validate album name if editing an album
+            if (_editingSong.IsAlbum && string.IsNullOrWhiteSpace(_editAlbumName))
+            {
+                _validationErrors.Add("Album name is required.");
             }
 
             // Validate other fields
@@ -278,6 +287,23 @@ public partial class SellerSongManagementModel : BlazorBase
                     if (_editingSong.IsAlbum)
                     {
                         metadata.AlbumPrice = _editAlbumPrice;
+                        
+                        // Update album name if changed
+                        var oldAlbumName = metadata.AlbumName;
+                        if (!string.IsNullOrEmpty(oldAlbumName) && oldAlbumName != _editAlbumName)
+                        {
+                            // Update album name for all tracks in this album
+                            var albumTracks = await SongMetadataService.GetByAlbumNameAsync(oldAlbumName);
+                            foreach (var track in albumTracks)
+                            {
+                                if (track.SellerId == _sellerId) // Only update tracks owned by this seller
+                                {
+                                    track.AlbumName = _editAlbumName;
+                                    await SongMetadataService.UpsertAsync(track);
+                                }
+                            }
+                        }
+                        metadata.AlbumName = _editAlbumName;
                     }
                     else
                     {

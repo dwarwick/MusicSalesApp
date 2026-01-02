@@ -235,6 +235,15 @@
                         <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" />
                     </div>
 
+                    @if (!string.IsNullOrEmpty(_editingSong.AlbumName) && _editingSong.IsAlbum)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Album Name <span class="text-danger">*</span></label>
+                            <SfTextBox @bind-Value="_editAlbumName" CssClass="e-outline" Placeholder="Enter album name" />
+                            <small class="text-muted">Note: Changing the album name will update it for all tracks in the album.</small>
+                        </div>
+                    }
+
                     @if (!_editingSong.IsAlbum)
                     {
                         <div class="mb-3">
