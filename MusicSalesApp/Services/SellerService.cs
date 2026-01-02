@@ -15,17 +15,20 @@ public class SellerService : ISellerService
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IAzureStorageService _storageService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<SellerService> _logger;
 
     public SellerService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         IAzureStorageService storageService,
         UserManager<ApplicationUser> userManager,
+        IConfiguration configuration,
         ILogger<SellerService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _storageService = storageService;
         _userManager = userManager;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -134,20 +137,32 @@ public class SellerService : ISellerService
             throw new InvalidOperationException($"Seller with ID {sellerId} not found");
         }
 
+        // In sandbox mode, having a valid merchant_id is sufficient for activation
+        // since sandbox accounts may not have payments_receivable or primary_email_confirmed set
+        var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+        var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", baseUrl.Contains("sandbox", StringComparison.OrdinalIgnoreCase));
+        
+        // Determine if onboarding is complete:
+        // - In production: requires both paymentsReceivable and primaryEmailConfirmed
+        // - In sandbox: having a valid merchantId is sufficient (optional override via PayPal:SandboxAllowPartialOnboarding)
+        var allowPartialOnboarding = sandboxMode && _configuration.GetValue<bool>("PayPal:SandboxAllowPartialOnboarding", true);
+        var isComplete = (paymentsReceivable && primaryEmailConfirmed) || 
+                         (allowPartialOnboarding && !string.IsNullOrWhiteSpace(merchantId));
+
         seller.PayPalMerchantId = merchantId;
         seller.PaymentsReceivable = paymentsReceivable;
         seller.PrimaryEmailConfirmed = primaryEmailConfirmed;
-        seller.OnboardingStatus = paymentsReceivable && primaryEmailConfirmed
+        seller.OnboardingStatus = isComplete
             ? SellerOnboardingStatus.Completed
             : SellerOnboardingStatus.InProgress;
-        seller.OnboardedAt = paymentsReceivable && primaryEmailConfirmed ? DateTime.UtcNow : null;
-        seller.IsActive = paymentsReceivable && primaryEmailConfirmed;
+        seller.OnboardedAt = isComplete ? DateTime.UtcNow : null;
+        seller.IsActive = isComplete;
         seller.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Completed onboarding for seller {SellerId} with merchant ID {MerchantId}, IsActive: {IsActive}",
-            sellerId, merchantId, seller.IsActive);
+        _logger.LogInformation("Completed onboarding for seller {SellerId} with merchant ID {MerchantId}, IsActive: {IsActive}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
+            sellerId, merchantId, seller.IsActive, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
         return seller;
     }
 

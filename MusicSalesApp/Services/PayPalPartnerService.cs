@@ -224,13 +224,27 @@ public class PayPalPartnerService : IPayPalPartnerService
             var response = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations?tracking_id={trackingId}");
             var body = await response.Content.ReadAsStringAsync();
 
+            _logger.LogInformation("PayPal merchant status response for tracking ID {TrackingId}: {Body}", trackingId, body);
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Failed to get merchant status by tracking ID: {Status} {Body}", response.StatusCode, body);
                 return null;
             }
 
-            return ParseMerchantStatus(body);
+            var status = ParseMerchantStatus(body);
+            
+            // In sandbox mode, if we have a merchant_id but payments_receivable is false,
+            // it may be because the sandbox account hasn't completed all verification steps.
+            // Check if SandboxMode is enabled to treat this as a valid integration.
+            var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", baseUrl.Contains("sandbox", StringComparison.OrdinalIgnoreCase));
+            if (sandboxMode && !string.IsNullOrWhiteSpace(status.MerchantId) && !status.PaymentsReceivable)
+            {
+                _logger.LogInformation("Sandbox mode: Merchant {MerchantId} has not completed all verification steps. PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
+                    status.MerchantId, status.PaymentsReceivable, status.PrimaryEmailConfirmed);
+            }
+            
+            return status;
         }
         catch (Exception ex)
         {
