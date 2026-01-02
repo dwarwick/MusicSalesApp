@@ -26,9 +26,6 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     private bool startedPaypalInitialization;
     private bool _currentOrderIsMultiParty;
     private string _currentSellerMerchantId;
-    private string _currentPayPalOrderId; // Server-created PayPal order ID for multi-party orders
-    private string _currentInternalOrderId; // Internal order ID for tracking in database
-
 
     protected override async Task OnInitializedAsync()
     {
@@ -129,22 +126,11 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
-                Logger.LogInformation("Created order {OrderId}, isMultiParty: {IsMultiParty}, PayPalOrderId: {PayPalOrderId}", 
-                    result?.OrderId, result?.IsMultiParty, result?.PayPalOrderId);
+                Logger.LogInformation("Created PayPal order {OrderId}, isMultiParty: {IsMultiParty}", result?.OrderId, result?.IsMultiParty);
                 
-                // Store order information for later
+                // Store multi-party information for later
                 _currentOrderIsMultiParty = result?.IsMultiParty ?? false;
                 _currentSellerMerchantId = result?.SellerMerchantId;
-                _currentPayPalOrderId = result?.PayPalOrderId;
-                _currentInternalOrderId = result?.OrderId; // Always store internal order ID
-                
-                // For multi-party orders, return the server-created PayPal order ID
-                // For standard orders, return the internal order ID (JavaScript will create PayPal order)
-                if (_currentOrderIsMultiParty && !string.IsNullOrEmpty(_currentPayPalOrderId))
-                {
-                    Logger.LogInformation("Returning server-created PayPal order ID for multi-party order: {PayPalOrderId}", _currentPayPalOrderId);
-                    return _currentPayPalOrderId;
-                }
                 
                 return result?.OrderId ?? string.Empty;
             }
@@ -161,7 +147,6 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
         return string.Empty;
     }
-
 
     [JSInvokable]
     public bool GetIsMultiParty()
@@ -204,13 +189,6 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Unable to parse PayPal approval payload");
-        }
-
-        // For multi-party orders, use stored internal order ID and PayPal order ID
-        if (_currentOrderIsMultiParty)
-        {
-            orderId = _currentInternalOrderId;
-            payPalOrderId = _currentPayPalOrderId;
         }
 
         Logger.LogInformation("OnApprove invoked for orderId {OrderId} / PayPal order {PayPalOrderId}, isMultiParty: {IsMultiParty}", 
@@ -352,7 +330,6 @@ public class PayPalClientIdResponse
 public class CreateOrderResponse
 {
     public string OrderId { get; set; }
-    public string PayPalOrderId { get; set; } // Server-created PayPal order ID for multi-party orders
     public string Amount { get; set; }
     public bool IsMultiParty { get; set; }
     public int? SellerId { get; set; }

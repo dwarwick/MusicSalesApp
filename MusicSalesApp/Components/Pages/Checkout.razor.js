@@ -37,29 +37,18 @@ export async function initPayPal(clientId, amount, dotNetRef) {
             try {
                 console.log('PayPal createOrder called');
                 
-                // First, create our internal order record and check if multi-party
+                // First, create our internal order record
                 const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
-                console.log('Internal order created, returned ID:', orderId);
+                console.log('Internal order created:', orderId);
                 
                 if (!orderId) {
                     throw new Error('Failed to create internal order');
                 }
 
-                // Check if this is a multi-party order (seller content)
-                const isMultiParty = await dotNetRef.invokeMethodAsync('GetIsMultiParty');
-                
-                console.log('Order type:', isMultiParty ? 'Multi-party (seller content)' : 'Standard (platform content)');
-
-                // For multi-party orders, the server has already created the PayPal order
-                // with proper payee and platform_fees structure. Just return the PayPal order ID.
-                if (isMultiParty) {
-                    console.log('Multi-party order: Using server-created PayPal order ID:', orderId);
-                    currentOrderId = orderId; // This is actually the PayPal order ID for multi-party
-                    return orderId;
-                }
-
-                // For standard (platform) orders, create PayPal order client-side
+                // Store the order ID for use in onApprove
                 currentOrderId = orderId;
+
+                // Create PayPal order using client-side SDK with 3D Secure support
                 const paypalOrderId = await actions.order.create({
                     purchase_units: [{
                         reference_id: orderId,
@@ -82,7 +71,7 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                     }
                 });
                 
-                console.log('PayPal order created client-side with 3D Secure support:', paypalOrderId);
+                console.log('PayPal order created with 3D Secure support:', paypalOrderId);
                 return paypalOrderId;
             } catch (error) {
                 console.error('Error creating order:', error);
