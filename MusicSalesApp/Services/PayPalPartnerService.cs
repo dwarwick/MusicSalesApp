@@ -221,18 +221,51 @@ public class PayPalPartnerService : IPayPalPartnerService
                 client.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
             }
 
-            var response = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations?tracking_id={trackingId}");
-            var body = await response.Content.ReadAsStringAsync();
+            // Step 1: Get merchant_id from tracking ID using "List seller tracking information" endpoint
+            // https://developer.paypal.com/docs/api/partner-referrals/v1/#merchant-integration_find
+            var trackingResponse = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations?tracking_id={trackingId}");
+            var trackingBody = await trackingResponse.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("PayPal merchant status response for tracking ID {TrackingId}: {Body}", trackingId, body);
+            _logger.LogInformation("PayPal merchant tracking response for tracking ID {TrackingId}: {Body}", trackingId, trackingBody);
 
-            if (!response.IsSuccessStatusCode)
+            if (!trackingResponse.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to get merchant status by tracking ID: {Status} {Body}", response.StatusCode, body);
+                _logger.LogWarning("Failed to get merchant tracking info by tracking ID: {Status} {Body}", trackingResponse.StatusCode, trackingBody);
                 return null;
             }
 
-            var status = ParseMerchantStatus(body);
+            // Parse merchant_id from the tracking response
+            string? merchantId = null;
+            using (var trackingDoc = JsonDocument.Parse(trackingBody))
+            {
+                if (trackingDoc.RootElement.TryGetProperty("merchant_id", out var merchantIdElement))
+                {
+                    merchantId = merchantIdElement.GetString();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(merchantId))
+            {
+                _logger.LogWarning("No merchant_id found in tracking response for tracking ID {TrackingId}", trackingId);
+                return null;
+            }
+
+            // Step 2: Get detailed merchant status using "Show seller status" endpoint
+            // https://developer.paypal.com/docs/api/partner-referrals/v1/#merchant-integration_status
+            var statusResponse = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations/{merchantId}");
+            var statusBody = await statusResponse.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("PayPal merchant status response for merchant {MerchantId}: {Body}", merchantId, statusBody);
+
+            if (!statusResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to get merchant status: {Status} {Body}", statusResponse.StatusCode, statusBody);
+                return null;
+            }
+
+            var status = ParseMerchantStatus(statusBody);
+            status.MerchantId = merchantId;
+            status.TrackingId = trackingId;
             
             // In sandbox mode, if we have a merchant_id but payments_receivable is false,
             // it may be because the sandbox account hasn't completed all verification steps.
