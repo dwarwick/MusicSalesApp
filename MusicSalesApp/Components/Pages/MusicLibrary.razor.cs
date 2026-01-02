@@ -385,6 +385,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     {
                         _homePageSongs.Add(audioFile.Name);
                     }
+                    // Store the song title if available
+                    if (!string.IsNullOrEmpty(songMeta.SongTitle))
+                    {
+                        _songTitles[audioFile.Name] = songMeta.SongTitle;
+                    }
                 }
                 _songPrices[audioFile.Name] = songPrice;
             }
@@ -616,7 +621,26 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected string GetDisplayTitle(string fileName)
     {
+        // Check for stored SongTitle in metadata
+        if (_songMetadataIds.TryGetValue(fileName, out var metadataId) && metadataId > 0)
+        {
+            var storedTitle = GetStoredSongTitle(fileName);
+            if (!string.IsNullOrEmpty(storedTitle))
+            {
+                return storedTitle;
+            }
+        }
+        
+        // Fall back to extracting from file name
         return Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+    }
+    
+    // Map file names to stored song titles
+    private Dictionary<string, string> _songTitles = new Dictionary<string, string>();
+    
+    protected string GetStoredSongTitle(string fileName)
+    {
+        return _songTitles.TryGetValue(fileName, out var title) ? title : null;
     }
 
     protected string GetStreamUrl(string fileName)

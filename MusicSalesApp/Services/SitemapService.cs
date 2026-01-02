@@ -135,11 +135,17 @@ public class SitemapService : ISitemapService
     }
 
     /// <summary>
-    /// Extracts the song title from the blob path.
-    /// For standalone songs, the MP3 filename without extension is the title.
+    /// Extracts the song title from metadata.
+    /// Prefers stored SongTitle, falls back to extracting from blob path.
     /// </summary>
     private string GetSongTitle(Models.SongMetadata song)
     {
+        // Prefer stored SongTitle
+        if (!string.IsNullOrEmpty(song.SongTitle))
+        {
+            return song.SongTitle;
+        }
+        
         if (string.IsNullOrEmpty(song.Mp3BlobPath))
         {
             return string.Empty;

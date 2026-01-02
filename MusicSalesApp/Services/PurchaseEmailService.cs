@@ -342,6 +342,13 @@ public class PurchaseEmailService : IPurchaseEmailService
 
     private string GetSongTitle(CartItemWithMetadata item)
     {
+        // Prefer stored SongTitle from metadata
+        if (!string.IsNullOrEmpty(item.SongMetadata?.SongTitle))
+        {
+            return item.SongMetadata.SongTitle;
+        }
+        
+        // Fall back to extracting from Mp3BlobPath
         if (item.SongMetadata?.Mp3BlobPath != null)
         {
             return Path.GetFileNameWithoutExtension(item.SongMetadata.Mp3BlobPath);

@@ -49,7 +49,7 @@ public class CartController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var items = await _cartService.GetCartItemsAsync(user.Id);
+        var items = await _cartService.GetCartItemsWithMetadataAsync(user.Id);
         var total = await _cartService.GetCartTotalAsync(user.Id);
 
         return Ok(new
@@ -57,13 +57,28 @@ public class CartController : ControllerBase
             items = items.Select(i => new
             {
                 songFileName = i.SongFileName,
-                songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
-                price = i.Price,
-                addedAt = i.AddedAt
+                songTitle = GetSongTitle(i),
+                price = i.Price
             }),
             albums = Array.Empty<object>(), // Albums are stored as individual tracks
             total
         });
+    }
+    
+    /// <summary>
+    /// Gets the song title from CartItemWithMetadata.
+    /// Prefers stored SongTitle, falls back to extracting from file name.
+    /// </summary>
+    private static string GetSongTitle(CartItemWithMetadata item)
+    {
+        // Prefer stored SongTitle from metadata
+        if (!string.IsNullOrEmpty(item.SongMetadata?.SongTitle))
+        {
+            return item.SongMetadata.SongTitle;
+        }
+        
+        // Fall back to extracting from file name
+        return Path.GetFileNameWithoutExtension(Path.GetFileName(item.SongFileName));
     }
 
     [HttpGet("count")]

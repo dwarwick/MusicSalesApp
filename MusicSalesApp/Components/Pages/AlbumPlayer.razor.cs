@@ -914,7 +914,16 @@ namespace MusicSalesApp.Components.Pages
         protected string GetTrackTitle(int index)
         {
             if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return "";
-            return Path.GetFileNameWithoutExtension(Path.GetFileName(_albumInfo.Tracks[index].Name));
+            
+            // Check for stored SongTitle in metadata
+            var track = _albumInfo.Tracks[index];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && !string.IsNullOrEmpty(metadata.SongTitle))
+            {
+                return metadata.SongTitle;
+            }
+            
+            // Fall back to extracting from file name
+            return Path.GetFileNameWithoutExtension(Path.GetFileName(track.Name));
         }
 
         protected string GetTrackNumber(int index)

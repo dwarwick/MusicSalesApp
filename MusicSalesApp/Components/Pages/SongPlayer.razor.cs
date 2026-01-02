@@ -385,8 +385,14 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected string GetDisplayTitle()
     {
+        // Prefer stored SongTitle from metadata if available
+        if (_songMetadata != null && !string.IsNullOrEmpty(_songMetadata.SongTitle))
+        {
+            return _songMetadata.SongTitle;
+        }
+        
         if (_songInfo == null) return SongTitle ?? "Unknown Song";
-        // Get just the file name without folder path, then remove extension
+        // Fall back to extracting from file name
         return Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
     }
 
