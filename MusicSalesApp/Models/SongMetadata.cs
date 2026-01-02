@@ -65,6 +65,12 @@ public class SongMetadata
     public string Genre { get; set; }
 
     /// <summary>
+    /// The display title of the song. If null, the title is derived from the file name.
+    /// </summary>
+    [MaxLength(200)]
+    public string SongTitle { get; set; }
+
+    /// <summary>
     /// The track number for an album track (1-based index)
     /// </summary>
     public int? TrackNumber { get; set; }

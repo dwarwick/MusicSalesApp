@@ -25,6 +25,7 @@ public partial class SellerSongManagementModel : BlazorBase
     protected decimal? _editSongPrice;
     protected decimal? _editAlbumPrice;
     protected string _editGenre = string.Empty;
+    protected string _editSongTitle = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
 
@@ -114,11 +115,18 @@ public partial class SellerSongManagementModel : BlazorBase
     }
 
     /// <summary>
-    /// Extracts the song title from metadata by looking at various blob path fields.
-    /// Priority: Mp3BlobPath > ImageBlobPath > BlobPath (deprecated)
+    /// Extracts the song title from metadata. Prefers the stored SongTitle,
+    /// but falls back to extracting from file path if not set.
+    /// Priority: SongTitle > Mp3BlobPath > ImageBlobPath > BlobPath (deprecated)
     /// </summary>
     private static string GetSongTitleFromMetadata(SongMetadata metadata)
     {
+        // Prefer the stored SongTitle if set
+        if (!string.IsNullOrEmpty(metadata.SongTitle))
+        {
+            return metadata.SongTitle;
+        }
+
         // Try MP3 path first (most common for songs)
         if (!string.IsNullOrEmpty(metadata.Mp3BlobPath))
         {
@@ -204,6 +212,7 @@ public partial class SellerSongManagementModel : BlazorBase
         _editSongPrice = song.SongPrice;
         _editAlbumPrice = song.AlbumPrice;
         _editGenre = song.Genre;
+        _editSongTitle = song.SongTitle;
         _validationErrors.Clear();
         _showEditDialog = true;
     }
@@ -225,7 +234,13 @@ public partial class SellerSongManagementModel : BlazorBase
 
         try
         {
-            // Validate
+            // Validate song title
+            if (string.IsNullOrWhiteSpace(_editSongTitle))
+            {
+                _validationErrors.Add("Song title is required.");
+            }
+
+            // Validate other fields
             if (!_editingSong.IsAlbum)
             {
                 if (!_editSongPrice.HasValue || _editSongPrice.Value <= 0)
@@ -257,6 +272,9 @@ public partial class SellerSongManagementModel : BlazorBase
 
                 if (metadata != null)
                 {
+                    // Always update the title
+                    metadata.SongTitle = _editSongTitle;
+
                     if (_editingSong.IsAlbum)
                     {
                         metadata.AlbumPrice = _editAlbumPrice;
@@ -269,7 +287,7 @@ public partial class SellerSongManagementModel : BlazorBase
 
                     await SongMetadataService.UpsertAsync(metadata);
                     
-                    _successMessage = $"'{_editingSong.SongTitle}' has been updated successfully.";
+                    _successMessage = $"'{_editSongTitle}' has been updated successfully.";
                     await LoadSongsAsync();
                     _showEditDialog = false;
                     _editingSong = null;

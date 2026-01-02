@@ -71,6 +71,7 @@ namespace MusicSalesApp.Services
                 existing.AlbumPrice = metadata.AlbumPrice;
                 existing.SongPrice = metadata.SongPrice;
                 existing.Genre = metadata.Genre;
+                existing.SongTitle = metadata.SongTitle;
                 existing.TrackNumber = metadata.TrackNumber;
                 existing.TrackLength = metadata.TrackLength;
                 existing.Mp3BlobPath = metadata.Mp3BlobPath;

@@ -231,8 +231,8 @@
                     }
 
                     <div class="mb-3">
-                        <label class="form-label">Song Title (Read-only)</label>
-                        <SfTextBox Value="@_editingSong.SongTitle" Enabled="false" CssClass="e-outline" />
+                        <label class="form-label">Song Title <span class="text-danger">*</span></label>
+                        <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" />
                     </div>
 
                     @if (!_editingSong.IsAlbum)
