@@ -306,9 +306,49 @@ public class CartController : ControllerBase
             // Example: $10 total * 0.15 = $1.50 platform fee, seller receives $8.50
             var platformFee = Math.Round(total * seller.CommissionRate, 2);
 
+            // Create multi-party PayPal order on server-side
+            // This creates an order where the seller is the merchant of record
+            // The seller receives payment and pays PayPal fees
+            // Platform receives commission via platform_fees
+            var orderItems = cartItemsWithMetadata.Select(i => new OrderItem
+            {
+                Name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                UnitAmount = i.Price,
+                Quantity = 1
+            });
+
+            var multiPartyResult = await _payPalPartnerService.CreateMultiPartyOrderAsync(
+                seller,
+                orderItems,
+                total,
+                platformFee);
+
+            if (multiPartyResult == null || !multiPartyResult.Success)
+            {
+                _logger.LogError("Failed to create multi-party PayPal order: {Error}", multiPartyResult?.ErrorMessage);
+                // Fall back to standard order
+                return Ok(new
+                {
+                    orderId,
+                    amount = total.ToString("F2"),
+                    isMultiParty = false,
+                    items = cartItemsWithMetadata.Select(i => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                        unit_amount = i.Price.ToString("F2"),
+                        quantity = 1
+                    })
+                });
+            }
+
+            _logger.LogInformation("Created multi-party PayPal order {PayPalOrderId} for seller {SellerId}, platform fee: ${PlatformFee}",
+                multiPartyResult.OrderId, seller.Id, platformFee);
+
             return Ok(new
             {
                 orderId,
+                payPalOrderId = multiPartyResult.OrderId,
+                approvalUrl = multiPartyResult.ApprovalUrl,
                 amount = total.ToString("F2"),
                 isMultiParty = true,
                 sellerId = seller.Id,

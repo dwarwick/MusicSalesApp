@@ -27,6 +27,12 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     private bool _currentOrderIsMultiParty;
     private string _currentSellerMerchantId;
 
+    [SupplyParameterFromQuery(Name = "token")]
+    public string PayPalToken { get; set; }
+
+    [SupplyParameterFromQuery(Name = "PayerID")]
+    public string PayPalPayerId { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -35,6 +41,12 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         if (_isAuthenticated)
         {
             await LoadCart();
+
+            // Handle return from PayPal approval (multi-party orders)
+            if (!string.IsNullOrEmpty(PayPalToken) && !string.IsNullOrEmpty(PayPalPayerId))
+            {
+                await HandlePayPalReturn();
+            }
         }
 
         _loading = false;
@@ -70,6 +82,22 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     {
         try
         {
+            // Check if this will be a multi-party order before initializing PayPal buttons
+            // Multi-party orders need direct redirect, not JS SDK buttons
+            var checkResponse = await Http.PostAsync("api/cart/create-order", null);
+            if (checkResponse.IsSuccessStatusCode)
+            {
+                var orderInfo = await checkResponse.Content.ReadFromJsonAsync<CreateOrderResponse>();
+                if (orderInfo != null && orderInfo.IsMultiParty && !string.IsNullOrEmpty(orderInfo.ApprovalUrl))
+                {
+                    // Multi-party order - redirect directly to PayPal
+                    Logger.LogInformation("Multi-party order detected, redirecting to PayPal approval URL");
+                    NavigationManager.NavigateTo(orderInfo.ApprovalUrl, forceLoad: true);
+                    return;
+                }
+            }
+
+            // Standard order - use PayPal JavaScript SDK
             var clientIdResponse = await Http.GetFromJsonAsync<PayPalClientIdResponse>("api/cart/paypal-client-id");
             var clientId = clientIdResponse?.ClientId;
 
@@ -291,6 +319,73 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    private async Task HandlePayPalReturn()
+    {
+        Logger.LogInformation("Handling return from PayPal, token: {Token}", PayPalToken);
+        _checkoutInProgress = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Capture the multi-party order
+            var response = await Http.PostAsJsonAsync("api/cart/capture-order", new
+            {
+                OrderId = PayPalToken, // For multi-party, token is the PayPal order ID
+                PayPalOrderId = PayPalToken,
+                IsMultiParty = true
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CaptureOrderResponse>();
+                Logger.LogInformation("Multi-party purchase completed, {Count} songs bought", result?.PurchasedCount);
+                _purchasedCount = result?.PurchasedCount ?? 0;
+                _checkoutComplete = true;
+                _checkoutError = false;
+                _checkoutCancelled = false;
+                _errorMessage = string.Empty;
+                _cartItems.Clear();
+                _cartTotal = 0;
+                CartService.NotifyCartUpdated();
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Logger.LogWarning("Multi-party capture-order error: {Content}", errorContent);
+
+                string errorMessage = "Payment could not be processed. Please try again.";
+                try
+                {
+                    var errorResult = await response.Content.ReadFromJsonAsync<CaptureOrderErrorResponse>();
+                    if (!string.IsNullOrEmpty(errorResult?.Error))
+                    {
+                        errorMessage = errorResult.Error;
+                    }
+                }
+                catch
+                {
+                    // If parsing fails, use default message
+                }
+
+                _checkoutError = true;
+                _checkoutComplete = false;
+                _errorMessage = errorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error capturing multi-party order");
+            _checkoutError = true;
+            _checkoutComplete = false;
+            _errorMessage = "An unexpected error occurred. Please try again or contact support.";
+        }
+        finally
+        {
+            _checkoutInProgress = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         try
@@ -330,6 +425,8 @@ public class PayPalClientIdResponse
 public class CreateOrderResponse
 {
     public string OrderId { get; set; }
+    public string PayPalOrderId { get; set; }
+    public string ApprovalUrl { get; set; }
     public string Amount { get; set; }
     public bool IsMultiParty { get; set; }
     public int? SellerId { get; set; }
