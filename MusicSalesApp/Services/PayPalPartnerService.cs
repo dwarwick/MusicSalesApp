@@ -560,6 +560,165 @@ public class PayPalPartnerService : IPayPalPartnerService
     }
 
     /// <inheritdoc />
+    public async Task<MultiSellerOrderResult?> CreateMultiSellerOrderAsync(Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> sellerOrders)
+    {
+        try
+        {
+            if (sellerOrders == null || !sellerOrders.Any())
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "No sellers in order" };
+            }
+
+            if (sellerOrders.Count > 10)
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "PayPal supports maximum 10 sellers per transaction" };
+            }
+
+            // Validate all sellers have merchant IDs
+            var invalidSellers = sellerOrders.Keys.Where(s => string.IsNullOrWhiteSpace(s.PayPalMerchantId)).ToList();
+            if (invalidSellers.Any())
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Sellers without PayPal merchant ID: {string.Join(", ", invalidSellers.Select(s => s.Id))}" };
+            }
+
+            var token = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "Failed to get PayPal access token" };
+            }
+
+            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"] ?? "https://localhost:5001";
+            var bnCode = _configuration["PayPal:BNCode"];
+
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
+            
+            if (!string.IsNullOrWhiteSpace(bnCode))
+            {
+                client.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
+            }
+
+            // Create purchase_units array - one per seller
+            var purchaseUnits = sellerOrders.Select((kvp, index) =>
+            {
+                var seller = kvp.Key;
+                var (items, amount, platformFee) = kvp.Value;
+
+                var orderItems = items.Select(item => new
+                {
+                    name = item.Name,
+                    unit_amount = new
+                    {
+                        currency_code = "USD",
+                        value = item.UnitAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                    },
+                    quantity = item.Quantity.ToString()
+                }).ToArray();
+
+                return new
+                {
+                    reference_id = $"SELLER_{seller.Id}",
+                    amount = new
+                    {
+                        currency_code = "USD",
+                        value = amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                        breakdown = new
+                        {
+                            item_total = new
+                            {
+                                currency_code = "USD",
+                                value = amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            }
+                        }
+                    },
+                    payee = new
+                    {
+                        merchant_id = seller.PayPalMerchantId
+                    },
+                    payment_instruction = new
+                    {
+                        disbursement_mode = "INSTANT",
+                        platform_fees = new[]
+                        {
+                            new
+                            {
+                                amount = new
+                                {
+                                    currency_code = "USD",
+                                    value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                }
+                            }
+                        }
+                    },
+                    items = orderItems
+                };
+            }).ToArray();
+
+            var orderData = new
+            {
+                intent = "CAPTURE",
+                purchase_units = purchaseUnits,
+                application_context = new
+                {
+                    brand_name = "StreamTunes",
+                    landing_page = "NO_PREFERENCE",
+                    shipping_preference = "NO_SHIPPING",
+                    user_action = "PAY_NOW",
+                    return_url = $"{returnBaseUrl}/checkout?success=true",
+                    cancel_url = $"{returnBaseUrl}/checkout?success=false"
+                }
+            };
+
+            var content = new StringContent(JsonSerializer.Serialize(orderData), Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("v2/checkout/orders", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to create multi-seller order: {Status} {Body}", response.StatusCode, body);
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Order creation failed: {response.StatusCode}" };
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var orderId = root.GetProperty("id").GetString() ?? string.Empty;
+
+            // Find the approval URL
+            string? approvalUrl = null;
+            if (root.TryGetProperty("links", out var links))
+            {
+                foreach (var link in links.EnumerateArray())
+                {
+                    if (link.TryGetProperty("rel", out var rel) && rel.GetString() == "approve")
+                    {
+                        approvalUrl = link.GetProperty("href").GetString();
+                        break;
+                    }
+                }
+            }
+
+            var sellerMerchantIds = sellerOrders.Keys.Select(s => s.PayPalMerchantId!).ToList();
+            _logger.LogInformation("Created multi-seller order {OrderId} with {SellerCount} sellers", orderId, sellerOrders.Count);
+
+            return new MultiSellerOrderResult
+            {
+                Success = true,
+                OrderId = orderId,
+                ApprovalUrl = approvalUrl,
+                SellerMerchantIds = sellerMerchantIds
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating multi-seller order");
+            return new MultiSellerOrderResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<CaptureResult> CaptureMultiPartyOrderAsync(string payPalOrderId)
     {
         try

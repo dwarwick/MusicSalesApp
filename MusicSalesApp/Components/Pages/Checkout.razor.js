@@ -1,7 +1,7 @@
 let paypalLoaded = false;
 let currentOrderId = null;
 
-export async function initPayPal(clientId, sellerMerchantId, amount, dotNetRef) {
+export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef) {
     if (!clientId || clientId === '__REPLACE_WITH_PAYPAL_CLIENT_ID__') {
         console.log('PayPal client ID not configured');
         return;
@@ -9,7 +9,7 @@ export async function initPayPal(clientId, sellerMerchantId, amount, dotNetRef) 
 
     // Load PayPal SDK if not already loaded
     if (!paypalLoaded) {
-        await loadPayPalScript(clientId, sellerMerchantId);
+        await loadPayPalScript(clientId, sellerMerchantIds);
         paypalLoaded = true;
     }
 
@@ -48,10 +48,11 @@ export async function initPayPal(clientId, sellerMerchantId, amount, dotNetRef) 
                 // Store the order ID for use in onApprove
                 currentOrderId = orderId;
 
-                // For multi-party orders with seller merchant-id in SDK,
+                // For multi-party orders with seller merchant-id(s) in SDK,
                 // the server pre-creates the PayPal order and returns its ID
                 // We just return it directly without creating a new one
-                if (sellerMerchantId) {
+                // This works for both single-seller and multi-seller orders
+                if (sellerMerchantIds) {
                     console.log('Multi-party order: Using server-created PayPal order ID:', orderId);
                     return orderId;
                 }
@@ -135,7 +136,7 @@ export async function initPayPal(clientId, sellerMerchantId, amount, dotNetRef) 
     }).render('#paypal-button-container');
 }
 
-function loadPayPalScript(clientId, sellerMerchantId) {
+function loadPayPalScript(clientId, sellerMerchantIds) {
     return new Promise((resolve, reject) => {
         if (document.querySelector('script[src*="paypal.com/sdk"]')) {
             resolve();
@@ -149,11 +150,13 @@ function loadPayPalScript(clientId, sellerMerchantId) {
         // intent=capture ensures immediate payment capture
         let sdkUrl = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater&intent=capture`;
         
-        // For multi-party payments, add the seller's merchant ID
-        // This allows the SDK to work with orders where the seller is the payee
-        if (sellerMerchantId) {
-            sdkUrl += `&merchant-id=${sellerMerchantId}`;
-            console.log('Loading PayPal SDK with seller merchant ID for multi-party payment');
+        // For multi-party payments, add the seller merchant IDs (comma-separated for multiple sellers)
+        // This allows the SDK to work with orders where sellers are the payees
+        // Supports up to 10 merchants
+        if (sellerMerchantIds) {
+            sdkUrl += `&merchant-id=${sellerMerchantIds}`;
+            const sellerCount = sellerMerchantIds.split(',').length;
+            console.log(`Loading PayPal SDK with ${sellerCount} seller merchant ID(s) for multi-party payment`);
         }
         
         script.src = sdkUrl;

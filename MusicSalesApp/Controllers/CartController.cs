@@ -263,17 +263,38 @@ public class CartController : ControllerBase
         var hasSellerContent = itemsBySeller.Any(g => g.Key != null);
         var hasPlatformContent = itemsBySeller.Any(g => g.Key == null);
 
-        // Check if order should use multi-party payment
-        if (ShouldUseMultiPartyPayment(hasSellerContent, hasPlatformContent, itemsBySeller.Count))
+        // Multi-party payment is used when there is ONLY seller content (no platform content)
+        // Supports up to 10 sellers
+        if (hasSellerContent && !hasPlatformContent)
         {
-            var sellerGroup = itemsBySeller.First();
-            var sellerId = sellerGroup.Key!.Value;
-            var seller = await _sellerService.GetSellerByIdAsync(sellerId);
+            var sellerGroups = itemsBySeller.Where(g => g.Key != null).ToList();
             
-            if (seller != null && seller.IsActive && !string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+            if (sellerGroups.Count > 10)
             {
-                return Ok(new { isMultiParty = true, sellerMerchantId = seller.PayPalMerchantId });
+                return Ok(new { isMultiParty = false }); // Too many sellers
             }
+
+            var sellerMerchantIds = new List<string>();
+            
+            foreach (var sellerGroup in sellerGroups)
+            {
+                var sellerId = sellerGroup.Key!.Value;
+                var seller = await _sellerService.GetSellerByIdAsync(sellerId);
+                
+                if (seller == null || !seller.IsActive || string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+                {
+                    return Ok(new { isMultiParty = false }); // Invalid seller
+                }
+                
+                sellerMerchantIds.Add(seller.PayPalMerchantId);
+            }
+            
+            return Ok(new 
+            { 
+                isMultiParty = true, 
+                sellerMerchantIds = sellerMerchantIds,
+                sellerCount = sellerMerchantIds.Count 
+            });
         }
 
         return Ok(new { isMultiParty = false });
@@ -307,11 +328,173 @@ public class CartController : ControllerBase
         await _cartService.CreatePayPalOrderAsync(user.Id, orderId, total);
 
         // Check if order should use multi-party payment
-        // Multi-party is used only when all items are from a single seller
-        // Mixed orders (multiple sellers or platform + seller) use standard checkout
+        // Multi-party is used when there is ONLY seller content (no platform content)
+        // Supports single seller OR multiple sellers (up to 10)
+        if (hasSellerContent && !hasPlatformContent)
+        {
+            // Get all sellers
+            var sellerGroups = itemsBySeller.Where(g => g.Key != null).ToList();
+            
+            if (sellerGroups.Count > 10)
+            {
+                _logger.LogWarning("Cart has {Count} sellers, exceeding PayPal's 10 seller limit. Falling back to standard checkout.", sellerGroups.Count);
+                // Fall back to standard order
+                return Ok(new
+                {
+                    orderId,
+                    amount = total.ToString("F2"),
+                    isMultiParty = false,
+                    items = cartItemsWithMetadata.Select(i => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                        unit_amount = i.Price.ToString("F2"),
+                        quantity = 1
+                    })
+                });
+            }
+
+            // Build seller orders dictionary
+            var sellerOrders = new Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)>();
+            var allSellerMerchantIds = new List<string>();
+
+            foreach (var sellerGroup in sellerGroups)
+            {
+                var sellerId = sellerGroup.Key!.Value;
+                var seller = await _sellerService.GetSellerByIdAsync(sellerId);
+                
+                if (seller == null || !seller.IsActive || string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+                {
+                    _logger.LogWarning("Seller {SellerId} is not active or has no PayPal merchant ID. Falling back to standard checkout.", sellerId);
+                    // Fall back to standard order if any seller is invalid
+                    return Ok(new
+                    {
+                        orderId,
+                        amount = total.ToString("F2"),
+                        isMultiParty = false,
+                        items = cartItemsWithMetadata.Select(i => new
+                        {
+                            name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                            unit_amount = i.Price.ToString("F2"),
+                            quantity = 1
+                        })
+                    });
+                }
+
+                var sellerAmount = sellerGroup.Sum(item => item.Price);
+                var platformFee = Math.Round(sellerAmount * seller.CommissionRate, 2);
+                
+                var orderItems = sellerGroup.Select(i => new OrderItem
+                {
+                    Name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                    UnitAmount = i.Price,
+                    Quantity = 1
+                });
+
+                sellerOrders[seller] = (orderItems, sellerAmount, platformFee);
+                allSellerMerchantIds.Add(seller.PayPalMerchantId);
+            }
+
+            // Create multi-seller order (supports 1-10 sellers)
+            if (sellerOrders.Count == 1)
+            {
+                // Single seller - use existing method
+                var seller = sellerOrders.Keys.First();
+                var (items, amount, platformFee) = sellerOrders[seller];
+                
+                var multiPartyResult = await _payPalPartnerService.CreateMultiPartyOrderAsync(
+                    seller,
+                    items,
+                    amount,
+                    platformFee);
+
+                if (multiPartyResult == null || !multiPartyResult.Success)
+                {
+                    _logger.LogError("Failed to create multi-party PayPal order: {Error}", multiPartyResult?.ErrorMessage);
+                    // Fall back to standard order
+                    return Ok(new
+                    {
+                        orderId,
+                        amount = total.ToString("F2"),
+                        isMultiParty = false,
+                        items = cartItemsWithMetadata.Select(i => new
+                        {
+                            name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                            unit_amount = i.Price.ToString("F2"),
+                            quantity = 1
+                        })
+                    });
+                }
+
+                _logger.LogInformation("Created single-seller PayPal order {PayPalOrderId}, platform fee: ${PlatformFee}",
+                    multiPartyResult.OrderId, platformFee);
+
+                return Ok(new
+                {
+                    orderId,
+                    payPalOrderId = multiPartyResult.OrderId,
+                    amount = total.ToString("F2"),
+                    isMultiParty = true,
+                    sellerCount = 1,
+                    sellerMerchantIds = allSellerMerchantIds,
+                    platformFee = platformFee.ToString("F2"),
+                    items = cartItemsWithMetadata.Select(i => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                        unit_amount = i.Price.ToString("F2"),
+                        quantity = 1
+                    })
+                });
+            }
+            else
+            {
+                // Multiple sellers - use multi-seller method
+                var multiSellerResult = await _payPalPartnerService.CreateMultiSellerOrderAsync(sellerOrders);
+
+                if (multiSellerResult == null || !multiSellerResult.Success)
+                {
+                    _logger.LogError("Failed to create multi-seller PayPal order: {Error}", multiSellerResult?.ErrorMessage);
+                    // Fall back to standard order
+                    return Ok(new
+                    {
+                        orderId,
+                        amount = total.ToString("F2"),
+                        isMultiParty = false,
+                        items = cartItemsWithMetadata.Select(i => new
+                        {
+                            name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                            unit_amount = i.Price.ToString("F2"),
+                            quantity = 1
+                        })
+                    });
+                }
+
+                var totalPlatformFee = sellerOrders.Sum(kvp => kvp.Value.PlatformFee);
+                _logger.LogInformation("Created multi-seller PayPal order {PayPalOrderId} with {SellerCount} sellers, total platform fee: ${TotalFee}",
+                    multiSellerResult.OrderId, sellerOrders.Count, totalPlatformFee);
+
+                return Ok(new
+                {
+                    orderId,
+                    payPalOrderId = multiSellerResult.OrderId,
+                    amount = total.ToString("F2"),
+                    isMultiParty = true,
+                    sellerCount = sellerOrders.Count,
+                    sellerMerchantIds = allSellerMerchantIds,
+                    platformFee = totalPlatformFee.ToString("F2"),
+                    items = cartItemsWithMetadata.Select(i => new
+                    {
+                        name = Path.GetFileNameWithoutExtension(Path.GetFileName(i.SongFileName)),
+                        unit_amount = i.Price.ToString("F2"),
+                        quantity = 1
+                    })
+                });
+            }
+        }
+
+        // Check if old single-seller logic (deprecated, handled above)
         if (ShouldUseMultiPartyPayment(hasSellerContent, hasPlatformContent, itemsBySeller.Count))
         {
-            // All items from a single seller - use multi-party order
+            // This should not be reached anymore but keeping for backwards compatibility
             var sellerGroup = itemsBySeller.First();
             var sellerId = sellerGroup.Key!.Value;
             

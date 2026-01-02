@@ -2,12 +2,15 @@
 
 ## Overview
 
-This implementation enables sellers to be the merchant of record for their music sales using PayPal's JavaScript SDK with Expanded Checkout features. Payment goes directly to the seller's PayPal account, the seller pays PayPal transaction fees, and the platform receives a 15% commission automatically.
+This implementation enables sellers to be the merchant of record for their music sales using PayPal's JavaScript SDK with Expanded Checkout features. Payment goes directly to the seller's PayPal account(s), each seller pays their own PayPal transaction fees, and the platform receives a 15% commission automatically.
+
+**Supports both single-seller and multi-seller transactions (up to 10 sellers per transaction).**
 
 ## Payment Flow
 
 ### For Seller Content (Multi-Party Payment)
 
+**Single Seller:**
 ```
 Customer $10 → Seller's PayPal (merchant of record)
               → Seller pays PayPal fees ($0.59)
@@ -15,6 +18,25 @@ Customer $10 → Seller's PayPal (merchant of record)
               → Seller nets $7.91
 
 Platform receives: $1.50 (commission only, NO PayPal fees)
+```
+
+**Multiple Sellers:**
+```
+Customer pays $25 total
+
+Seller A ($15):
+→ Seller A's PayPal (merchant of record)
+→ Seller A pays fees ($0.74)
+→ Platform receives $2.25 commission
+→ Seller A nets $12.01
+
+Seller B ($10):
+→ Seller B's PayPal (merchant of record)
+→ Seller B pays fees ($0.59)
+→ Platform receives $1.50 commission
+→ Seller B nets $7.91
+
+Platform receives: $3.75 total commission (NO PayPal fees)
 ```
 
 ### For Platform Content (Standard Payment)
@@ -29,52 +51,63 @@ Customer $10 → Platform's PayPal
 
 ### 1. SDK Loading with merchant-id Parameter
 
-**Key Insight:** PayPal's JavaScript SDK supports multi-party payments when you include the seller's `merchant-id` parameter in the SDK URL.
+**Key Insight:** PayPal's JavaScript SDK supports multi-seller payments when you include multiple seller `merchant-id` values (comma-separated) in the SDK URL.
 
-**Checkout.razor.cs** checks if the cart is multi-party and passes the seller's merchant ID to JavaScript:
+**Checkout.razor.cs** checks if the cart has seller content and passes all seller merchant IDs to JavaScript:
 
 ```csharp
-// Get seller merchant ID if this is a multi-party order
 var cartCheckResponse = await Http.GetFromJsonAsync<CartCheckResponse>("api/cart/check-multiparty");
 if (cartCheckResponse != null && cartCheckResponse.IsMultiParty)
 {
-    sellerMerchantId = cartCheckResponse.SellerMerchantId;
+    // Join multiple merchant IDs with comma (PayPal SDK supports up to 10)
+    sellerMerchantIds = string.Join(",", cartCheckResponse.SellerMerchantIds);
 }
-
-// Initialize SDK with seller merchant ID for multi-party
-await _jsModule.InvokeVoidAsync("initPayPal", clientId, sellerMerchantId, amount, _dotNetRef);
 ```
 
-**Checkout.razor.js** loads the SDK with the merchant-id parameter:
+**Checkout.razor.js** loads the SDK with all merchant IDs:
 
 ```javascript
 let sdkUrl = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater&intent=capture`;
 
-// For multi-party payments, add the seller's merchant ID
-if (sellerMerchantId) {
-    sdkUrl += `&merchant-id=${sellerMerchantId}`;
+// For multi-party payments, add merchant IDs (comma-separated for multiple sellers)
+if (sellerMerchantIds) {
+    sdkUrl += `&merchant-id=${sellerMerchantIds}`;  // e.g., "SELLER1,SELLER2,SELLER3"
 }
 ```
 
 ### 2. Server-Side Order Creation
 
-For multi-party orders, `CartController.CreatePayPalOrder()` calls `PayPalPartnerService.CreateMultiPartyOrderAsync()` which creates a PayPal order with:
+**Single Seller:** Uses `PayPalPartnerService.CreateMultiPartyOrderAsync()` to create an order with one purchase unit.
+
+**Multiple Sellers:** Uses `PayPalPartnerService.CreateMultiSellerOrderAsync()` to create an order with multiple purchase units (one per seller):
 
 ```csharp
 {
-    payee: {
-        merchant_id: seller.PayPalMerchantId  // Seller is merchant of record
-    },
-    payment_instruction: {
-        disbursement_mode: "INSTANT",
-        platform_fees: [{
-            amount: { value: platformFee }  // 15% commission
-        }]
-    }
+    intent: "CAPTURE",
+    purchase_units: [
+        {
+            reference_id: "SELLER_123",
+            payee: { merchant_id: seller1.PayPalMerchantId },
+            amount: { value: "15.00" },
+            payment_instruction: {
+                disbursement_mode: "INSTANT",
+                platform_fees: [{ amount: { value: "2.25" } }]
+            },
+            items: [...]
+        },
+        {
+            reference_id: "SELLER_456",
+            payee: { merchant_id: seller2.PayPalMerchantId },
+            amount: { value: "10.00" },
+            payment_instruction: {
+                disbursement_mode: "INSTANT",
+                platform_fees: [{ amount: { value: "1.50" } }]
+            },
+            items: [...]
+        }
+    ]
 }
 ```
-
-This returns a PayPal order ID that is compatible with the SDK loaded with the seller's merchant-id.
 
 ### 3. JavaScript Handles Both Flows
 
@@ -84,8 +117,8 @@ The `createOrder` callback detects whether it's a multi-party order:
 createOrder: async function (data, actions) {
     const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
     
-    if (sellerMerchantId) {
-        // Multi-party: server pre-created the order, just return the ID
+    if (sellerMerchantIds) {
+        // Multi-party (single or multiple sellers): server pre-created the order
         return orderId;  // This is the PayPal order ID
     }
     
@@ -105,31 +138,34 @@ The SDK is loaded with Expanded Checkout parameters:
 ### 5. Fund Disbursement
 
 PayPal automatically splits funds upon capture:
-- Seller receives net amount (gross - PayPal fees - platform fee)
-- Platform receives commission
+- Each seller receives their net amount (gross - PayPal fees - platform fee)
+- Platform receives sum of all platform fees
 - Disbursement mode is **INSTANT** - no waiting period
+- Buyer may see separate transactions on their statement (one per seller)
 
 ## Order Type Detection
 
-| Scenario | Payment Method |
-|----------|---------------|
-| Single seller, all seller content | Multi-party ✅ |
-| Platform content only | Standard |
-| Mixed (platform + seller) | Standard |
-| Multiple sellers | Standard |
+| Scenario | Payment Method | Seller Limit |
+|----------|---------------|--------------|
+| Single seller, all seller content | Multi-party ✅ | 1 seller |
+| Multiple sellers, all seller content | Multi-party ✅ | 2-10 sellers |
+| Platform content only | Standard | N/A |
+| Mixed (platform + seller) | Standard (fallback) | N/A |
+| More than 10 sellers | Standard (fallback) | Exceeds limit |
 
-Only pure single-seller carts use multi-party payment.
+Multi-party payment is used when the cart contains ONLY seller content (no platform content) and has 1-10 sellers.
 
 ## API Endpoints
 
 ### GET /api/cart/check-multiparty
-Check if the current cart is multi-party without creating an order.
+Check if the current cart qualifies for multi-party payment and get seller merchant IDs.
 
 **Response:**
 ```json
 {
   "isMultiParty": true,
-  "sellerMerchantId": "SELLER_MERCHANT_ID"
+  "sellerMerchantIds": ["SELLER1", "SELLER2"],
+  "sellerCount": 2
 }
 ```
 
@@ -142,9 +178,10 @@ Create the order (internal database record and PayPal order if multi-party).
   "orderId": "internal-guid",
   "payPalOrderId": "PAYPAL-ORDER-ID",
   "isMultiParty": true,
-  "sellerMerchantId": "SELLER_MERCHANT_ID",
-  "platformFee": "1.50",
-  "sellerAmount": "8.50"
+  "sellerCount": 2,
+  "sellerMerchantIds": ["SELLER1", "SELLER2"],
+  "platformFee": "3.75",
+  "items": [...]
 }
 ```
 
@@ -162,17 +199,26 @@ Sellers must complete PayPal Partner Referrals onboarding:
 
 Default commission: **15%** (configurable per seller via `Seller.CommissionRate`)
 
-**Example for $10 sale:**
+**Example for $25 sale (2 sellers):**
+
+**Seller A ($15):**
+- Gross amount: $15.00
+- PayPal fee (seller pays): $0.74
+- Platform commission: $2.25
+- **Seller A net: $12.01**
+
+**Seller B ($10):**
 - Gross amount: $10.00
 - PayPal fee (seller pays): $0.59
 - Platform commission: $1.50
-- **Seller net: $7.91**
-- **Platform net: $1.50**
+- **Seller B net: $7.91**
+
+**Platform total: $3.75**
 
 ## Benefits
 
 **For Sellers:**
-- Direct payment to their PayPal account
+- Direct payment to their PayPal accounts
 - Merchant of record for their sales
 - Instant access to funds
 - Standard PayPal seller protection
@@ -181,15 +227,16 @@ Default commission: **15%** (configurable per seller via `Seller.CommissionRate`
 **For Platform:**
 - No liability for seller transactions
 - No PayPal fees on seller sales
-- Automatic commission collection
+- Automatic commission collection for all sellers
 - No manual payouts needed
-- Simplified accounting
+- Simplified accounting (single transaction, multiple settlements)
 
 **For Customers:**
 - Expanded payment options (Venmo, Pay Later, cards)
-- Can review cart before completing payment
+- Can review full cart before completing payment
 - 3D Secure protection for card payments
 - Standard PayPal buyer protection
+- Single checkout experience (even with multiple sellers)
 
 ## Technical Requirements
 
@@ -198,19 +245,31 @@ Default commission: **15%** (configurable per seller via `Seller.CommissionRate`
 - `PayPal:BNCode` must be configured
 - Sellers must complete Partner Referrals onboarding
 - Sellers must have active `PayPalMerchantId`
+- Maximum 10 sellers per transaction (PayPal limitation)
 
 ## Files Modified
 
-- `MusicSalesApp/Controllers/CartController.cs` - Added check-multiparty endpoint, multi-party order creation
-- `MusicSalesApp/Components/Pages/Checkout.razor.cs` - SDK initialization with seller merchant ID
-- `MusicSalesApp/Components/Pages/Checkout.razor.js` - SDK loading with merchant-id parameter, order creation logic
+- `MusicSalesApp/Services/IPayPalPartnerService.cs` - Added CreateMultiSellerOrderAsync method
+- `MusicSalesApp/Services/PayPalPartnerService.cs` - Implemented multi-seller order creation
+- `MusicSalesApp/Controllers/CartController.cs` - Updated to support 1-10 sellers
+- `MusicSalesApp/Components/Pages/Checkout.razor.cs` - SDK initialization with multiple merchant IDs
+- `MusicSalesApp/Components/Pages/Checkout.razor.js` - Support comma-separated merchant IDs
 
 ## Why This Works
 
-According to PayPal's documentation, when you load the SDK with a `merchant-id` parameter that differs from the platform's client-id, the SDK is configured to handle orders where that merchant is the payee. This is specifically designed for marketplace/partner scenarios and is the recommended approach for Expanded Checkout with multi-party payments.
+According to PayPal's Commerce Platform documentation, the `purchase_units` array can contain up to 10 units, each with its own `payee` (merchant) and `platform_fees`. When the SDK is loaded with multiple `merchant-id` values (comma-separated), it configures the checkout to handle orders where those merchants are payees.
+
+Behind the scenes, PayPal creates separate settlement transactions for each seller, but the buyer experiences a single checkout flow with one approval.
 
 **References:**
-- [PayPal Multi-Party Checkout](https://developer.paypal.com/docs/multiparty/checkout/)
+- [PayPal Multi-Seller Payments](https://developer.paypal.com/docs/multiparty/checkout/multiseller-payments/)
+- [PayPal Orders API v2](https://developer.paypal.com/docs/api/orders/v2/)
 - [PayPal JavaScript SDK](https://developer.paypal.com/sdk/js/)
 - [PayPal SDK npm package](https://www.npmjs.com/package/@paypal/paypal-js)
 
+## Limitations
+
+- Maximum 10 sellers per transaction (PayPal limit)
+- Cannot mix platform and seller content in multi-party orders
+- Buyer may see multiple transactions on their bank statement (one per seller)
+- All sellers must have completed PayPal onboarding and have active merchant IDs

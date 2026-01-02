@@ -53,6 +53,14 @@ public interface IPayPalPartnerService
     Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Seller seller, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee);
 
     /// <summary>
+    /// Creates a multi-seller order with multiple purchase units (one per seller).
+    /// Supports up to 10 sellers per transaction. Each seller is the merchant of record for their items.
+    /// </summary>
+    /// <param name="sellerOrders">Dictionary mapping seller to their items and amounts.</param>
+    /// <returns>The created order details with all seller merchant IDs.</returns>
+    Task<MultiSellerOrderResult?> CreateMultiSellerOrderAsync(Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> sellerOrders);
+
+    /// <summary>
     /// Captures a multi-party order payment.
     /// </summary>
     /// <param name="payPalOrderId">The PayPal order ID to capture.</param>
@@ -114,6 +122,18 @@ public class MultiPartyOrderResult
     public string? ApprovalUrl { get; set; }
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
+}
+
+/// <summary>
+/// Result of creating a multi-seller order with multiple purchase units.
+/// </summary>
+public class MultiSellerOrderResult
+{
+    public string OrderId { get; set; } = string.Empty;
+    public string? ApprovalUrl { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public List<string> SellerMerchantIds { get; set; } = new();
 }
 
 /// <summary>

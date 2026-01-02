@@ -79,16 +79,18 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Get seller merchant ID if this is a multi-party order
-            // This is needed to load the SDK with the correct merchant ID
-            string sellerMerchantId = null;
+            // Get seller merchant IDs if this is a multi-party order
+            // This is needed to load the SDK with the correct merchant IDs
+            string sellerMerchantIds = null;
             try
             {
                 var cartCheckResponse = await Http.GetFromJsonAsync<CartCheckResponse>("api/cart/check-multiparty");
                 if (cartCheckResponse != null && cartCheckResponse.IsMultiParty)
                 {
-                    sellerMerchantId = cartCheckResponse.SellerMerchantId;
-                    Logger.LogInformation("Multi-party order detected, will use seller merchant ID: {MerchantId}", sellerMerchantId);
+                    // Join multiple merchant IDs with comma (PayPal SDK supports this)
+                    sellerMerchantIds = string.Join(",", cartCheckResponse.SellerMerchantIds);
+                    Logger.LogInformation("Multi-party order detected with {Count} sellers, merchant IDs: {MerchantIds}", 
+                        cartCheckResponse.SellerCount, sellerMerchantIds);
                 }
             }
             catch (Exception ex)
@@ -98,7 +100,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
 
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Checkout.razor.js");
-            await _jsModule.InvokeVoidAsync("initPayPal", clientId, sellerMerchantId, _cartTotal.ToString("F2"), _dotNetRef);
+            await _jsModule.InvokeVoidAsync("initPayPal", clientId, sellerMerchantIds, _cartTotal.ToString("F2"), _dotNetRef);
         }
         catch (Exception ex)
         {
@@ -356,7 +358,11 @@ public class PayPalClientIdResponse
 public class CartCheckResponse
 {
     public bool IsMultiParty { get; set; }
-    public string SellerMerchantId { get; set; }
+    public List<string> SellerMerchantIds { get; set; } = new();
+    public int SellerCount { get; set; }
+    
+    // Backwards compatibility
+    public string SellerMerchantId => SellerMerchantIds?.FirstOrDefault();
 }
 
 public class CreateOrderResponse
