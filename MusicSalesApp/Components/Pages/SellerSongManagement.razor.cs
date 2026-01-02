@@ -142,7 +142,7 @@ public partial class SellerSongManagementModel : BlazorBase
 
     protected void NavigateToUpload()
     {
-        NavigationManager.NavigateTo("/upload");
+        NavigationManager.NavigateTo("/upload-files");
     }
 
     protected void ShowDeleteConfirmation(SongAdminViewModel song)
