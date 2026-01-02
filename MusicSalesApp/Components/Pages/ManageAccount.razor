@@ -231,7 +231,7 @@
                                 <div class="mb-3">
                                     <label for="sellerDisplayName" class="e-label">Display Name (optional)</label>
                                     <SfTextBox @bind-Value="_sellerDisplayName" ID="sellerDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
-                                    <small class="form-text text-muted">This name will be shown to buyers on your music listings.</small>
+                                    <small class="form-text">This name will be shown to buyers on your music listings.</small>
                                 </div>
 
                                 <div class="mb-3">
@@ -333,17 +333,17 @@
 
                         <div class="stop-selling-section">
                             <h5 class="text-danger">Stop Being a Seller</h5>
-                            <p class="text-muted">
+                            <p>
                                 If you no longer want to sell music on StreamTunes, you can stop being a seller. 
                                 <strong>Warning:</strong> This action will:
                             </p>
-                            <ul class="text-muted">
+                            <ul>
                                 <li>Remove all your uploaded music from the platform</li>
                                 <li>Delete all your song files from storage</li>
                                 <li>Your music will no longer be available for purchase or streaming</li>
                                 <li>You will need to go through the seller onboarding process again if you want to sell in the future</li>
                             </ul>
-                            <p class="text-muted">
+                            <p>
                             See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.
                             </p>
                             
@@ -380,7 +380,7 @@
             <div class="mb-3">
                 <label for="passkeyName" class="e-label">Passkey Name</label>
                 <SfTextBox @bind-Value="_newPasskeyName" ID="passkeyName" Placeholder="e.g., My Laptop, iPhone" CssClass="e-outline" />
-                <small class="form-text text-muted">Choose a name to help you identify this passkey.</small>
+                <small class="form-text">Choose a name to help you identify this passkey.</small>
             </div>
         </Content>
         <FooterTemplate>
@@ -479,7 +479,7 @@
             <p>Type your email address to confirm account suspension:</p>
             <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
             <div class="mt-3">
-                <small class="text-muted">You can re-enable your account by contacting support.</small>
+                <small>You can re-enable your account by contacting support.</small>
             </div>
         </Content>
         <FooterTemplate>
