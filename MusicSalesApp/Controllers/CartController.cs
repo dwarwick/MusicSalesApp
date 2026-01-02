@@ -244,6 +244,41 @@ public class CartController : ControllerBase
         return Ok(new { clientId });
     }
 
+    [HttpGet("check-multiparty")]
+    public async Task<IActionResult> CheckMultiParty()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var cartItemsWithMetadata = (await _cartService.GetCartItemsWithMetadataAsync(user.Id)).ToList();
+        if (!cartItemsWithMetadata.Any())
+            return Ok(new { isMultiParty = false });
+
+        // Group items by seller (null = platform content)
+        var itemsBySeller = cartItemsWithMetadata
+            .GroupBy(c => c.SongMetadata?.SellerId)
+            .ToList();
+
+        // Check if there's any seller content
+        var hasSellerContent = itemsBySeller.Any(g => g.Key != null);
+        var hasPlatformContent = itemsBySeller.Any(g => g.Key == null);
+
+        // Check if order should use multi-party payment
+        if (ShouldUseMultiPartyPayment(hasSellerContent, hasPlatformContent, itemsBySeller.Count))
+        {
+            var sellerGroup = itemsBySeller.First();
+            var sellerId = sellerGroup.Key!.Value;
+            var seller = await _sellerService.GetSellerByIdAsync(sellerId);
+            
+            if (seller != null && seller.IsActive && !string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+            {
+                return Ok(new { isMultiParty = true, sellerMerchantId = seller.PayPalMerchantId });
+            }
+        }
+
+        return Ok(new { isMultiParty = false });
+    }
+
     [HttpPost("create-order")]
     public async Task<IActionResult> CreatePayPalOrder()
     {
@@ -344,11 +379,12 @@ public class CartController : ControllerBase
             _logger.LogInformation("Created multi-party PayPal order {PayPalOrderId} for seller {SellerId}, platform fee: ${PlatformFee}",
                 multiPartyResult.OrderId, seller.Id, platformFee);
 
+            // Return the PayPal order ID for the JavaScript SDK to use
+            // The SDK will handle approval flow when merchant-id is set correctly
             return Ok(new
             {
                 orderId,
                 payPalOrderId = multiPartyResult.OrderId,
-                approvalUrl = multiPartyResult.ApprovalUrl,
                 amount = total.ToString("F2"),
                 isMultiParty = true,
                 sellerId = seller.Id,
