@@ -93,16 +93,16 @@
             <GridPageSettings PageSize="10"></GridPageSettings>
             <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
             <GridColumns>
-                <GridColumn HeaderText="Actions" Width="150" AllowFiltering="false" AllowSorting="false">
+                <GridColumn HeaderText="Actions" Width="200" AllowFiltering="false" AllowSorting="false">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            <div class="btn-group" role="group">
-                                <SfButton OnClick="() => EditSong(song)" CssClass="e-btn e-small e-info" title="Edit">
-                                    <i class="bi bi-pencil"></i>
+                            <div class="d-flex gap-2">
+                                <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
+                                    <i class="bi bi-pencil me-1"></i> Edit
                                 </SfButton>
-                                <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger" title="Delete">
-                                    <i class="bi bi-trash"></i>
+                                <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger">
+                                    <i class="bi bi-trash me-1"></i> Delete
                                 </SfButton>
                             </div>
                         }
