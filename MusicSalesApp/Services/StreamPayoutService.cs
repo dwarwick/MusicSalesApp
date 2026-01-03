@@ -205,14 +205,10 @@ public class StreamPayoutService : IStreamPayoutService
     }
 
     /// <summary>
-    /// Processes a PayPal payout to the seller.
+    /// Processes a PayPal payout to the seller using PayPal Payouts API.
     /// </summary>
     private async Task<string> ProcessPayPalPayoutAsync(Seller seller, decimal amount)
     {
-        // TODO: Implement actual PayPal Payouts API integration
-        // For now, return a mock transaction ID
-        // In production, this would call PayPal's Payouts API
-        
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
         
         // Detailed logging for development/sandbox mode
@@ -227,31 +223,154 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("Request Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
             _logger.LogInformation("=== END Request Data ===");
         }
-        
-        _logger.LogWarning("PayPal payout integration not yet implemented. Mock transaction ID generated for seller {SellerId}", seller.Id);
-        
-        // Generate a mock transaction ID for testing
-        var mockTransactionId = $"PAYOUT-{DateTime.UtcNow:yyyyMMddHHmmss}-{seller.Id}";
-        
-        // Simulate async PayPal API call
-        await Task.Delay(100);
-        
-        // Detailed logging for development/sandbox mode - Response
-        if (sandboxMode)
+
+        try
         {
-            _logger.LogInformation("=== PayPal Payout Response (Development Mode - MOCK) ===");
-            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
-            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
-            _logger.LogInformation("Transaction ID: {TransactionId}", mockTransactionId);
-            _logger.LogInformation("Amount Paid: ${Amount:F2} USD", amount);
-            _logger.LogInformation("Status: SUCCESS (MOCK)");
-            _logger.LogInformation("Response Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
-            _logger.LogInformation("=== END Response Data ===");
-            _logger.LogWarning("NOTE: This is a MOCK payout. Real PayPal API not called yet.");
-            _logger.LogWarning("Check PayPal Sandbox at: https://www.sandbox.paypal.com/");
+            // Validate we have a PayPal email for the seller
+            if (string.IsNullOrWhiteSpace(seller.PayPalEmail))
+            {
+                _logger.LogError("Seller {SellerId} does not have a PayPal email configured", seller.Id);
+                return string.Empty;
+            }
+
+            // Get PayPal access token
+            var token = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogError("Failed to get PayPal access token for payout");
+                return string.Empty;
+            }
+
+            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            var bnCode = _configuration["PayPal:BNCode"];
+
+            // Create PayPal Payouts API request
+            var batchId = $"STREAM-PAYOUT-{DateTime.UtcNow:yyyyMMddHHmmss}-{seller.Id}";
+            var payoutRequest = new
+            {
+                sender_batch_header = new
+                {
+                    sender_batch_id = batchId,
+                    email_subject = "You have a payout from StreamTunes!",
+                    email_message = $"You have received a payout of ${amount:F2} for streams of your music on StreamTunes."
+                },
+                items = new[]
+                {
+                    new
+                    {
+                        recipient_type = "EMAIL",
+                        amount = new
+                        {
+                            value = amount.ToString("F2"),
+                            currency = "USD"
+                        },
+                        receiver = seller.PayPalEmail,
+                        note = $"StreamTunes stream payout for seller {seller.Id}",
+                        sender_item_id = $"SELLER-{seller.Id}-{DateTime.UtcNow:yyyyMMddHHmmss}"
+                    }
+                }
+            };
+
+            using var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri(baseUrl);
+            httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            httpClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
+            
+            if (!string.IsNullOrWhiteSpace(bnCode))
+            {
+                httpClient.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
+            }
+
+            var jsonContent = System.Text.Json.JsonSerializer.Serialize(payoutRequest);
+            var content = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
+
+            var response = await httpClient.PostAsync("v1/payments/payouts", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (sandboxMode)
+            {
+                _logger.LogInformation("PayPal Payouts API Response Status: {Status}", response.StatusCode);
+                _logger.LogInformation("PayPal Payouts API Response Body: {Body}", responseBody);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("PayPal payout failed for seller {SellerId}: {Status} {Body}", 
+                    seller.Id, response.StatusCode, responseBody);
+                return string.Empty;
+            }
+
+            // Parse the payout batch ID from response
+            using var doc = System.Text.Json.JsonDocument.Parse(responseBody);
+            var payoutBatchId = doc.RootElement.GetProperty("batch_header").GetProperty("payout_batch_id").GetString();
+
+            // Detailed logging for development/sandbox mode - Response
+            if (sandboxMode)
+            {
+                _logger.LogInformation("=== PayPal Payout Response (Development Mode) ===");
+                _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
+                _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+                _logger.LogInformation("Transaction ID (payout_batch_id): {TransactionId}", payoutBatchId);
+                _logger.LogInformation("Amount Paid: ${Amount:F2} USD", amount);
+                _logger.LogInformation("Status: SUCCESS");
+                _logger.LogInformation("Response Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
+                _logger.LogInformation("=== END Response Data ===");
+            }
+
+            _logger.LogInformation("PayPal payout successful for seller {SellerId}: {PayoutBatchId}", seller.Id, payoutBatchId);
+            
+            return payoutBatchId;
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing PayPal payout for seller {SellerId}", seller.Id);
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Gets a PayPal OAuth access token for API calls.
+    /// </summary>
+    private async Task<string> GetPayPalAccessTokenAsync()
+    {
+        var clientId = _configuration["PayPal:ClientId"];
+        var secret = _configuration["PayPal:Secret"];
+        var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
         
-        return mockTransactionId;
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret) || 
+            clientId.Contains("REPLACE", StringComparison.OrdinalIgnoreCase) || 
+            secret.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogError("PayPal ClientId/Secret not configured");
+            return string.Empty;
+        }
+
+        try
+        {
+            using var client = new HttpClient();
+            client.BaseAddress = new Uri(baseUrl);
+
+            var authBytes = System.Text.Encoding.ASCII.GetBytes($"{clientId}:{secret}");
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            var content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("grant_type", "client_credentials") });
+            var response = await client.PostAsync("v1/oauth2/token", content);
+            var body = await response.Content.ReadAsStringAsync();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal token request failed: {Status} {Body}", response.StatusCode, body);
+                return string.Empty;
+            }
+
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            return doc.RootElement.GetProperty("access_token").GetString() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting PayPal access token");
+            return string.Empty;
+        }
     }
 
     /// <inheritdoc />

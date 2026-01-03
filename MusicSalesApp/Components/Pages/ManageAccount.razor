@@ -71,6 +71,23 @@
             </CardContent>
         </SfCard>
 
+        <!-- PayPal Email Section (for sellers) -->
+        @if (_isSeller)
+        {
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="PayPal Email for Payouts" />
+                <CardContent>
+                    <p class="mb-3">This email will be used to send stream payouts and other seller payments. It may be different from your login email.</p>
+                    <div class="mb-3">
+                        <label for="paypalEmail" class="e-label">PayPal Email Address</label>
+                        <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                        <small class="form-text">Enter the email address associated with your PayPal account where you want to receive payments.</small>
+                    </div>
+                    <SfButton IsPrimary="true" Content="Save PayPal Email" OnClick="SavePayPalEmail" />
+                </CardContent>
+            </SfCard>
+        }
+
         <!-- Passkey Management Section -->
         <SfCard CssClass="mb-4">
             <CardHeader Title="Passkeys" />
@@ -229,6 +246,12 @@
 
                             <div class="seller-signup-form mt-4">
                                 <div class="mb-3">
+                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
+                                    <SfTextBox @bind-Value="_sellerPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This email will be used for all seller payouts. You can use a different email than your login email.</small>
+                                </div>
+
+                                <div class="mb-3">
                                     <label for="sellerDisplayName" class="e-label">Display Name (optional)</label>
                                     <SfTextBox @bind-Value="_sellerDisplayName" ID="sellerDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
                                     <small class="form-text">This name will be shown to buyers on your music listings.</small>
@@ -241,7 +264,11 @@
 
                                 @if (!_startingOnboarding)
                                 {
-                                    <SfButton IsPrimary="true" Content="Start Seller Signup" OnClick="StartSellerOnboarding" />
+                                    <SfButton IsPrimary="true" Content="Start Seller Signup" OnClick="StartSellerOnboarding" Disabled="@string.IsNullOrWhiteSpace(_sellerPayPalEmail)" />
+                                    @if (string.IsNullOrWhiteSpace(_sellerPayPalEmail))
+                                    {
+                                        <p class="text-danger mt-2">Please enter your PayPal email address to continue.</p>
+                                    }
                                 }
                                 else
                                 {

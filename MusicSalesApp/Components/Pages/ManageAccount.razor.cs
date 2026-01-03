@@ -53,11 +53,14 @@ public partial class ManageAccountModel : BlazorBase
     protected string _accountActionConfirmEmail = string.Empty;
 
     // Seller fields
+    protected bool _isSeller = false;
     protected bool _isActiveSeller = false;
     protected string _sellerOnboardingStatus = null;
     protected string _sellerReferralUrl = null;
     protected string _sellerDisplayName = string.Empty;
     protected string _sellerBio = string.Empty;
+    protected string _sellerPayPalEmail = string.Empty;
+    protected string _paypalEmail = string.Empty;
     protected decimal _platformCommissionRate = 0.15m;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
@@ -700,15 +703,18 @@ public partial class ManageAccountModel : BlazorBase
             var seller = await SellerService.GetSellerByUserIdAsync(_currentUser.Id);
             if (seller != null)
             {
+                _isSeller = true;
                 _isActiveSeller = seller.IsActive;
                 _sellerOnboardingStatus = seller.OnboardingStatus.ToString();
                 _sellerReferralUrl = seller.PayPalReferralUrl;
                 _sellerDisplayName = seller.DisplayName ?? string.Empty;
                 _sellerBio = seller.Bio ?? string.Empty;
+                _paypalEmail = seller.PayPalEmail ?? string.Empty;
                 _platformCommissionRate = seller.CommissionRate;
             }
             else
             {
+                _isSeller = false;
                 _isActiveSeller = false;
                 _sellerOnboardingStatus = null;
             }
@@ -716,6 +722,48 @@ public partial class ManageAccountModel : BlazorBase
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading seller status");
+        }
+    }
+
+    protected async Task SavePayPalEmail()
+    {
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+
+        try
+        {
+            // Validate email format
+            if (string.IsNullOrWhiteSpace(_paypalEmail))
+            {
+                _errorMessage = "Please enter a PayPal email address.";
+                return;
+            }
+
+            if (!_paypalEmail.Contains("@") || !_paypalEmail.Contains("."))
+            {
+                _errorMessage = "Please enter a valid email address.";
+                return;
+            }
+
+            await using var context = await DbContextFactory.CreateDbContextAsync();
+            var seller = await context.Sellers.FirstOrDefaultAsync(s => s.UserId == _currentUser.Id);
+            
+            if (seller == null)
+            {
+                _errorMessage = "Seller record not found.";
+                return;
+            }
+
+            seller.PayPalEmail = _paypalEmail;
+            seller.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+
+            _successMessage = "PayPal email updated successfully!";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving PayPal email");
+            _errorMessage = "Failed to save PayPal email. Please try again.";
         }
     }
 
@@ -728,10 +776,19 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
+            // Validate PayPal email is provided
+            if (string.IsNullOrWhiteSpace(_sellerPayPalEmail))
+            {
+                _errorMessage = "Please enter your PayPal email address before starting onboarding.";
+                _startingOnboarding = false;
+                return;
+            }
+
             var response = await Http.PostAsJsonAsync("api/seller/start-onboarding", new
             {
                 DisplayName = _sellerDisplayName,
-                Bio = _sellerBio
+                Bio = _sellerBio,
+                PayPalEmail = _sellerPayPalEmail
             });
 
             if (response.IsSuccessStatusCode)
