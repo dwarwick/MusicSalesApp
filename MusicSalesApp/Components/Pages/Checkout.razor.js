@@ -1,7 +1,8 @@
 let paypalLoaded = false;
 let currentOrderId = null;
+let currentPayPalOrderId = null;
 
-export async function initPayPal(clientId, amount, dotNetRef) {
+export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef) {
     if (!clientId || clientId === '__REPLACE_WITH_PAYPAL_CLIENT_ID__') {
         console.log('PayPal client ID not configured');
         return;
@@ -9,7 +10,7 @@ export async function initPayPal(clientId, amount, dotNetRef) {
 
     // Load PayPal SDK if not already loaded
     if (!paypalLoaded) {
-        await loadPayPalScript(clientId);
+        await loadPayPalScript(clientId, sellerMerchantIds);
         paypalLoaded = true;
     }
 
@@ -37,21 +38,47 @@ export async function initPayPal(clientId, amount, dotNetRef) {
             try {
                 console.log('PayPal createOrder called');
                 
-                // First, create our internal order record
-                const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
-                console.log('Internal order created:', orderId);
+                // Call server to create order (returns internal ID or object with both IDs)
+                const orderResponse = await dotNetRef.invokeMethodAsync('CreateOrder');
+                console.log('Order created, returned response:', orderResponse);
                 
-                if (!orderId) {
-                    throw new Error('Failed to create internal order');
+                if (!orderResponse) {
+                    throw new Error('Failed to create order');
                 }
 
-                // Store the order ID for use in onApprove
-                currentOrderId = orderId;
+                // Handle both string (standard) and object (multi-party) responses
+                let internalOrderId;
+                let paypalOrderId;
+                let isMultiParty = false;
 
-                // Create PayPal order using client-side SDK with 3D Secure support
-                const paypalOrderId = await actions.order.create({
+                if (typeof orderResponse === 'object' && orderResponse !== null && 'payPalOrderId' in orderResponse) {
+                    // Multi-party order - response contains both IDs
+                    internalOrderId = orderResponse.orderId;
+                    paypalOrderId = orderResponse.payPalOrderId;
+                    isMultiParty = orderResponse.isMultiParty;
+                    console.log('Multi-party order detected:', { internalOrderId, paypalOrderId });
+                } else {
+                    // Standard order - response is just the internal ID
+                    internalOrderId = orderResponse;
+                    console.log('Standard order, internal ID:', internalOrderId);
+                }
+
+                // Store INTERNAL order ID for use in onApprove
+                currentOrderId = internalOrderId;
+                currentPayPalOrderId = paypalOrderId;
+
+                // For multi-party orders with seller merchant-id(s) in SDK,
+                // return the server-created PayPal order ID
+                if (isMultiParty && paypalOrderId) {
+                    console.log('Multi-party order: Using server-created PayPal order ID:', paypalOrderId);
+                    return paypalOrderId;
+                }
+
+                // For standard orders, create PayPal order client-side
+                console.log('Standard order: Creating PayPal order client-side');
+                paypalOrderId = await actions.order.create({
                     purchase_units: [{
-                        reference_id: orderId,
+                        reference_id: internalOrderId,
                         amount: {
                             value: amount,
                             currency_code: 'USD'
@@ -71,7 +98,10 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                     }
                 });
                 
-                console.log('PayPal order created with 3D Secure support:', paypalOrderId);
+                // Store PayPal order ID for standard orders
+                currentPayPalOrderId = paypalOrderId;
+                
+                console.log('PayPal order created client-side with 3D Secure support:', paypalOrderId);
                 return paypalOrderId;
             } catch (error) {
                 console.error('Error creating order:', error);
@@ -93,9 +123,9 @@ export async function initPayPal(clientId, amount, dotNetRef) {
                 // Server will capture the payment after we notify it
                 console.log('Payment approved (3D Secure passed if required), notifying server to capture...');
                 
-                // Use our stored internal order ID
-                const internalOrderId = currentOrderId || (data && data.orderID);
-                const paypalOrderId = data && data.orderID;
+                // Use our stored internal order ID and PayPal order ID
+                const internalOrderId = currentOrderId;
+                const paypalOrderId = currentPayPalOrderId || (data && data.orderID);
                 console.log('Using internal order ID:', internalOrderId);
                 console.log('PayPal order ID:', paypalOrderId);
                 
@@ -115,18 +145,20 @@ export async function initPayPal(clientId, amount, dotNetRef) {
         onCancel: function (data) {
             console.log('Payment cancelled by user');
             currentOrderId = null;
+            currentPayPalOrderId = null;
             dotNetRef.invokeMethodAsync('OnCancel');
         },
 
         onError: function (err) {
             console.error('PayPal button error:', err);
             currentOrderId = null;
+            currentPayPalOrderId = null;
             dotNetRef.invokeMethodAsync('OnError', err.toString());
         }
     }).render('#paypal-button-container');
 }
 
-function loadPayPalScript(clientId) {
+function loadPayPalScript(clientId, sellerMerchantIds) {
     return new Promise((resolve, reject) => {
         if (document.querySelector('script[src*="paypal.com/sdk"]')) {
             resolve();
@@ -134,10 +166,22 @@ function loadPayPalScript(clientId) {
         }
 
         const script = document.createElement('script');
+        // Build SDK URL with client-id and optional merchant-id for multi-party
         // Add enable-funding and intent parameters for Expanded Checkout
         // enable-funding=venmo,paylater adds additional payment options
         // intent=capture ensures immediate payment capture
-        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater&intent=capture`;
+        let sdkUrl = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&enable-funding=venmo,paylater&intent=capture`;
+        
+        // For multi-party payments, add the seller merchant IDs (comma-separated for multiple sellers)
+        // This allows the SDK to work with orders where sellers are the payees
+        // Supports up to 10 merchants
+        if (sellerMerchantIds) {
+            sdkUrl += `&merchant-id=${sellerMerchantIds}`;
+            const sellerCount = sellerMerchantIds.split(',').length;
+            console.log(`Loading PayPal SDK with ${sellerCount} seller merchant ID(s) for multi-party payment`);
+        }
+        
+        script.src = sdkUrl;
         script.async = true;
         script.onload = () => {
             console.log('PayPal SDK loaded successfully with Expanded Checkout features');

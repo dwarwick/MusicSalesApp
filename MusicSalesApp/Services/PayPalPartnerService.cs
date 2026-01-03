@@ -15,6 +15,7 @@ public class PayPalPartnerService : IPayPalPartnerService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PayPalPartnerService> _logger;
+    private readonly IWebHostEnvironment _environment;
     
     /// <summary>
     /// Placeholder value used in configuration to indicate credentials need to be replaced.
@@ -24,11 +25,13 @@ public class PayPalPartnerService : IPayPalPartnerService
     public PayPalPartnerService(
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILogger<PayPalPartnerService> logger)
+        ILogger<PayPalPartnerService> logger,
+        IWebHostEnvironment environment)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+        _environment = environment;
     }
 
     /// <inheritdoc />
@@ -440,6 +443,7 @@ public class PayPalPartnerService : IPayPalPartnerService
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"] ?? "https://localhost:5001";
             var bnCode = _configuration["PayPal:BNCode"];
+            var partnerMerchantId = _configuration["PayPal:PartnerId"];
 
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
@@ -497,6 +501,10 @@ public class PayPalPartnerService : IPayPalPartnerService
                                     {
                                         currency_code = "USD",
                                         value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                    },
+                                    payee = new
+                                    {
+                                        merchant_id = partnerMerchantId
                                     }
                                 }
                             }
@@ -544,6 +552,21 @@ public class PayPalPartnerService : IPayPalPartnerService
             }
 
             _logger.LogInformation("Created multi-party order {OrderId} for seller {SellerId}", orderId, seller.Id);
+            
+            // Development-only: Log money distribution details
+            if (_environment.IsDevelopment())
+            {
+                _logger.LogInformation("=== MULTI-PARTY ORDER MONEY DISTRIBUTION (Development) ===");
+                _logger.LogInformation("PayPal Order ID: {OrderId}", orderId);
+                _logger.LogInformation("Seller ID: {SellerId} (PayPal Merchant ID: {MerchantId})", seller.Id, seller.PayPalMerchantId);
+                _logger.LogInformation("Total Amount (Buyer Pays): ${TotalAmount:F2}", totalAmount);
+                _logger.LogInformation("Platform Commission (15%): ${PlatformFee:F2}", platformFee);
+                _logger.LogInformation("Seller Receives (Gross, 85%): ${SellerAmount:F2}", totalAmount - platformFee);
+                _logger.LogInformation("Seller Will Pay PayPal Fees: ~${PayPalFees:F2} (2.9% + $0.30)", (totalAmount * 0.029m) + 0.30m);
+                _logger.LogInformation("Seller Net (After PayPal Fees): ~${SellerNet:F2}", (totalAmount - platformFee) - ((totalAmount * 0.029m) + 0.30m));
+                _logger.LogInformation("Platform Receives (Commission Only): ${PlatformFee:F2} (NO PayPal fees deducted)", platformFee);
+                _logger.LogInformation("===============================================");
+            }
 
             return new MultiPartyOrderResult
             {
@@ -556,6 +579,207 @@ public class PayPalPartnerService : IPayPalPartnerService
         {
             _logger.LogError(ex, "Error creating multi-party order for seller {SellerId}", seller.Id);
             return new MultiPartyOrderResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<MultiSellerOrderResult?> CreateMultiSellerOrderAsync(Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> sellerOrders)
+    {
+        try
+        {
+            if (sellerOrders == null || !sellerOrders.Any())
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "No sellers in order" };
+            }
+
+            if (sellerOrders.Count > 10)
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "PayPal supports maximum 10 sellers per transaction" };
+            }
+
+            // Validate all sellers have merchant IDs
+            var invalidSellers = sellerOrders.Keys.Where(s => string.IsNullOrWhiteSpace(s.PayPalMerchantId)).ToList();
+            if (invalidSellers.Any())
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Sellers without PayPal merchant ID: {string.Join(", ", invalidSellers.Select(s => s.Id))}" };
+            }
+
+            var token = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = "Failed to get PayPal access token" };
+            }
+
+            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
+            var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"] ?? "https://localhost:5001";
+            var bnCode = _configuration["PayPal:BNCode"];
+            var partnerMerchantId = _configuration["PayPal:PartnerId"];
+
+            var client = _httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
+            
+            if (!string.IsNullOrWhiteSpace(bnCode))
+            {
+                client.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
+            }
+
+            // Create purchase_units array - one per seller
+            var purchaseUnits = sellerOrders.Select((kvp, index) =>
+            {
+                var seller = kvp.Key;
+                var (items, amount, platformFee) = kvp.Value;
+
+                var orderItems = items.Select(item => new
+                {
+                    name = item.Name,
+                    unit_amount = new
+                    {
+                        currency_code = "USD",
+                        value = item.UnitAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                    },
+                    quantity = item.Quantity.ToString()
+                }).ToArray();
+
+                return new
+                {
+                    reference_id = $"SELLER_{seller.Id}",
+                    amount = new
+                    {
+                        currency_code = "USD",
+                        value = amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                        breakdown = new
+                        {
+                            item_total = new
+                            {
+                                currency_code = "USD",
+                                value = amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                            }
+                        }
+                    },
+                    payee = new
+                    {
+                        merchant_id = seller.PayPalMerchantId
+                    },
+                    payment_instruction = new
+                    {
+                        disbursement_mode = "INSTANT",
+                        platform_fees = new[]
+                        {
+                            new
+                            {
+                                amount = new
+                                {
+                                    currency_code = "USD",
+                                    value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                },
+                                payee = new
+                                {
+                                    merchant_id = partnerMerchantId
+                                }
+                            }
+                        }
+                    },
+                    items = orderItems
+                };
+            }).ToArray();
+
+            var orderData = new
+            {
+                intent = "CAPTURE",
+                purchase_units = purchaseUnits,
+                application_context = new
+                {
+                    brand_name = "StreamTunes",
+                    landing_page = "NO_PREFERENCE",
+                    shipping_preference = "NO_SHIPPING",
+                    user_action = "PAY_NOW",
+                    return_url = $"{returnBaseUrl}/checkout?success=true",
+                    cancel_url = $"{returnBaseUrl}/checkout?success=false"
+                }
+            };
+
+            var content = new StringContent(JsonSerializer.Serialize(orderData), Encoding.UTF8, "application/json");
+            var response = await client.PostAsync("v2/checkout/orders", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to create multi-seller order: {Status} {Body}", response.StatusCode, body);
+                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Order creation failed: {response.StatusCode}" };
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var orderId = root.GetProperty("id").GetString() ?? string.Empty;
+
+            // Find the approval URL
+            string? approvalUrl = null;
+            if (root.TryGetProperty("links", out var links))
+            {
+                foreach (var link in links.EnumerateArray())
+                {
+                    if (link.TryGetProperty("rel", out var rel) && rel.GetString() == "approve")
+                    {
+                        approvalUrl = link.GetProperty("href").GetString();
+                        break;
+                    }
+                }
+            }
+
+            var sellerMerchantIds = sellerOrders.Keys.Select(s => s.PayPalMerchantId!).ToList();
+            _logger.LogInformation("Created multi-seller order {OrderId} with {SellerCount} sellers", orderId, sellerOrders.Count);
+
+            // Development-only: Log money distribution details for multi-seller order
+            if (_environment.IsDevelopment())
+            {
+                _logger.LogInformation("=== MULTI-SELLER ORDER MONEY DISTRIBUTION (Development) ===");
+                _logger.LogInformation("PayPal Order ID: {OrderId}", orderId);
+                _logger.LogInformation("Number of Sellers: {SellerCount}", sellerOrders.Count);
+                
+                var totalCartAmount = sellerOrders.Sum(kvp => kvp.Value.Amount);
+                var totalPlatformFees = sellerOrders.Sum(kvp => kvp.Value.PlatformFee);
+                var totalPayPalFees = sellerOrders.Sum(kvp => (kvp.Value.Amount * 0.029m) + 0.30m);
+                
+                _logger.LogInformation("Total Cart Amount (Buyer Pays): ${Total:F2}", totalCartAmount);
+                _logger.LogInformation("Total Platform Commission: ${TotalCommission:F2}", totalPlatformFees);
+                _logger.LogInformation("Total PayPal Fees (Paid by Sellers): ~${TotalPayPalFees:F2}", totalPayPalFees);
+                
+                var sellerIndex = 1;
+                foreach (var kvp in sellerOrders)
+                {
+                    var seller = kvp.Key;
+                    var (items, amount, platformFee) = kvp.Value;
+                    var estimatedPayPalFee = (amount * 0.029m) + 0.30m;
+                    var sellerNet = amount - platformFee - estimatedPayPalFee;
+                    
+                    _logger.LogInformation("--- Seller {Index}: ID {SellerId} (PayPal: {MerchantId}) ---", sellerIndex, seller.Id, seller.PayPalMerchantId);
+                    _logger.LogInformation("  Items: {ItemCount} songs totaling ${Amount:F2}", items.Count(), amount);
+                    _logger.LogInformation("  Seller Receives (Gross): ${Amount:F2}", amount);
+                    _logger.LogInformation("  Platform Commission: ${PlatformFee:F2}", platformFee);
+                    _logger.LogInformation("  Seller After Commission: ${AfterCommission:F2}", amount - platformFee);
+                    _logger.LogInformation("  Estimated PayPal Fees (Seller Pays): ~${PayPalFees:F2}", estimatedPayPalFee);
+                    _logger.LogInformation("  Seller Net (After All Fees): ~${Net:F2}", sellerNet);
+                    sellerIndex++;
+                }
+                
+                _logger.LogInformation("Platform Receives (Total Commission): ${TotalCommission:F2} (NO PayPal fees)", totalPlatformFees);
+                _logger.LogInformation("===============================================");
+            }
+
+            return new MultiSellerOrderResult
+            {
+                Success = true,
+                OrderId = orderId,
+                ApprovalUrl = approvalUrl,
+                SellerMerchantIds = sellerMerchantIds
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating multi-seller order");
+            return new MultiSellerOrderResult { Success = false, ErrorMessage = ex.Message };
         }
     }
 
@@ -621,6 +845,86 @@ public class PayPalPartnerService : IPayPalPartnerService
             }
 
             _logger.LogInformation("Captured multi-party order {OrderId}, capture ID: {CaptureId}", payPalOrderId, captureId);
+
+            // Development-only: Log actual payment distribution from PayPal response
+            if (_environment.IsDevelopment())
+            {
+                _logger.LogInformation("=== MULTI-PARTY CAPTURE RESULTS (Development) ===");
+                _logger.LogInformation("PayPal Order ID: {OrderId}", payPalOrderId);
+                _logger.LogInformation("Capture ID: {CaptureId}", captureId);
+                _logger.LogInformation("Status: {Status}", status);
+                
+                if (root.TryGetProperty("purchase_units", out var units))
+                {
+                    var unitIndex = 1;
+                    foreach (var unit in units.EnumerateArray())
+                    {
+                        _logger.LogInformation("--- Purchase Unit {Index} ---", unitIndex);
+                        
+                        // Log payee
+                        if (unit.TryGetProperty("payee", out var payee) && payee.TryGetProperty("merchant_id", out var merchantId))
+                        {
+                            _logger.LogInformation("  Payee (Merchant of Record): {MerchantId}", merchantId.GetString());
+                        }
+                        
+                        // Log amount
+                        if (unit.TryGetProperty("amount", out var amount) && amount.TryGetProperty("value", out var value))
+                        {
+                            _logger.LogInformation("  Total Amount: ${Amount}", value.GetString());
+                        }
+                        
+                        // Log payments (captures) with breakdown
+                        if (unit.TryGetProperty("payments", out var pmts) && pmts.TryGetProperty("captures", out var caps))
+                        {
+                            foreach (var cap in caps.EnumerateArray())
+                            {
+                                if (cap.TryGetProperty("amount", out var capAmount) && capAmount.TryGetProperty("value", out var capValue))
+                                {
+                                    _logger.LogInformation("  Captured Amount: ${CapturedAmount}", capValue.GetString());
+                                }
+                                
+                                // Log seller receivable amount
+                                if (cap.TryGetProperty("seller_receivable_breakdown", out var breakdown))
+                                {
+                                    if (breakdown.TryGetProperty("gross_amount", out var gross) && gross.TryGetProperty("value", out var grossValue))
+                                    {
+                                        _logger.LogInformation("  Seller Gross Amount: ${Gross}", grossValue.GetString());
+                                    }
+                                    
+                                    if (breakdown.TryGetProperty("paypal_fee", out var fee) && fee.TryGetProperty("value", out var feeValue))
+                                    {
+                                        _logger.LogInformation("  PayPal Fee (Paid by Seller): ${Fee}", feeValue.GetString());
+                                    }
+                                    
+                                    if (breakdown.TryGetProperty("net_amount", out var net) && net.TryGetProperty("value", out var netValue))
+                                    {
+                                        _logger.LogInformation("  Seller Net Amount: ${Net}", netValue.GetString());
+                                    }
+                                    
+                                    if (breakdown.TryGetProperty("platform_fees", out var platformFees))
+                                    {
+                                        foreach (var pf in platformFees.EnumerateArray())
+                                        {
+                                            if (pf.TryGetProperty("amount", out var pfAmount) && pfAmount.TryGetProperty("value", out var pfValue))
+                                            {
+                                                _logger.LogInformation("  Platform Fee (Commission): ${PlatformFee}", pfValue.GetString());
+                                            }
+                                            if (pf.TryGetProperty("payee", out var pfPayee) && pfPayee.TryGetProperty("merchant_id", out var pfMerchantId))
+                                            {
+                                                _logger.LogInformation("  Platform Fee Recipient: {PlatformMerchantId}", pfMerchantId.GetString());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        unitIndex++;
+                    }
+                }
+                
+                _logger.LogInformation("===============================================");
+            }
 
             return new CaptureResult { Success = true, CaptureId = captureId };
         }

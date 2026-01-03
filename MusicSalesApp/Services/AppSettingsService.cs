@@ -24,6 +24,16 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const decimal DefaultSubscriptionPrice = 3.99m;
 
+    /// <summary>
+    /// The key used for storing the platform commission rate setting.
+    /// </summary>
+    public const string CommissionRateKey = "CommissionRate";
+
+    /// <summary>
+    /// Default commission rate if not set in the database (15%).
+    /// </summary>
+    public const decimal DefaultCommissionRate = 0.15m;
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -103,5 +113,33 @@ public class AppSettingsService : IAppSettingsService
             SubscriptionPriceKey,
             price.ToString("F2"),
             "Monthly subscription price in USD");
+    }
+
+    /// <inheritdoc />
+    public async Task<decimal> GetCommissionRateAsync()
+    {
+        var value = await GetSettingAsync(CommissionRateKey);
+        
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultCommissionRate;
+        }
+
+        if (decimal.TryParse(value, out var rate))
+        {
+            return rate;
+        }
+
+        _logger.LogWarning("Invalid commission rate value in database: {Value}. Using default.", value);
+        return DefaultCommissionRate;
+    }
+
+    /// <inheritdoc />
+    public async Task SetCommissionRateAsync(decimal rate)
+    {
+        await SetSettingAsync(
+            CommissionRateKey,
+            rate.ToString("F4"),
+            "Platform commission rate for seller sales (0.15 = 15%)");
     }
 }

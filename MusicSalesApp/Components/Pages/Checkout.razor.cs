@@ -79,9 +79,28 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
+            // Get seller merchant IDs if this is a multi-party order
+            // This is needed to load the SDK with the correct merchant IDs
+            string sellerMerchantIds = null;
+            try
+            {
+                var cartCheckResponse = await Http.GetFromJsonAsync<CartCheckResponse>("api/cart/check-multiparty");
+                if (cartCheckResponse != null && cartCheckResponse.IsMultiParty)
+                {
+                    // Join multiple merchant IDs with comma (PayPal SDK supports this)
+                    sellerMerchantIds = string.Join(",", cartCheckResponse.SellerMerchantIds);
+                    Logger.LogInformation("Multi-party order detected with {Count} sellers, merchant IDs: {MerchantIds}", 
+                        cartCheckResponse.SellerCount, sellerMerchantIds);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error checking for multi-party order, will use standard checkout");
+            }
+
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Checkout.razor.js");
-            await _jsModule.InvokeVoidAsync("initPayPal", clientId, _cartTotal.ToString("F2"), _dotNetRef);
+            await _jsModule.InvokeVoidAsync("initPayPal", clientId, sellerMerchantIds, _cartTotal.ToString("F2"), _dotNetRef);
         }
         catch (Exception ex)
         {
@@ -115,7 +134,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public async Task<string> CreateOrder()
+    public async Task<JsonElement> CreateOrder()
     {
         try
         {
@@ -126,13 +145,31 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
-                Logger.LogInformation("Created PayPal order {OrderId}, isMultiParty: {IsMultiParty}", result?.OrderId, result?.IsMultiParty);
+                Logger.LogInformation("Created order {OrderId}, isMultiParty: {IsMultiParty}, PayPalOrderId: {PayPalOrderId}", 
+                    result?.OrderId, result?.IsMultiParty, result?.PayPalOrderId);
                 
                 // Store multi-party information for later
                 _currentOrderIsMultiParty = result?.IsMultiParty ?? false;
                 _currentSellerMerchantId = result?.SellerMerchantId;
                 
-                return result?.OrderId ?? string.Empty;
+                // For multi-party orders, return object with both internal and PayPal order IDs
+                // For standard orders, return just the internal order ID (JavaScript will create PayPal order)
+                if (_currentOrderIsMultiParty && !string.IsNullOrEmpty(result?.PayPalOrderId))
+                {
+                    Logger.LogInformation("Returning order IDs for multi-party - internal: {InternalId}, PayPal: {PayPalOrderId}", 
+                        result.OrderId, result.PayPalOrderId);
+                    
+                    var orderInfo = new
+                    {
+                        orderId = result.OrderId,
+                        payPalOrderId = result.PayPalOrderId,
+                        isMultiParty = true
+                    };
+                    return JsonSerializer.SerializeToElement(orderInfo);
+                }
+                
+                // Standard order - return just the internal ID as string
+                return JsonSerializer.SerializeToElement(result?.OrderId ?? string.Empty);
             }
             else
             {
@@ -145,7 +182,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             Logger.LogError(ex, "Error creating PayPal order");
         }
 
-        return string.Empty;
+        return JsonSerializer.SerializeToElement(string.Empty);
     }
 
     [JSInvokable]
@@ -327,9 +364,21 @@ public class PayPalClientIdResponse
     public string ClientId { get; set; }
 }
 
+public class CartCheckResponse
+{
+    public bool IsMultiParty { get; set; }
+    public List<string> SellerMerchantIds { get; set; } = new();
+    public int SellerCount { get; set; }
+    
+    // Backwards compatibility
+    public string SellerMerchantId => SellerMerchantIds?.FirstOrDefault();
+}
+
 public class CreateOrderResponse
 {
     public string OrderId { get; set; }
+    public string PayPalOrderId { get; set; }
+    public string ApprovalUrl { get; set; }
     public string Amount { get; set; }
     public bool IsMultiParty { get; set; }
     public int? SellerId { get; set; }

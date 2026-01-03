@@ -17,19 +17,22 @@ public class SellerService : ISellerService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SellerService> _logger;
+    private readonly IAppSettingsService _appSettingsService;
 
     public SellerService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         IAzureStorageService storageService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
-        ILogger<SellerService> logger)
+        ILogger<SellerService> logger,
+        IAppSettingsService appSettingsService)
     {
         _dbContextFactory = dbContextFactory;
         _storageService = storageService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
+        _appSettingsService = appSettingsService;
     }
 
     /// <inheritdoc />
@@ -87,11 +90,15 @@ public class SellerService : ISellerService
             return existingSeller;
         }
 
+        // Get the platform commission rate from settings (default 15%)
+        var commissionRate = await _appSettingsService.GetCommissionRateAsync();
+
         var seller = new Seller
         {
             UserId = userId,
             DisplayName = displayName,
             Bio = bio,
+            CommissionRate = commissionRate, // Set from app settings
             OnboardingStatus = SellerOnboardingStatus.NotStarted,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -100,7 +107,8 @@ public class SellerService : ISellerService
         context.Sellers.Add(seller);
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Created seller record for user {UserId}", userId);
+        _logger.LogInformation("Created seller record for user {UserId} with commission rate {Rate}%", 
+            userId, commissionRate * 100);
         return seller;
     }
 
