@@ -222,7 +222,8 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
             _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
             _logger.LogInformation("Payout Amount: ${Amount:F2} USD", amount);
-            _logger.LogInformation("Seller Email: {Email}", seller.User?.Email ?? "NOT AVAILABLE");
+            _logger.LogInformation("PayPal Email (for payout): {PayPalEmail}", seller.PayPalEmail ?? "NOT SET");
+            _logger.LogInformation("User Login Email: {LoginEmail}", seller.User?.Email ?? "NOT AVAILABLE");
             _logger.LogInformation("Request Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
             _logger.LogInformation("=== END Request Data ===");
         }
