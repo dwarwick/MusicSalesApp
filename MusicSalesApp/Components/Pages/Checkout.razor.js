@@ -1,5 +1,6 @@
 let paypalLoaded = false;
 let currentOrderId = null;
+let currentPayPalOrderId = null;
 
 export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef) {
     if (!clientId || clientId === '__REPLACE_WITH_PAYPAL_CLIENT_ID__') {
@@ -37,24 +38,40 @@ export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef)
             try {
                 console.log('PayPal createOrder called');
                 
-                // Call server to create order (returns internal ID or PayPal ID)
-                const orderId = await dotNetRef.invokeMethodAsync('CreateOrder');
-                console.log('Order created, returned ID:', orderId);
+                // Call server to create order (returns internal ID or object with both IDs)
+                const orderResponse = await dotNetRef.invokeMethodAsync('CreateOrder');
+                console.log('Order created, returned response:', orderResponse);
                 
-                if (!orderId) {
+                if (!orderResponse) {
                     throw new Error('Failed to create order');
                 }
 
-                // Store the order ID for use in onApprove
-                currentOrderId = orderId;
+                // Handle both string (standard) and object (multi-party) responses
+                let internalOrderId;
+                let paypalOrderId;
+                let isMultiParty = false;
+
+                if (typeof orderResponse === 'object' && orderResponse !== null && 'payPalOrderId' in orderResponse) {
+                    // Multi-party order - response contains both IDs
+                    internalOrderId = orderResponse.orderId;
+                    paypalOrderId = orderResponse.payPalOrderId;
+                    isMultiParty = orderResponse.isMultiParty;
+                    console.log('Multi-party order detected:', { internalOrderId, paypalOrderId });
+                } else {
+                    // Standard order - response is just the internal ID
+                    internalOrderId = orderResponse;
+                    console.log('Standard order, internal ID:', internalOrderId);
+                }
+
+                // Store INTERNAL order ID for use in onApprove
+                currentOrderId = internalOrderId;
+                currentPayPalOrderId = paypalOrderId;
 
                 // For multi-party orders with seller merchant-id(s) in SDK,
-                // the server pre-creates the PayPal order and returns its ID
-                // We just return it directly without creating a new one
-                // This works for both single-seller and multi-seller orders
-                if (sellerMerchantIds) {
-                    console.log('Multi-party order: Using server-created PayPal order ID:', orderId);
-                    return orderId;
+                // return the server-created PayPal order ID
+                if (isMultiParty && paypalOrderId) {
+                    console.log('Multi-party order: Using server-created PayPal order ID:', paypalOrderId);
+                    return paypalOrderId;
                 }
 
                 // For standard orders, create PayPal order client-side
@@ -103,9 +120,9 @@ export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef)
                 // Server will capture the payment after we notify it
                 console.log('Payment approved (3D Secure passed if required), notifying server to capture...');
                 
-                // Use our stored internal order ID
-                const internalOrderId = currentOrderId || (data && data.orderID);
-                const paypalOrderId = data && data.orderID;
+                // Use our stored internal order ID and PayPal order ID
+                const internalOrderId = currentOrderId;
+                const paypalOrderId = currentPayPalOrderId || (data && data.orderID);
                 console.log('Using internal order ID:', internalOrderId);
                 console.log('PayPal order ID:', paypalOrderId);
                 
@@ -125,12 +142,14 @@ export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef)
         onCancel: function (data) {
             console.log('Payment cancelled by user');
             currentOrderId = null;
+            currentPayPalOrderId = null;
             dotNetRef.invokeMethodAsync('OnCancel');
         },
 
         onError: function (err) {
             console.error('PayPal button error:', err);
             currentOrderId = null;
+            currentPayPalOrderId = null;
             dotNetRef.invokeMethodAsync('OnError', err.toString());
         }
     }).render('#paypal-button-container');

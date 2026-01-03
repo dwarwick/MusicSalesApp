@@ -134,7 +134,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public async Task<string> CreateOrder()
+    public async Task<JsonElement> CreateOrder()
     {
         try
         {
@@ -152,15 +152,24 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
                 _currentOrderIsMultiParty = result?.IsMultiParty ?? false;
                 _currentSellerMerchantId = result?.SellerMerchantId;
                 
-                // For multi-party orders, return the server-created PayPal order ID
-                // For standard orders, return the internal order ID (JavaScript will create PayPal order)
+                // For multi-party orders, return object with both internal and PayPal order IDs
+                // For standard orders, return just the internal order ID (JavaScript will create PayPal order)
                 if (_currentOrderIsMultiParty && !string.IsNullOrEmpty(result?.PayPalOrderId))
                 {
-                    Logger.LogInformation("Returning server-created PayPal order ID for multi-party: {PayPalOrderId}", result.PayPalOrderId);
-                    return result.PayPalOrderId;
+                    Logger.LogInformation("Returning order IDs for multi-party - internal: {InternalId}, PayPal: {PayPalOrderId}", 
+                        result.OrderId, result.PayPalOrderId);
+                    
+                    var orderInfo = new
+                    {
+                        orderId = result.OrderId,
+                        payPalOrderId = result.PayPalOrderId,
+                        isMultiParty = true
+                    };
+                    return JsonSerializer.SerializeToElement(orderInfo);
                 }
                 
-                return result?.OrderId ?? string.Empty;
+                // Standard order - return just the internal ID as string
+                return JsonSerializer.SerializeToElement(result?.OrderId ?? string.Empty);
             }
             else
             {
@@ -173,7 +182,7 @@ public class CheckoutModel : BlazorBase, IAsyncDisposable
             Logger.LogError(ex, "Error creating PayPal order");
         }
 
-        return string.Empty;
+        return JsonSerializer.SerializeToElement(string.Empty);
     }
 
     [JSInvokable]
