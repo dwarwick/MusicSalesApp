@@ -76,9 +76,9 @@ export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef)
 
                 // For standard orders, create PayPal order client-side
                 console.log('Standard order: Creating PayPal order client-side');
-                const paypalOrderId = await actions.order.create({
+                paypalOrderId = await actions.order.create({
                     purchase_units: [{
-                        reference_id: orderId,
+                        reference_id: internalOrderId,
                         amount: {
                             value: amount,
                             currency_code: 'USD'
@@ -97,6 +97,9 @@ export async function initPayPal(clientId, sellerMerchantIds, amount, dotNetRef)
                         }
                     }
                 });
+                
+                // Store PayPal order ID for standard orders
+                currentPayPalOrderId = paypalOrderId;
                 
                 console.log('PayPal order created client-side with 3D Secure support:', paypalOrderId);
                 return paypalOrderId;
