@@ -96,6 +96,12 @@ public class SongMetadata
     public int NumberOfStreams { get; set; }
 
     /// <summary>
+    /// The number of streams at the time of the last payout.
+    /// Used to calculate unpaid streams (NumberOfStreams - StreamsAtLastPayout).
+    /// </summary>
+    public int StreamsAtLastPayout { get; set; }
+
+    /// <summary>
     /// Indicates whether this song or album should be displayed on the home page
     /// </summary>
     public bool DisplayOnHomePage { get; set; }

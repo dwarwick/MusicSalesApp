@@ -202,6 +202,7 @@ try
     builder.Services.AddScoped<ISitemapService, SitemapService>();
     builder.Services.AddScoped<ISellerService, SellerService>();
     builder.Services.AddScoped<IPayPalPartnerService, PayPalPartnerService>();
+    builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>

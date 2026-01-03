@@ -2,7 +2,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -21,19 +23,22 @@ public class SellerController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ILogger<SellerController> _logger;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
     public SellerController(
         ISellerService sellerService,
         IPayPalPartnerService payPalPartnerService,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
-        ILogger<SellerController> logger)
+        ILogger<SellerController> logger,
+        IDbContextFactory<AppDbContext> dbContextFactory)
     {
         _sellerService = sellerService;
         _payPalPartnerService = payPalPartnerService;
         _userManager = userManager;
         _roleManager = roleManager;
         _logger = logger;
+        _dbContextFactory = dbContextFactory;
     }
 
     /// <summary>
@@ -87,6 +92,12 @@ public class SellerController : ControllerBase
             return BadRequest("User must have a verified email address to become a seller.");
         }
 
+        // Validate PayPal email is provided
+        if (string.IsNullOrWhiteSpace(request.PayPalEmail))
+        {
+            return BadRequest("PayPal email address is required to become a seller.");
+        }
+
         // Check if user already has a seller record
         var existingSeller = await _sellerService.GetSellerByUserIdAsync(user.Id);
         if (existingSeller != null && existingSeller.IsActive)
@@ -111,6 +122,16 @@ public class SellerController : ControllerBase
             }
         }
 
+        // Update seller with PayPal email
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        var sellerToUpdate = await context.Sellers.FindAsync(seller.Id);
+        if (sellerToUpdate != null)
+        {
+            sellerToUpdate.PayPalEmail = request.PayPalEmail;
+            sellerToUpdate.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
         // Create PayPal partner referral
         var referralResult = await _payPalPartnerService.CreatePartnerReferralAsync(user.Id, user.Email);
         if (referralResult == null || !referralResult.Success)
@@ -122,7 +143,8 @@ public class SellerController : ControllerBase
         // Update seller with onboarding info
         await _sellerService.UpdateOnboardingInfoAsync(seller.Id, referralResult.TrackingId, referralResult.ReferralUrl);
 
-        _logger.LogInformation("Started seller onboarding for user {UserId}, tracking ID: {TrackingId}", user.Id, referralResult.TrackingId);
+        _logger.LogInformation("Started seller onboarding for user {UserId}, tracking ID: {TrackingId}, PayPal email: {PayPalEmail}", 
+            user.Id, referralResult.TrackingId, request.PayPalEmail);
 
         return Ok(new StartOnboardingResponse
         {
@@ -423,6 +445,7 @@ public class StartOnboardingRequest
 {
     public string? DisplayName { get; set; }
     public string? Bio { get; set; }
+    public string? PayPalEmail { get; set; }
 }
 
 public class StartOnboardingResponse

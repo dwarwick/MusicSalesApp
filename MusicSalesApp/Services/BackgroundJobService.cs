@@ -21,17 +21,24 @@ public class BackgroundJobService : IBackgroundJobService
     {
         try
         {
-            // Schedule daily cleanup job at 3 AM UTC
-            RecurringJob.AddOrUpdate<IPlaylistCleanupService>(
-                "cleanup-lapsed-subscription-playlists",
-                service => service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync(),
-                Cron.Daily(3));
+            // Schedule weekly stream payouts every Monday at 1 AM UTC
+            // This processes payouts to sellers based on stream counts
+            RecurringJob.AddOrUpdate<IStreamPayoutService>(
+                "process-stream-payouts",
+                service => service.ProcessPendingPayoutsAsync(),
+                Cron.Weekly(DayOfWeek.Monday, 1));
 
             // Schedule nightly sync of likes to Supabase at 2 AM UTC
             RecurringJob.AddOrUpdate<IRecommendationService>(
                 "sync-likes-to-supabase",
                 service => service.SyncLikesToSupabaseAsync(),
                 Cron.Daily(2));
+
+            // Schedule daily cleanup job at 3 AM UTC
+            RecurringJob.AddOrUpdate<IPlaylistCleanupService>(
+                "cleanup-lapsed-subscription-playlists",
+                service => service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync(),
+                Cron.Daily(3));
 
             // Schedule nightly new song notification emails at 4 AM UTC
             // This runs after song cleanup and sends emails to opted-in users about new songs added in the past 24 hours
