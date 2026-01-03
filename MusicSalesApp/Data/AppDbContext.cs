@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
     public DbSet<AppSettings> AppSettings { get; set; }
     public DbSet<Seller> Sellers { get; set; }
+    public DbSet<StreamPayout> StreamPayouts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

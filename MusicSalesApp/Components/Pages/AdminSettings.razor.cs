@@ -18,8 +18,12 @@ public class AdminSettingsModel : BlazorBase
     protected decimal? _originalSubscriptionPrice = null;
     protected decimal? _commissionRate = null;
     protected decimal? _originalCommissionRate = null;
+    protected decimal? _streamPayRateDisplay = null; // Display as per 1000 streams (e.g., 5.00)
+    protected decimal? _originalStreamPayRateDisplay = null;
 
-    protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice || _commissionRate != _originalCommissionRate;
+    protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
+                                   || _commissionRate != _originalCommissionRate
+                                   || _streamPayRateDisplay != _originalStreamPayRateDisplay;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -49,12 +53,18 @@ public class AdminSettingsModel : BlazorBase
         
         _commissionRate = (await AppSettingsService.GetCommissionRateAsync()) * 100; // Convert to percentage for display
         _originalCommissionRate = _commissionRate;
+        
+        // Convert stream pay rate from per-stream to per-1000-streams for display
+        var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
+        _streamPayRateDisplay = streamPayRate * 1000;
+        _originalStreamPayRateDisplay = _streamPayRateDisplay;
     }
 
     protected void CancelChanges()
     {
         _subscriptionPrice = _originalSubscriptionPrice;
         _commissionRate = _originalCommissionRate;
+        _streamPayRateDisplay = _originalStreamPayRateDisplay;
         _validationErrors.Clear();
         _successMessage = null;
         StateHasChanged();
@@ -89,6 +99,16 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Commission rate cannot exceed 100%.");
             }
 
+            if (!_streamPayRateDisplay.HasValue || _streamPayRateDisplay.Value <= 0)
+            {
+                _validationErrors.Add("Stream pay rate must be greater than 0.");
+            }
+
+            if (_streamPayRateDisplay.HasValue && _streamPayRateDisplay.Value > 100)
+            {
+                _validationErrors.Add("Stream pay rate cannot exceed $100 per 1000 streams.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
@@ -101,12 +121,17 @@ public class AdminSettingsModel : BlazorBase
             // Save the commission rate (convert from percentage to decimal)
             await AppSettingsService.SetCommissionRateAsync(_commissionRate!.Value / 100);
 
+            // Save the stream pay rate (convert from per-1000-streams to per-stream)
+            await AppSettingsService.SetStreamPayRateAsync(_streamPayRateDisplay!.Value / 1000);
+
             // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
             _originalCommissionRate = _commissionRate;
-            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Commission rate: {_commissionRate.Value:F1}%";
+            _originalStreamPayRateDisplay = _streamPayRateDisplay;
+            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Commission rate: {_commissionRate.Value:F1}%, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams";
             
-            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Commission rate: {Rate}%", _subscriptionPrice.Value, _commissionRate.Value);
+            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Commission rate: {Rate}%, Stream pay rate: ${StreamRate} per 1000 streams", 
+                _subscriptionPrice.Value, _commissionRate.Value, _streamPayRateDisplay.Value);
         }
         catch (Exception ex)
         {

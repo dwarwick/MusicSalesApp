@@ -45,4 +45,16 @@ public interface IAppSettingsService
     /// </summary>
     /// <param name="rate">The commission rate as a decimal (0.15 = 15%).</param>
     Task SetCommissionRateAsync(decimal rate);
+
+    /// <summary>
+    /// Gets the stream pay rate for sellers.
+    /// </summary>
+    /// <returns>The stream pay rate as a decimal (0.005 = $5 per 1000 streams), or the default value if not set.</returns>
+    Task<decimal> GetStreamPayRateAsync();
+
+    /// <summary>
+    /// Sets the stream pay rate for sellers.
+    /// </summary>
+    /// <param name="rate">The stream pay rate as a decimal (0.005 = $5 per 1000 streams).</param>
+    Task SetStreamPayRateAsync(decimal rate);
 }

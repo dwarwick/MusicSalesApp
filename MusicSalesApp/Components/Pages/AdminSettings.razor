@@ -51,7 +51,7 @@ else
             }
 
             <div class="row mb-4">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">Subscription Price (USD) <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_subscriptionPrice" 
                                      Format="C2"
@@ -65,7 +65,7 @@ else
                         Monthly subscription price for new subscribers. Existing subscribers will continue at their original rate.
                     </small>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">Platform Commission Rate (%) <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_commissionRate" 
                                      Format="N1"
@@ -79,6 +79,20 @@ else
                         Percentage taken from each seller sale (default 15%). This applies to all new sellers onboarded after this setting is changed.
                     </small>
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label">Stream Pay Rate (per 1000 streams) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_streamPayRateDisplay" 
+                                     Format="C2"
+                                     Min="0.01m"
+                                     Max="100m"
+                                     Decimals="2"
+                                     Step="0.25m"
+                                     Placeholder="Enter pay rate"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Amount paid to sellers per 1000 streams (default $5.00). This applies to all new sellers onboarded after this setting is changed.
+                    </small>
+                </div>
             </div>
 
             <div class="alert alert-info">
@@ -86,6 +100,7 @@ else
                 <ul class="mb-0">
                     <li><strong>Subscription Price:</strong> Existing subscribers continue at their original rate; new subscribers get the new price.</li>
                     <li><strong>Commission Rate:</strong> This is used as the default for new sellers. Existing sellers keep their current rate unless manually updated.</li>
+                    <li><strong>Stream Pay Rate:</strong> This is used as the default for new sellers. Existing sellers keep their current rate unless manually updated.</li>
                 </ul>
             </div>
 

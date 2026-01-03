@@ -98,7 +98,8 @@ public partial class SellerSongManagementModel : BlazorBase
             DisplayOnHomePage = m.DisplayOnHomePage,
             HasAlbumCover = m.IsAlbumCover,
             SellerId = m.SellerId,
-            IsActive = m.IsActive
+            IsActive = m.IsActive,
+            NumberOfStreams = m.NumberOfStreams
         }).ToList();
 
         // Generate SAS URLs for images

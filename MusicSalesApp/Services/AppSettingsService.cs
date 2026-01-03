@@ -34,6 +34,16 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const decimal DefaultCommissionRate = 0.15m;
 
+    /// <summary>
+    /// The key used for storing the stream pay rate setting.
+    /// </summary>
+    public const string StreamPayRateKey = "StreamPayRate";
+
+    /// <summary>
+    /// Default stream pay rate if not set in the database ($5 per 1000 streams = $0.005 per stream).
+    /// </summary>
+    public const decimal DefaultStreamPayRate = 0.005m;
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -141,5 +151,39 @@ public class AppSettingsService : IAppSettingsService
             CommissionRateKey,
             rate.ToString("F4"),
             "Platform commission rate for seller sales (0.15 = 15%)");
+    }
+
+    /// <summary>
+    /// Gets the stream pay rate for sellers.
+    /// </summary>
+    /// <returns>The stream pay rate as a decimal (0.005 = $5 per 1000 streams), or the default value if not set.</returns>
+    public async Task<decimal> GetStreamPayRateAsync()
+    {
+        var value = await GetSettingAsync(StreamPayRateKey);
+        
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultStreamPayRate;
+        }
+
+        if (decimal.TryParse(value, out var rate))
+        {
+            return rate;
+        }
+
+        _logger.LogWarning("Invalid stream pay rate value in database: {Value}. Using default.", value);
+        return DefaultStreamPayRate;
+    }
+
+    /// <summary>
+    /// Sets the stream pay rate for sellers.
+    /// </summary>
+    /// <param name="rate">The stream pay rate as a decimal (0.005 = $5 per 1000 streams).</param>
+    public async Task SetStreamPayRateAsync(decimal rate)
+    {
+        await SetSettingAsync(
+            StreamPayRateKey,
+            rate.ToString("F6"),
+            "Stream pay rate for sellers in USD per stream (0.005 = $5 per 1000 streams)");
     }
 }

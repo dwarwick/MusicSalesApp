@@ -19,6 +19,7 @@ public class SongAdminViewModel
     public int? TrackNumber { get; set; }
     public double? TrackLength { get; set; }
     public bool DisplayOnHomePage { get; set; }
+    public int NumberOfStreams { get; set; }
 
     // Additional properties for internal use
     public bool HasAlbumCover { get; set; }

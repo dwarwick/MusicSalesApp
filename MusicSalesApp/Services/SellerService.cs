@@ -93,12 +93,16 @@ public class SellerService : ISellerService
         // Get the platform commission rate from settings (default 15%)
         var commissionRate = await _appSettingsService.GetCommissionRateAsync();
 
+        // Get the stream pay rate from settings (default $5 per 1000 streams)
+        var streamPayRate = await _appSettingsService.GetStreamPayRateAsync();
+
         var seller = new Seller
         {
             UserId = userId,
             DisplayName = displayName,
             Bio = bio,
             CommissionRate = commissionRate, // Set from app settings
+            StreamPayRate = streamPayRate, // Set from app settings
             OnboardingStatus = SellerOnboardingStatus.NotStarted,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -107,8 +111,8 @@ public class SellerService : ISellerService
         context.Sellers.Add(seller);
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Created seller record for user {UserId} with commission rate {Rate}%", 
-            userId, commissionRate * 100);
+        _logger.LogInformation("Created seller record for user {UserId} with commission rate {Rate}% and stream pay rate ${StreamRate:F6} per stream", 
+            userId, commissionRate * 100, streamPayRate);
         return seller;
     }
 

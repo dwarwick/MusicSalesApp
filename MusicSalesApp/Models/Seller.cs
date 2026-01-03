@@ -68,6 +68,13 @@ public class Seller
     public decimal CommissionRate { get; set; } = 0.15m;
 
     /// <summary>
+    /// The rate paid per stream in USD (e.g., 0.005 for $5 per 1000 streams).
+    /// This is set when the seller is onboarded and locked in for the lifetime of the seller account.
+    /// </summary>
+    [Column(TypeName = "decimal(10,6)")]
+    public decimal StreamPayRate { get; set; } = 0.005m;
+
+    /// <summary>
     /// Display name for the seller (can be different from username).
     /// </summary>
     [MaxLength(200)]

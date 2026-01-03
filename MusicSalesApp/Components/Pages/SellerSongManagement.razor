@@ -57,7 +57,7 @@
         }
 
         <div class="row mb-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="card bg-primary text-white">
                     <div class="card-body">
                         <h5 class="card-title">Total Songs</h5>
@@ -65,7 +65,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="card bg-success text-white">
                     <div class="card-body">
                         <h5 class="card-title">Albums</h5>
@@ -73,11 +73,19 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="card bg-info text-white">
                     <div class="card-body">
                         <h5 class="card-title">Total Value</h5>
                         <h2 class="mb-0">$@(_songs.Where(s => !s.IsAlbum).Sum(s => s.SongPrice ?? 0).ToString("F2"))</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Streams</h5>
+                        <h2 class="mb-0">@(_songs.Where(s => !s.IsAlbum).Sum(s => s.NumberOfStreams).ToString("N0"))</h2>
                     </div>
                 </div>
             </div>
@@ -170,6 +178,12 @@
                             }
                             else
                             {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.NumberOfStreams)" HeaderText="Streams" Width="100" Format="N0"></GridColumn>
                                 <span class="text-muted">-</span>
                             }
                         }
