@@ -440,6 +440,7 @@ public class PayPalPartnerService : IPayPalPartnerService
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"] ?? "https://localhost:5001";
             var bnCode = _configuration["PayPal:BNCode"];
+            var partnerMerchantId = _configuration["PayPal:PartnerId"];
 
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
@@ -497,6 +498,10 @@ public class PayPalPartnerService : IPayPalPartnerService
                                     {
                                         currency_code = "USD",
                                         value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                    },
+                                    payee = new
+                                    {
+                                        merchant_id = partnerMerchantId
                                     }
                                 }
                             }
@@ -590,6 +595,7 @@ public class PayPalPartnerService : IPayPalPartnerService
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             var returnBaseUrl = _configuration["PayPal:ReturnBaseUrl"] ?? "https://localhost:5001";
             var bnCode = _configuration["PayPal:BNCode"];
+            var partnerMerchantId = _configuration["PayPal:PartnerId"];
 
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri(baseUrl);
@@ -649,6 +655,10 @@ public class PayPalPartnerService : IPayPalPartnerService
                                 {
                                     currency_code = "USD",
                                     value = platformFee.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                                },
+                                payee = new
+                                {
+                                    merchant_id = partnerMerchantId
                                 }
                             }
                         }
