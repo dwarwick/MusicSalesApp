@@ -22,6 +22,7 @@ public class CartController : ControllerBase
     private readonly IPurchaseEmailService _purchaseEmailService;
     private readonly IPayPalPartnerService _payPalPartnerService;
     private readonly ISellerService _sellerService;
+    private readonly IAppSettingsService _appSettingsService;
 
     public CartController(
         ICartService cartService,
@@ -31,7 +32,8 @@ public class CartController : ControllerBase
         IHttpClientFactory httpClientFactory,
         IPurchaseEmailService purchaseEmailService,
         IPayPalPartnerService payPalPartnerService,
-        ISellerService sellerService)
+        ISellerService sellerService,
+        IAppSettingsService appSettingsService)
     {
         _cartService = cartService;
         _userManager = userManager;
@@ -41,6 +43,7 @@ public class CartController : ControllerBase
         _purchaseEmailService = purchaseEmailService;
         _payPalPartnerService = payPalPartnerService;
         _sellerService = sellerService;
+        _appSettingsService = appSettingsService;
     }
 
     [HttpGet]
@@ -381,6 +384,7 @@ public class CartController : ControllerBase
                 }
 
                 var sellerAmount = sellerGroup.Sum(item => item.Price);
+                // Use seller's individual commission rate
                 var platformFee = Math.Round(sellerAmount * seller.CommissionRate, 2);
                 
                 var orderItems = sellerGroup.Select(i => new OrderItem

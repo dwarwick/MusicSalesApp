@@ -27,7 +27,7 @@ else
 {
     <div class="card settings-card">
         <div class="card-header">
-            <h5 class="mb-0">PayPal Subscription Settings</h5>
+            <h5 class="mb-0">Platform Settings</h5>
         </div>
         <div class="card-body">
             @if (_successMessage != null)
@@ -65,14 +65,27 @@ else
                         Monthly subscription price for new subscribers. Existing subscribers will continue at their original rate.
                     </small>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label">Platform Commission Rate (%) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_commissionRate" 
+                                     Format="N1"
+                                     Min="0m"
+                                     Max="100m"
+                                     Decimals="1"
+                                     Step="0.5m"
+                                     Placeholder="Enter commission rate"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Percentage taken from each seller sale (default 15%). This applies to all new sellers onboarded after this setting is changed.
+                    </small>
+                </div>
             </div>
 
             <div class="alert alert-info">
-                <strong>Note:</strong> When you change the subscription price:
+                <strong>Note:</strong> When you change these settings:
                 <ul class="mb-0">
-                    <li><strong>Existing subscribers</strong> will continue to be charged at their original rate.</li>
-                    <li><strong>New subscribers</strong> will be charged at the new price.</li>
-                    <li>A new PayPal plan will be created automatically with the updated price.</li>
+                    <li><strong>Subscription Price:</strong> Existing subscribers continue at their original rate; new subscribers get the new price.</li>
+                    <li><strong>Commission Rate:</strong> This is used as the default for new sellers. Existing sellers keep their current rate unless manually updated.</li>
                 </ul>
             </div>
 

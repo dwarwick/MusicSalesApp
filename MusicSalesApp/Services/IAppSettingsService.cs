@@ -33,4 +33,16 @@ public interface IAppSettingsService
     /// </summary>
     /// <param name="price">The subscription price.</param>
     Task SetSubscriptionPriceAsync(decimal price);
+
+    /// <summary>
+    /// Gets the platform commission rate for seller sales.
+    /// </summary>
+    /// <returns>The commission rate as a decimal (0.15 = 15%), or the default value if not set.</returns>
+    Task<decimal> GetCommissionRateAsync();
+
+    /// <summary>
+    /// Sets the platform commission rate for seller sales.
+    /// </summary>
+    /// <param name="rate">The commission rate as a decimal (0.15 = 15%).</param>
+    Task SetCommissionRateAsync(decimal rate);
 }

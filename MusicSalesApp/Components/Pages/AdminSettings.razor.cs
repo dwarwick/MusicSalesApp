@@ -16,8 +16,10 @@ public class AdminSettingsModel : BlazorBase
     // Settings fields
     protected decimal? _subscriptionPrice = null;
     protected decimal? _originalSubscriptionPrice = null;
+    protected decimal? _commissionRate = null;
+    protected decimal? _originalCommissionRate = null;
 
-    protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice;
+    protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice || _commissionRate != _originalCommissionRate;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -44,11 +46,15 @@ public class AdminSettingsModel : BlazorBase
     {
         _subscriptionPrice = await AppSettingsService.GetSubscriptionPriceAsync();
         _originalSubscriptionPrice = _subscriptionPrice;
+        
+        _commissionRate = (await AppSettingsService.GetCommissionRateAsync()) * 100; // Convert to percentage for display
+        _originalCommissionRate = _commissionRate;
     }
 
     protected void CancelChanges()
     {
         _subscriptionPrice = _originalSubscriptionPrice;
+        _commissionRate = _originalCommissionRate;
         _validationErrors.Clear();
         _successMessage = null;
         StateHasChanged();
@@ -73,20 +79,34 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Subscription price cannot exceed $999.99.");
             }
 
+            if (!_commissionRate.HasValue || _commissionRate.Value < 0)
+            {
+                _validationErrors.Add("Commission rate must be 0% or greater.");
+            }
+
+            if (_commissionRate.HasValue && _commissionRate.Value > 100)
+            {
+                _validationErrors.Add("Commission rate cannot exceed 100%.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
                 return;
             }
 
-            // Save the setting
+            // Save the subscription price
             await AppSettingsService.SetSubscriptionPriceAsync(_subscriptionPrice!.Value);
 
-            // Update the original value to reflect the saved state
+            // Save the commission rate (convert from percentage to decimal)
+            await AppSettingsService.SetCommissionRateAsync(_commissionRate!.Value / 100);
+
+            // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
-            _successMessage = $"Settings saved successfully. New subscription price: ${_subscriptionPrice.Value:F2}";
+            _originalCommissionRate = _commissionRate;
+            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Commission rate: {_commissionRate.Value:F1}%";
             
-            Logger.LogInformation("Subscription price updated to ${Price}", _subscriptionPrice.Value);
+            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Commission rate: {Rate}%", _subscriptionPrice.Value, _commissionRate.Value);
         }
         catch (Exception ex)
         {
