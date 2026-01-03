@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -265,13 +266,19 @@ public class StreamPayoutService : IStreamPayoutService
     {
         var body = new StringBuilder();
 
+        // HTML encode user-provided data for security
+        var encodedUserName = HtmlEncoder.Default.Encode(seller.User.UserName ?? "");
+        var encodedTransactionId = HtmlEncoder.Default.Encode(payPalTransactionId);
+        var encodedBaseUrl = HtmlEncoder.Default.Encode(baseUrl);
+        var encodedLogoUrl = HtmlEncoder.Default.Encode(logoUrl);
+
         // Email header with logo
         body.Append($@"
         <div style='text-align: center; margin-bottom: 20px;'>
-            <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+            <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
         </div>
         <h2>Stream Payout Receipt</h2>
-        <p>Hi {seller.User.UserName},</p>
+        <p>Hi {encodedUserName},</p>
         <p>You've received a payout for streams of your music on StreamTunes!</p>
         ");
 
@@ -280,7 +287,7 @@ public class StreamPayoutService : IStreamPayoutService
         <div style='background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;'>
             <h3 style='margin-top: 0;'>Payout Summary</h3>
             <p><strong>Payment Date:</strong> {DateTime.UtcNow:MMMM dd, yyyy}</p>
-            <p><strong>PayPal Transaction ID:</strong> {payPalTransactionId}</p>
+            <p><strong>PayPal Transaction ID:</strong> {encodedTransactionId}</p>
             <p><strong>Total Amount:</strong> <span style='font-size: 20px; color: #28a745;'>${totalAmount:F2}</span></p>
         </div>
         ");
@@ -305,10 +312,11 @@ public class StreamPayoutService : IStreamPayoutService
             if (songs.TryGetValue(payout.SongMetadataId, out var song))
             {
                 var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
                 
                 body.Append($@"
                 <tr>
-                    <td style='padding: 10px; border: 1px solid #dee2e6;'>{songTitle}</td>
+                    <td style='padding: 10px; border: 1px solid #dee2e6;'>{encodedSongTitle}</td>
                     <td style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>{payout.NumberOfStreams:N0}</td>
                     <td style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>${payout.RatePerStream:F6}</td>
                     <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.AmountPaid:F2}</td>
@@ -333,7 +341,7 @@ public class StreamPayoutService : IStreamPayoutService
         <p style='margin-top: 30px;'>The payment has been sent to your PayPal account associated with your seller account.</p>
         <p>Thank you for sharing your music on StreamTunes!</p>
         <p style='color: #999; font-size: 12px; margin-top: 30px;'>
-            <a href='{baseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your account preferences</a>
+            <a href='{encodedBaseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your account preferences</a>
         </p>
         ");
 
