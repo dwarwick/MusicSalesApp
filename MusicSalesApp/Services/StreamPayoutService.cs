@@ -150,6 +150,28 @@ public class StreamPayoutService : IStreamPayoutService
             return false;
         }
 
+        // Detailed logging for development/sandbox mode - Calculated data before PayPal call
+        var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
+        if (sandboxMode)
+        {
+            _logger.LogInformation("=== Stream Payout Calculation Summary (Development Mode) ===");
+            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
+            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("Number of Songs with Unpaid Streams: {SongCount}", payoutRecords.Count);
+            _logger.LogInformation("Total Unpaid Streams: {TotalStreams:N0}", payoutRecords.Sum(p => p.NumberOfStreams));
+            _logger.LogInformation("Stream Pay Rate: ${Rate:F6} per stream", seller.StreamPayRate);
+            _logger.LogInformation("Total Calculated Amount: ${Amount:F2} USD", totalAmount);
+            
+            _logger.LogInformation("--- Per-Song Breakdown ---");
+            foreach (var record in payoutRecords.OrderByDescending(p => p.AmountPaid))
+            {
+                var songTitle = sellerSongs.FirstOrDefault(s => s.Id == record.SongMetadataId)?.SongTitle ?? "Unknown";
+                _logger.LogInformation("  Song: {Title} | Streams: {Streams:N0} | Amount: ${Amount:F2}",
+                    songTitle, record.NumberOfStreams, record.AmountPaid);
+            }
+            _logger.LogInformation("=== END Calculation Summary ===");
+        }
+
         // Process PayPal payout
         var payPalTransactionId = await ProcessPayPalPayoutAsync(seller, totalAmount);
 
@@ -191,6 +213,20 @@ public class StreamPayoutService : IStreamPayoutService
         // For now, return a mock transaction ID
         // In production, this would call PayPal's Payouts API
         
+        var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
+        
+        // Detailed logging for development/sandbox mode
+        if (sandboxMode)
+        {
+            _logger.LogInformation("=== PayPal Payout Request (Development Mode) ===");
+            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
+            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("Payout Amount: ${Amount:F2} USD", amount);
+            _logger.LogInformation("Seller Email: {Email}", seller.User?.Email ?? "NOT AVAILABLE");
+            _logger.LogInformation("Request Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
+            _logger.LogInformation("=== END Request Data ===");
+        }
+        
         _logger.LogWarning("PayPal payout integration not yet implemented. Mock transaction ID generated for seller {SellerId}", seller.Id);
         
         // Generate a mock transaction ID for testing
@@ -198,6 +234,21 @@ public class StreamPayoutService : IStreamPayoutService
         
         // Simulate async PayPal API call
         await Task.Delay(100);
+        
+        // Detailed logging for development/sandbox mode - Response
+        if (sandboxMode)
+        {
+            _logger.LogInformation("=== PayPal Payout Response (Development Mode - MOCK) ===");
+            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
+            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("Transaction ID: {TransactionId}", mockTransactionId);
+            _logger.LogInformation("Amount Paid: ${Amount:F2} USD", amount);
+            _logger.LogInformation("Status: SUCCESS (MOCK)");
+            _logger.LogInformation("Response Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
+            _logger.LogInformation("=== END Response Data ===");
+            _logger.LogWarning("NOTE: This is a MOCK payout. Real PayPal API not called yet.");
+            _logger.LogWarning("Check PayPal Sandbox at: https://www.sandbox.paypal.com/");
+        }
         
         return mockTransactionId;
     }
