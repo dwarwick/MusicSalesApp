@@ -150,7 +150,6 @@
                         }
                     </Template>
                 </GridColumn>
-
                 <GridColumn Field="@nameof(SongAdminViewModel.TrackNumber)" HeaderText="Track #" Width="80"></GridColumn>
                 <GridColumn HeaderText="Duration" Width="100">
                     <Template>
@@ -186,7 +185,7 @@
                     <p>Are you sure you want to delete "<strong>@_songToDelete.SongTitle</strong>"?</p>
                     <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
                     <p class="text-muted small">
-                        The song will be removed from the platform.
+                        The song will be removed from the platform and will no longer be available to subscribers.
                     </p>
                 </div>
             }
