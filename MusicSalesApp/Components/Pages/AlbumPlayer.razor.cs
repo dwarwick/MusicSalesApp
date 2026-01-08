@@ -279,7 +279,6 @@ namespace MusicSalesApp.Components.Pages
                     CoverArtUrl = $"api/music/{SafeEncodePath(coverImagePath)}", // Cover art from metadata
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
-                    Price = albumPrice,
                     MetadataId = albumCoverMeta.Id
                 };
 
@@ -473,7 +472,6 @@ namespace MusicSalesApp.Components.Pages
                     CoverArtUrl = coverImageUrl,
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
-                    Price = 0, // Playlists don't have a price
                     MetadataId = firstTrackMeta.Id // Use first track's metadata ID for playlists
                 };
 
@@ -619,7 +617,6 @@ namespace MusicSalesApp.Components.Pages
                     CoverArtUrl = coverImageUrl,
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
-                    Price = 0, // Recommended playlists don't have a price
                     MetadataId = firstTrackMeta.Id
                 };
 

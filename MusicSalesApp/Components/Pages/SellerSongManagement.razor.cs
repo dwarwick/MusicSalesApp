@@ -22,8 +22,6 @@ public partial class SellerSongManagementModel : BlazorBase
     // Edit dialog
     protected bool _showEditDialog = false;
     protected SongAdminViewModel _editingSong;
-    protected decimal? _editSongPrice;
-    protected decimal? _editAlbumPrice;
     protected string _editGenre = string.Empty;
     protected string _editSongTitle = string.Empty;
     protected string _editAlbumName = string.Empty;
@@ -90,8 +88,6 @@ public partial class SellerSongManagementModel : BlazorBase
             JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
             AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
             IsAlbum = m.IsAlbumCover,
-            AlbumPrice = m.AlbumPrice,
-            SongPrice = m.SongPrice,
             Genre = m.Genre ?? string.Empty,
             TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
@@ -211,8 +207,6 @@ public partial class SellerSongManagementModel : BlazorBase
     protected void EditSong(SongAdminViewModel song)
     {
         _editingSong = song;
-        _editSongPrice = song.SongPrice;
-        _editAlbumPrice = song.AlbumPrice;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
         _editAlbumName = song.AlbumName;
@@ -253,7 +247,6 @@ public partial class SellerSongManagementModel : BlazorBase
             // Validate other fields
             if (!_editingSong.IsAlbum)
             {
-                if (!_editSongPrice.HasValue || _editSongPrice.Value <= 0)
                 {
                     _validationErrors.Add("Song price is required and must be greater than 0.");
                 }
@@ -264,7 +257,6 @@ public partial class SellerSongManagementModel : BlazorBase
             }
             else
             {
-                if (!_editAlbumPrice.HasValue || _editAlbumPrice.Value <= 0)
                 {
                     _validationErrors.Add("Album price is required and must be greater than 0.");
                 }

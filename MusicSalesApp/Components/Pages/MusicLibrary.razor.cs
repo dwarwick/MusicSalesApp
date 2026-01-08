@@ -68,7 +68,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private Dictionary<string, string> _albumArtUrls = new Dictionary<string, string>();
     
     // Map file names to song prices
-    private Dictionary<string, decimal> _songPrices = new Dictionary<string, decimal>();
     
     // Map file names to song metadata IDs
     private Dictionary<string, int> _songMetadataIds = new Dictionary<string, int>();
@@ -300,7 +299,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                             CoverArtUrl = $"api/music/{SafeEncodePath(imagePath)}",
                             CoverArtFileName = imagePath,
                             Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
-                            Price = albumPrice,
                             MetadataId = coverMeta.Id,
                             DisplayOnHomePage = coverMeta.DisplayOnHomePage
                         };
@@ -369,7 +367,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         _songTitles[audioFile.Name] = songMeta.SongTitle;
                     }
                 }
-                _songPrices[audioFile.Name] = songPrice;
             }
         }
         catch (Exception ex)
