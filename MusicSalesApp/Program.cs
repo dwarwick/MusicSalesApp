@@ -199,7 +199,7 @@ try
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
-    builder.Services.AddScoped<ISellerService, SellerService>();
+    builder.Services.AddScoped<ICreatorService, CreatorService>();
     builder.Services.AddScoped<IPayPalPartnerService, PayPalPartnerService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
 

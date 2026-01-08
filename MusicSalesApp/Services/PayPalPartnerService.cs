@@ -8,7 +8,7 @@ namespace MusicSalesApp.Services;
 
 /// <summary>
 /// Service for PayPal Partner Referrals API operations.
-/// Handles seller onboarding, multi-party payments, and refunds.
+/// Handles creator onboarding, multi-party payments, and refunds.
 /// </summary>
 public class PayPalPartnerService : IPayPalPartnerService
 {
@@ -69,9 +69,9 @@ public class PayPalPartnerService : IPayPalPartnerService
                 partner_config_override = new
                 {
                     partner_logo_url = $"{returnBaseUrl}/images/logo-light-small.png",
-                    return_url = $"{returnBaseUrl}/manage-account?seller_onboarding=complete&tracking_id={trackingId}",
-                    return_url_description = "Return to StreamTunes to complete your seller setup.",
-                    action_renewal_url = $"{returnBaseUrl}/manage-account?seller_onboarding=renew&tracking_id={trackingId}",
+                    return_url = $"{returnBaseUrl}/manage-account?creator_onboarding=complete&tracking_id={trackingId}",
+                    return_url_description = "Return to StreamTunes to complete your creator setup.",
+                    action_renewal_url = $"{returnBaseUrl}/manage-account?creator_onboarding=renew&tracking_id={trackingId}",
                     show_add_credit_card = true
                 },
                 operations = new[]
@@ -117,7 +117,7 @@ public class PayPalPartnerService : IPayPalPartnerService
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
 
-            // Find the action_url link for seller onboarding
+            // Find the action_url link for creator onboarding
             string? referralUrl = null;
             if (root.TryGetProperty("links", out var links))
             {
@@ -224,7 +224,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                 client.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
             }
 
-            // Step 1: Get merchant_id from tracking ID using "List seller tracking information" endpoint
+            // Step 1: Get merchant_id from tracking ID using "List creator tracking information" endpoint
             // https://developer.paypal.com/docs/api/partner-referrals/v1/#merchant-integration_find
             var trackingResponse = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations?tracking_id={trackingId}");
             var trackingBody = await trackingResponse.Content.ReadAsStringAsync();
@@ -253,7 +253,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                 return null;
             }
 
-            // Step 2: Get detailed merchant status using "Show seller status" endpoint
+            // Step 2: Get detailed merchant status using "Show creator status" endpoint
             // https://developer.paypal.com/docs/api/partner-referrals/v1/#merchant-integration_status
             var statusResponse = await client.GetAsync($"v1/customer/partners/{partnerId}/merchant-integrations/{merchantId}");
             var statusBody = await statusResponse.Content.ReadAsStringAsync();
@@ -425,13 +425,13 @@ public class PayPalPartnerService : IPayPalPartnerService
     }
 
     /// <inheritdoc />
-    public async Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Seller seller, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee)
+    public async Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Creator creator, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(seller.PayPalMerchantId))
+            if (string.IsNullOrWhiteSpace(creator.PayPalMerchantId))
             {
-                return new MultiPartyOrderResult { Success = false, ErrorMessage = "Seller does not have a PayPal merchant ID" };
+                return new MultiPartyOrderResult { Success = false, ErrorMessage = "Creator does not have a PayPal merchant ID" };
             }
 
             var token = await GetPayPalAccessTokenAsync();
@@ -488,7 +488,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                         },
                         payee = new
                         {
-                            merchant_id = seller.PayPalMerchantId
+                            merchant_id = creator.PayPalMerchantId
                         },
                         payment_instruction = new
                         {
@@ -551,19 +551,19 @@ public class PayPalPartnerService : IPayPalPartnerService
                 }
             }
 
-            _logger.LogInformation("Created multi-party order {OrderId} for seller {SellerId}", orderId, seller.Id);
+            _logger.LogInformation("Created multi-party order {OrderId} for creator {CreatorId}", orderId, creator.Id);
             
             // Development-only: Log money distribution details
             if (_environment.IsDevelopment())
             {
                 _logger.LogInformation("=== MULTI-PARTY ORDER MONEY DISTRIBUTION (Development) ===");
                 _logger.LogInformation("PayPal Order ID: {OrderId}", orderId);
-                _logger.LogInformation("Seller ID: {SellerId} (PayPal Merchant ID: {MerchantId})", seller.Id, seller.PayPalMerchantId);
+                _logger.LogInformation("Creator ID: {CreatorId} (PayPal Merchant ID: {MerchantId})", creator.Id, creator.PayPalMerchantId);
                 _logger.LogInformation("Total Amount (Buyer Pays): ${TotalAmount:F2}", totalAmount);
                 _logger.LogInformation("Platform Commission (15%): ${PlatformFee:F2}", platformFee);
-                _logger.LogInformation("Seller Receives (Gross, 85%): ${SellerAmount:F2}", totalAmount - platformFee);
-                _logger.LogInformation("Seller Will Pay PayPal Fees: ~${PayPalFees:F2} (2.9% + $0.30)", (totalAmount * 0.029m) + 0.30m);
-                _logger.LogInformation("Seller Net (After PayPal Fees): ~${SellerNet:F2}", (totalAmount - platformFee) - ((totalAmount * 0.029m) + 0.30m));
+                _logger.LogInformation("Creator Receives (Gross, 85%): ${CreatorAmount:F2}", totalAmount - platformFee);
+                _logger.LogInformation("Creator Will Pay PayPal Fees: ~${PayPalFees:F2} (2.9% + $0.30)", (totalAmount * 0.029m) + 0.30m);
+                _logger.LogInformation("Creator Net (After PayPal Fees): ~${CreatorNet:F2}", (totalAmount - platformFee) - ((totalAmount * 0.029m) + 0.30m));
                 _logger.LogInformation("Platform Receives (Commission Only): ${PlatformFee:F2} (NO PayPal fees deducted)", platformFee);
                 _logger.LogInformation("===============================================");
             }
@@ -577,37 +577,37 @@ public class PayPalPartnerService : IPayPalPartnerService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating multi-party order for seller {SellerId}", seller.Id);
+            _logger.LogError(ex, "Error creating multi-party order for creator {CreatorId}", creator.Id);
             return new MultiPartyOrderResult { Success = false, ErrorMessage = ex.Message };
         }
     }
 
     /// <inheritdoc />
-    public async Task<MultiSellerOrderResult?> CreateMultiSellerOrderAsync(Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> sellerOrders)
+    public async Task<MultiCreatorOrderResult?> CreateMultiCreatorOrderAsync(Dictionary<Creator, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> creatorOrders)
     {
         try
         {
-            if (sellerOrders == null || !sellerOrders.Any())
+            if (creatorOrders == null || !creatorOrders.Any())
             {
-                return new MultiSellerOrderResult { Success = false, ErrorMessage = "No sellers in order" };
+                return new MultiCreatorOrderResult { Success = false, ErrorMessage = "No creators in order" };
             }
 
-            if (sellerOrders.Count > 10)
+            if (creatorOrders.Count > 10)
             {
-                return new MultiSellerOrderResult { Success = false, ErrorMessage = "PayPal supports maximum 10 sellers per transaction" };
+                return new MultiCreatorOrderResult { Success = false, ErrorMessage = "PayPal supports maximum 10 creators per transaction" };
             }
 
-            // Validate all sellers have merchant IDs
-            var invalidSellers = sellerOrders.Keys.Where(s => string.IsNullOrWhiteSpace(s.PayPalMerchantId)).ToList();
-            if (invalidSellers.Any())
+            // Validate all creators have merchant IDs
+            var invalidCreators = creatorOrders.Keys.Where(s => string.IsNullOrWhiteSpace(s.PayPalMerchantId)).ToList();
+            if (invalidCreators.Any())
             {
-                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Sellers without PayPal merchant ID: {string.Join(", ", invalidSellers.Select(s => s.Id))}" };
+                return new MultiCreatorOrderResult { Success = false, ErrorMessage = $"Creators without PayPal merchant ID: {string.Join(", ", invalidCreators.Select(s => s.Id))}" };
             }
 
             var token = await GetPayPalAccessTokenAsync();
             if (string.IsNullOrWhiteSpace(token))
             {
-                return new MultiSellerOrderResult { Success = false, ErrorMessage = "Failed to get PayPal access token" };
+                return new MultiCreatorOrderResult { Success = false, ErrorMessage = "Failed to get PayPal access token" };
             }
 
             var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
@@ -625,10 +625,10 @@ public class PayPalPartnerService : IPayPalPartnerService
                 client.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
             }
 
-            // Create purchase_units array - one per seller
-            var purchaseUnits = sellerOrders.Select((kvp, index) =>
+            // Create purchase_units array - one per creator
+            var purchaseUnits = creatorOrders.Select((kvp, index) =>
             {
-                var seller = kvp.Key;
+                var creator = kvp.Key;
                 var (items, amount, platformFee) = kvp.Value;
 
                 var orderItems = items.Select(item => new
@@ -644,7 +644,7 @@ public class PayPalPartnerService : IPayPalPartnerService
 
                 return new
                 {
-                    reference_id = $"SELLER_{seller.Id}",
+                    reference_id = $"SELLER_{creator.Id}",
                     amount = new
                     {
                         currency_code = "USD",
@@ -660,7 +660,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                     },
                     payee = new
                     {
-                        merchant_id = seller.PayPalMerchantId
+                        merchant_id = creator.PayPalMerchantId
                     },
                     payment_instruction = new
                     {
@@ -706,8 +706,8 @@ public class PayPalPartnerService : IPayPalPartnerService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Failed to create multi-seller order: {Status} {Body}", response.StatusCode, body);
-                return new MultiSellerOrderResult { Success = false, ErrorMessage = $"Order creation failed: {response.StatusCode}" };
+                _logger.LogError("Failed to create multi-creator order: {Status} {Body}", response.StatusCode, body);
+                return new MultiCreatorOrderResult { Success = false, ErrorMessage = $"Order creation failed: {response.StatusCode}" };
             }
 
             using var doc = JsonDocument.Parse(body);
@@ -728,58 +728,58 @@ public class PayPalPartnerService : IPayPalPartnerService
                 }
             }
 
-            var sellerMerchantIds = sellerOrders.Keys.Select(s => s.PayPalMerchantId!).ToList();
-            _logger.LogInformation("Created multi-seller order {OrderId} with {SellerCount} sellers", orderId, sellerOrders.Count);
+            var creatorMerchantIds = creatorOrders.Keys.Select(s => s.PayPalMerchantId!).ToList();
+            _logger.LogInformation("Created multi-creator order {OrderId} with {CreatorCount} creators", orderId, creatorOrders.Count);
 
-            // Development-only: Log money distribution details for multi-seller order
+            // Development-only: Log money distribution details for multi-creator order
             if (_environment.IsDevelopment())
             {
                 _logger.LogInformation("=== MULTI-SELLER ORDER MONEY DISTRIBUTION (Development) ===");
                 _logger.LogInformation("PayPal Order ID: {OrderId}", orderId);
-                _logger.LogInformation("Number of Sellers: {SellerCount}", sellerOrders.Count);
+                _logger.LogInformation("Number of Creators: {CreatorCount}", creatorOrders.Count);
                 
-                var totalCartAmount = sellerOrders.Sum(kvp => kvp.Value.Amount);
-                var totalPlatformFees = sellerOrders.Sum(kvp => kvp.Value.PlatformFee);
-                var totalPayPalFees = sellerOrders.Sum(kvp => (kvp.Value.Amount * 0.029m) + 0.30m);
+                var totalCartAmount = creatorOrders.Sum(kvp => kvp.Value.Amount);
+                var totalPlatformFees = creatorOrders.Sum(kvp => kvp.Value.PlatformFee);
+                var totalPayPalFees = creatorOrders.Sum(kvp => (kvp.Value.Amount * 0.029m) + 0.30m);
                 
                 _logger.LogInformation("Total Cart Amount (Buyer Pays): ${Total:F2}", totalCartAmount);
                 _logger.LogInformation("Total Platform Commission: ${TotalCommission:F2}", totalPlatformFees);
-                _logger.LogInformation("Total PayPal Fees (Paid by Sellers): ~${TotalPayPalFees:F2}", totalPayPalFees);
+                _logger.LogInformation("Total PayPal Fees (Paid by Creators): ~${TotalPayPalFees:F2}", totalPayPalFees);
                 
-                var sellerIndex = 1;
-                foreach (var kvp in sellerOrders)
+                var creatorIndex = 1;
+                foreach (var kvp in creatorOrders)
                 {
-                    var seller = kvp.Key;
+                    var creator = kvp.Key;
                     var (items, amount, platformFee) = kvp.Value;
                     var estimatedPayPalFee = (amount * 0.029m) + 0.30m;
-                    var sellerNet = amount - platformFee - estimatedPayPalFee;
+                    var creatorNet = amount - platformFee - estimatedPayPalFee;
                     
-                    _logger.LogInformation("--- Seller {Index}: ID {SellerId} (PayPal: {MerchantId}) ---", sellerIndex, seller.Id, seller.PayPalMerchantId);
+                    _logger.LogInformation("--- Creator {Index}: ID {CreatorId} (PayPal: {MerchantId}) ---", creatorIndex, creator.Id, creator.PayPalMerchantId);
                     _logger.LogInformation("  Items: {ItemCount} songs totaling ${Amount:F2}", items.Count(), amount);
-                    _logger.LogInformation("  Seller Receives (Gross): ${Amount:F2}", amount);
+                    _logger.LogInformation("  Creator Receives (Gross): ${Amount:F2}", amount);
                     _logger.LogInformation("  Platform Commission: ${PlatformFee:F2}", platformFee);
-                    _logger.LogInformation("  Seller After Commission: ${AfterCommission:F2}", amount - platformFee);
-                    _logger.LogInformation("  Estimated PayPal Fees (Seller Pays): ~${PayPalFees:F2}", estimatedPayPalFee);
-                    _logger.LogInformation("  Seller Net (After All Fees): ~${Net:F2}", sellerNet);
-                    sellerIndex++;
+                    _logger.LogInformation("  Creator After Commission: ${AfterCommission:F2}", amount - platformFee);
+                    _logger.LogInformation("  Estimated PayPal Fees (Creator Pays): ~${PayPalFees:F2}", estimatedPayPalFee);
+                    _logger.LogInformation("  Creator Net (After All Fees): ~${Net:F2}", creatorNet);
+                    creatorIndex++;
                 }
                 
                 _logger.LogInformation("Platform Receives (Total Commission): ${TotalCommission:F2} (NO PayPal fees)", totalPlatformFees);
                 _logger.LogInformation("===============================================");
             }
 
-            return new MultiSellerOrderResult
+            return new MultiCreatorOrderResult
             {
                 Success = true,
                 OrderId = orderId,
                 ApprovalUrl = approvalUrl,
-                SellerMerchantIds = sellerMerchantIds
+                CreatorMerchantIds = creatorMerchantIds
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating multi-seller order");
-            return new MultiSellerOrderResult { Success = false, ErrorMessage = ex.Message };
+            _logger.LogError(ex, "Error creating multi-creator order");
+            return new MultiCreatorOrderResult { Success = false, ErrorMessage = ex.Message };
         }
     }
 
@@ -883,22 +883,22 @@ public class PayPalPartnerService : IPayPalPartnerService
                                     _logger.LogInformation("  Captured Amount: ${CapturedAmount}", capValue.GetString());
                                 }
                                 
-                                // Log seller receivable amount
-                                if (cap.TryGetProperty("seller_receivable_breakdown", out var breakdown))
+                                // Log creator receivable amount
+                                if (cap.TryGetProperty("creator_receivable_breakdown", out var breakdown))
                                 {
                                     if (breakdown.TryGetProperty("gross_amount", out var gross) && gross.TryGetProperty("value", out var grossValue))
                                     {
-                                        _logger.LogInformation("  Seller Gross Amount: ${Gross}", grossValue.GetString());
+                                        _logger.LogInformation("  Creator Gross Amount: ${Gross}", grossValue.GetString());
                                     }
                                     
                                     if (breakdown.TryGetProperty("paypal_fee", out var fee) && fee.TryGetProperty("value", out var feeValue))
                                     {
-                                        _logger.LogInformation("  PayPal Fee (Paid by Seller): ${Fee}", feeValue.GetString());
+                                        _logger.LogInformation("  PayPal Fee (Paid by Creator): ${Fee}", feeValue.GetString());
                                     }
                                     
                                     if (breakdown.TryGetProperty("net_amount", out var net) && net.TryGetProperty("value", out var netValue))
                                     {
-                                        _logger.LogInformation("  Seller Net Amount: ${Net}", netValue.GetString());
+                                        _logger.LogInformation("  Creator Net Amount: ${Net}", netValue.GetString());
                                     }
                                     
                                     if (breakdown.TryGetProperty("platform_fees", out var platformFees))

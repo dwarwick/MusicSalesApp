@@ -5,12 +5,12 @@ namespace MusicSalesApp.Services;
 
 /// <summary>
 /// Service interface for PayPal Partner Referrals API operations.
-/// Used for onboarding sellers to the platform.
+/// Used for onboarding creators to the platform.
 /// </summary>
 public interface IPayPalPartnerService
 {
     /// <summary>
-    /// Creates a partner referral (onboarding link) for a user to become a seller.
+    /// Creates a partner referral (onboarding link) for a user to become a creator.
     /// </summary>
     /// <param name="userId">The ID of the user to onboard.</param>
     /// <param name="email">The email address of the user.</param>
@@ -21,7 +21,7 @@ public interface IPayPalPartnerService
     /// Gets the merchant onboarding status from PayPal to check if onboarding is complete.
     /// </summary>
     /// <param name="partnerId">The partner merchant ID (platform's merchant ID).</param>
-    /// <param name="merchantId">The merchant ID of the seller being onboarded.</param>
+    /// <param name="merchantId">The merchant ID of the creator being onboarded.</param>
     /// <returns>The onboarding status information.</returns>
     Task<MerchantOnboardingStatus?> GetMerchantStatusAsync(string partnerId, string merchantId);
 
@@ -42,23 +42,23 @@ public interface IPayPalPartnerService
     Task<RefundResult> IssueRefundAsync(string captureId, decimal? amount = null, string? reason = null);
 
     /// <summary>
-    /// Creates a multi-party order where the seller is the merchant of record.
+    /// Creates a multi-party order where the creator is the merchant of record.
     /// Platform commission is split using PayPal's payment platform partner fee.
     /// </summary>
-    /// <param name="seller">The seller who is the merchant of record.</param>
+    /// <param name="creator">The creator who is the merchant of record.</param>
     /// <param name="items">The items being purchased.</param>
     /// <param name="totalAmount">The total amount of the order.</param>
     /// <param name="platformFee">The platform fee (commission) amount.</param>
     /// <returns>The created order details.</returns>
-    Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Seller seller, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee);
+    Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Creator creator, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee);
 
     /// <summary>
-    /// Creates a multi-seller order with multiple purchase units (one per seller).
-    /// Supports up to 10 sellers per transaction. Each seller is the merchant of record for their items.
+    /// Creates a multi-creator order with multiple purchase units (one per creator).
+    /// Supports up to 10 creators per transaction. Each creator is the merchant of record for their items.
     /// </summary>
-    /// <param name="sellerOrders">Dictionary mapping seller to their items and amounts.</param>
-    /// <returns>The created order details with all seller merchant IDs.</returns>
-    Task<MultiSellerOrderResult?> CreateMultiSellerOrderAsync(Dictionary<Seller, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> sellerOrders);
+    /// <param name="creatorOrders">Dictionary mapping creator to their items and amounts.</param>
+    /// <returns>The created order details with all creator merchant IDs.</returns>
+    Task<MultiCreatorOrderResult?> CreateMultiCreatorOrderAsync(Dictionary<Creator, (IEnumerable<OrderItem> Items, decimal Amount, decimal PlatformFee)> creatorOrders);
 
     /// <summary>
     /// Captures a multi-party order payment.
@@ -93,7 +93,7 @@ public class MerchantOnboardingStatus
 }
 
 /// <summary>
-/// OAuth integration status for a seller.
+/// OAuth integration status for a creator.
 /// </summary>
 public class OAuthIntegration
 {
@@ -125,15 +125,15 @@ public class MultiPartyOrderResult
 }
 
 /// <summary>
-/// Result of creating a multi-seller order with multiple purchase units.
+/// Result of creating a multi-creator order with multiple purchase units.
 /// </summary>
-public class MultiSellerOrderResult
+public class MultiCreatorOrderResult
 {
     public string OrderId { get; set; } = string.Empty;
     public string? ApprovalUrl { get; set; }
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
-    public List<string> SellerMerchantIds { get; set; } = new();
+    public List<string> CreatorMerchantIds { get; set; } = new();
 }
 
 /// <summary>

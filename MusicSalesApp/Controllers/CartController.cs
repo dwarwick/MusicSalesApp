@@ -13,7 +13,7 @@ namespace MusicSalesApp.Controllers;
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(Roles = "Admin,User,Seller")]
+[Authorize(Roles = "Admin,User,Creator")]
 public class CartController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;

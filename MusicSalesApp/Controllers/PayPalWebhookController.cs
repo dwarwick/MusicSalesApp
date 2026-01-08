@@ -13,14 +13,14 @@ namespace MusicSalesApp.Controllers;
 
 /// <summary>
 /// API controller for handling PayPal webhook notifications.
-/// Handles merchant onboarding events for seller management.
+/// Handles merchant onboarding events for creator management.
 /// </summary>
 [Route("api/paypal/webhooks")]
 [ApiController]
 [AllowAnonymous] // Webhooks come from PayPal, not authenticated users
 public class PayPalWebhookController : ControllerBase
 {
-    private readonly ISellerService _sellerService;
+    private readonly ICreatorService _creatorService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly IConfiguration _configuration;
@@ -32,14 +32,14 @@ public class PayPalWebhookController : ControllerBase
     private const string MerchantPartnerConsentRevoked = "MERCHANT.PARTNER-CONSENT.REVOKED";
 
     public PayPalWebhookController(
-        ISellerService sellerService,
+        ICreatorService creatorService,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
         ILogger<PayPalWebhookController> logger)
     {
-        _sellerService = sellerService;
+        _creatorService = creatorService;
         _userManager = userManager;
         _roleManager = roleManager;
         _configuration = configuration;
@@ -119,7 +119,7 @@ public class PayPalWebhookController : ControllerBase
 
     /// <summary>
     /// Handles the MERCHANT.ONBOARDING.COMPLETED event.
-    /// This is triggered when a seller completes their PayPal onboarding process.
+    /// This is triggered when a creator completes their PayPal onboarding process.
     /// </summary>
     private async Task<IActionResult> HandleMerchantOnboardingCompletedAsync(JsonElement root)
     {
@@ -162,58 +162,58 @@ public class PayPalWebhookController : ControllerBase
                 "PaymentsReceivable={PaymentsReceivable}, PrimaryEmailConfirmed={PrimaryEmailConfirmed}",
                 merchantId, trackingId, paymentsReceivable, primaryEmailConfirmed);
 
-            // Find the seller by tracking ID or merchant ID
-            Seller? seller = null;
+            // Find the creator by tracking ID or merchant ID
+            Creator? creator = null;
             if (!string.IsNullOrWhiteSpace(trackingId))
             {
-                seller = await _sellerService.GetSellerByTrackingIdAsync(trackingId);
+                creator = await _creatorService.GetCreatorByTrackingIdAsync(trackingId);
             }
-            if (seller == null && !string.IsNullOrWhiteSpace(merchantId))
+            if (creator == null && !string.IsNullOrWhiteSpace(merchantId))
             {
-                seller = await _sellerService.GetSellerByMerchantIdAsync(merchantId);
+                creator = await _creatorService.GetCreatorByMerchantIdAsync(merchantId);
             }
 
-            if (seller == null)
+            if (creator == null)
             {
                 _logger.LogWarning(
-                    "Could not find seller for MERCHANT.ONBOARDING.COMPLETED webhook: " +
+                    "Could not find creator for MERCHANT.ONBOARDING.COMPLETED webhook: " +
                     "TrackingId={TrackingId}, MerchantId={MerchantId}",
                     trackingId, merchantId);
-                // Return 200 OK to prevent PayPal from retrying - the seller may not exist in our system
-                return Ok(new { status = "seller_not_found" });
+                // Return 200 OK to prevent PayPal from retrying - the creator may not exist in our system
+                return Ok(new { status = "creator_not_found" });
             }
 
             // Complete the onboarding
-            await _sellerService.CompleteOnboardingAsync(
-                seller.Id,
+            await _creatorService.CompleteOnboardingAsync(
+                creator.Id,
                 merchantId ?? string.Empty,
                 paymentsReceivable,
                 primaryEmailConfirmed);
 
-            // Reload seller to get updated status
-            seller = await _sellerService.GetSellerByIdAsync(seller.Id);
+            // Reload creator to get updated status
+            creator = await _creatorService.GetCreatorByIdAsync(creator.Id);
 
-            // If onboarding is complete, add Seller role to user
-            if (seller != null && seller.IsActive)
+            // If onboarding is complete, add Creator role to user
+            if (creator != null && creator.IsActive)
             {
-                // Ensure the Seller role exists
-                if (!await _roleManager.RoleExistsAsync(Roles.Seller))
+                // Ensure the Creator role exists
+                if (!await _roleManager.RoleExistsAsync(Roles.Creator))
                 {
-                    await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Seller, NormalizedName = Roles.Seller.ToUpper() });
+                    await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
                 }
 
-                // Add Seller role if user doesn't already have it
-                var user = await _userManager.FindByIdAsync(seller.UserId.ToString());
-                if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Seller))
+                // Add Creator role if user doesn't already have it
+                var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+                if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Creator))
                 {
-                    await _userManager.AddToRoleAsync(user, Roles.Seller);
-                    _logger.LogInformation("Added Seller role to user {UserId} via webhook", seller.UserId);
+                    await _userManager.AddToRoleAsync(user, Roles.Creator);
+                    _logger.LogInformation("Added Creator role to user {UserId} via webhook", creator.UserId);
                 }
             }
 
             _logger.LogInformation(
-                "Successfully processed MERCHANT.ONBOARDING.COMPLETED for seller {SellerId}, IsActive={IsActive}",
-                seller?.Id, seller?.IsActive);
+                "Successfully processed MERCHANT.ONBOARDING.COMPLETED for creator {CreatorId}, IsActive={IsActive}",
+                creator?.Id, creator?.IsActive);
 
             return Ok(new { status = "success" });
         }
@@ -226,7 +226,7 @@ public class PayPalWebhookController : ControllerBase
 
     /// <summary>
     /// Handles the MERCHANT.PARTNER-CONSENT.REVOKED event.
-    /// This is triggered when a seller revokes their consent to the platform.
+    /// This is triggered when a creator revokes their consent to the platform.
     /// </summary>
     private async Task<IActionResult> HandleMerchantConsentRevokedAsync(JsonElement root)
     {
@@ -256,41 +256,41 @@ public class PayPalWebhookController : ControllerBase
                 "Processing MERCHANT.PARTNER-CONSENT.REVOKED: MerchantId={MerchantId}, TrackingId={TrackingId}",
                 merchantId, trackingId);
 
-            // Find the seller by merchant ID or tracking ID
-            Seller? seller = null;
+            // Find the creator by merchant ID or tracking ID
+            Creator? creator = null;
             if (!string.IsNullOrWhiteSpace(merchantId))
             {
-                seller = await _sellerService.GetSellerByMerchantIdAsync(merchantId);
+                creator = await _creatorService.GetCreatorByMerchantIdAsync(merchantId);
             }
-            if (seller == null && !string.IsNullOrWhiteSpace(trackingId))
+            if (creator == null && !string.IsNullOrWhiteSpace(trackingId))
             {
-                seller = await _sellerService.GetSellerByTrackingIdAsync(trackingId);
+                creator = await _creatorService.GetCreatorByTrackingIdAsync(trackingId);
             }
 
-            if (seller == null)
+            if (creator == null)
             {
                 _logger.LogWarning(
-                    "Could not find seller for MERCHANT.PARTNER-CONSENT.REVOKED webhook: " +
+                    "Could not find creator for MERCHANT.PARTNER-CONSENT.REVOKED webhook: " +
                     "MerchantId={MerchantId}, TrackingId={TrackingId}",
                     merchantId, trackingId);
                 // Return 200 OK to prevent PayPal from retrying
-                return Ok(new { status = "seller_not_found" });
+                return Ok(new { status = "creator_not_found" });
             }
 
-            // Revoke the seller's consent - this will deactivate their account and songs
-            await _sellerService.RevokeSellerConsentAsync(seller.Id);
+            // Revoke the creator's consent - this will deactivate their account and songs
+            await _creatorService.RevokeCreatorConsentAsync(creator.Id);
 
-            // Remove Seller role from the user
-            var user = await _userManager.FindByIdAsync(seller.UserId.ToString());
-            if (user != null && await _userManager.IsInRoleAsync(user, Roles.Seller))
+            // Remove Creator role from the user
+            var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+            if (user != null && await _userManager.IsInRoleAsync(user, Roles.Creator))
             {
-                await _userManager.RemoveFromRoleAsync(user, Roles.Seller);
-                _logger.LogInformation("Removed Seller role from user {UserId} via consent revocation webhook", seller.UserId);
+                await _userManager.RemoveFromRoleAsync(user, Roles.Creator);
+                _logger.LogInformation("Removed Creator role from user {UserId} via consent revocation webhook", creator.UserId);
             }
 
             _logger.LogInformation(
-                "Successfully processed MERCHANT.PARTNER-CONSENT.REVOKED for seller {SellerId}",
-                seller.Id);
+                "Successfully processed MERCHANT.PARTNER-CONSENT.REVOKED for creator {CreatorId}",
+                creator.Id);
 
             return Ok(new { status = "success" });
         }

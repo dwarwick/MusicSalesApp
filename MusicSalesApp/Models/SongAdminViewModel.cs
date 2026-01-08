@@ -23,7 +23,7 @@ public class SongAdminViewModel
     public bool HasAlbumCover { get; set; }
     public string AlbumCoverBlobName { get; set; } = string.Empty;
 
-    // Seller-related properties
-    public int? SellerId { get; set; }
+    // Creator-related properties
+    public int? CreatorId { get; set; }
     public bool IsActive { get; set; } = true;
 }

@@ -8,23 +8,23 @@ using MusicSalesApp.Models;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for managing seller accounts and their operations.
+/// Service for managing creator accounts and their operations.
 /// </summary>
-public class SellerService : ISellerService
+public class CreatorService : ICreatorService
 {
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IAzureStorageService _storageService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
-    private readonly ILogger<SellerService> _logger;
+    private readonly ILogger<CreatorService> _logger;
     private readonly IAppSettingsService _appSettingsService;
 
-    public SellerService(
+    public CreatorService(
         IDbContextFactory<AppDbContext> dbContextFactory,
         IAzureStorageService storageService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
-        ILogger<SellerService> logger,
+        ILogger<CreatorService> logger,
         IAppSettingsService appSettingsService)
     {
         _dbContextFactory = dbContextFactory;
@@ -36,58 +36,58 @@ public class SellerService : ISellerService
     }
 
     /// <inheritdoc />
-    public async Task<Seller?> GetSellerByIdAsync(int sellerId)
+    public async Task<Creator?> GetCreatorByIdAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
-            .FirstOrDefaultAsync(s => s.Id == sellerId);
+            .FirstOrDefaultAsync(s => s.Id == creatorId);
     }
 
     /// <inheritdoc />
-    public async Task<Seller?> GetSellerByUserIdAsync(int userId)
+    public async Task<Creator?> GetCreatorByUserIdAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
             .FirstOrDefaultAsync(s => s.UserId == userId);
     }
 
     /// <inheritdoc />
-    public async Task<Seller?> GetSellerByMerchantIdAsync(string merchantId)
+    public async Task<Creator?> GetCreatorByMerchantIdAsync(string merchantId)
     {
         if (string.IsNullOrWhiteSpace(merchantId))
             return null;
 
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
             .FirstOrDefaultAsync(s => s.PayPalMerchantId == merchantId);
     }
 
     /// <inheritdoc />
-    public async Task<Seller?> GetSellerByTrackingIdAsync(string trackingId)
+    public async Task<Creator?> GetCreatorByTrackingIdAsync(string trackingId)
     {
         if (string.IsNullOrWhiteSpace(trackingId))
             return null;
 
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
             .FirstOrDefaultAsync(s => s.PayPalTrackingId == trackingId);
     }
 
     /// <inheritdoc />
-    public async Task<Seller> CreateSellerAsync(int userId, string? displayName = null, string? bio = null)
+    public async Task<Creator> CreateCreatorAsync(int userId, string? displayName = null, string? bio = null)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        // Check if seller already exists
-        var existingSeller = await context.Sellers.FirstOrDefaultAsync(s => s.UserId == userId);
-        if (existingSeller != null)
+        // Check if creator already exists
+        var existingCreator = await context.Creators.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (existingCreator != null)
         {
-            _logger.LogWarning("Attempt to create duplicate seller record for user {UserId}", userId);
-            return existingSeller;
+            _logger.LogWarning("Attempt to create duplicate creator record for user {UserId}", userId);
+            return existingCreator;
         }
 
         // Get the platform commission rate from settings (default 15%)
@@ -96,57 +96,57 @@ public class SellerService : ISellerService
         // Get the stream pay rate from settings (default $5 per 1000 streams)
         var streamPayRate = await _appSettingsService.GetStreamPayRateAsync();
 
-        var seller = new Seller
+        var creator = new Creator
         {
             UserId = userId,
             DisplayName = displayName,
             Bio = bio,
             CommissionRate = commissionRate, // Set from app settings
             StreamPayRate = streamPayRate, // Set from app settings
-            OnboardingStatus = SellerOnboardingStatus.NotStarted,
+            OnboardingStatus = CreatorOnboardingStatus.NotStarted,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        context.Sellers.Add(seller);
+        context.Creators.Add(creator);
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Created seller record for user {UserId} with commission rate {Rate}% and stream pay rate ${StreamRate:F6} per stream", 
+        _logger.LogInformation("Created creator record for user {UserId} with commission rate {Rate}% and stream pay rate ${StreamRate:F6} per stream", 
             userId, commissionRate * 100, streamPayRate);
-        return seller;
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<Seller> UpdateOnboardingInfoAsync(int sellerId, string trackingId, string referralUrl)
+    public async Task<Creator> UpdateOnboardingInfoAsync(int creatorId, string trackingId, string referralUrl)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        seller.PayPalTrackingId = trackingId;
-        seller.PayPalReferralUrl = referralUrl;
-        seller.OnboardingStatus = SellerOnboardingStatus.Pending;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.PayPalTrackingId = trackingId;
+        creator.PayPalReferralUrl = referralUrl;
+        creator.OnboardingStatus = CreatorOnboardingStatus.Pending;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Updated onboarding info for seller {SellerId} with tracking ID {TrackingId}", sellerId, trackingId);
-        return seller;
+        _logger.LogInformation("Updated onboarding info for creator {CreatorId} with tracking ID {TrackingId}", creatorId, trackingId);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<Seller> CompleteOnboardingAsync(int sellerId, string merchantId, bool paymentsReceivable, bool primaryEmailConfirmed)
+    public async Task<Creator> CompleteOnboardingAsync(int creatorId, string merchantId, bool paymentsReceivable, bool primaryEmailConfirmed)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
         // In sandbox mode, having a valid merchant_id is sufficient for activation
@@ -161,185 +161,185 @@ public class SellerService : ISellerService
         var isComplete = (paymentsReceivable && primaryEmailConfirmed) || 
                          (allowPartialOnboarding && !string.IsNullOrWhiteSpace(merchantId));
 
-        seller.PayPalMerchantId = merchantId;
-        seller.PaymentsReceivable = paymentsReceivable;
-        seller.PrimaryEmailConfirmed = primaryEmailConfirmed;
-        seller.OnboardingStatus = isComplete
-            ? SellerOnboardingStatus.Completed
-            : SellerOnboardingStatus.InProgress;
-        seller.OnboardedAt = isComplete ? DateTime.UtcNow : null;
-        seller.IsActive = isComplete;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.PayPalMerchantId = merchantId;
+        creator.PaymentsReceivable = paymentsReceivable;
+        creator.PrimaryEmailConfirmed = primaryEmailConfirmed;
+        creator.OnboardingStatus = isComplete
+            ? CreatorOnboardingStatus.Completed
+            : CreatorOnboardingStatus.InProgress;
+        creator.OnboardedAt = isComplete ? DateTime.UtcNow : null;
+        creator.IsActive = isComplete;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Completed onboarding for seller {SellerId} with merchant ID {MerchantId}, IsActive: {IsActive}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
-            sellerId, merchantId, seller.IsActive, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
-        return seller;
+        _logger.LogInformation("Completed onboarding for creator {CreatorId} with merchant ID {MerchantId}, IsActive: {IsActive}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
+            creatorId, merchantId, creator.IsActive, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<Seller> UpdateOnboardingStatusAsync(int sellerId, SellerOnboardingStatus status)
+    public async Task<Creator> UpdateOnboardingStatusAsync(int creatorId, CreatorOnboardingStatus status)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        seller.OnboardingStatus = status;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.OnboardingStatus = status;
+        creator.UpdatedAt = DateTime.UtcNow;
 
-        if (status == SellerOnboardingStatus.Failed || status == SellerOnboardingStatus.Suspended)
+        if (status == CreatorOnboardingStatus.Failed || status == CreatorOnboardingStatus.Suspended)
         {
-            seller.IsActive = false;
+            creator.IsActive = false;
         }
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Updated onboarding status for seller {SellerId} to {Status}", sellerId, status);
-        return seller;
+        _logger.LogInformation("Updated onboarding status for creator {CreatorId} to {Status}", creatorId, status);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<bool> IsActiveSellerAsync(int userId)
+    public async Task<bool> IsActiveCreatorAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers.AnyAsync(s => s.UserId == userId && s.IsActive);
+        return await context.Creators.AnyAsync(s => s.UserId == userId && s.IsActive);
     }
 
     /// <inheritdoc />
-    public async Task<List<Seller>> GetActiveSellersAsync()
+    public async Task<List<Creator>> GetActiveCreatorsAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
             .Where(s => s.IsActive)
             .ToListAsync();
     }
 
     /// <inheritdoc />
-    public async Task<List<Seller>> GetAllSellersAsync()
+    public async Task<List<Creator>> GetAllCreatorsAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Sellers
+        return await context.Creators
             .Include(s => s.User)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
     }
 
     /// <inheritdoc />
-    public async Task<Seller> UpdateSellerProfileAsync(int sellerId, string? displayName, string? bio)
+    public async Task<Creator> UpdateCreatorProfileAsync(int creatorId, string? displayName, string? bio)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        seller.DisplayName = displayName;
-        seller.Bio = bio;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.DisplayName = displayName;
+        creator.Bio = bio;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Updated profile for seller {SellerId}", sellerId);
-        return seller;
+        _logger.LogInformation("Updated profile for creator {CreatorId}", creatorId);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<Seller> ActivateSellerAsync(int sellerId)
+    public async Task<Creator> ActivateCreatorAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        seller.IsActive = true;
-        seller.OnboardingStatus = SellerOnboardingStatus.Completed;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.IsActive = true;
+        creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Activated seller {SellerId}", sellerId);
-        return seller;
+        _logger.LogInformation("Activated creator {CreatorId}", creatorId);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<Seller> DeactivateSellerAsync(int sellerId)
+    public async Task<Creator> DeactivateCreatorAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            throw new InvalidOperationException($"Seller with ID {sellerId} not found");
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        seller.IsActive = false;
-        seller.OnboardingStatus = SellerOnboardingStatus.Suspended;
-        seller.UpdatedAt = DateTime.UtcNow;
+        creator.IsActive = false;
+        creator.OnboardingStatus = CreatorOnboardingStatus.Suspended;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Deactivated seller {SellerId}", sellerId);
-        return seller;
+        _logger.LogInformation("Deactivated creator {CreatorId}", creatorId);
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<int?> GetSellerIdForUserAsync(int userId)
+    public async Task<int?> GetCreatorIdForUserAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        var seller = await context.Sellers
+        var creator = await context.Creators
             .Where(s => s.UserId == userId)
             .Select(s => (int?)s.Id)
             .FirstOrDefaultAsync();
-        return seller;
+        return creator;
     }
 
     /// <inheritdoc />
-    public async Task<bool> StopBeingSellerAsync(int userId)
+    public async Task<bool> StopBeingCreatorAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FirstOrDefaultAsync(s => s.UserId == userId);
-        if (seller == null)
+        var creator = await context.Creators.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (creator == null)
         {
-            _logger.LogWarning("User {UserId} is not a seller", userId);
+            _logger.LogWarning("User {UserId} is not a creator", userId);
             return false;
         }
 
-        // Deactivate all seller's songs
-        var deactivatedCount = await DeactivateAllSellerSongsAsync(seller.Id);
-        _logger.LogInformation("Deactivated {Count} songs for seller {SellerId}", deactivatedCount, seller.Id);
+        // Deactivate all creator's songs
+        var deactivatedCount = await DeactivateAllCreatorSongsAsync(creator.Id);
+        _logger.LogInformation("Deactivated {Count} songs for creator {CreatorId}", deactivatedCount, creator.Id);
 
-        // Mark seller as inactive
-        seller.IsActive = false;
-        seller.OnboardingStatus = SellerOnboardingStatus.Suspended;
-        seller.UpdatedAt = DateTime.UtcNow;
+        // Mark creator as inactive
+        creator.IsActive = false;
+        creator.OnboardingStatus = CreatorOnboardingStatus.Suspended;
+        creator.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 
-        // Remove Seller role from the user
+        // Remove Creator role from the user
         var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user != null && await _userManager.IsInRoleAsync(user, Roles.Seller))
+        if (user != null && await _userManager.IsInRoleAsync(user, Roles.Creator))
         {
-            await _userManager.RemoveFromRoleAsync(user, Roles.Seller);
-            _logger.LogInformation("Removed Seller role from user {UserId}", userId);
+            await _userManager.RemoveFromRoleAsync(user, Roles.Creator);
+            _logger.LogInformation("Removed Creator role from user {UserId}", userId);
         }
 
-        _logger.LogInformation("User {UserId} stopped being a seller", userId);
+        _logger.LogInformation("User {UserId} stopped being a creator", userId);
         return true;
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteSellerSongAsync(int songMetadataId, int sellerId)
+    public async Task<bool> DeleteCreatorSongAsync(int songMetadataId, int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
@@ -350,10 +350,10 @@ public class SellerService : ISellerService
             return false;
         }
 
-        // Verify the seller owns this song
-        if (song.SellerId != sellerId)
+        // Verify the creator owns this song
+        if (song.CreatorId != creatorId)
         {
-            _logger.LogWarning("Seller {SellerId} does not own song {SongMetadataId}", sellerId, songMetadataId);
+            _logger.LogWarning("Creator {CreatorId} does not own song {SongMetadataId}", creatorId, songMetadataId);
             return false;
         }
 
@@ -365,27 +365,27 @@ public class SellerService : ISellerService
         song.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Deleted song {SongMetadataId} for seller {SellerId}", songMetadataId, sellerId);
+        _logger.LogInformation("Deleted song {SongMetadataId} for creator {CreatorId}", songMetadataId, creatorId);
         return true;
     }
 
     /// <inheritdoc />
-    public async Task<List<SongMetadata>> GetSellerSongsAsync(int sellerId)
+    public async Task<List<SongMetadata>> GetCreatorSongsAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         return await context.SongMetadata
-            .Where(s => s.SellerId == sellerId && s.IsActive)
+            .Where(s => s.CreatorId == creatorId && s.IsActive)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
     }
 
     /// <inheritdoc />
-    public async Task<int> DeactivateAllSellerSongsAsync(int sellerId)
+    public async Task<int> DeactivateAllCreatorSongsAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         var songs = await context.SongMetadata
-            .Where(s => s.SellerId == sellerId && s.IsActive)
+            .Where(s => s.CreatorId == creatorId && s.IsActive)
             .ToListAsync();
 
         foreach (var song in songs)
@@ -403,29 +403,29 @@ public class SellerService : ISellerService
     }
 
     /// <inheritdoc />
-    public async Task<bool> RevokeSellerConsentAsync(int sellerId)
+    public async Task<bool> RevokeCreatorConsentAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
-            _logger.LogWarning("Seller {SellerId} not found for consent revocation", sellerId);
+            _logger.LogWarning("Creator {CreatorId} not found for consent revocation", creatorId);
             return false;
         }
 
-        // Deactivate all seller's songs (marks inactive + removes from Azure storage)
-        var deactivatedCount = await DeactivateAllSellerSongsAsync(sellerId);
-        _logger.LogInformation("Deactivated {Count} songs for seller {SellerId} due to consent revocation", deactivatedCount, sellerId);
+        // Deactivate all creator's songs (marks inactive + removes from Azure storage)
+        var deactivatedCount = await DeactivateAllCreatorSongsAsync(creatorId);
+        _logger.LogInformation("Deactivated {Count} songs for creator {CreatorId} due to consent revocation", deactivatedCount, creatorId);
 
-        // Mark seller as inactive with consent revoked status
-        seller.IsActive = false;
-        seller.OnboardingStatus = SellerOnboardingStatus.ConsentRevoked;
-        seller.UpdatedAt = DateTime.UtcNow;
+        // Mark creator as inactive with consent revoked status
+        creator.IsActive = false;
+        creator.OnboardingStatus = CreatorOnboardingStatus.ConsentRevoked;
+        creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Revoked consent for seller {SellerId}", sellerId);
+        _logger.LogInformation("Revoked consent for creator {CreatorId}", creatorId);
         return true;
     }
 

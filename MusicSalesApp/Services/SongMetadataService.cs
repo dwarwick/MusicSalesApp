@@ -75,7 +75,7 @@ namespace MusicSalesApp.Services
                 existing.Mp3BlobPath = metadata.Mp3BlobPath;
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
-                existing.SellerId = metadata.SellerId ?? existing.SellerId; // Only update if provided
+                existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 context.SongMetadata.Update(existing);
@@ -149,10 +149,10 @@ namespace MusicSalesApp.Services
                 }
             }
 
-            // Filter by seller ID if specified
-            if (parameters.SellerId.HasValue)
+            // Filter by creator ID if specified
+            if (parameters.CreatorId.HasValue)
             {
-                query = query.Where(s => s.SellerId == parameters.SellerId.Value);
+                query = query.Where(s => s.CreatorId == parameters.CreatorId.Value);
             }
 
             // Apply sorting - always have a default order for consistent pagination
@@ -204,7 +204,7 @@ namespace MusicSalesApp.Services
                 TrackLength = m.TrackLength,
                 DisplayOnHomePage = m.DisplayOnHomePage,
                 HasAlbumCover = m.IsAlbumCover,
-                SellerId = m.SellerId,
+                CreatorId = m.CreatorId,
                 IsActive = m.IsActive
             }).ToList();
 

@@ -1,11 +1,11 @@
-@page "/seller/songs"
-@inherits SellerSongManagementModel
+@page "/creator/songs"
+@inherits CreatorSongManagementModel
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Models
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
 
-<PageTitle>My Songs - Seller Dashboard</PageTitle>
+<PageTitle>My Songs - Creator Dashboard</PageTitle>
 
 <div class="container-fluid my-4">
     <div class="d-flex justify-content-between align-items-center mb-4">

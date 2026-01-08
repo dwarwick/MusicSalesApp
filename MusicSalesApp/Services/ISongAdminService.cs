@@ -30,7 +30,7 @@ namespace MusicSalesApp.Services
         public string FilterSongTitle { get; set; } = string.Empty;
         public string FilterGenre { get; set; } = string.Empty;
         public string FilterType { get; set; } = string.Empty; // "album" or "song"
-        public int? SellerId { get; set; } // Filter by seller ID (for seller-specific views)
+        public int? CreatorId { get; set; } // Filter by creator ID (for creator-specific views)
         public bool IncludeInactive { get; set; } = false; // Include inactive songs (for admin views)
     }
 

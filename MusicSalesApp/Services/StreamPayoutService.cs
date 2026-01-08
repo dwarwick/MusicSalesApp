@@ -7,7 +7,7 @@ using MusicSalesApp.Models;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for processing stream payouts to sellers.
+/// Service for processing stream payouts to creators.
 /// </summary>
 public class StreamPayoutService : IStreamPayoutService
 {
@@ -41,34 +41,34 @@ public class StreamPayoutService : IStreamPayoutService
         
         await using var context = await _contextFactory.CreateDbContextAsync();
         
-        var sellersProcessed = 0;
+        var creatorsProcessed = 0;
 
         try
         {
-            // Get all active sellers with songs
-            var sellers = await context.Sellers
+            // Get all active creators with songs
+            var creators = await context.Creators
                 .Include(s => s.User)
-                .Where(s => s.IsActive && s.OnboardingStatus == SellerOnboardingStatus.Completed)
+                .Where(s => s.IsActive && s.OnboardingStatus == CreatorOnboardingStatus.Completed)
                 .ToListAsync();
 
-            foreach (var seller in sellers)
+            foreach (var creator in creators)
             {
                 try
                 {
-                    var payoutProcessed = await ProcessSellerPayoutAsync(seller);
+                    var payoutProcessed = await ProcessCreatorPayoutAsync(creator);
                     if (payoutProcessed)
                     {
-                        sellersProcessed++;
+                        creatorsProcessed++;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing payout for seller {SellerId}", seller.Id);
-                    // Continue with next seller
+                    _logger.LogError(ex, "Error processing payout for creator {CreatorId}", creator.Id);
+                    // Continue with next creator
                 }
             }
 
-            _logger.LogInformation("Stream payout processing completed. Processed {Count} sellers", sellersProcessed);
+            _logger.LogInformation("Stream payout processing completed. Processed {Count} creators", creatorsProcessed);
         }
         catch (Exception ex)
         {
@@ -76,20 +76,20 @@ public class StreamPayoutService : IStreamPayoutService
             throw;
         }
 
-        return sellersProcessed;
+        return creatorsProcessed;
     }
 
     /// <summary>
-    /// Processes payout for a single seller if they have reached the minimum threshold
+    /// Processes payout for a single creator if they have reached the minimum threshold
     /// and haven't received a payout in the past week.
     /// </summary>
-    private async Task<bool> ProcessSellerPayoutAsync(Seller seller)
+    private async Task<bool> ProcessCreatorPayoutAsync(Creator creator)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        // Check if seller received a payout in the past 7 days
+        // Check if creator received a payout in the past 7 days
         var lastPayout = await context.StreamPayouts
-            .Where(sp => sp.SellerId == seller.Id)
+            .Where(sp => sp.CreatorId == creator.Id)
             .OrderByDescending(sp => sp.PaymentDate)
             .FirstOrDefaultAsync();
 
@@ -98,23 +98,23 @@ public class StreamPayoutService : IStreamPayoutService
             var daysSinceLastPayout = (DateTime.UtcNow - lastPayout.PaymentDate).TotalDays;
             if (daysSinceLastPayout < MinimumDaysBetweenPayouts)
             {
-                _logger.LogDebug("Seller {SellerId} received a payout {Days:F1} days ago, skipping (weekly minimum not met)",
-                    seller.Id, daysSinceLastPayout);
+                _logger.LogDebug("Creator {CreatorId} received a payout {Days:F1} days ago, skipping (weekly minimum not met)",
+                    creator.Id, daysSinceLastPayout);
                 return false;
             }
         }
 
-        // Get all songs for this seller that have unpaid streams
-        var sellerSongs = await context.SongMetadata
-            .Where(sm => sm.SellerId == seller.Id 
+        // Get all songs for this creator that have unpaid streams
+        var creatorSongs = await context.SongMetadata
+            .Where(sm => sm.CreatorId == creator.Id 
                       && sm.IsActive 
                       && !sm.IsAlbumCover
                       && sm.NumberOfStreams > sm.StreamsAtLastPayout)
             .ToListAsync();
 
-        if (!sellerSongs.Any())
+        if (!creatorSongs.Any())
         {
-            _logger.LogDebug("No unpaid streams for seller {SellerId}", seller.Id);
+            _logger.LogDebug("No unpaid streams for creator {CreatorId}", creator.Id);
             return false;
         }
 
@@ -122,19 +122,19 @@ public class StreamPayoutService : IStreamPayoutService
         var payoutRecords = new List<StreamPayout>();
         decimal totalAmount = 0;
 
-        foreach (var song in sellerSongs)
+        foreach (var song in creatorSongs)
         {
             var unpaidStreams = song.NumberOfStreams - song.StreamsAtLastPayout;
-            var amountForSong = unpaidStreams * seller.StreamPayRate;
+            var amountForSong = unpaidStreams * creator.StreamPayRate;
 
             if (amountForSong > 0)
             {
                 payoutRecords.Add(new StreamPayout
                 {
-                    SellerId = seller.Id,
+                    CreatorId = creator.Id,
                     SongMetadataId = song.Id,
                     NumberOfStreams = unpaidStreams,
-                    RatePerStream = seller.StreamPayRate,
+                    RatePerStream = creator.StreamPayRate,
                     AmountPaid = amountForSong
                 });
 
@@ -145,8 +145,8 @@ public class StreamPayoutService : IStreamPayoutService
         // Check if total meets minimum threshold
         if (totalAmount < MinimumPayoutThreshold)
         {
-            _logger.LogDebug("Seller {SellerId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
-                seller.Id, totalAmount, MinimumPayoutThreshold);
+            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
+                creator.Id, totalAmount, MinimumPayoutThreshold);
             return false;
         }
 
@@ -155,17 +155,17 @@ public class StreamPayoutService : IStreamPayoutService
         if (sandboxMode)
         {
             _logger.LogInformation("=== Stream Payout Calculation Summary (Development Mode) ===");
-            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
-            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
+            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
             _logger.LogInformation("Number of Songs with Unpaid Streams: {SongCount}", payoutRecords.Count);
             _logger.LogInformation("Total Unpaid Streams: {TotalStreams:N0}", payoutRecords.Sum(p => p.NumberOfStreams));
-            _logger.LogInformation("Stream Pay Rate: ${Rate:F6} per stream", seller.StreamPayRate);
+            _logger.LogInformation("Stream Pay Rate: ${Rate:F6} per stream", creator.StreamPayRate);
             _logger.LogInformation("Total Calculated Amount: ${Amount:F2} USD", totalAmount);
             
             _logger.LogInformation("--- Per-Song Breakdown ---");
             foreach (var record in payoutRecords.OrderByDescending(p => p.AmountPaid))
             {
-                var songTitle = sellerSongs.FirstOrDefault(s => s.Id == record.SongMetadataId)?.SongTitle ?? "Unknown";
+                var songTitle = creatorSongs.FirstOrDefault(s => s.Id == record.SongMetadataId)?.SongTitle ?? "Unknown";
                 _logger.LogInformation("  Song: {Title} | Streams: {Streams:N0} | Amount: ${Amount:F2}",
                     songTitle, record.NumberOfStreams, record.AmountPaid);
             }
@@ -173,11 +173,11 @@ public class StreamPayoutService : IStreamPayoutService
         }
 
         // Process PayPal payout
-        var payPalTransactionId = await ProcessPayPalPayoutAsync(seller, totalAmount);
+        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalAmount);
 
         if (string.IsNullOrEmpty(payPalTransactionId))
         {
-            _logger.LogError("Failed to process PayPal payout for seller {SellerId}", seller.Id);
+            _logger.LogError("Failed to process PayPal payout for creator {CreatorId}", creator.Id);
             return false;
         }
 
@@ -189,25 +189,25 @@ public class StreamPayoutService : IStreamPayoutService
             context.StreamPayouts.Add(payoutRecord);
 
             // Update the song's StreamsAtLastPayout
-            var song = sellerSongs.First(s => s.Id == payoutRecord.SongMetadataId);
+            var song = creatorSongs.First(s => s.Id == payoutRecord.SongMetadataId);
             song.StreamsAtLastPayout = song.NumberOfStreams;
         }
 
         await context.SaveChangesAsync();
 
         // Send receipt email
-        await SendPayoutReceiptEmailAsync(seller.Id, payoutRecords, totalAmount, payPalTransactionId);
+        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalAmount, payPalTransactionId);
 
-        _logger.LogInformation("Processed payout for seller {SellerId}: ${Amount:F2} for {Songs} songs",
-            seller.Id, totalAmount, payoutRecords.Count);
+        _logger.LogInformation("Processed payout for creator {CreatorId}: ${Amount:F2} for {Songs} songs",
+            creator.Id, totalAmount, payoutRecords.Count);
 
         return true;
     }
 
     /// <summary>
-    /// Processes a PayPal payout to the seller using PayPal Payouts API.
+    /// Processes a PayPal payout to the creator using PayPal Payouts API.
     /// </summary>
-    private async Task<string> ProcessPayPalPayoutAsync(Seller seller, decimal amount)
+    private async Task<string> ProcessPayPalPayoutAsync(Creator creator, decimal amount)
     {
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
         
@@ -215,21 +215,21 @@ public class StreamPayoutService : IStreamPayoutService
         if (sandboxMode)
         {
             _logger.LogInformation("=== PayPal Payout Request (Development Mode) ===");
-            _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
-            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
+            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
             _logger.LogInformation("Payout Amount: ${Amount:F2} USD", amount);
-            _logger.LogInformation("PayPal Email (for payout): {PayPalEmail}", seller.PayPalEmail ?? "NOT SET");
-            _logger.LogInformation("User Login Email: {LoginEmail}", seller.User?.Email ?? "NOT AVAILABLE");
+            _logger.LogInformation("PayPal Email (for payout): {PayPalEmail}", creator.PayPalEmail ?? "NOT SET");
+            _logger.LogInformation("User Login Email: {LoginEmail}", creator.User?.Email ?? "NOT AVAILABLE");
             _logger.LogInformation("Request Time: {Time:yyyy-MM-dd HH:mm:ss} UTC", DateTime.UtcNow);
             _logger.LogInformation("=== END Request Data ===");
         }
 
         try
         {
-            // Validate we have a PayPal email for the seller
-            if (string.IsNullOrWhiteSpace(seller.PayPalEmail))
+            // Validate we have a PayPal email for the creator
+            if (string.IsNullOrWhiteSpace(creator.PayPalEmail))
             {
-                _logger.LogError("Seller {SellerId} does not have a PayPal email configured", seller.Id);
+                _logger.LogError("Creator {CreatorId} does not have a PayPal email configured", creator.Id);
                 return string.Empty;
             }
 
@@ -245,7 +245,7 @@ public class StreamPayoutService : IStreamPayoutService
             var bnCode = _configuration["PayPal:BNCode"];
 
             // Create PayPal Payouts API request
-            var batchId = $"STREAM-PAYOUT-{DateTime.UtcNow:yyyyMMddHHmmss}-{seller.Id}";
+            var batchId = $"STREAM-PAYOUT-{DateTime.UtcNow:yyyyMMddHHmmss}-{creator.Id}";
             var payoutRequest = new
             {
                 sender_batch_header = new
@@ -264,9 +264,9 @@ public class StreamPayoutService : IStreamPayoutService
                             value = amount.ToString("F2"),
                             currency = "USD"
                         },
-                        receiver = seller.PayPalEmail,
-                        note = $"StreamTunes stream payout for seller {seller.Id}",
-                        sender_item_id = $"SELLER-{seller.Id}-{DateTime.UtcNow:yyyyMMddHHmmss}"
+                        receiver = creator.PayPalEmail,
+                        note = $"StreamTunes stream payout for creator {creator.Id}",
+                        sender_item_id = $"SELLER-{creator.Id}-{DateTime.UtcNow:yyyyMMddHHmmss}"
                     }
                 }
             };
@@ -295,8 +295,8 @@ public class StreamPayoutService : IStreamPayoutService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("PayPal payout failed for seller {SellerId}: {Status} {Body}", 
-                    seller.Id, response.StatusCode, responseBody);
+                _logger.LogError("PayPal payout failed for creator {CreatorId}: {Status} {Body}", 
+                    creator.Id, response.StatusCode, responseBody);
                 return string.Empty;
             }
 
@@ -308,8 +308,8 @@ public class StreamPayoutService : IStreamPayoutService
             if (sandboxMode)
             {
                 _logger.LogInformation("=== PayPal Payout Response (Development Mode) ===");
-                _logger.LogInformation("Seller ID: {SellerId}", seller.Id);
-                _logger.LogInformation("PayPal Merchant ID: {MerchantId}", seller.PayPalMerchantId ?? "NOT SET");
+                _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
+                _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
                 _logger.LogInformation("Transaction ID (payout_batch_id): {TransactionId}", payoutBatchId);
                 _logger.LogInformation("Amount Paid: ${Amount:F2} USD", amount);
                 _logger.LogInformation("Status: SUCCESS");
@@ -317,13 +317,13 @@ public class StreamPayoutService : IStreamPayoutService
                 _logger.LogInformation("=== END Response Data ===");
             }
 
-            _logger.LogInformation("PayPal payout successful for seller {SellerId}: {PayoutBatchId}", seller.Id, payoutBatchId);
+            _logger.LogInformation("PayPal payout successful for creator {CreatorId}: {PayoutBatchId}", creator.Id, payoutBatchId);
             
             return payoutBatchId;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing PayPal payout for seller {SellerId}", seller.Id);
+            _logger.LogError(ex, "Error processing PayPal payout for creator {CreatorId}", creator.Id);
             return string.Empty;
         }
     }
@@ -375,7 +375,7 @@ public class StreamPayoutService : IStreamPayoutService
 
     /// <inheritdoc />
     public async Task<bool> SendPayoutReceiptEmailAsync(
-        int sellerId,
+        int creatorId,
         List<StreamPayout> payoutRecords,
         decimal totalAmount,
         string payPalTransactionId)
@@ -384,13 +384,13 @@ public class StreamPayoutService : IStreamPayoutService
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
 
-            var seller = await context.Sellers
+            var creator = await context.Creators
                 .Include(s => s.User)
-                .FirstOrDefaultAsync(s => s.Id == sellerId);
+                .FirstOrDefaultAsync(s => s.Id == creatorId);
 
-            if (seller?.User == null)
+            if (creator?.User == null)
             {
-                _logger.LogError("Seller {SellerId} or User not found for receipt email", sellerId);
+                _logger.LogError("Creator {CreatorId} or User not found for receipt email", creatorId);
                 return false;
             }
 
@@ -404,7 +404,7 @@ public class StreamPayoutService : IStreamPayoutService
             var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
 
             var body = BuildPayoutReceiptEmail(
-                seller,
+                creator,
                 payoutRecords,
                 songs,
                 totalAmount,
@@ -414,11 +414,11 @@ public class StreamPayoutService : IStreamPayoutService
 
             var subject = $"StreamTunes - Stream Payout Receipt (${totalAmount:F2})";
             
-            return await _emailService.SendEmailAsync(seller.User.Email, subject, body);
+            return await _emailService.SendEmailAsync(creator.User.Email, subject, body);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sending payout receipt email to seller {SellerId}", sellerId);
+            _logger.LogError(ex, "Error sending payout receipt email to creator {CreatorId}", creatorId);
             return false;
         }
     }
@@ -427,7 +427,7 @@ public class StreamPayoutService : IStreamPayoutService
     /// Builds the HTML email body for a payout receipt.
     /// </summary>
     private string BuildPayoutReceiptEmail(
-        Seller seller,
+        Creator creator,
         List<StreamPayout> payoutRecords,
         Dictionary<int, SongMetadata> songs,
         decimal totalAmount,
@@ -438,7 +438,7 @@ public class StreamPayoutService : IStreamPayoutService
         var body = new StringBuilder();
 
         // HTML encode user-provided data for security
-        var encodedUserName = HtmlEncoder.Default.Encode(seller.User.UserName ?? "");
+        var encodedUserName = HtmlEncoder.Default.Encode(creator.User.UserName ?? "");
         var encodedTransactionId = HtmlEncoder.Default.Encode(payPalTransactionId);
         var encodedBaseUrl = HtmlEncoder.Default.Encode(baseUrl);
         var encodedLogoUrl = HtmlEncoder.Default.Encode(logoUrl);
@@ -509,7 +509,7 @@ public class StreamPayoutService : IStreamPayoutService
 
         // Footer
         body.Append($@"
-        <p style='margin-top: 30px;'>The payment has been sent to your PayPal account associated with your seller account.</p>
+        <p style='margin-top: 30px;'>The payment has been sent to your PayPal account associated with your creator account.</p>
         <p>Thank you for sharing your music on StreamTunes!</p>
         <p style='color: #999; font-size: 12px; margin-top: 30px;'>
             <a href='{encodedBaseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your account preferences</a>
@@ -520,41 +520,41 @@ public class StreamPayoutService : IStreamPayoutService
     }
 
     /// <inheritdoc />
-    public async Task<decimal> GetUnpaidEarningsAsync(int sellerId)
+    public async Task<decimal> GetUnpaidEarningsAsync(int creatorId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var seller = await context.Sellers.FindAsync(sellerId);
-        if (seller == null)
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
         {
             return 0;
         }
 
-        var sellerSongs = await context.SongMetadata
-            .Where(sm => sm.SellerId == sellerId 
+        var creatorSongs = await context.SongMetadata
+            .Where(sm => sm.CreatorId == creatorId 
                       && sm.IsActive 
                       && !sm.IsAlbumCover
                       && sm.NumberOfStreams > sm.StreamsAtLastPayout)
             .ToListAsync();
 
         decimal totalUnpaid = 0;
-        foreach (var song in sellerSongs)
+        foreach (var song in creatorSongs)
         {
             var unpaidStreams = song.NumberOfStreams - song.StreamsAtLastPayout;
-            totalUnpaid += unpaidStreams * seller.StreamPayRate;
+            totalUnpaid += unpaidStreams * creator.StreamPayRate;
         }
 
         return totalUnpaid;
     }
 
     /// <inheritdoc />
-    public async Task<List<StreamPayout>> GetPayoutHistoryAsync(int sellerId)
+    public async Task<List<StreamPayout>> GetPayoutHistoryAsync(int creatorId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         return await context.StreamPayouts
             .Include(sp => sp.SongMetadata)
-            .Where(sp => sp.SellerId == sellerId)
+            .Where(sp => sp.CreatorId == creatorId)
             .OrderByDescending(sp => sp.PaymentDate)
             .ToListAsync();
     }

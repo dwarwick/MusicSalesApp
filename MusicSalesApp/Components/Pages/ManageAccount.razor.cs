@@ -52,19 +52,19 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _hasPurchasedMusic = false;
     protected string _accountActionConfirmEmail = string.Empty;
 
-    // Seller fields
-    protected bool _isSeller = false;
-    protected bool _isActiveSeller = false;
-    protected string _sellerOnboardingStatus = null;
-    protected string _sellerReferralUrl = null;
-    protected string _sellerDisplayName = string.Empty;
-    protected string _sellerBio = string.Empty;
-    protected string _sellerPayPalEmail = string.Empty;
+    // Creator fields
+    protected bool _isCreator = false;
+    protected bool _isActiveCreator = false;
+    protected string _creatorOnboardingStatus = null;
+    protected string _creatorReferralUrl = null;
+    protected string _creatorDisplayName = string.Empty;
+    protected string _creatorBio = string.Empty;
+    protected string _creatorPayPalEmail = string.Empty;
     protected string _paypalEmail = string.Empty;
     protected decimal _platformCommissionRate = 0.15m;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
-    protected bool _stoppingSellerStatus = false;
+    protected bool _stoppingCreatorStatus = false;
     protected string _stopSellingConfirmEmail = string.Empty;
     
     // Dialogs
@@ -84,11 +84,11 @@ public partial class ManageAccountModel : BlazorBase
     [SupplyParameterFromQuery(Name = "success")]
     public bool? Success { get; set; }
 
-    [SupplyParameterFromQuery(Name = "seller_onboarding")]
-    public string SellerOnboardingResult { get; set; }
+    [SupplyParameterFromQuery(Name = "creator_onboarding")]
+    public string CreatorOnboardingResult { get; set; }
 
     [SupplyParameterFromQuery(Name = "tracking_id")]
-    public string SellerTrackingId { get; set; }
+    public string CreatorTrackingId { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -113,12 +113,12 @@ public partial class ManageAccountModel : BlazorBase
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
-                        await LoadSellerStatus();
+                        await LoadCreatorStatus();
 
-                        // Handle return from PayPal seller onboarding
-                        if (!string.IsNullOrEmpty(SellerOnboardingResult) && SellerOnboardingResult == "complete")
+                        // Handle return from PayPal creator onboarding
+                        if (!string.IsNullOrEmpty(CreatorOnboardingResult) && CreatorOnboardingResult == "complete")
                         {
-                            await CompleteSellerOnboarding();
+                            await CompleteCreatorOnboarding();
                         }
                         
                         // Handle return from PayPal subscription
@@ -689,32 +689,32 @@ public partial class ManageAccountModel : BlazorBase
         }
     }
 
-    protected async Task LoadSellerStatus()
+    protected async Task LoadCreatorStatus()
     {
         try
         {
-            var seller = await SellerService.GetSellerByUserIdAsync(_currentUser.Id);
-            if (seller != null)
+            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
+            if (creator != null)
             {
-                _isSeller = true;
-                _isActiveSeller = seller.IsActive;
-                _sellerOnboardingStatus = seller.OnboardingStatus.ToString();
-                _sellerReferralUrl = seller.PayPalReferralUrl;
-                _sellerDisplayName = seller.DisplayName ?? string.Empty;
-                _sellerBio = seller.Bio ?? string.Empty;
-                _paypalEmail = seller.PayPalEmail ?? string.Empty;
-                _platformCommissionRate = seller.CommissionRate;
+                _isCreator = true;
+                _isActiveCreator = creator.IsActive;
+                _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
+                _creatorReferralUrl = creator.PayPalReferralUrl;
+                _creatorDisplayName = creator.DisplayName ?? string.Empty;
+                _creatorBio = creator.Bio ?? string.Empty;
+                _paypalEmail = creator.PayPalEmail ?? string.Empty;
+                _platformCommissionRate = creator.CommissionRate;
             }
             else
             {
-                _isSeller = false;
-                _isActiveSeller = false;
-                _sellerOnboardingStatus = null;
+                _isCreator = false;
+                _isActiveCreator = false;
+                _creatorOnboardingStatus = null;
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading seller status");
+            Logger.LogError(ex, "Error loading creator status");
         }
     }
 
@@ -739,16 +739,16 @@ public partial class ManageAccountModel : BlazorBase
             }
 
             await using var context = await DbContextFactory.CreateDbContextAsync();
-            var seller = await context.Sellers.FirstOrDefaultAsync(s => s.UserId == _currentUser.Id);
+            var creator = await context.Creators.FirstOrDefaultAsync(s => s.UserId == _currentUser.Id);
             
-            if (seller == null)
+            if (creator == null)
             {
-                _errorMessage = "Seller record not found.";
+                _errorMessage = "Creator record not found.";
                 return;
             }
 
-            seller.PayPalEmail = _paypalEmail;
-            seller.UpdatedAt = DateTime.UtcNow;
+            creator.PayPalEmail = _paypalEmail;
+            creator.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
 
             _successMessage = "PayPal email updated successfully!";
@@ -760,7 +760,7 @@ public partial class ManageAccountModel : BlazorBase
         }
     }
 
-    protected async Task StartSellerOnboarding()
+    protected async Task StartCreatorOnboarding()
     {
         _startingOnboarding = true;
         _errorMessage = string.Empty;
@@ -770,23 +770,23 @@ public partial class ManageAccountModel : BlazorBase
         try
         {
             // Validate PayPal email is provided
-            if (string.IsNullOrWhiteSpace(_sellerPayPalEmail))
+            if (string.IsNullOrWhiteSpace(_creatorPayPalEmail))
             {
                 _errorMessage = "Please enter your PayPal email address before starting onboarding.";
                 _startingOnboarding = false;
                 return;
             }
 
-            var response = await Http.PostAsJsonAsync("api/seller/start-onboarding", new
+            var response = await Http.PostAsJsonAsync("api/creator/start-onboarding", new
             {
-                DisplayName = _sellerDisplayName,
-                Bio = _sellerBio,
-                PayPalEmail = _sellerPayPalEmail
+                DisplayName = _creatorDisplayName,
+                Bio = _creatorBio,
+                PayPalEmail = _creatorPayPalEmail
             });
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<StartSellerOnboardingResponse>();
+                var result = await response.Content.ReadFromJsonAsync<StartCreatorOnboardingResponse>();
                 if (result != null && result.Success && !string.IsNullOrEmpty(result.ReferralUrl))
                 {
                     // Redirect to PayPal for onboarding
@@ -794,19 +794,19 @@ public partial class ManageAccountModel : BlazorBase
                 }
                 else
                 {
-                    _errorMessage = "Failed to start seller onboarding. Please try again.";
+                    _errorMessage = "Failed to start creator onboarding. Please try again.";
                 }
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to start seller onboarding: {error}";
+                _errorMessage = $"Failed to start creator onboarding: {error}";
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error starting seller onboarding");
-            _errorMessage = $"Error starting seller onboarding: {ex.Message}";
+            Logger.LogError(ex, "Error starting creator onboarding");
+            _errorMessage = $"Error starting creator onboarding: {ex.Message}";
         }
         finally
         {
@@ -815,7 +815,7 @@ public partial class ManageAccountModel : BlazorBase
         }
     }
 
-    protected async Task CompleteSellerOnboarding()
+    protected async Task CompleteCreatorOnboarding()
     {
         _completingOnboarding = true;
         _errorMessage = string.Empty;
@@ -824,26 +824,26 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/seller/complete-onboarding", new
+            var response = await Http.PostAsJsonAsync("api/creator/complete-onboarding", new
             {
                 MerchantId = (string)null // Will be retrieved from PayPal
             });
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<CompleteSellerOnboardingResponse>();
+                var result = await response.Content.ReadFromJsonAsync<CompleteCreatorOnboardingResponse>();
                 if (result != null && result.Success)
                 {
                     if (result.IsActive)
                     {
-                        _successMessage = "Congratulations! Your seller account is now active. You can start uploading and selling your music!";
-                        _isActiveSeller = true;
-                        _sellerOnboardingStatus = "Completed";
+                        _successMessage = "Congratulations! Your creator account is now active. You can start uploading and selling your music!";
+                        _isActiveCreator = true;
+                        _creatorOnboardingStatus = "Completed";
                     }
                     else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
                     {
                         _successMessage = "Your PayPal account is being verified. Please check back soon.";
-                        _sellerOnboardingStatus = "InProgress";
+                        _creatorOnboardingStatus = "InProgress";
                     }
                     else
                     {
@@ -858,15 +858,15 @@ public partial class ManageAccountModel : BlazorBase
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to complete seller onboarding: {error}";
+                _errorMessage = $"Failed to complete creator onboarding: {error}";
             }
 
-            await LoadSellerStatus();
+            await LoadCreatorStatus();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error completing seller onboarding");
-            _errorMessage = $"Error completing seller onboarding: {ex.Message}";
+            Logger.LogError(ex, "Error completing creator onboarding");
+            _errorMessage = $"Error completing creator onboarding: {ex.Message}";
         }
         finally
         {
@@ -882,7 +882,7 @@ public partial class ManageAccountModel : BlazorBase
 
     protected void NavigateToManageSongs()
     {
-        NavigationManager.NavigateTo("/seller/songs");
+        NavigationManager.NavigateTo("/creator/songs");
     }
 
     protected async Task ShowStopSellingConfirmation()
@@ -904,38 +904,38 @@ public partial class ManageAccountModel : BlazorBase
             return;
         }
 
-        _stoppingSellerStatus = true;
+        _stoppingCreatorStatus = true;
         _errorMessage = string.Empty;
         _successMessage = string.Empty;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            var response = await Http.PostAsync("api/seller/stop-selling", null);
+            var response = await Http.PostAsync("api/creator/stop-selling", null);
 
             if (response.IsSuccessStatusCode)
             {
-                _successMessage = "You are no longer a seller. All your music has been removed from the platform.";
-                _isActiveSeller = false;
-                _sellerOnboardingStatus = "Suspended";
+                _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
+                _isActiveCreator = false;
+                _creatorOnboardingStatus = "Suspended";
                 await _stopSellingDialog.HideAsync();
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to stop being a seller: {error}";
+                _errorMessage = $"Failed to stop being a creator: {error}";
             }
 
-            await LoadSellerStatus();
+            await LoadCreatorStatus();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error stopping seller status");
+            Logger.LogError(ex, "Error stopping creator status");
             _errorMessage = $"Error: {ex.Message}";
         }
         finally
         {
-            _stoppingSellerStatus = false;
+            _stoppingCreatorStatus = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -966,14 +966,14 @@ public class CancelSubscriptionResponse
     public DateTime? EndDate { get; set; }
 }
 
-public class StartSellerOnboardingResponse
+public class StartCreatorOnboardingResponse
 {
     public bool Success { get; set; }
     public string ReferralUrl { get; set; } = string.Empty;
     public string TrackingId { get; set; } = string.Empty;
 }
 
-public class CompleteSellerOnboardingResponse
+public class CompleteCreatorOnboardingResponse
 {
     public bool Success { get; set; }
     public bool IsActive { get; set; }

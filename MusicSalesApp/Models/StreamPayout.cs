@@ -4,8 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace MusicSalesApp.Models;
 
 /// <summary>
-/// Represents a payout to a seller for streams of their music.
-/// Sellers are paid $5 per 1000 streams. Minimum payout threshold is $5.
+/// Represents a payout to a creator for streams of their music.
+/// Creators are paid $5 per 1000 streams. Minimum payout threshold is $5.
 /// </summary>
 public class StreamPayout
 {
@@ -13,15 +13,15 @@ public class StreamPayout
     public int Id { get; set; }
 
     /// <summary>
-    /// Foreign key to the Seller receiving this payout
+    /// Foreign key to the Creator receiving this payout
     /// </summary>
-    public int SellerId { get; set; }
+    public int CreatorId { get; set; }
 
     /// <summary>
-    /// Navigation property to the Seller
+    /// Navigation property to the Creator
     /// </summary>
-    [ForeignKey(nameof(SellerId))]
-    public virtual Seller Seller { get; set; }
+    [ForeignKey(nameof(CreatorId))]
+    public virtual Creator Creator { get; set; }
 
     /// <summary>
     /// Foreign key to the SongMetadata record for the song being paid out
@@ -40,7 +40,7 @@ public class StreamPayout
     public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// The number of streams the seller is being paid for in this payout
+    /// The number of streams the creator is being paid for in this payout
     /// </summary>
     public int NumberOfStreams { get; set; }
 
@@ -51,7 +51,7 @@ public class StreamPayout
     public decimal RatePerStream { get; set; }
 
     /// <summary>
-    /// The total amount paid to the seller for this song in this payout
+    /// The total amount paid to the creator for this song in this payout
     /// </summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal AmountPaid { get; set; }

@@ -71,13 +71,13 @@
             </CardContent>
         </SfCard>
 
-        <!-- PayPal Email Section (for sellers) -->
-        @if (_isSeller)
+        <!-- PayPal Email Section (for creators) -->
+        @if (_isCreator)
         {
             <SfCard CssClass="mb-4">
                 <CardHeader Title="PayPal Email for Payouts" />
                 <CardContent>
-                    <p class="mb-3">This email will be used to send stream payouts and other seller payments. It may be different from your login email.</p>
+                    <p class="mb-3">This email will be used to send stream payouts and other creator payments. It may be different from your login email.</p>
                     <div class="mb-3">
                         <label for="paypalEmail" class="e-label">PayPal Email Address</label>
                         <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
@@ -208,20 +208,20 @@
             </CardContent>
         </SfCard>
 
-        <!-- Become a Seller Section (only shown if user is not already an active seller) -->
-        @if (!_isActiveSeller)
+        <!-- Become a Creator Section (only shown if user is not already an active creator) -->
+        @if (!_isActiveCreator)
         {
             <SfCard CssClass="mb-4">
-                <CardHeader Title="Become a Seller" />
+                <CardHeader Title="Become a Creator" />
                 <CardContent>
-                    @if (_sellerOnboardingStatus == "NotStarted" || _sellerOnboardingStatus == null)
+                    @if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null)
                     {
-                        <div class="seller-description">
+                        <div class="creator-description">
                             <h4>Sell Your Music on StreamTunes!</h4>
                             <p>Join our community of artists and start earning money from your music today.</p>
                             
-                            <div class="seller-benefits mt-3">
-                                <h5>Benefits of becoming a seller:</h5>
+                            <div class="creator-benefits mt-3">
+                                <h5>Benefits of becoming a creator:</h5>
                                 <ul>
                                     <li>Upload and sell your original music</li>
                                     <li>Reach a global audience of music lovers</li>
@@ -231,41 +231,41 @@
                                 </ul>
                             </div>
 
-                            <div class="seller-requirements mt-3">
+                            <div class="creator-requirements mt-3">
                                 <h5>Requirements:</h5>
                                 <ul>
                                     <li>A PayPal Business account (will be created during signup if you don't have one)</li>
                                     <li>Original music that you have the rights to sell</li>
-                                    <li>Agreement to <a href="https://www.paypal.com/us/webapps/mpp/security/seller-protection" target="_blank" rel="noopener noreferrer">PayPal's Seller Protection policy</a></li>
+                                    <li>Agreement to <a href="https://www.paypal.com/us/webapps/mpp/security/creator-protection" target="_blank" rel="noopener noreferrer">PayPal's Creator Protection policy</a></li>
                                 </ul>
                             </div>
 
-                            <div class="seller-commission mt-3">
+                            <div class="creator-commission mt-3">
                                 <p><strong>Platform Commission:</strong> StreamTunes takes a @(_platformCommissionRate * 100)% commission on each sale. The remaining @((1 - _platformCommissionRate) * 100)% goes directly to you. PayPal fees are additional.</p>
                             </div>
 
-                            <div class="seller-signup-form mt-4">
+                            <div class="creator-signup-form mt-4">
                                 <div class="mb-3">
                                     <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
-                                    <SfTextBox @bind-Value="_sellerPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This email will be used for all seller payouts. You can use a different email than your login email.</small>
+                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This email will be used for all creator payouts. You can use a different email than your login email.</small>
                                 </div>
 
                                 <div class="mb-3">
-                                    <label for="sellerDisplayName" class="e-label">Display Name (optional)</label>
-                                    <SfTextBox @bind-Value="_sellerDisplayName" ID="sellerDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
+                                    <label for="creatorDisplayName" class="e-label">Display Name (optional)</label>
+                                    <SfTextBox @bind-Value="_creatorDisplayName" ID="creatorDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
                                     <small class="form-text">This name will be shown to buyers on your music listings.</small>
                                 </div>
 
                                 <div class="mb-3">
-                                    <label for="sellerBio" class="e-label">Bio (optional)</label>
-                                    <SfTextBox @bind-Value="_sellerBio" ID="sellerBio" Multiline="true" Placeholder="Tell buyers about yourself and your music" CssClass="e-outline" />
+                                    <label for="creatorBio" class="e-label">Bio (optional)</label>
+                                    <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell buyers about yourself and your music" CssClass="e-outline" />
                                 </div>
 
                                 @if (!_startingOnboarding)
                                 {
-                                    <SfButton IsPrimary="true" Content="Start Seller Signup" OnClick="StartSellerOnboarding" Disabled="@string.IsNullOrWhiteSpace(_sellerPayPalEmail)" />
-                                    @if (string.IsNullOrWhiteSpace(_sellerPayPalEmail))
+                                    <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@string.IsNullOrWhiteSpace(_creatorPayPalEmail)" />
+                                    @if (string.IsNullOrWhiteSpace(_creatorPayPalEmail))
                                     {
                                         <p class="text-danger mt-2">Please enter your PayPal email address to continue.</p>
                                     }
@@ -277,21 +277,21 @@
                             </div>
                         </div>
                     }
-                    else if (_sellerOnboardingStatus == "Pending")
+                    else if (_creatorOnboardingStatus == "Pending")
                     {
-                        <div class="seller-pending">
+                        <div class="creator-pending">
                             <h4>Complete Your PayPal Signup</h4>
-                            <p>You've started the seller signup process. Please complete your PayPal Business account setup to start selling.</p>
+                            <p>You've started the creator signup process. Please complete your PayPal Business account setup to start selling.</p>
                             
-                            @if (!string.IsNullOrEmpty(_sellerReferralUrl))
+                            @if (!string.IsNullOrEmpty(_creatorReferralUrl))
                             {
-                                <p><a href="@_sellerReferralUrl" target="_blank" class="btn btn-primary">Continue with PayPal</a></p>
+                                <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue with PayPal</a></p>
                             }
                             
                             <p class="mt-3">After completing PayPal setup, return here and click the button below:</p>
                             @if (!_completingOnboarding)
                             {
-                                <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteSellerOnboarding" />
+                                <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteCreatorOnboarding" />
                             }
                             else
                             {
@@ -299,16 +299,16 @@
                             }
                         </div>
                     }
-                    else if (_sellerOnboardingStatus == "InProgress")
+                    else if (_creatorOnboardingStatus == "InProgress")
                     {
-                        <div class="seller-in-progress">
+                        <div class="creator-in-progress">
                             <h4>Verification In Progress</h4>
                             <p>Your PayPal account is being verified. This may take a few minutes to a few hours.</p>
                             <p>Once verified, you'll be able to start uploading and selling your music.</p>
                             
                             @if (!_completingOnboarding)
                             {
-                                <SfButton Content="Check Status" OnClick="CompleteSellerOnboarding" />
+                                <SfButton Content="Check Status" OnClick="CompleteCreatorOnboarding" />
                             }
                             else
                             {
@@ -316,16 +316,16 @@
                             }
                         </div>
                     }
-                    else if (_sellerOnboardingStatus == "Failed")
+                    else if (_creatorOnboardingStatus == "Failed")
                     {
-                        <div class="seller-failed">
+                        <div class="creator-failed">
                             <h4>Onboarding Failed</h4>
-                            <p class="text-danger">Unfortunately, your seller onboarding could not be completed. This may be due to PayPal verification issues.</p>
+                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed. This may be due to PayPal verification issues.</p>
                             <p>Please contact support for assistance or try again:</p>
                             
                             @if (!_startingOnboarding)
                             {
-                                <SfButton IsPrimary="true" Content="Try Again" OnClick="StartSellerOnboarding" />
+                                <SfButton IsPrimary="true" Content="Try Again" OnClick="StartCreatorOnboarding" />
                             }
                             else
                             {
@@ -338,16 +338,16 @@
         }
         else
         {
-            <!-- Seller Profile Section (shown for active sellers) -->
+            <!-- Creator Profile Section (shown for active creators) -->
             <SfCard CssClass="mb-4">
-                <CardHeader Title="Seller Profile" />
+                <CardHeader Title="Creator Profile" />
                 <CardContent>
-                    <div class="seller-active-info">
-                        <p class="text-success"><strong>✓ You are an active seller!</strong></p>
+                    <div class="creator-active-info">
+                        <p class="text-success"><strong>✓ You are an active creator!</strong></p>
                         <p>You can upload and sell your music on StreamTunes.</p>
                         
                         <div class="mt-3">
-                            <p><strong>Display Name:</strong> @(_sellerDisplayName ?? "Not set")</p>
+                            <p><strong>Display Name:</strong> @(_creatorDisplayName ?? "Not set")</p>
                             <p><strong>Commission Rate:</strong> @(_platformCommissionRate * 100)% platform fee</p>
                         </div>
 
@@ -359,24 +359,24 @@
                         <hr class="my-4" />
 
                         <div class="stop-selling-section">
-                            <h5 class="text-danger">Stop Being a Seller</h5>
+                            <h5 class="text-danger">Stop Being a Creator</h5>
                             <p>
-                                If you no longer want to sell music on StreamTunes, you can stop being a seller. 
+                                If you no longer want to sell music on StreamTunes, you can stop being a creator. 
                                 <strong>Warning:</strong> This action will:
                             </p>
                             <ul>
                                 <li>Remove all your uploaded music from the platform</li>
                                 <li>Delete all your song files from storage</li>
                                 <li>Your music will no longer be available for purchase or streaming</li>
-                                <li>You will need to go through the seller onboarding process again if you want to sell in the future</li>
+                                <li>You will need to go through the creator onboarding process again if you want to sell in the future</li>
                             </ul>
                             <p>
                             See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.
                             </p>
                             
-                            @if (!_stoppingSellerStatus)
+                            @if (!_stoppingCreatorStatus)
                             {
-                                <SfButton CssClass="e-danger" Content="Stop Being a Seller" OnClick="ShowStopSellingConfirmation" />
+                                <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" />
                             }
                             else
                             {
@@ -534,11 +534,11 @@
 </SfDialog>
 
 <!-- Stop Selling Confirmation Dialog -->
-<SfDialog @ref="_stopSellingDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false" Header="Stop Being a Seller">
+<SfDialog @ref="_stopSellingDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false" Header="Stop Being a Creator">
     <DialogTemplates>
         <Content>
             <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
-            <p>By stopping your seller account:</p>
+            <p>By stopping your creator account:</p>
             <ul>
                 <li>All your uploaded music will be permanently removed from the platform</li>
                 <li>All your song files will be deleted from storage</li>
@@ -549,7 +549,7 @@
             <SfTextBox @bind-Value="_stopSellingConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
         </Content>
         <FooterTemplate>
-            <SfButton CssClass="e-danger" Content="Stop Being a Seller" OnClick="ConfirmStopSelling" Disabled="@(_stopSellingConfirmEmail != _userEmail)" />
+            <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(_stopSellingConfirmEmail != _userEmail)" />
             <SfButton Content="Cancel" OnClick="CloseStopSellingDialog" />
         </FooterTemplate>
     </DialogTemplates>
