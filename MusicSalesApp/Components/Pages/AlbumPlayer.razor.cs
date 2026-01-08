@@ -261,7 +261,6 @@ namespace MusicSalesApp.Components.Pages
                 }
 
                 // Get album price from database metadata
-                decimal albumPrice = albumCoverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
                 // Build metadata lookup for track info (use Mp3BlobPath if available)
                 _metadataLookup = albumMetadata.ToDictionary(m => m.Mp3BlobPath ?? m.BlobPath, m => m);
@@ -420,7 +419,7 @@ namespace MusicSalesApp.Components.Pages
                 
                 foreach (var userPlaylist in playlistSongs)
                 {
-                    var songMetadata = userPlaylist.OwnedSong?.SongMetadata;
+                    var songMetadata = userPlaylist.SongMetadata;
                     if (songMetadata != null && !string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
                     {
                         tracks.Add(new StorageFileInfo

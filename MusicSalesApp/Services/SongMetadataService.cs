@@ -68,8 +68,6 @@ namespace MusicSalesApp.Services
                 // Update existing
                 existing.AlbumName = metadata.AlbumName;
                 existing.IsAlbumCover = metadata.IsAlbumCover;
-                existing.AlbumPrice = metadata.AlbumPrice;
-                existing.SongPrice = metadata.SongPrice;
                 existing.Genre = metadata.Genre;
                 existing.SongTitle = metadata.SongTitle;
                 existing.TrackNumber = metadata.TrackNumber;
@@ -168,12 +166,6 @@ namespace MusicSalesApp.Services
                     "Genre" => parameters.SortAscending
                         ? query.OrderBy(s => s.Genre)
                         : query.OrderByDescending(s => s.Genre),
-                    "AlbumPrice" => parameters.SortAscending
-                        ? query.OrderBy(s => s.AlbumPrice)
-                        : query.OrderByDescending(s => s.AlbumPrice),
-                    "SongPrice" => parameters.SortAscending
-                        ? query.OrderBy(s => s.SongPrice)
-                        : query.OrderByDescending(s => s.SongPrice),
                     "TrackNumber" => parameters.SortAscending
                         ? query.OrderBy(s => s.TrackNumber)
                         : query.OrderByDescending(s => s.TrackNumber),
@@ -207,8 +199,6 @@ namespace MusicSalesApp.Services
                 JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
                 AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
                 IsAlbum = m.IsAlbumCover,
-                AlbumPrice = m.AlbumPrice,
-                SongPrice = m.SongPrice,
                 Genre = m.Genre ?? string.Empty,
                 TrackNumber = m.TrackNumber,
                 TrackLength = m.TrackLength,

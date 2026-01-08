@@ -144,36 +144,6 @@ else
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.AlbumPrice)" HeaderText="Album Price" Width="120">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (song.AlbumPrice.HasValue)
-                            {
-                                <span>$@song.AlbumPrice.Value.ToString("F2")</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">-</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.SongPrice)" HeaderText="Song Price" Width="120">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (song.SongPrice.HasValue)
-                            {
-                                <span>$@song.SongPrice.Value.ToString("F2")</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">-</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.Genre)" HeaderText="Genre" Width="100">
                     <Template>
                         @{
@@ -288,15 +258,7 @@ else
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-3">
-                            <label class="e-label">Album Price</label>
-                            <SfNumericTextBox @bind-Value="_editAlbumPrice" Format="C2" Enabled="@_editingSong.IsAlbum" CssClass="e-outline" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="e-label">Song Price</label>
-                            <SfNumericTextBox @bind-Value="_editSongPrice" Format="C2" Enabled="@(!_editingSong.IsAlbum)" CssClass="e-outline" />
-                        </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="e-label">Genre <span class="text-danger">*</span></label>
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
                                           DataSource="@(new List<string> { "Rock", "Country", "Pop" })" 
@@ -305,7 +267,7 @@ else
                                           CssClass="e-outline">
                             </SfDropDownList>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="e-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
                             <SfNumericTextBox @bind-Value="_editTrackNumber" Format="N0" 
                                             Enabled="@(!_editingSong.IsAlbum && !string.IsNullOrEmpty(_editingSong.AlbumName))"

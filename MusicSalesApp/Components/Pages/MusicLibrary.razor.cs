@@ -20,7 +20,6 @@ public class AlbumInfo
     public string CoverArtUrl { get; set; }
     public string CoverArtFileName { get; set; }
     public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
-    public decimal Price { get; set; } = PriceDefaults.DefaultAlbumPrice;
     public int MetadataId { get; set; } // ID of the album cover's SongMetadata record
     public bool DisplayOnHomePage { get; set; } // Whether this album should be displayed on the home page
 }
@@ -293,7 +292,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     if (albumTracks.Any())
                     {
                         // Get album price from database metadata
-                        decimal albumPrice = coverMeta.AlbumPrice ?? PriceDefaults.DefaultAlbumPrice;
 
                         var imagePath = coverMeta.ImageBlobPath ?? coverMeta.BlobPath;
                         var album = new AlbumInfo
@@ -346,7 +344,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 }
                 
                 // Read song price from database metadata (try Mp3BlobPath first, then BlobPath)
-                decimal songPrice = PriceDefaults.DefaultSongPrice;
                 SongMetadata songMeta = null;
                 if (!metadataLookup.TryGetValue(audioFile.Name, out songMeta))
                 {
@@ -355,9 +352,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 }
                 if (songMeta != null)
                 {
-                    if (songMeta.SongPrice.HasValue)
                     {
-                        songPrice = songMeta.SongPrice.Value;
                     }
                     // Store the metadata ID
                     _songMetadataIds[audioFile.Name] = songMeta.Id;

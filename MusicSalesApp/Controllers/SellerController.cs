@@ -413,8 +413,6 @@ public class SellerController : ControllerBase
             ImageBlobPath = s.ImageBlobPath,
             AlbumName = s.AlbumName,
             IsAlbumCover = s.IsAlbumCover,
-            SongPrice = s.SongPrice,
-            AlbumPrice = s.AlbumPrice,
             Genre = s.Genre,
             TrackNumber = s.TrackNumber,
             TrackLength = s.TrackLength,
@@ -502,8 +500,6 @@ public class SellerSongItem
     public string? ImageBlobPath { get; set; }
     public string? AlbumName { get; set; }
     public bool IsAlbumCover { get; set; }
-    public decimal? SongPrice { get; set; }
-    public decimal? AlbumPrice { get; set; }
     public string? Genre { get; set; }
     public int? TrackNumber { get; set; }
     public double? TrackLength { get; set; }

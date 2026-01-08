@@ -60,12 +60,12 @@
         </SfButton>
     </div>
 
-    @if (!_hasActiveSubscription && !_hasOwnedSongs && !_loading)
+    @if (!_hasActiveSubscription && !_loading)
     {
         <div class="subscription-warning">
             <div class="e-alert e-alert-warning">
-                <strong>Limited Access:</strong> To create playlists, you need to either have an active subscription or own at least one song. 
-                <a href="/manage-account">Subscribe now</a> for unlimited access or <a href="/music-library">browse the library</a> to purchase songs.
+                <strong>Limited Access:</strong> To create playlists, you need an active subscription. 
+                <a href="/manage-account">Subscribe now</a> for unlimited access!
             </div>
         </div>
     }
@@ -144,7 +144,7 @@
                 <div class="playlists-page-songs-list">
                     @foreach (var userPlaylist in _playlistSongs)
                     {
-                        var songMetadata = userPlaylist.OwnedSong?.SongMetadata;
+                        var songMetadata = userPlaylist.SongMetadata;
                         if (songMetadata != null)
                         {
                             <div class="playlists-page-song-item">
@@ -209,19 +209,15 @@
             else
             {
                 <div class="playlists-page-add-song-list">
-                    @foreach (var ownedSong in _availableSongs)
+                    @foreach (var songMetadata in _availableSongs)
                     {
-                        var songMetadata = ownedSong.SongMetadata;
-                        if (songMetadata != null)
-                        {
-                            <div class="playlists-page-add-song-item">
-                                <span>@GetSongTitle(songMetadata)</span>
-                                <SfButton OnClick="@(() => AddSongToPlaylist(ownedSong.Id))"
-                                          CssClass="e-small e-success">
-                                    Add
-                                </SfButton>
-                            </div>
-                        }
+                        <div class="playlists-page-add-song-item">
+                            <span>@GetSongTitle(songMetadata)</span>
+                            <SfButton OnClick="@(() => AddSongToPlaylist(songMetadata.Id))"
+                                      CssClass="e-small e-success">
+                                Add
+                            </SfButton>
+                        </div>
                     }
                 </div>
             }

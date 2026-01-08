@@ -197,16 +197,9 @@ public partial class ManageAccountModel : BlazorBase
 
     protected async Task CheckPurchasedMusic()
     {
-        try
-        {
-            using var context = await DbContextFactory.CreateDbContextAsync();
-            _hasPurchasedMusic = await context.OwnedSongs
-                .AnyAsync(os => os.UserId == _currentUser.Id && !string.IsNullOrEmpty(os.PayPalOrderId));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error checking purchased music");
-        }
+        // No longer checking for purchased music since individual purchases are removed
+        // Users now access music through subscriptions only
+        _hasPurchasedMusic = false;
     }
 
     protected async Task ChangePassword()

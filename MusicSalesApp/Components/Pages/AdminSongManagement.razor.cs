@@ -32,8 +32,6 @@ public class AdminSongManagementModel : ComponentBase
     // Edit modal fields
     protected bool _showEditModal = false;
     protected SongAdminViewModel _editingSong = null;
-    protected decimal? _editAlbumPrice = null;
-    protected decimal? _editSongPrice = null;
     protected string _editGenre = string.Empty;
     protected int? _editTrackNumber = null;
     protected bool _editDisplayOnHomePage = false;
@@ -77,8 +75,6 @@ public class AdminSongManagementModel : ComponentBase
             JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
             AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
             IsAlbum = m.IsAlbumCover,
-            AlbumPrice = m.AlbumPrice,
-            SongPrice = m.SongPrice,
             Genre = m.Genre ?? string.Empty,
             TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
@@ -110,8 +106,6 @@ public class AdminSongManagementModel : ComponentBase
     protected void EditSong(SongAdminViewModel song)
     {
         _editingSong = song;
-        _editAlbumPrice = song.AlbumPrice;
-        _editSongPrice = song.SongPrice;
         _editGenre = song.Genre;
         _editTrackNumber = song.TrackNumber;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
@@ -152,11 +146,6 @@ public class AdminSongManagementModel : ComponentBase
                 {
                     _validationErrors.Add("All albums must have an album cover image.");
                 }
-
-                if (!_editAlbumPrice.HasValue)
-                {
-                    _validationErrors.Add("All albums must have a price.");
-                }
             }
 
             // Validate MP3 files that are part of an album
@@ -195,12 +184,6 @@ public class AdminSongManagementModel : ComponentBase
                     }
                 }
 
-                // All MP3s need a price (song price for album tracks)
-                if (!_editSongPrice.HasValue)
-                {
-                    _validationErrors.Add("All tracks must have a price.");
-                }
-
                 // All MP3s need a genre
                 if (string.IsNullOrWhiteSpace(_editGenre))
                 {
@@ -214,11 +197,6 @@ public class AdminSongManagementModel : ComponentBase
                 if (string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
                 {
                     _validationErrors.Add("All standalone songs must have a cover image.");
-                }
-
-                if (!_editSongPrice.HasValue)
-                {
-                    _validationErrors.Add("All standalone songs must have a price.");
                 }
 
                 if (string.IsNullOrWhiteSpace(_editGenre))
@@ -285,7 +263,6 @@ public class AdminSongManagementModel : ComponentBase
                     existingMetadata.AlbumName = _editingSong.AlbumName ?? string.Empty;
                     existingMetadata.IsAlbumCover = false;
                     existingMetadata.Genre = _editGenre;
-                    existingMetadata.SongPrice = _editSongPrice;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
@@ -300,7 +277,6 @@ public class AdminSongManagementModel : ComponentBase
                         AlbumName = _editingSong.AlbumName ?? string.Empty,
                         IsAlbumCover = false,
                         Genre = _editGenre,
-                        SongPrice = _editSongPrice,
                         DisplayOnHomePage = _editDisplayOnHomePage
                     });
                 }
@@ -350,7 +326,6 @@ public class AdminSongManagementModel : ComponentBase
                     existingMetadata.FileExtension = fileExtension;
                     existingMetadata.AlbumName = _editingSong.AlbumName;
                     existingMetadata.IsAlbumCover = true;
-                    existingMetadata.AlbumPrice = _editAlbumPrice;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
@@ -364,7 +339,6 @@ public class AdminSongManagementModel : ComponentBase
                         FileExtension = fileExtension,
                         AlbumName = _editingSong.AlbumName,
                         IsAlbumCover = true,
-                        AlbumPrice = _editAlbumPrice,
                         DisplayOnHomePage = _editDisplayOnHomePage
                     });
                 }
@@ -400,27 +374,13 @@ public class AdminSongManagementModel : ComponentBase
                 // Update DisplayOnHomePage for all file types
                 metadata.DisplayOnHomePage = _editDisplayOnHomePage;
 
-                // Update album cover metadata
-                if (isAlbumCover)
-                {
-                    if (_editAlbumPrice.HasValue)
-                    {
-                        metadata.AlbumPrice = _editAlbumPrice.Value;
-                    }
-                }
                 // Update MP3 metadata (both album tracks and standalone songs)
-                else if (isMP3)
+                if (isMP3)
                 {
                     // Set genre for all MP3s
                     if (!string.IsNullOrEmpty(_editGenre))
                     {
                         metadata.Genre = _editGenre;
-                    }
-
-                    // Set song price for all MP3s
-                    if (_editSongPrice.HasValue)
-                    {
-                        metadata.SongPrice = _editSongPrice.Value;
                     }
 
                     // Set track number only for MP3s that are part of an album
@@ -435,8 +395,6 @@ public class AdminSongManagementModel : ComponentBase
             }
 
             // Update local model
-            _editingSong.AlbumPrice = _editAlbumPrice;
-            _editingSong.SongPrice = _editSongPrice;
             _editingSong.Genre = _editGenre;
             _editingSong.TrackNumber = _editTrackNumber;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;

@@ -287,7 +287,6 @@ public partial class SellerSongManagementModel : BlazorBase
 
                     if (_editingSong.IsAlbum)
                     {
-                        metadata.AlbumPrice = _editAlbumPrice;
                         
                         // Update album name if changed
                         var oldAlbumName = metadata.AlbumName;
@@ -308,7 +307,6 @@ public partial class SellerSongManagementModel : BlazorBase
                     }
                     else
                     {
-                        metadata.SongPrice = _editSongPrice;
                         metadata.Genre = _editGenre;
                     }
 

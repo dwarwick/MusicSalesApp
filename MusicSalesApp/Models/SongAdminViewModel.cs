@@ -13,8 +13,6 @@ public class SongAdminViewModel
     public string SongTitle { get; set; } = string.Empty;
     public string Mp3FileName { get; set; } = string.Empty;
     public string JpegFileName { get; set; } = string.Empty;
-    public decimal? AlbumPrice { get; set; }
-    public decimal? SongPrice { get; set; }
     public string Genre { get; set; } = string.Empty;
     public int? TrackNumber { get; set; }
     public double? TrackLength { get; set; }
