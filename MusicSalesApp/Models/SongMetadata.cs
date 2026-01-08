@@ -47,18 +47,6 @@ public class SongMetadata
     public bool IsAlbumCover { get; set; }
 
     /// <summary>
-    /// The price of an album (for album cover images)
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal? AlbumPrice { get; set; }
-
-    /// <summary>
-    /// The price of a song (for MP3 files)
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal? SongPrice { get; set; }
-
-    /// <summary>
     /// The genre of the song (e.g., Rock, Country, Pop)
     /// </summary>
     [MaxLength(50)]

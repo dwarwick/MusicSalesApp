@@ -181,13 +181,13 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_DisplaysSongPriceFromMetadata()
+    public void MusicLibrary_DisplaysSongFromMetadata()
     {
-        // Arrange - authorize user so cart button with price is visible
+        // Arrange - set up a song in metadata
         var authContext = TestContext.AddAuthorization();
         authContext.SetAuthorized("testuser");
         
-        // Set up metadata with the expected song price
+        // Set up metadata with a song
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
             {
@@ -198,18 +198,18 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should display price from metadata
-        Assert.That(cut.Markup, Does.Contain("$2.49"));
+        // Assert - should display song name (price no longer displayed since individual purchases removed)
+        Assert.That(cut.Markup, Does.Contain("TestSong"));
     }
 
     [Test]
-    public void MusicLibrary_DisplaysAlbumPriceFromMetadata()
+    public void MusicLibrary_DisplaysAlbumFromMetadata()
     {
-        // Arrange - authorize user so cart button with price is visible
+        // Arrange - authorize user
         var authContext = TestContext.AddAuthorization();
         authContext.SetAuthorized("testuser");
         
-        // Set up metadata with the expected album price
+        // Set up metadata with the expected album
         // The component looks for IsAlbumCover=true entries and then finds matching tracks by AlbumName
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
@@ -236,8 +236,8 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should display album price from metadata
-        Assert.That(cut.Markup, Does.Contain("$12.99"));
+        // Assert - should display album name (price no longer displayed since individual purchases removed)
+        Assert.That(cut.Markup, Does.Contain("TestAlbum"));
     }
 
     [Test]

@@ -13,8 +13,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     {
     }
 
-    public DbSet<CartItem> CartItems { get; set; }
-    public DbSet<OwnedSong> OwnedSongs { get; set; }
     public DbSet<PayPalOrder> PayPalOrders { get; set; }
     public DbSet<SongMetadata> SongMetadata { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
@@ -181,13 +179,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasForeignKey(up => up.PlaylistId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Use NoAction for OwnedSong to avoid multiple cascade paths
-        // (User->OwnedSongs->UserPlaylists and User->Playlists->UserPlaylists)
+        // When SongMetadata is deleted, remove it from all playlists
         builder.Entity<UserPlaylist>()
-            .HasOne(up => up.OwnedSong)
+            .HasOne(up => up.SongMetadata)
             .WithMany()
-            .HasForeignKey(up => up.OwnedSongId)
-            .OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(up => up.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Configure Passkey entity
         builder.Entity<Passkey>()

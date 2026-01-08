@@ -21,10 +21,10 @@ public class UserPlaylist
     public Playlist Playlist { get; set; }
 
     [Required]
-    public int OwnedSongId { get; set; }
+    public int SongMetadataId { get; set; }
 
-    [ForeignKey("OwnedSongId")]
-    public OwnedSong OwnedSong { get; set; }
+    [ForeignKey("SongMetadataId")]
+    public SongMetadata SongMetadata { get; set; }
 
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 }

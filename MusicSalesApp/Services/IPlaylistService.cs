@@ -38,9 +38,9 @@ public interface IPlaylistService
     Task<List<UserPlaylist>> GetPlaylistSongsAsync(int playlistId);
 
     /// <summary>
-    /// Add a song to a playlist (only if user owns the song and it's not an album cover)
+    /// Add a song to a playlist by SongMetadataId
     /// </summary>
-    Task<bool> AddSongToPlaylistAsync(int userId, int playlistId, int ownedSongId);
+    Task<bool> AddSongToPlaylistAsync(int userId, int playlistId, int songMetadataId);
 
     /// <summary>
     /// Remove a song from a playlist
@@ -48,15 +48,15 @@ public interface IPlaylistService
     Task<bool> RemoveSongFromPlaylistAsync(int playlistId, int userPlaylistId, int userId);
 
     /// <summary>
-    /// Check if user owns a specific song and if it's valid for playlists (IsAlbumCover = false)
+    /// Check if song metadata is valid for playlists (IsAlbumCover = false)
     /// </summary>
-    Task<bool> CanAddSongToPlaylistAsync(int userId, int ownedSongId);
+    Task<bool> CanAddSongToPlaylistAsync(int songMetadataId);
 
     /// <summary>
-    /// Get all songs owned by a user that are available to add to a playlist
+    /// Get all songs available to add to a playlist (for users with active subscription)
     /// Filters out songs already in the playlist and album covers
     /// </summary>
-    Task<List<OwnedSong>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId);
+    Task<List<SongMetadata>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId);
 
     /// <summary>
     /// Get or create the "Liked Songs" system playlist for a user

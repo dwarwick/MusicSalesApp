@@ -42,9 +42,6 @@ public abstract class BlazorBase : ComponentBase
     protected IWebHostEnvironment Environment { get; set; } = default!;
 
     [Inject]
-    protected ICartService CartService { get; set; } = default!;
-
-    [Inject]
     protected ISongMetadataService SongMetadataService { get; set; } = default!;
 
     [Inject]
