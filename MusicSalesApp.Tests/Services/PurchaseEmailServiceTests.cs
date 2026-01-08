@@ -57,7 +57,7 @@ public class PurchaseEmailServiceTests
                 {
                     Mp3BlobPath = "songs/song1.mp3",
                     ImageBlobPath = "songs/song1.jpg",
-                    SongPrice = 0.99m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -68,7 +68,7 @@ public class PurchaseEmailServiceTests
                 {
                     Mp3BlobPath = "songs/song2.mp3",
                     ImageBlobPath = "songs/song2.jpg",
-                    SongPrice = 0.99m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -79,7 +79,7 @@ public class PurchaseEmailServiceTests
                 {
                     Mp3BlobPath = "songs/song3.mp3",
                     ImageBlobPath = "songs/song3.jpg",
-                    SongPrice = 0.99m
+                    
                 }
             }
         };
@@ -131,7 +131,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track1.jpg",
                     AlbumName = "My Album",
                     TrackNumber = 1,
-                    SongPrice = 3.33m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -144,7 +144,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track2.jpg",
                     AlbumName = "My Album",
                     TrackNumber = 2,
-                    SongPrice = 3.33m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -157,7 +157,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track3.jpg",
                     AlbumName = "My Album",
                     TrackNumber = 3,
-                    SongPrice = 3.33m
+                    
                 }
             }
         };
@@ -206,7 +206,7 @@ public class PurchaseEmailServiceTests
                 {
                     Mp3BlobPath = "songs/standalone.mp3",
                     ImageBlobPath = "songs/standalone.jpg",
-                    SongPrice = 0.99m
+                    
                 }
             },
             // Album tracks
@@ -220,7 +220,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track1.jpg",
                     AlbumName = "Test Album",
                     TrackNumber = 1,
-                    SongPrice = 3.99m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -233,7 +233,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track2.jpg",
                     AlbumName = "Test Album",
                     TrackNumber = 2,
-                    SongPrice = 3.99m
+                    
                 }
             },
             new CartItemWithMetadata
@@ -246,7 +246,7 @@ public class PurchaseEmailServiceTests
                     ImageBlobPath = "album/track3.jpg",
                     AlbumName = "Test Album",
                     TrackNumber = 3,
-                    SongPrice = 4.00m
+                    
                 }
             }
         };

@@ -34,7 +34,6 @@ public abstract class BUnitTestBase
     protected Mock<IMusicUploadService> MockMusicUploadService { get; private set; } = default!;
     protected Mock<IMusicService> MockMusicService { get; private set; } = default!;
     protected Mock<IAzureStorageService> MockAzureStorageService { get; private set; } = default!;
-    protected Mock<ICartService> MockCartService { get; private set; } = default!;
     protected Mock<IWebHostEnvironment> MockWebHostEnvironment { get; private set; } = default!;
     protected Mock<ISongMetadataService> MockSongMetadataService { get; private set; } = default!;
     protected Mock<IThemeService> MockThemeService { get; private set; } = default!;
@@ -65,7 +64,6 @@ public abstract class BUnitTestBase
         MockMusicUploadService = new Mock<IMusicUploadService>();
         MockMusicService = new Mock<IMusicService>();
         MockAzureStorageService = new Mock<IAzureStorageService>();
-        MockCartService = new Mock<ICartService>();
         MockWebHostEnvironment = new Mock<IWebHostEnvironment>();
         MockSongMetadataService = new Mock<ISongMetadataService>();
         MockThemeService = new Mock<IThemeService>();
@@ -127,14 +125,6 @@ public abstract class BUnitTestBase
             .ReturnsAsync((true, string.Empty));
         MockAuthService.Setup(x => x.ResetPasswordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, string.Empty));
-
-        // Setup default returns for ICartService methods
-        MockCartService.Setup(x => x.GetCartItemsAsync(It.IsAny<int>()))
-            .ReturnsAsync(new List<MusicSalesApp.Models.CartItem>());
-        MockCartService.Setup(x => x.GetCartItemCountAsync(It.IsAny<int>()))
-            .ReturnsAsync(0);
-        MockCartService.Setup(x => x.GetOwnedSongsAsync(It.IsAny<int>()))
-            .ReturnsAsync(new List<string>());
 
         // Setup default returns for ISongMetadataService methods
         MockSongMetadataService.Setup(x => x.GetAllAsync())
@@ -261,7 +251,6 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IMusicUploadService>(MockMusicUploadService.Object);
         TestContext.Services.AddSingleton<IMusicService>(MockMusicService.Object);
         TestContext.Services.AddSingleton<IAzureStorageService>(MockAzureStorageService.Object);
-        TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
         TestContext.Services.AddSingleton<IWebHostEnvironment>(MockWebHostEnvironment.Object);
         TestContext.Services.AddSingleton<ISongMetadataService>(MockSongMetadataService.Object);
         TestContext.Services.AddSingleton<IThemeService>(MockThemeService.Object);

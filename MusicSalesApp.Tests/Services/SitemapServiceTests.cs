@@ -119,7 +119,7 @@ public class SitemapServiceTests
                 ImageBlobPath = "albums/Best Of 2024/cover.jpg",
                 AlbumName = "Best Of 2024",
                 IsAlbumCover = true,
-                AlbumPrice = 9.99m,
+                
                 UpdatedAt = new DateTime(2024, 2, 1)
             },
             new SongMetadata
@@ -128,7 +128,7 @@ public class SitemapServiceTests
                 ImageBlobPath = "albums/Rock Classics/cover.jpg",
                 AlbumName = "Rock Classics",
                 IsAlbumCover = true,
-                AlbumPrice = 12.99m,
+                
                 UpdatedAt = new DateTime(2024, 2, 2)
             }
         };
@@ -169,7 +169,7 @@ public class SitemapServiceTests
                 ImageBlobPath = "albums/My Album/cover.jpg",
                 AlbumName = "My Album",
                 IsAlbumCover = true,
-                AlbumPrice = 9.99m,
+                
                 UpdatedAt = DateTime.UtcNow
             },
             // Album track (should not be included as standalone)

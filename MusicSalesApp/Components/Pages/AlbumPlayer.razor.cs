@@ -717,33 +717,6 @@ namespace MusicSalesApp.Components.Pages
             return _duration;
         }
 
-        private class CartResponseDto
-        {
-            public IEnumerable<CartItemDto> Items { get; set; }
-            public IEnumerable<CartAlbumDto> Albums { get; set; }
-            public decimal Total { get; set; }
-        }
-
-        private class CartItemDto
-        {
-            public string SongFileName { get; set; }
-            public string SongTitle { get; set; }
-            public decimal Price { get; set; }
-        }
-
-        private class CartAlbumDto
-        {
-            public string AlbumName { get; set; }
-            public decimal Price { get; set; }
-            public IEnumerable<string> TrackFileNames { get; set; }
-        }
-
-        private class CartToggleResponseDto
-        {
-            public bool InCart { get; set; }
-            public int Count { get; set; }
-        }
-
         private class StreamUrlResponseDto
         {
             public string Url { get; set; }

@@ -83,7 +83,7 @@ public class MusicLibraryTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -110,7 +110,7 @@ public class MusicLibraryTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -137,7 +137,7 @@ public class MusicLibraryTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -162,7 +162,7 @@ public class MusicLibraryTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -191,7 +191,7 @@ public class MusicLibraryTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
             {
-                new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3", SongPrice = 2.49m }
+                new MusicSalesApp.Models.SongMetadata { Mp3BlobPath = "TestSong.mp3",  }
             });
 
         // Act
@@ -221,7 +221,7 @@ public class MusicLibraryTests : BUnitTestBase
                     ImageBlobPath = "AlbumCover.jpg",
                     IsAlbumCover = true, 
                     AlbumName = "TestAlbum",
-                    AlbumPrice = 12.99m 
+                     
                 },
                 // Track entry that belongs to the album
                 new MusicSalesApp.Models.SongMetadata 
@@ -284,7 +284,7 @@ public class MusicLibraryTests : BUnitTestBase
             { 
                 Id = 1,
                 Mp3BlobPath = "FeaturedSong.mp3",
-                SongPrice = 0.99m,
+                
                 DisplayOnHomePage = true,
                 UpdatedAt = DateTime.Now
             },
@@ -292,7 +292,7 @@ public class MusicLibraryTests : BUnitTestBase
             { 
                 Id = 2,
                 Mp3BlobPath = "RegularSong.mp3",
-                SongPrice = 0.99m,
+                
                 DisplayOnHomePage = false,
                 UpdatedAt = DateTime.Now
             }
@@ -329,7 +329,7 @@ public class MusicLibraryTests : BUnitTestBase
                     ImageBlobPath = "FeaturedAlbumCover.jpg",
                     IsAlbumCover = true, 
                     AlbumName = "FeaturedAlbum",
-                    AlbumPrice = 9.99m,
+                    
                     DisplayOnHomePage = true
                 },
                 new MusicSalesApp.Models.SongMetadata 
@@ -347,7 +347,7 @@ public class MusicLibraryTests : BUnitTestBase
                     ImageBlobPath = "RegularAlbumCover.jpg",
                     IsAlbumCover = true, 
                     AlbumName = "RegularAlbum",
-                    AlbumPrice = 12.99m,
+                    
                     DisplayOnHomePage = false
                 },
                 new MusicSalesApp.Models.SongMetadata 

@@ -14,7 +14,7 @@ namespace MusicSalesApp.Tests.Controllers;
 public class MusicControllerTests
 {
     private Mock<IAzureStorageService> _mockStorageService;
-    private Mock<ICartService> _mockCartService;
+    private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IStreamCountService> _mockStreamCountService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private MusicController _controller;
@@ -23,7 +23,7 @@ public class MusicControllerTests
     public void Setup()
     {
         _mockStorageService = new Mock<IAzureStorageService>();
-        _mockCartService = new Mock<ICartService>();
+        _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockStreamCountService = new Mock<IStreamCountService>();
         
         // Mock UserManager with required dependencies
@@ -33,7 +33,7 @@ public class MusicControllerTests
         
         _controller = new MusicController(
             _mockStorageService.Object,
-            _mockCartService.Object,
+            _mockSubscriptionService.Object,
             _mockStreamCountService.Object,
             _mockUserManager.Object);
 
@@ -85,7 +85,7 @@ public class MusicControllerTests
     {
         // Arrange
         var fileName = "nonexistent.mp3";
-        _mockStorageService.Setup(s => s.GetFileInfoAsync(fileName)).ReturnsAsync((StorageFileInfo)null);
+        _mockStorageService.Setup(s => s.OpenReadAsync(fileName)).ReturnsAsync((Stream)null);
 
         // Act
         var result = await _controller.Stream(fileName);
@@ -132,7 +132,7 @@ public class MusicControllerTests
     }
 
     [Test]
-    public async Task GetStreamUrl_ForOwner_UsesLongerLifetime()
+    public async Task GetStreamUrl_ForSubscriber_UsesLongerLifetime()
     {
         // Arrange
         var fileName = "test.mp3";
@@ -142,7 +142,7 @@ public class MusicControllerTests
         
         _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
             .ReturnsAsync(user);
-        _mockCartService.Setup(s => s.UserOwnsSongAsync(userId, fileName))
+        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(userId))
             .ReturnsAsync(true);
         _mockStorageService.Setup(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(24)))
             .Returns(sasUri);
@@ -156,7 +156,7 @@ public class MusicControllerTests
     }
 
     [Test]
-    public async Task GetStreamUrl_ForNonOwner_UsesShorterLifetime()
+    public async Task GetStreamUrl_ForNonSubscriber_UsesShorterLifetime()
     {
         // Arrange
         var fileName = "test.mp3";
@@ -166,7 +166,7 @@ public class MusicControllerTests
         
         _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
             .ReturnsAsync(user);
-        _mockCartService.Setup(s => s.UserOwnsSongAsync(userId, fileName))
+        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(userId))
             .ReturnsAsync(false);
         _mockStorageService.Setup(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(2)))
             .Returns(sasUri);
@@ -177,5 +177,75 @@ public class MusicControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockStorageService.Verify(s => s.GetReadSasUri(fileName, TimeSpan.FromHours(2)), Times.Once);
+    }
+
+    [Test]
+    public async Task RecordStream_WithValidId_ReturnsOkWithStreamCount()
+    {
+        // Arrange
+        var songMetadataId = 1;
+        var newCount = 42;
+        
+        _mockStreamCountService.Setup(s => s.IncrementStreamCountAsync(songMetadataId))
+            .ReturnsAsync(newCount);
+
+        // Act
+        var result = await _controller.RecordStream(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var value = okResult.Value;
+        var streamCountProperty = value.GetType().GetProperty("streamCount");
+        var streamCount = (int)streamCountProperty.GetValue(value);
+        Assert.That(streamCount, Is.EqualTo(newCount));
+    }
+
+    [Test]
+    public async Task RecordStream_WithInvalidId_ReturnsBadRequest()
+    {
+        // Arrange
+        var songMetadataId = 0;
+
+        // Act
+        var result = await _controller.RecordStream(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetStreamCount_WithValidId_ReturnsOkWithCount()
+    {
+        // Arrange
+        var songMetadataId = 1;
+        var count = 100;
+        
+        _mockStreamCountService.Setup(s => s.GetStreamCountAsync(songMetadataId))
+            .ReturnsAsync(count);
+
+        // Act
+        var result = await _controller.GetStreamCount(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var value = okResult.Value;
+        var streamCountProperty = value.GetType().GetProperty("streamCount");
+        var streamCount = (int)streamCountProperty.GetValue(value);
+        Assert.That(streamCount, Is.EqualTo(count));
+    }
+
+    [Test]
+    public async Task GetStreamCount_WithInvalidId_ReturnsBadRequest()
+    {
+        // Arrange
+        var songMetadataId = -1;
+
+        // Act
+        var result = await _controller.GetStreamCount(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
 }

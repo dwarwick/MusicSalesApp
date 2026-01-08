@@ -150,21 +150,7 @@
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn HeaderText="Price" Width="100">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (price.HasValue)
-                            {
-                                <span>$@price.Value.ToString("F2")</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">-</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
+
                 <GridColumn Field="@nameof(SongAdminViewModel.TrackNumber)" HeaderText="Track #" Width="80"></GridColumn>
                 <GridColumn HeaderText="Duration" Width="100">
                     <Template>
@@ -200,7 +186,7 @@
                     <p>Are you sure you want to delete "<strong>@_songToDelete.SongTitle</strong>"?</p>
                     <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
                     <p class="text-muted small">
-                        The song will be removed from the platform and any users who purchased it will no longer have access to it.
+                        The song will be removed from the platform.
                     </p>
                 </div>
             }
@@ -255,21 +241,11 @@
                     @if (!_editingSong.IsAlbum)
                     {
                         <div class="mb-3">
-                            <label class="form-label">Song Price <span class="text-danger">*</span></label>
-                        </div>
-
-                        <div class="mb-3">
                             <label class="form-label">Genre <span class="text-danger">*</span></label>
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
                                           DataSource="@(new List<string> { "Rock", "Country", "Pop", "Jazz", "Classical", "Electronic", "Hip-Hop", "R&B" })"
                                           CssClass="e-outline">
                             </SfDropDownList>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="mb-3">
-                            <label class="form-label">Album Price <span class="text-danger">*</span></label>
                         </div>
                     }
                 </div>
