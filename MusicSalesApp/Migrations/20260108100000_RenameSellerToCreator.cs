@@ -43,6 +43,18 @@ namespace MusicSalesApp.Migrations
                 table: "Creators",
                 newName: "IX_Creators_PayPalTrackingId");
 
+            // Rename SellerId column in StreamPayouts to CreatorId
+            migrationBuilder.RenameColumn(
+                name: "SellerId",
+                table: "StreamPayouts",
+                newName: "CreatorId");
+
+            // Update indexes for the renamed column in StreamPayouts
+            migrationBuilder.RenameIndex(
+                name: "IX_StreamPayouts_SellerId",
+                table: "StreamPayouts",
+                newName: "IX_StreamPayouts_CreatorId");
+
             // Update the Seller role name to Creator in AspNetRoles table
             migrationBuilder.UpdateData(
                 table: "AspNetRoles",
@@ -94,6 +106,18 @@ namespace MusicSalesApp.Migrations
                 name: "IX_Creators_PayPalTrackingId",
                 table: "Sellers",
                 newName: "IX_Sellers_PayPalTrackingId");
+
+            // Rename CreatorId column back to SellerId in StreamPayouts
+            migrationBuilder.RenameColumn(
+                name: "CreatorId",
+                table: "StreamPayouts",
+                newName: "SellerId");
+
+            // Revert indexes for the column in StreamPayouts
+            migrationBuilder.RenameIndex(
+                name: "IX_StreamPayouts_CreatorId",
+                table: "StreamPayouts",
+                newName: "IX_StreamPayouts_SellerId");
 
             // Update the Creator role name back to Seller
             migrationBuilder.UpdateData(
