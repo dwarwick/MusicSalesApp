@@ -44,10 +44,6 @@ namespace MusicSalesApp.Components.Pages
         protected double _previousVolume = 1.0;
         protected bool _isMuted;
         protected bool _isAuthenticated;
-        protected bool _ownsAlbum;
-        protected HashSet<string> _ownedSongs = new HashSet<string>();
-        protected bool _inCart;
-        protected bool _cartAnimating;
         protected int _currentTrackIndex;
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
         protected Dictionary<int, int> _trackStreamCounts = new Dictionary<int, int>();
@@ -324,10 +320,10 @@ namespace MusicSalesApp.Components.Pages
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
 
-                // Check ownership and cart status if authenticated
+                // Check subscription status if authenticated
                 if (_isAuthenticated)
                 {
-                    await LoadAlbumStatus();
+                    await LoadSubscriptionStatus();
                 }
             }
             catch (Exception ex)
@@ -341,33 +337,17 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
-        private async Task LoadAlbumStatus()
+        private async Task LoadSubscriptionStatus()
         {
-            if (_albumInfo == null) return;
-
             try
             {
                 // Check subscription status
                 var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
                 _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
-                // Check if user owns tracks in the album
-                var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
-                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
-                _ownsAlbum = _albumInfo.Tracks.All(t => _ownedSongs.Contains(t.Name));
-
-                // Check if album is in cart (albums are stored as individual tracks)
-                var cartResponse = await Http.GetFromJsonAsync<CartResponseDto>("api/cart");
-                if (cartResponse?.Items != null)
-                {
-                    var cartSongs = new HashSet<string>(cartResponse.Items.Select(i => i.SongFileName));
-                    // An album is in cart if all of its tracks are in cart
-                    _inCart = _albumInfo.Tracks.All(t => cartSongs.Contains(t.Name));
-                }
             }
             catch (HttpRequestException ex)
             {
-                Logger.LogDebug(ex, "Unable to load album status; user may not be authenticated");
+                Logger.LogDebug(ex, "Unable to load subscription status; user may not be authenticated");
             }
         }
 
@@ -519,16 +499,9 @@ namespace MusicSalesApp.Components.Pages
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
 
-                // Check subscription status and actual ownership
+                // Check subscription status
                 var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
                 _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
-                // Get the list of songs the user actually owns (purchased)
-                var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
-                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
-                
-                // Check if user owns all tracks in the playlist
-                _ownsAlbum = tracks.All(t => _ownedSongs.Contains(t.Name));
             }
             catch (Exception ex)
             {
@@ -675,11 +648,6 @@ namespace MusicSalesApp.Components.Pages
                 // Check subscription status to determine if user can play full tracks
                 var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
                 _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
-                // Check if user owns any of the recommended songs
-                var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
-                _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
-                _ownsAlbum = false; // Recommended playlists are not "owned" as a unit
             }
             catch (Exception ex)
             {
@@ -692,76 +660,9 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
-        protected async Task ToggleCart()
-        {
-            if (_albumInfo == null) return;
-
-            try
-            {
-                var trackFileNames = _albumInfo.Tracks.Select(t => t.Name).ToList();
-                
-                // Build dictionary of track filenames to metadata IDs
-                var trackMetadataIds = new Dictionary<string, int>();
-                foreach (var track in _albumInfo.Tracks)
-                {
-                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
-                    {
-                        trackMetadataIds[track.Name] = metadata.Id;
-                    }
-                }
-
-                var response = await Http.PostAsJsonAsync("api/cart/toggle-album", new
-                {
-                    AlbumName = _albumInfo.AlbumName,
-                    TrackFileNames = trackFileNames,
-                    Price = _albumInfo.Price,
-                    TrackMetadataIds = trackMetadataIds
-                });
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadFromJsonAsync<CartToggleResponseDto>();
-                    if (result != null)
-                    {
-                        _inCart = result.InCart;
-
-                        if (_inCart)
-                        {
-                            // Trigger animation
-                            _cartAnimating = true;
-                            await InvokeAsync(StateHasChanged);
-
-                            _ = Task.Run(async () =>
-                            {
-                                await Task.Delay(800);
-                                _cartAnimating = false;
-                                await InvokeAsync(StateHasChanged);
-                            });
-                        }
-
-                        CartService.NotifyCartUpdated();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error toggling album cart for {AlbumName}", _albumInfo?.AlbumName);
-            }
-        }
-
-        /// <summary>
-        /// Checks if the user owns the specified track.
-        /// </summary>
-        protected bool OwnsTrack(int trackIndex)
-        {
-            if (!_isAuthenticated || _albumInfo == null || trackIndex < 0 || trackIndex >= _albumInfo.Tracks.Count)
-                return false;
-            return _ownedSongs.Contains(_albumInfo.Tracks[trackIndex].Name);
-        }
-
         /// <summary>
         /// Checks if a specific track should be restricted (60 second preview).
-        /// Restricted for non-authenticated users OR authenticated users who don't own the track and don't have an active subscription.
+        /// Restricted for non-authenticated users OR authenticated users without an active subscription.
         /// </summary>
         protected bool IsTrackRestricted(int trackIndex)
         {
@@ -769,12 +670,13 @@ namespace MusicSalesApp.Components.Pages
             if (_hasActiveSubscription)
                 return false;
 
-            return !_isAuthenticated || !OwnsTrack(trackIndex);
+            // Non-authenticated users or users without subscription are restricted
+            return true;
         }
 
         /// <summary>
         /// Checks if the current track should be restricted (60 second preview).
-        /// Restricted for non-authenticated users OR authenticated users who don't own the current track and don't have an active subscription.
+        /// Restricted for non-authenticated users OR authenticated users without an active subscription.
         /// </summary>
         protected bool IsCurrentTrackRestricted()
         {
@@ -787,7 +689,7 @@ namespace MusicSalesApp.Components.Pages
             if (_hasActiveSubscription)
                 return false;
 
-            // Restrict preview for non-authenticated users OR authenticated users who don't own the current track
+            // Restrict preview for non-authenticated users OR authenticated users without subscription
             return IsCurrentTrackRestricted();
         }
 

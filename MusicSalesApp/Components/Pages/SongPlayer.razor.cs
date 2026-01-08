@@ -33,10 +33,6 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected double _previousVolume = 1.0;
     protected bool _isMuted;
     protected bool _isAuthenticated;
-    protected bool _ownsSong;
-    protected bool _inCart;
-    protected bool _cartAnimating;
-    protected decimal _songPrice = PriceDefaults.DefaultSongPrice;
     protected int _streamCount;
     private Models.SongMetadata _songMetadata;
     private IJSObjectReference _jsModule;
@@ -163,14 +159,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 LastModified = _songMetadata.UpdatedAt,
                 Tags = new Dictionary<string, string>() // No longer using tags
             };
-            if (_songMetadata.SongPrice.HasValue)
-            {
-                _songPrice = _songMetadata.SongPrice.Value;
-            }
 
             // Get SAS URL for direct streaming from blob storage
-            // Non-owners and unauthenticated users get short-lived URLs (preview only)
-            // Owners get longer-lived URLs for full access
             await LoadStreamUrl();
 
             // Try to find album art from metadata (look for image with matching name in the same folder)
@@ -193,10 +183,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _albumArtUrl = null;
             }
 
-            // Check ownership and cart status if authenticated
+            // Check subscription status if authenticated
             if (_isAuthenticated)
             {
-                await LoadSongStatus();
+                await LoadSubscriptionStatus();
             }
         }
         catch (Exception ex)
@@ -210,26 +200,17 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task LoadSongStatus()
+    private async Task LoadSubscriptionStatus()
     {
-        if (_songInfo == null) return;
-        
         try
         {
             // Check subscription status
             var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
             _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
-            var response = await Http.GetFromJsonAsync<SongStatusResponse>($"api/cart/status/{SafeEncodePath(_songInfo.Name)}");
-            if (response != null)
-            {
-                _ownsSong = response.Owns;
-                _inCart = response.InCart;
-            }
         }
         catch (HttpRequestException ex)
         {
-            Logger.LogDebug(ex, "Unable to load song status; user may be unauthenticated");
+            Logger.LogDebug(ex, "Unable to load subscription status; user may be unauthenticated");
         }
     }
 
@@ -258,53 +239,14 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected async Task ToggleCart()
-    {
-        if (_songInfo == null) return;
-
-        try
-        {
-            int? songMetadataId = _songMetadata?.Id;
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = _songInfo.Name, Price = _songPrice, SongMetadataId = songMetadataId });
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<CartToggleResponseDto>();
-                if (result != null)
-                {
-                    _inCart = result.InCart;
-                    
-                    if (_inCart)
-                    {
-                        // Trigger animation
-                        _cartAnimating = true;
-                        await InvokeAsync(StateHasChanged);
-                        
-                        _ = Task.Run(async () =>
-                        {
-                            await Task.Delay(800);
-                            _cartAnimating = false;
-                            await InvokeAsync(StateHasChanged);
-                        });
-                    }
-
-                    CartService.NotifyCartUpdated();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error toggling cart item {SongFile}", _songInfo?.Name);
-        }
-    }
-
     protected bool IsProgressBarRestricted()
     {
         // If user has an active subscription, they can listen to everything
         if (_hasActiveSubscription)
             return false;
 
-        // Restrict for non-authenticated users OR authenticated users who don't own the song
-        return !_isAuthenticated || !_ownsSong;
+        // Non-authenticated users or users without subscription are restricted to preview
+        return true;
     }
 
     protected double GetProgressBarWidth()
@@ -333,18 +275,6 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
         }
         return _duration;
-    }
-
-    private class SongStatusResponse
-    {
-        public bool Owns { get; set; }
-        public bool InCart { get; set; }
-    }
-
-    private class CartToggleResponseDto
-    {
-        public bool InCart { get; set; }
-        public int Count { get; set; }
     }
 
     private class SasUrlResponse

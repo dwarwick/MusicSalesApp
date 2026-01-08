@@ -21,17 +21,6 @@
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
     </div>
-    <AuthorizeView>
-        <Authorized>
-            <SfButton OnClick="@NavigateToCart">
-                <SfIcon IconCss="fas fa-shopping-cart" />
-                @if (_cartCount > 0)
-                {
-                    <span class="cart-badge">@_cartCount</span>
-                }
-            </SfButton>
-        </Authorized>
-    </AuthorizeView>
 </SfAppBar>
 
 <SfSidebar @ref="_sidebar"

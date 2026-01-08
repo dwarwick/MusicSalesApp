@@ -11,13 +11,6 @@ using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages;
 
-public enum FilterMode
-{
-    All,
-    Owned,
-    NotOwned
-}
-
 /// <summary>
 /// Represents an album with its cover art and tracks.
 /// </summary>
@@ -46,19 +39,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
     protected List<AlbumInfo> _albums = new List<AlbumInfo>();
-    protected FilterMode _filterMode = FilterMode.All;
-    
-    // String property for Syncfusion radio button binding
-    protected string _filterModeString
-    {
-        get => _filterMode.ToString();
-        set => _filterMode = Enum.Parse<FilterMode>(value);
-    }
-    
-    protected HashSet<string> _ownedSongs = new HashSet<string>();
-    protected HashSet<string> _cartSongs = new HashSet<string>();
-    protected HashSet<string> _cartAlbums = new HashSet<string>();
-    protected HashSet<string> _animatingCartButtons = new HashSet<string>();
     
     // Track DisplayOnHomePage status for standalone songs
     private HashSet<string> _homePageSongs = new HashSet<string>();
@@ -91,7 +71,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to song prices
     private Dictionary<string, decimal> _songPrices = new Dictionary<string, decimal>();
     
-    // Map file names to song metadata IDs for cart operations
+    // Map file names to song metadata IDs
     private Dictionary<string, int> _songMetadataIds = new Dictionary<string, int>();
 
     // Map song metadata IDs to stream counts
@@ -122,10 +102,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
-        // Load cart and owned songs first if authenticated
+        // Check subscription status if authenticated
         if (_isAuthenticated)
         {
-            await LoadCartAndOwnedSongs();
+            await LoadSubscriptionStatus();
         }
         
         // Then load files - this will set _loading to false
@@ -305,7 +285,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         if (fileInfo != null)
                         {
                             albumTracks.Add(fileInfo);
-                            // Store the metadata ID for cart operations
+                            // Store the metadata ID
                             _songMetadataIds[fileInfo.Name] = trackMeta.Id;
                         }
                     }
@@ -379,7 +359,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     {
                         songPrice = songMeta.SongPrice.Value;
                     }
-                    // Store the metadata ID for cart operations
+                    // Store the metadata ID
                     _songMetadataIds[audioFile.Name] = songMeta.Id;
                     // Store the stream count
                     _streamCounts[songMeta.Id] = songMeta.NumberOfStreams;
@@ -408,43 +388,23 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task LoadCartAndOwnedSongs()
+    private async Task LoadSubscriptionStatus()
     {
         try
         {
             // Check subscription status
             var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
             _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-
-            // Load owned songs
-            var ownedResponse = await Http.GetFromJsonAsync<IEnumerable<string>>("api/cart/owned");
-            _ownedSongs = new HashSet<string>(ownedResponse ?? Enumerable.Empty<string>());
-
-            // Load cart items
-            var cartResponse = await Http.GetFromJsonAsync<CartResponseDto>("api/cart");
-            if (cartResponse?.Items != null)
-            {
-                _cartSongs = new HashSet<string>(cartResponse.Items.Select(i => i.SongFileName));
-            }
-            if (cartResponse?.Albums != null)
-            {
-                _cartAlbums = new HashSet<string>(cartResponse.Albums.Select(a => a.AlbumName));
-            }
         }
         catch (HttpRequestException ex)
         {
-            Logger.LogDebug(ex, "Unable to load cart or owned songs; user may not be authenticated");
+            Logger.LogDebug(ex, "Unable to load subscription status; user may not be authenticated");
         }
     }
 
     protected IEnumerable<StorageFileInfo> GetFilteredFiles()
     {
-        var files = _filterMode switch
-        {
-            FilterMode.Owned => _files.Where(f => _ownedSongs.Contains(f.Name)),
-            FilterMode.NotOwned => _files.Where(f => !_ownedSongs.Contains(f.Name)),
-            _ => _files
-        };
+        var files = _files.AsEnumerable();
         
         // When showing home page featured items, filter by DisplayOnHomePage
         if (ShowHomePageFeatured)
@@ -453,26 +413,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         
         return files;
-    }
-
-    protected void SetFilter(FilterMode mode)
-    {
-        _filterMode = mode;
-    }
-
-    protected bool IsSongOwned(string fileName)
-    {
-        return _ownedSongs.Contains(fileName);
-    }
-
-    protected bool IsSongInCart(string fileName)
-    {
-        return _cartSongs.Contains(fileName);
-    }
-
-    protected decimal GetSongPrice(string fileName)
-    {
-        return _songPrices.TryGetValue(fileName, out var price) ? price : PriceDefaults.DefaultSongPrice;
     }
 
     protected int GetSongMetadataId(string fileName)
@@ -488,76 +428,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return count;
         }
         return 0;
-    }
-
-    protected async Task ToggleCartItem(string fileName)
-    {
-        try
-        {
-            var price = GetSongPrice(fileName);
-            int? songMetadataId = _songMetadataIds.TryGetValue(fileName, out var id) ? id : (int?)null;
-            var response = await Http.PostAsJsonAsync("api/cart/toggle", new { SongFileName = fileName, Price = price, SongMetadataId = songMetadataId });
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
-                if (result != null)
-                {
-                    if (result.InCart)
-                    {
-                        _cartSongs.Add(fileName);
-                        // Trigger animation
-                        _animatingCartButtons.Add(fileName);
-                        await InvokeAsync(StateHasChanged);
-                        
-                        // Remove animation class after animation completes
-                        _ = Task.Run(async () =>
-                        {
-                            await Task.Delay(800);
-                            _animatingCartButtons.Remove(fileName);
-                            await InvokeAsync(StateHasChanged);
-                        });
-                    }
-                    else
-                    {
-                        _cartSongs.Remove(fileName);
-                    }
-                    
-                    // Notify the NavMenu to update the cart count
-                    CartService.NotifyCartUpdated();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error toggling cart item {FileName}", fileName);
-        }
-    }
-
-    private class CartResponseDto
-    {
-        public IEnumerable<CartItemDto> Items { get; set; }
-        public IEnumerable<CartAlbumDto> Albums { get; set; }
-        public decimal Total { get; set; }
-    }
-
-    private class CartItemDto
-    {
-        public string SongFileName { get; set; }
-        public string SongTitle { get; set; }
-        public decimal Price { get; set; }
-    }
-
-    private class CartAlbumDto
-    {
-        public string AlbumName { get; set; }
-        public decimal Price { get; set; }
-        public IEnumerable<string> TrackFileNames { get; set; }
-    }
-
-    private class CartToggleResponse
-    {
-        public bool InCart { get; set; }
-        public int Count { get; set; }
     }
 
     private class StreamUrlResponseDto
@@ -698,7 +568,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Checks if the currently playing track is restricted (60 second preview).
-    /// Restricted for non-authenticated users OR authenticated users who don't own the track.
+    /// Restricted for non-authenticated users OR authenticated users without an active subscription.
     /// </summary>
     protected bool IsCurrentPlayingTrackRestricted()
     {
@@ -710,19 +580,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (!_isAuthenticated)
             return true;
 
-        // For albums, check if the current track is owned
-        if (_playingAlbum != null && _currentTrackIndex < _playingAlbum.Tracks.Count)
-        {
-            return !_ownedSongs.Contains(_playingAlbum.Tracks[_currentTrackIndex].Name);
-        }
-
-        // For individual songs, check if the file is owned
-        if (!string.IsNullOrEmpty(_playingFileName))
-        {
-            return !_ownedSongs.Contains(_playingFileName);
-        }
-
-        return true; // Default to restricted if we can't determine
+        // Users without subscription are restricted to preview
+        return true;
     }
 
     /// <summary>
@@ -1012,12 +871,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Album-specific methods
     protected IEnumerable<AlbumInfo> GetFilteredAlbums()
     {
-        var albums = _filterMode switch
-        {
-            FilterMode.Owned => _albums.Where(a => IsAlbumOwned(a)),
-            FilterMode.NotOwned => _albums.Where(a => !IsAlbumOwned(a)),
-            _ => _albums
-        };
+        var albums = _albums.AsEnumerable();
         
         // When showing home page featured items, filter by DisplayOnHomePage
         if (ShowHomePageFeatured)
@@ -1032,18 +886,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         // Create a stable card ID from the album name prefixed with "album:"
         return "album_" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(album.AlbumName)).Replace("+", "-").Replace("/", "_");
-    }
-
-    protected bool IsAlbumOwned(AlbumInfo album)
-    {
-        // An album is owned if all of its tracks are owned
-        return album.Tracks.All(t => _ownedSongs.Contains(t.Name));
-    }
-
-    protected bool IsAlbumInCart(AlbumInfo album)
-    {
-        // An album is in cart if all of its tracks are in cart
-        return album.Tracks.All(t => _cartSongs.Contains(t.Name));
     }
 
     protected async Task PlayAlbum(AlbumInfo album)
@@ -1113,76 +955,5 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
         var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
         return $"{baseUrl}/song/{Uri.EscapeDataString(songTitle)}";
-    }
-
-    protected async Task ToggleAlbumCartItem(AlbumInfo album)
-    {
-        try
-        {
-            // Get all track file names in the album
-            var trackFileNames = album.Tracks.Select(t => t.Name).ToList();
-            
-            // Build dictionary of track filenames to metadata IDs
-            var trackMetadataIds = new Dictionary<string, int>();
-            foreach (var track in album.Tracks)
-            {
-                if (_songMetadataIds.TryGetValue(track.Name, out var id))
-                {
-                    trackMetadataIds[track.Name] = id;
-                }
-            }
-            
-            var response = await Http.PostAsJsonAsync("api/cart/toggle-album", new 
-            { 
-                AlbumName = album.AlbumName,
-                TrackFileNames = trackFileNames,
-                Price = album.Price,
-                TrackMetadataIds = trackMetadataIds
-            });
-            
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<CartToggleResponse>();
-                if (result != null)
-                {
-                    if (result.InCart)
-                    {
-                        _cartAlbums.Add(album.AlbumName);
-                        // Also add individual tracks to cart tracking
-                        foreach (var track in album.Tracks)
-                        {
-                            _cartSongs.Add(track.Name);
-                        }
-                        // Trigger animation
-                        _animatingCartButtons.Add(album.AlbumName);
-                        await InvokeAsync(StateHasChanged);
-                        
-                        // Remove animation class after animation completes
-                        _ = Task.Run(async () =>
-                        {
-                            await Task.Delay(800);
-                            _animatingCartButtons.Remove(album.AlbumName);
-                            await InvokeAsync(StateHasChanged);
-                        });
-                    }
-                    else
-                    {
-                        _cartAlbums.Remove(album.AlbumName);
-                        // Also remove individual tracks from cart tracking
-                        foreach (var track in album.Tracks)
-                        {
-                            _cartSongs.Remove(track.Name);
-                        }
-                    }
-                    
-                    // Notify the NavMenu to update the cart count
-                    CartService.NotifyCartUpdated();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error toggling album cart for {AlbumName}", album.AlbumName);
-        }
     }
 }
