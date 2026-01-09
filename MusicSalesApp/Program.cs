@@ -7,9 +7,11 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Azure.Storage.Blobs;
 using MusicSalesApp;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
@@ -160,6 +162,35 @@ try
 
     // Register Antiforgery services for DI
     builder.Services.AddAntiforgery();
+
+    // Configure Data Protection to persist keys to Azure Blob Storage
+    // This ensures all instances/domains share the same encryption keys for antiforgery tokens and cookies
+    var azureConnectionString = builder.Configuration["Azure:StorageAccountConnectionString"];
+    var dataProtectionContainerName = builder.Configuration["Azure:DataProtectionContainerName"] ?? "dataprotection-keys";
+    
+    if (!string.IsNullOrEmpty(azureConnectionString))
+    {
+        try
+        {
+            var blobServiceClient = new BlobServiceClient(azureConnectionString);
+            var containerClient = blobServiceClient.GetBlobContainerClient(dataProtectionContainerName);
+            containerClient.CreateIfNotExists();
+            
+            builder.Services.AddDataProtection()
+                .SetApplicationName("MusicSalesApp") // Ensures all deployments use the same application name
+                .PersistKeysToAzureBlobStorage(azureConnectionString, dataProtectionContainerName, "keys.xml");
+            
+            Log.Information("Data Protection configured to use Azure Blob Storage container: {Container}", dataProtectionContainerName);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to configure Data Protection with Azure Blob Storage. Using default key storage.");
+        }
+    }
+    else
+    {
+        Log.Warning("Azure storage connection string not configured. Data Protection will use default key storage.");
+    }
 
     builder.Services.AddAuthorizationCore(options =>
     {
