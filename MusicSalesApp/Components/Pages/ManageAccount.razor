@@ -71,19 +71,19 @@
             </CardContent>
         </SfCard>
 
-        <!-- PayPal Email Section (for creators) -->
+        <!-- Payout Email Section (for creators) -->
         @if (_isCreator)
         {
             <SfCard CssClass="mb-4">
-                <CardHeader Title="PayPal Email for Payouts" />
+                <CardHeader Title="Payout Email Address" />
                 <CardContent>
-                    <p class="mb-3">This email will be used to send stream payouts and other creator payments. It may be different from your login email.</p>
+                    <p class="mb-3">This email will be used to send stream royalty payouts and other creator payments. It may be different from your login email.</p>
                     <div class="mb-3">
-                        <label for="paypalEmail" class="e-label">PayPal Email Address</label>
-                        <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                        <small class="form-text">Enter the email address associated with your PayPal account where you want to receive payments.</small>
+                        <label for="paypalEmail" class="e-label">Payout Email Address</label>
+                        <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
+                        <small class="form-text">Enter the email address where you want to receive royalty payments.</small>
                     </div>
-                    <SfButton IsPrimary="true" Content="Save PayPal Email" OnClick="SavePayPalEmail" />
+                    <SfButton IsPrimary="true" Content="Save Payout Email" OnClick="SavePayPalEmail" />
                 </CardContent>
             </SfCard>
         }
@@ -217,49 +217,50 @@
                     @if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null)
                     {
                         <div class="creator-description">
-                            <h4>Sell Your Music on StreamTunes!</h4>
-                            <p>Join our community of artists and start earning money from your music today.</p>
+                            <h4>Share Your Music on StreamTunes!</h4>
+                            <p>Join our community of artists and start earning royalties from your music streams.</p>
                             
                             <div class="creator-benefits mt-3">
                                 <h5>Benefits of becoming a creator:</h5>
                                 <ul>
-                                    <li>Upload and sell your original music</li>
+                                    <li>Upload your original music to our streaming platform</li>
                                     <li>Reach a global audience of music lovers</li>
-                                    <li>Get paid directly to your PayPal business account</li>
-                                    <li>You control the pricing of your music</li>
-                                    <li>Keep @((1 - _platformCommissionRate) * 100)% of each sale</li>
+                                    <li>Earn royalties for every stream of your music</li>
+                                    <li>Get paid directly via our payment processor (Stripe)</li>
+                                    <li>Stripe handles all tax reporting (1099s and W-9s)</li>
                                 </ul>
                             </div>
 
                             <div class="creator-requirements mt-3">
                                 <h5>Requirements:</h5>
                                 <ul>
-                                    <li>A PayPal Business account (will be created during signup if you don't have one)</li>
-                                    <li>Original music that you have the rights to sell</li>
-                                    <li>Agreement to <a href="https://www.paypal.com/us/webapps/mpp/security/creator-protection" target="_blank" rel="noopener noreferrer">PayPal's Creator Protection policy</a></li>
+                                    <li>Complete payout onboarding with our payment processor</li>
+                                    <li>Provide accurate tax and identity information for royalty payments</li>
+                                    <li>Original music that you have the rights to distribute</li>
+                                    <li>Agreement to our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a></li>
                                 </ul>
                             </div>
 
                             <div class="creator-commission mt-3">
-                                <p><strong>Platform Commission:</strong> StreamTunes takes a @(_platformCommissionRate * 100)% commission on each sale. The remaining @((1 - _platformCommissionRate) * 100)% goes directly to you. PayPal fees are additional.</p>
+                                <p><strong>How You Earn:</strong> You earn royalties based on the number of qualifying streams (30+ seconds of continuous playback). Your royalty rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
                             </div>
 
                             <div class="creator-signup-form mt-4">
                                 <div class="mb-3">
-                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
-                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This email will be used for all creator payouts. You can use a different email than your login email.</small>
+                                    <label for="paypalEmailOnboarding" class="e-label">Payout Email Address <span class="text-danger">*</span></label>
+                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This email will be used for all royalty payouts. You can use a different email than your login email.</small>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="creatorDisplayName" class="e-label">Display Name (optional)</label>
                                     <SfTextBox @bind-Value="_creatorDisplayName" ID="creatorDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
-                                    <small class="form-text">This name will be shown to buyers on your music listings.</small>
+                                    <small class="form-text">This name will be shown to listeners on your music listings.</small>
                                 </div>
 
                                 <div class="mb-3">
                                     <label for="creatorBio" class="e-label">Bio (optional)</label>
-                                    <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell buyers about yourself and your music" CssClass="e-outline" />
+                                    <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell listeners about yourself and your music" CssClass="e-outline" />
                                 </div>
 
                                 @if (!_startingOnboarding)
@@ -267,7 +268,7 @@
                                     <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@string.IsNullOrWhiteSpace(_creatorPayPalEmail)" />
                                     @if (string.IsNullOrWhiteSpace(_creatorPayPalEmail))
                                     {
-                                        <p class="text-danger mt-2">Please enter your PayPal email address to continue.</p>
+                                        <p class="text-danger mt-2">Please enter your payout email address to continue.</p>
                                     }
                                 }
                                 else
@@ -280,22 +281,22 @@
                     else if (_creatorOnboardingStatus == "Pending")
                     {
                         <div class="creator-pending">
-                            <h4>Complete Your PayPal Signup</h4>
-                            <p>You've started the creator signup process. Please complete your PayPal Business account setup to start selling.</p>
+                            <h4>Complete Your Payout Account Setup</h4>
+                            <p>You've started the creator signup process. Please complete your payout account setup with our payment processor to start earning royalties.</p>
                             
                             @if (!string.IsNullOrEmpty(_creatorReferralUrl))
                             {
-                                <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue with PayPal</a></p>
+                                <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue Setup</a></p>
                             }
                             
-                            <p class="mt-3">After completing PayPal setup, return here and click the button below:</p>
+                            <p class="mt-3">After completing the setup, return here and click the button below:</p>
                             @if (!_completingOnboarding)
                             {
-                                <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteCreatorOnboarding" />
+                                <SfButton IsPrimary="true" Content="I've Completed Setup" OnClick="CompleteCreatorOnboarding" />
                             }
                             else
                             {
-                                <p>Verifying your PayPal setup...</p>
+                                <p>Verifying your account setup...</p>
                             }
                         </div>
                     }
@@ -303,8 +304,8 @@
                     {
                         <div class="creator-in-progress">
                             <h4>Verification In Progress</h4>
-                            <p>Your PayPal account is being verified. This may take a few minutes to a few hours.</p>
-                            <p>Once verified, you'll be able to start uploading and selling your music.</p>
+                            <p>Your payout account is being verified. This may take a few minutes to a few hours.</p>
+                            <p>Once verified, you'll be able to start uploading music and earning royalties.</p>
                             
                             @if (!_completingOnboarding)
                             {
@@ -320,7 +321,7 @@
                     {
                         <div class="creator-failed">
                             <h4>Onboarding Failed</h4>
-                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed. This may be due to PayPal verification issues.</p>
+                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed. This may be due to verification issues with our payment processor.</p>
                             <p>Please contact support for assistance or try again:</p>
                             
                             @if (!_startingOnboarding)
@@ -344,11 +345,10 @@
                 <CardContent>
                     <div class="creator-active-info">
                         <p class="text-success"><strong>✓ You are an active creator!</strong></p>
-                        <p>You can upload and sell your music on StreamTunes.</p>
+                        <p>You can upload music to StreamTunes and earn royalties from streams.</p>
                         
                         <div class="mt-3">
                             <p><strong>Display Name:</strong> @(_creatorDisplayName ?? "Not set")</p>
-                            <p><strong>Commission Rate:</strong> @(_platformCommissionRate * 100)% platform fee</p>
                         </div>
 
                         <div class="mt-3">
@@ -361,14 +361,14 @@
                         <div class="stop-selling-section">
                             <h5 class="text-danger">Stop Being a Creator</h5>
                             <p>
-                                If you no longer want to sell music on StreamTunes, you can stop being a creator. 
+                                If you no longer want to share your music on StreamTunes, you can stop being a creator. 
                                 <strong>Warning:</strong> This action will:
                             </p>
                             <ul>
                                 <li>Remove all your uploaded music from the platform</li>
                                 <li>Delete all your song files from storage</li>
-                                <li>Your music will no longer be available for purchase or streaming</li>
-                                <li>You will need to go through the creator onboarding process again if you want to sell in the future</li>
+                                <li>Your music will no longer be available for streaming</li>
+                                <li>You will need to go through the creator onboarding process again if you want to share music in the future</li>
                             </ul>
                             <p>
                             See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.

@@ -728,7 +728,7 @@ public partial class ManageAccountModel : BlazorBase
             // Validate email format
             if (string.IsNullOrWhiteSpace(_paypalEmail))
             {
-                _errorMessage = "Please enter a PayPal email address.";
+                _errorMessage = "Please enter a payout email address.";
                 return;
             }
 
@@ -751,12 +751,12 @@ public partial class ManageAccountModel : BlazorBase
             creator.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
 
-            _successMessage = "PayPal email updated successfully!";
+            _successMessage = "Payout email updated successfully!";
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error saving PayPal email");
-            _errorMessage = "Failed to save PayPal email. Please try again.";
+            Logger.LogError(ex, "Error saving payout email");
+            _errorMessage = "Failed to save payout email. Please try again.";
         }
     }
 
