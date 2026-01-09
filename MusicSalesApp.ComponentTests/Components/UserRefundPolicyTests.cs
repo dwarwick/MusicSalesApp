@@ -15,7 +15,7 @@ public class UserRefundPolicyTests : BUnitTestBase
 
         // Assert - Check for key elements
         Assert.That(cut.Markup, Does.Contain("User Refund Policy"));
-        Assert.That(cut.Markup, Does.Contain("Streamtunes"));
+        Assert.That(cut.Markup, Does.Contain("non-refundable"));
     }
 
     [Test]
