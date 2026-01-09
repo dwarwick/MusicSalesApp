@@ -340,4 +340,25 @@ public class SitemapServiceTests
         Assert.That(content, Does.StartWith("<?xml version=\"1.0\" encoding=\"utf-8\"?>"),
             "Sitemap should include XML declaration with UTF-8 encoding");
     }
+
+    [Test]
+    public async Task GenerateSitemapAsync_IncludesStaticPolicyPages()
+    {
+        // Arrange
+        _mockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<SongMetadata>());
+
+        // Act
+        await _service.GenerateSitemapAsync();
+
+        // Assert
+        var sitemapPath = Path.Combine(_tempDirectory, "sitemap.xml");
+        var content = await File.ReadAllTextAsync(sitemapPath);
+
+        // Verify all static policy pages are included
+        Assert.That(content, Does.Contain("/privacy-policy"), "Should include Privacy Policy page");
+        Assert.That(content, Does.Contain("/terms-of-use"), "Should include Terms of Use page");
+        Assert.That(content, Does.Contain("/creator-agreement"), "Should include Creator Agreement page");
+        Assert.That(content, Does.Contain("/user-refund-policy"), "Should include User Refund Policy page");
+    }
 }

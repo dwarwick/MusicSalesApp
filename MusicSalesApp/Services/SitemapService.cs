@@ -91,6 +91,12 @@ public class SitemapService : ISitemapService
         // Add home page
         WriteUrlEntry(xmlWriter, baseUrl, DateTime.UtcNow, "daily", "1.0");
 
+        // Add static policy pages
+        WriteUrlEntry(xmlWriter, $"{baseUrl}/privacy-policy", DateTime.UtcNow, "monthly", "0.5");
+        WriteUrlEntry(xmlWriter, $"{baseUrl}/terms-of-use", DateTime.UtcNow, "monthly", "0.5");
+        WriteUrlEntry(xmlWriter, $"{baseUrl}/creator-agreement", DateTime.UtcNow, "monthly", "0.5");
+        WriteUrlEntry(xmlWriter, $"{baseUrl}/user-refund-policy", DateTime.UtcNow, "monthly", "0.5");
+
         // Add song URLs
         foreach (var song in songs)
         {
