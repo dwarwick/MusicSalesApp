@@ -183,7 +183,6 @@ try
     builder.Services.AddScoped<IPurchaseEmailService, PurchaseEmailService>();
     builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
-    builder.Services.AddScoped<ICartService, CartService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();
     builder.Services.AddScoped<IThemeService, ThemeService>();
@@ -200,7 +199,7 @@ try
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
-    builder.Services.AddScoped<ISellerService, SellerService>();
+    builder.Services.AddScoped<ICreatorService, CreatorService>();
     builder.Services.AddScoped<IPayPalPartnerService, PayPalPartnerService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
 

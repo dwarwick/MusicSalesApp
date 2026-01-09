@@ -42,14 +42,13 @@ public class TermsOfUseTests : BUnitTestBase
     }
 
     [Test]
-    public void TermsOfUse_ContainsPurchaseTerms()
+    public void TermsOfUse_ContainsSubscriptionRefundPolicy()
     {
         // Act
         var cut = TestContext.Render<TermsOfUse>();
 
-        // Assert - Verify purchase terms
-        Assert.That(cut.Markup, Does.Contain("Purchases"));
-        Assert.That(cut.Markup, Does.Contain("permanent access"));
+        // Assert - Verify subscription/refund terms (individual purchases removed)
+        Assert.That(cut.Markup, Does.Contain("Subscription"));
         Assert.That(cut.Markup, Does.Contain("No Refunds"));
     }
 
@@ -129,6 +128,6 @@ public class TermsOfUseTests : BUnitTestBase
 
         // Assert - Verify last updated date
         Assert.That(cut.Markup, Does.Contain("Last Updated"));
-        Assert.That(cut.Markup, Does.Contain("2024"));
+        Assert.That(cut.Markup, Does.Contain("2026"));
     }
 }

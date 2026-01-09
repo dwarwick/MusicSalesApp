@@ -6,7 +6,7 @@ using Syncfusion.Blazor.Grids;
 
 namespace MusicSalesApp.Components.Pages;
 
-public partial class SellerSongManagementModel : BlazorBase
+public partial class CreatorSongManagementModel : BlazorBase
 {
     protected bool _loading = true;
     protected string _errorMessage = string.Empty;
@@ -22,15 +22,13 @@ public partial class SellerSongManagementModel : BlazorBase
     // Edit dialog
     protected bool _showEditDialog = false;
     protected SongAdminViewModel _editingSong;
-    protected decimal? _editSongPrice;
-    protected decimal? _editAlbumPrice;
     protected string _editGenre = string.Empty;
     protected string _editSongTitle = string.Empty;
     protected string _editAlbumName = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
 
-    private int? _sellerId;
+    private int? _creatorId;
     private bool _hasLoadedData = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -48,16 +46,16 @@ public partial class SellerSongManagementModel : BlazorBase
                     var appUser = await UserManager.GetUserAsync(user);
                     if (appUser != null)
                     {
-                        // Get the seller ID for this user
-                        _sellerId = await SellerService.GetSellerIdForUserAsync(appUser.Id);
+                        // Get the creator ID for this user
+                        _creatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
 
-                        if (_sellerId.HasValue)
+                        if (_creatorId.HasValue)
                         {
                             await LoadSongsAsync();
                         }
                         else
                         {
-                            _errorMessage = "You are not registered as a seller. Please complete seller onboarding first.";
+                            _errorMessage = "You are not registered as a creator. Please complete creator onboarding first.";
                         }
                     }
                 }
@@ -76,12 +74,12 @@ public partial class SellerSongManagementModel : BlazorBase
 
     protected async Task LoadSongsAsync()
     {
-        if (!_sellerId.HasValue)
+        if (!_creatorId.HasValue)
             return;
 
-        var sellerSongs = await SellerService.GetSellerSongsAsync(_sellerId.Value);
+        var creatorSongs = await CreatorService.GetCreatorSongsAsync(_creatorId.Value);
         
-        _songs = sellerSongs.Select(m => new SongAdminViewModel
+        _songs = creatorSongs.Select(m => new SongAdminViewModel
         {
             Id = m.Id.ToString(),
             AlbumName = m.AlbumName ?? string.Empty,
@@ -90,14 +88,12 @@ public partial class SellerSongManagementModel : BlazorBase
             JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
             AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
             IsAlbum = m.IsAlbumCover,
-            AlbumPrice = m.AlbumPrice,
-            SongPrice = m.SongPrice,
             Genre = m.Genre ?? string.Empty,
             TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             HasAlbumCover = m.IsAlbumCover,
-            SellerId = m.SellerId,
+            CreatorId = m.CreatorId,
             IsActive = m.IsActive,
             NumberOfStreams = m.NumberOfStreams
         }).ToList();
@@ -169,7 +165,7 @@ public partial class SellerSongManagementModel : BlazorBase
 
     protected async Task ConfirmDelete()
     {
-        if (_songToDelete == null || !_sellerId.HasValue)
+        if (_songToDelete == null || !_creatorId.HasValue)
             return;
 
         _isDeleting = true;
@@ -178,7 +174,7 @@ public partial class SellerSongManagementModel : BlazorBase
         {
             if (int.TryParse(_songToDelete.Id, out var songMetadataId))
             {
-                var success = await SellerService.DeleteSellerSongAsync(songMetadataId, _sellerId.Value);
+                var success = await CreatorService.DeleteCreatorSongAsync(songMetadataId, _creatorId.Value);
                 
                 if (success)
                 {
@@ -211,8 +207,6 @@ public partial class SellerSongManagementModel : BlazorBase
     protected void EditSong(SongAdminViewModel song)
     {
         _editingSong = song;
-        _editSongPrice = song.SongPrice;
-        _editAlbumPrice = song.AlbumPrice;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
         _editAlbumName = song.AlbumName;
@@ -253,7 +247,6 @@ public partial class SellerSongManagementModel : BlazorBase
             // Validate other fields
             if (!_editingSong.IsAlbum)
             {
-                if (!_editSongPrice.HasValue || _editSongPrice.Value <= 0)
                 {
                     _validationErrors.Add("Song price is required and must be greater than 0.");
                 }
@@ -264,7 +257,6 @@ public partial class SellerSongManagementModel : BlazorBase
             }
             else
             {
-                if (!_editAlbumPrice.HasValue || _editAlbumPrice.Value <= 0)
                 {
                     _validationErrors.Add("Album price is required and must be greater than 0.");
                 }
@@ -287,7 +279,6 @@ public partial class SellerSongManagementModel : BlazorBase
 
                     if (_editingSong.IsAlbum)
                     {
-                        metadata.AlbumPrice = _editAlbumPrice;
                         
                         // Update album name if changed
                         var oldAlbumName = metadata.AlbumName;
@@ -297,7 +288,7 @@ public partial class SellerSongManagementModel : BlazorBase
                             var albumTracks = await SongMetadataService.GetByAlbumNameAsync(oldAlbumName);
                             foreach (var track in albumTracks)
                             {
-                                if (track.SellerId == _sellerId) // Only update tracks owned by this seller
+                                if (track.CreatorId == _creatorId) // Only update tracks owned by this creator
                                 {
                                     track.AlbumName = _editAlbumName;
                                     await SongMetadataService.UpsertAsync(track);
@@ -308,7 +299,6 @@ public partial class SellerSongManagementModel : BlazorBase
                     }
                     else
                     {
-                        metadata.SongPrice = _editSongPrice;
                         metadata.Genre = _editGenre;
                     }
 

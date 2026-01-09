@@ -107,22 +107,13 @@ public class AlbumPlayerTests : BUnitTestBase
             Genre = "Rock"
         };
 
-        var ownedSong = new OwnedSong
-        {
-            Id = 1,
-            UserId = 1,
-            SongFileName = "music/song1.mp3",
-            SongMetadata = songMetadata,
-            SongMetadataId = 1
-        };
-
         var userPlaylist = new UserPlaylist
         {
             Id = 1,
             PlaylistId = 1,
             UserId = 1,
-            OwnedSongId = 1,
-            OwnedSong = ownedSong,
+            SongMetadataId = 1,
+            SongMetadata = songMetadata,
             Playlist = playlist
         };
 
@@ -144,7 +135,7 @@ public class AlbumPlayerTests : BUnitTestBase
     }
 
     [Test]
-    public void AlbumPlayer_PlaylistMode_DoesNotShowAddToCartButton()
+    public void AlbumPlayer_PlaylistMode_SubscriptionRequired()
     {
         // Arrange - Setup authorized user
         var authContext = TestContext.AddAuthorization();
@@ -170,22 +161,13 @@ public class AlbumPlayerTests : BUnitTestBase
             Genre = "Rock"
         };
 
-        var ownedSong = new OwnedSong
-        {
-            Id = 1,
-            UserId = 1,
-            SongFileName = "music/song1.mp3",
-            SongMetadata = songMetadata,
-            SongMetadataId = 1
-        };
-
         var userPlaylist = new UserPlaylist
         {
             Id = 1,
             PlaylistId = 1,
             UserId = 1,
-            OwnedSongId = 1,
-            OwnedSong = ownedSong,
+            SongMetadataId = 1,
+            SongMetadata = songMetadata,
             Playlist = playlist
         };
 
@@ -241,22 +223,13 @@ public class AlbumPlayerTests : BUnitTestBase
                 Genre = "Rock"
             };
 
-            var ownedSong = new OwnedSong
-            {
-                Id = i,
-                UserId = 1,
-                SongFileName = $"music/song{i}.mp3",
-                SongMetadata = songMetadata,
-                SongMetadataId = i
-            };
-
             songs.Add(new UserPlaylist
             {
                 Id = i,
                 PlaylistId = 1,
                 UserId = 1,
-                OwnedSongId = i,
-                OwnedSong = ownedSong,
+                SongMetadataId = i,
+                SongMetadata = songMetadata,
                 Playlist = playlist
             });
         }
@@ -521,8 +494,7 @@ public class AlbumPlayerTests : BUnitTestBase
             Id = 1,
             AlbumName = albumName,
             IsAlbumCover = true,
-            ImageBlobPath = $"music/{albumName}/cover.jpg",
-            AlbumPrice = 9.99m
+            ImageBlobPath = $"music/{albumName}/cover.jpg"
         });
 
         // Add tracks
@@ -537,8 +509,7 @@ public class AlbumPlayerTests : BUnitTestBase
                 ImageBlobPath = $"music/{albumName}/track{i}.jpg",
                 TrackNumber = i,
                 TrackLength = 180.0,
-                Genre = "Rock",
-                SongPrice = 0.99m
+                Genre = "Rock"
             });
         }
 

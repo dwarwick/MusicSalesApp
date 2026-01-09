@@ -68,8 +68,6 @@ namespace MusicSalesApp.Services
                 // Update existing
                 existing.AlbumName = metadata.AlbumName;
                 existing.IsAlbumCover = metadata.IsAlbumCover;
-                existing.AlbumPrice = metadata.AlbumPrice;
-                existing.SongPrice = metadata.SongPrice;
                 existing.Genre = metadata.Genre;
                 existing.SongTitle = metadata.SongTitle;
                 existing.TrackNumber = metadata.TrackNumber;
@@ -77,7 +75,7 @@ namespace MusicSalesApp.Services
                 existing.Mp3BlobPath = metadata.Mp3BlobPath;
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
-                existing.SellerId = metadata.SellerId ?? existing.SellerId; // Only update if provided
+                existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 context.SongMetadata.Update(existing);
@@ -151,10 +149,10 @@ namespace MusicSalesApp.Services
                 }
             }
 
-            // Filter by seller ID if specified
-            if (parameters.SellerId.HasValue)
+            // Filter by creator ID if specified
+            if (parameters.CreatorId.HasValue)
             {
-                query = query.Where(s => s.SellerId == parameters.SellerId.Value);
+                query = query.Where(s => s.CreatorId == parameters.CreatorId.Value);
             }
 
             // Apply sorting - always have a default order for consistent pagination
@@ -168,12 +166,6 @@ namespace MusicSalesApp.Services
                     "Genre" => parameters.SortAscending
                         ? query.OrderBy(s => s.Genre)
                         : query.OrderByDescending(s => s.Genre),
-                    "AlbumPrice" => parameters.SortAscending
-                        ? query.OrderBy(s => s.AlbumPrice)
-                        : query.OrderByDescending(s => s.AlbumPrice),
-                    "SongPrice" => parameters.SortAscending
-                        ? query.OrderBy(s => s.SongPrice)
-                        : query.OrderByDescending(s => s.SongPrice),
                     "TrackNumber" => parameters.SortAscending
                         ? query.OrderBy(s => s.TrackNumber)
                         : query.OrderByDescending(s => s.TrackNumber),
@@ -207,14 +199,12 @@ namespace MusicSalesApp.Services
                 JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
                 AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
                 IsAlbum = m.IsAlbumCover,
-                AlbumPrice = m.AlbumPrice,
-                SongPrice = m.SongPrice,
                 Genre = m.Genre ?? string.Empty,
                 TrackNumber = m.TrackNumber,
                 TrackLength = m.TrackLength,
                 DisplayOnHomePage = m.DisplayOnHomePage,
                 HasAlbumCover = m.IsAlbumCover,
-                SellerId = m.SellerId,
+                CreatorId = m.CreatorId,
                 IsActive = m.IsActive
             }).ToList();
 

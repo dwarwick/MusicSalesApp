@@ -9,7 +9,7 @@ public partial class MyPlaylistsModel : BlazorBase
     protected List<Playlist> _playlists;
     protected Dictionary<int, int> _playlistSongCounts = new();
     protected List<UserPlaylist> _playlistSongs;
-    protected List<OwnedSong> _availableSongs;
+    protected List<SongMetadata> _availableSongs;
     protected List<RecommendedPlaylist> _recommendedPlaylist = new();
     protected Playlist _selectedPlaylist;
     protected Playlist _editingPlaylist;
@@ -23,7 +23,6 @@ public partial class MyPlaylistsModel : BlazorBase
     protected bool _viewingSongs = false;
     protected int _currentUserId;
     protected bool _hasActiveSubscription = false;
-    protected bool _hasOwnedSongs = false;
     private bool _hasLoadedData = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -45,10 +44,6 @@ public partial class MyPlaylistsModel : BlazorBase
                         
                         // Check if user has active subscription
                         _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId);
-                        
-                        // Check if user owns any songs (needed for creating playlists)
-                        var ownedSongs = await CartService.GetOwnedSongsAsync(_currentUserId);
-                        _hasOwnedSongs = ownedSongs.Any();
                         
                         await LoadPlaylists();
                         await LoadRecommendedPlaylist();
@@ -101,10 +96,10 @@ public partial class MyPlaylistsModel : BlazorBase
 
     protected void ShowCreatePlaylistDialog()
     {
-        // Users can create playlists if they have a subscription OR own at least one song
-        if (!_hasActiveSubscription && !_hasOwnedSongs)
+        // Users can create playlists if they have a subscription
+        if (!_hasActiveSubscription)
         {
-            _error = "To create playlists, you need to either have an active subscription or own at least one song. Subscribe for unlimited access or purchase songs to get started.";
+            _error = "To create playlists, you need an active subscription. Subscribe for unlimited access!";
             return;
         }
         
@@ -239,11 +234,11 @@ public partial class MyPlaylistsModel : BlazorBase
         _availableSongs = null;
     }
 
-    protected async Task AddSongToPlaylist(int ownedSongId)
+    protected async Task AddSongToPlaylist(int songMetadataId)
     {
         try
         {
-            var success = await PlaylistService.AddSongToPlaylistAsync(_currentUserId, _selectedPlaylist.Id, ownedSongId);
+            var success = await PlaylistService.AddSongToPlaylistAsync(_currentUserId, _selectedPlaylist.Id, songMetadataId);
             
             if (success)
             {
@@ -254,7 +249,7 @@ public partial class MyPlaylistsModel : BlazorBase
                 _playlistSongCounts[_selectedPlaylist.Id] = _playlistSongs.Count;
                 
                 // Remove the added song from available songs
-                _availableSongs = _availableSongs?.Where(s => s.Id != ownedSongId).ToList();
+                _availableSongs = _availableSongs?.Where(s => s.Id != songMetadataId).ToList();
                 
                 _error = null;
             }
@@ -301,11 +296,15 @@ public partial class MyPlaylistsModel : BlazorBase
 
     protected string GetSongTitle(SongMetadata songMetadata)
     {
-        if (!string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
+        if (!string.IsNullOrEmpty(songMetadata?.SongTitle))
+        {
+            return songMetadata.SongTitle;
+        }
+        if (!string.IsNullOrEmpty(songMetadata?.Mp3BlobPath))
         {
             return Path.GetFileNameWithoutExtension(songMetadata.Mp3BlobPath);
         }
-        if (!string.IsNullOrEmpty(songMetadata.BlobPath))
+        if (!string.IsNullOrEmpty(songMetadata?.BlobPath))
         {
             return Path.GetFileNameWithoutExtension(songMetadata.BlobPath);
         }

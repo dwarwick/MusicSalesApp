@@ -58,7 +58,6 @@ public class MyPlaylistsTests : BUnitTestBase
         MockPlaylistService.Setup(x => x.GetUserPlaylistsAsync(userId)).ReturnsAsync(playlists);
         MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(It.IsAny<int>())).ReturnsAsync(new List<UserPlaylist>());
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
-        MockCartService.Setup(x => x.GetOwnedSongsAsync(userId)).ReturnsAsync(new List<string>());
         MockRecommendationService.Setup(x => x.GetRecommendedPlaylistAsync(userId)).ReturnsAsync(new List<RecommendedPlaylist>());
 
         // Act
@@ -107,7 +106,6 @@ public class MyPlaylistsTests : BUnitTestBase
         MockPlaylistService.Setup(x => x.GetUserPlaylistsAsync(userId)).ReturnsAsync(new List<Playlist> { likedSongsPlaylist });
         MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(1)).ReturnsAsync(new List<UserPlaylist>());
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
-        MockCartService.Setup(x => x.GetOwnedSongsAsync(userId)).ReturnsAsync(new List<string>());
         MockRecommendationService.Setup(x => x.GetRecommendedPlaylistAsync(userId)).ReturnsAsync(new List<RecommendedPlaylist>());
 
         // Act
@@ -164,7 +162,6 @@ public class MyPlaylistsTests : BUnitTestBase
         MockPlaylistService.Setup(x => x.GetUserPlaylistsAsync(userId)).ReturnsAsync(new List<Playlist> { regularPlaylist });
         MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(2)).ReturnsAsync(new List<UserPlaylist>());
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
-        MockCartService.Setup(x => x.GetOwnedSongsAsync(userId)).ReturnsAsync(new List<string>());
         MockRecommendationService.Setup(x => x.GetRecommendedPlaylistAsync(userId)).ReturnsAsync(new List<RecommendedPlaylist>());
 
         // Act

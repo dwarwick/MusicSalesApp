@@ -69,7 +69,7 @@ public class PlaylistCleanupServiceTests
     }
 
     [Test]
-    public async Task RemoveNonOwnedSongsFromLapsedSubscriptionsAsync_LapsedSubscriptionWithNonOwnedSongs_RemovesSongs()
+    public async Task RemoveNonOwnedSongsFromLapsedSubscriptionsAsync_LapsedSubscription_RemovesAllSongsFromPlaylist()
     {
         // Arrange
         var user = new ApplicationUser { Id = 1, UserName = "test@example.com", Email = "test@example.com" };
@@ -95,43 +95,35 @@ public class PlaylistCleanupServiceTests
         };
         _context.Playlists.Add(playlist);
 
-        // Create owned songs - one purchased, one subscription-only
-        var purchasedSong = new OwnedSong
+        // Create song metadata
+        var song1Metadata = new SongMetadata
         {
-            UserId = user.Id,
-            SongFileName = "purchased-song.mp3",
-            PayPalOrderId = "ORDER-123", // This song was purchased
-            PurchasedAt = DateTime.UtcNow.AddDays(-30)
+            Mp3BlobPath = "song1.mp3",
+            IsAlbumCover = false
         };
-        
-        var subscriptionSong = new OwnedSong
+        var song2Metadata = new SongMetadata
         {
-            UserId = user.Id,
-            SongFileName = "subscription-song.mp3",
-            PayPalOrderId = null, // This song was only accessible via subscription
-            PurchasedAt = DateTime.UtcNow.AddDays(-30)
+            Mp3BlobPath = "song2.mp3",
+            IsAlbumCover = false
         };
-        
-        _context.OwnedSongs.AddRange(purchasedSong, subscriptionSong);
+        _context.SongMetadata.AddRange(song1Metadata, song2Metadata);
         await _context.SaveChangesAsync();
 
-        // Add both songs to playlist
+        // Add songs to playlist
         var userPlaylist1 = new UserPlaylist
         {
             UserId = user.Id,
             PlaylistId = playlist.Id,
-            OwnedSongId = purchasedSong.Id,
+            SongMetadataId = song1Metadata.Id,
             AddedAt = DateTime.UtcNow.AddDays(-20)
         };
-        
         var userPlaylist2 = new UserPlaylist
         {
             UserId = user.Id,
             PlaylistId = playlist.Id,
-            OwnedSongId = subscriptionSong.Id,
+            SongMetadataId = song2Metadata.Id,
             AddedAt = DateTime.UtcNow.AddDays(-20)
         };
-        
         _context.UserPlaylists.AddRange(userPlaylist1, userPlaylist2);
         await _context.SaveChangesAsync();
 
@@ -139,18 +131,11 @@ public class PlaylistCleanupServiceTests
         var result = await _service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync();
 
         // Assert
-        Assert.That(result, Is.EqualTo(1)); // Should remove only the subscription-only song
+        Assert.That(result, Is.EqualTo(2)); // Should remove all songs from playlist
         
-        // Verify the purchased song is still in the playlist
+        // Verify no songs remain in the playlist
         var remainingSongs = await _context.UserPlaylists.ToListAsync();
-        Assert.That(remainingSongs.Count, Is.EqualTo(1));
-        Assert.That(remainingSongs[0].OwnedSongId, Is.EqualTo(purchasedSong.Id));
-        
-        // Verify the subscription-based OwnedSong record was deleted
-        var remainingOwnedSongs = await _context.OwnedSongs.ToListAsync();
-        Assert.That(remainingOwnedSongs.Count, Is.EqualTo(1));
-        Assert.That(remainingOwnedSongs[0].Id, Is.EqualTo(purchasedSong.Id));
-        Assert.That(remainingOwnedSongs[0].PayPalOrderId, Is.EqualTo("ORDER-123"));
+        Assert.That(remainingSongs.Count, Is.EqualTo(0));
     }
 
     [Test]
@@ -183,7 +168,7 @@ public class PlaylistCleanupServiceTests
         
         _context.Subscriptions.AddRange(oldSubscription, newSubscription);
 
-        // Create a playlist with a subscription-only song
+        // Create a playlist with a song
         var playlist = new Playlist
         {
             UserId = user.Id,
@@ -191,25 +176,21 @@ public class PlaylistCleanupServiceTests
         };
         _context.Playlists.Add(playlist);
 
-        var subscriptionSong = new OwnedSong
+        var songMetadata = new SongMetadata
         {
-            UserId = user.Id,
-            SongFileName = "subscription-song.mp3",
-            PayPalOrderId = null,
-            PurchasedAt = DateTime.UtcNow.AddDays(-30)
+            Mp3BlobPath = "song.mp3",
+            IsAlbumCover = false
         };
-        
-        _context.OwnedSongs.Add(subscriptionSong);
+        _context.SongMetadata.Add(songMetadata);
         await _context.SaveChangesAsync();
 
         var userPlaylist = new UserPlaylist
         {
             UserId = user.Id,
             PlaylistId = playlist.Id,
-            OwnedSongId = subscriptionSong.Id,
+            SongMetadataId = songMetadata.Id,
             AddedAt = DateTime.UtcNow.AddDays(-20)
         };
-        
         _context.UserPlaylists.Add(userPlaylist);
         await _context.SaveChangesAsync();
 
@@ -242,7 +223,7 @@ public class PlaylistCleanupServiceTests
         };
         _context.Subscriptions.Add(recentlyLapsedSubscription);
 
-        // Create a playlist with a subscription-only song
+        // Create a playlist with a song
         var playlist = new Playlist
         {
             UserId = user.Id,
@@ -250,25 +231,21 @@ public class PlaylistCleanupServiceTests
         };
         _context.Playlists.Add(playlist);
 
-        var subscriptionSong = new OwnedSong
+        var songMetadata = new SongMetadata
         {
-            UserId = user.Id,
-            SongFileName = "subscription-song.mp3",
-            PayPalOrderId = null,
-            PurchasedAt = DateTime.UtcNow.AddDays(-30)
+            Mp3BlobPath = "song.mp3",
+            IsAlbumCover = false
         };
-        
-        _context.OwnedSongs.Add(subscriptionSong);
+        _context.SongMetadata.Add(songMetadata);
         await _context.SaveChangesAsync();
 
         var userPlaylist = new UserPlaylist
         {
             UserId = user.Id,
             PlaylistId = playlist.Id,
-            OwnedSongId = subscriptionSong.Id,
+            SongMetadataId = songMetadata.Id,
             AddedAt = DateTime.UtcNow.AddDays(-20)
         };
-        
         _context.UserPlaylists.Add(userPlaylist);
         await _context.SaveChangesAsync();
 
@@ -317,16 +294,16 @@ public class PlaylistCleanupServiceTests
         var playlist2 = new Playlist { UserId = user2.Id, PlaylistName = "User 2 Playlist" };
         _context.Playlists.AddRange(playlist1, playlist2);
 
-        // Create subscription songs for both users
-        var song1 = new OwnedSong { UserId = user1.Id, SongFileName = "song1.mp3", PayPalOrderId = null };
-        var song2 = new OwnedSong { UserId = user2.Id, SongFileName = "song2.mp3", PayPalOrderId = null };
-        _context.OwnedSongs.AddRange(song1, song2);
+        // Create song metadata
+        var song1Metadata = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
+        var song2Metadata = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
+        _context.SongMetadata.AddRange(song1Metadata, song2Metadata);
         await _context.SaveChangesAsync();
 
         // Add songs to playlists
         _context.UserPlaylists.AddRange(
-            new UserPlaylist { UserId = user1.Id, PlaylistId = playlist1.Id, OwnedSongId = song1.Id },
-            new UserPlaylist { UserId = user2.Id, PlaylistId = playlist2.Id, OwnedSongId = song2.Id }
+            new UserPlaylist { UserId = user1.Id, PlaylistId = playlist1.Id, SongMetadataId = song1Metadata.Id },
+            new UserPlaylist { UserId = user2.Id, PlaylistId = playlist2.Id, SongMetadataId = song2Metadata.Id }
         );
         await _context.SaveChangesAsync();
 

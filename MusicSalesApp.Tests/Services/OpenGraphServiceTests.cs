@@ -124,7 +124,7 @@ public class OpenGraphServiceTests
                 ImageBlobPath = "album/Test Album.jpg",
                 AlbumName = "Test Album",
                 IsAlbumCover = true,
-                AlbumPrice = 9.99m
+                
             },
             new SongMetadata
             {

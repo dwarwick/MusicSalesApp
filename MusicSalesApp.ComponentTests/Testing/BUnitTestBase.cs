@@ -34,7 +34,6 @@ public abstract class BUnitTestBase
     protected Mock<IMusicUploadService> MockMusicUploadService { get; private set; } = default!;
     protected Mock<IMusicService> MockMusicService { get; private set; } = default!;
     protected Mock<IAzureStorageService> MockAzureStorageService { get; private set; } = default!;
-    protected Mock<ICartService> MockCartService { get; private set; } = default!;
     protected Mock<IWebHostEnvironment> MockWebHostEnvironment { get; private set; } = default!;
     protected Mock<ISongMetadataService> MockSongMetadataService { get; private set; } = default!;
     protected Mock<IThemeService> MockThemeService { get; private set; } = default!;
@@ -50,7 +49,7 @@ public abstract class BUnitTestBase
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
-    protected Mock<ISellerService> MockSellerService { get; private set; } = default!;
+    protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -65,7 +64,6 @@ public abstract class BUnitTestBase
         MockMusicUploadService = new Mock<IMusicUploadService>();
         MockMusicService = new Mock<IMusicService>();
         MockAzureStorageService = new Mock<IAzureStorageService>();
-        MockCartService = new Mock<ICartService>();
         MockWebHostEnvironment = new Mock<IWebHostEnvironment>();
         MockSongMetadataService = new Mock<ISongMetadataService>();
         MockThemeService = new Mock<IThemeService>();
@@ -80,7 +78,7 @@ public abstract class BUnitTestBase
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
-        MockSellerService = new Mock<ISellerService>();
+        MockCreatorService = new Mock<ICreatorService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -127,14 +125,6 @@ public abstract class BUnitTestBase
             .ReturnsAsync((true, string.Empty));
         MockAuthService.Setup(x => x.ResetPasswordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, string.Empty));
-
-        // Setup default returns for ICartService methods
-        MockCartService.Setup(x => x.GetCartItemsAsync(It.IsAny<int>()))
-            .ReturnsAsync(new List<MusicSalesApp.Models.CartItem>());
-        MockCartService.Setup(x => x.GetCartItemCountAsync(It.IsAny<int>()))
-            .ReturnsAsync(0);
-        MockCartService.Setup(x => x.GetOwnedSongsAsync(It.IsAny<int>()))
-            .ReturnsAsync(new List<string>());
 
         // Setup default returns for ISongMetadataService methods
         MockSongMetadataService.Setup(x => x.GetAllAsync())
@@ -237,12 +227,12 @@ public abstract class BUnitTestBase
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
-        // Setup default returns for ISellerService methods
-        MockSellerService.Setup(x => x.GetSellerByUserIdAsync(It.IsAny<int>()))
-            .ReturnsAsync((Seller)null);
-        MockSellerService.Setup(x => x.IsActiveSellerAsync(It.IsAny<int>()))
+        // Setup default returns for ICreatorService methods
+        MockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(It.IsAny<int>()))
+            .ReturnsAsync((Creator)null);
+        MockCreatorService.Setup(x => x.IsActiveCreatorAsync(It.IsAny<int>()))
             .ReturnsAsync(false);
-        MockSellerService.Setup(x => x.GetSellerIdForUserAsync(It.IsAny<int>()))
+        MockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(It.IsAny<int>()))
             .ReturnsAsync((int?)null);
 
         // Setup DbContextFactory mock - use in-memory database for testing
@@ -261,7 +251,6 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IMusicUploadService>(MockMusicUploadService.Object);
         TestContext.Services.AddSingleton<IMusicService>(MockMusicService.Object);
         TestContext.Services.AddSingleton<IAzureStorageService>(MockAzureStorageService.Object);
-        TestContext.Services.AddSingleton<ICartService>(MockCartService.Object);
         TestContext.Services.AddSingleton<IWebHostEnvironment>(MockWebHostEnvironment.Object);
         TestContext.Services.AddSingleton<ISongMetadataService>(MockSongMetadataService.Object);
         TestContext.Services.AddSingleton<IThemeService>(MockThemeService.Object);
@@ -277,7 +266,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
-        TestContext.Services.AddSingleton<ISellerService>(MockSellerService.Object);
+        TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

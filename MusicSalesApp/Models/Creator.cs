@@ -5,16 +5,16 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace MusicSalesApp.Models;
 
 /// <summary>
-/// Represents a seller who can upload and sell music on the platform.
-/// Sellers are onboarded through PayPal Partner Referrals and can receive payments for their music sales.
+/// Represents a creator who can upload and sell music on the platform.
+/// Creators are onboarded through PayPal Partner Referrals and can receive payments for their music sales.
 /// </summary>
-public class Seller
+public class Creator
 {
     [Key]
     public int Id { get; set; }
 
     /// <summary>
-    /// Foreign key to the ApplicationUser who is the seller
+    /// Foreign key to the ApplicationUser who is the creator
     /// </summary>
     public int UserId { get; set; }
 
@@ -25,15 +25,15 @@ public class Seller
     public virtual ApplicationUser User { get; set; } = null!;
 
     /// <summary>
-    /// PayPal Merchant ID (Payer ID) for the seller's PayPal business account.
+    /// PayPal Merchant ID (Payer ID) for the creator's PayPal business account.
     /// This is obtained after successful PayPal onboarding.
     /// </summary>
     [MaxLength(50)]
     public string? PayPalMerchantId { get; set; }
 
     /// <summary>
-    /// The PayPal email address where this seller receives payouts.
-    /// This may be different from the seller's login email (User.Email).
+    /// The PayPal email address where this creator receives payouts.
+    /// This may be different from the creator's login email (User.Email).
     /// Used for PayPal Payouts API calls.
     /// </summary>
     [MaxLength(255)]
@@ -48,24 +48,24 @@ public class Seller
     public string? PayPalTrackingId { get; set; }
 
     /// <summary>
-    /// The referral URL returned by PayPal for the seller to complete onboarding.
+    /// The referral URL returned by PayPal for the creator to complete onboarding.
     /// </summary>
     [MaxLength(2000)]
     public string? PayPalReferralUrl { get; set; }
 
     /// <summary>
-    /// The status of the seller's PayPal onboarding process.
+    /// The status of the creator's PayPal onboarding process.
     /// </summary>
-    public SellerOnboardingStatus OnboardingStatus { get; set; } = SellerOnboardingStatus.NotStarted;
+    public CreatorOnboardingStatus OnboardingStatus { get; set; } = CreatorOnboardingStatus.NotStarted;
 
     /// <summary>
-    /// Whether the seller has granted the necessary permissions to the platform.
+    /// Whether the creator has granted the necessary permissions to the platform.
     /// This is required for multi-party payments.
     /// </summary>
     public bool PaymentsReceivable { get; set; } = false;
 
     /// <summary>
-    /// Whether the seller's email has been confirmed with PayPal.
+    /// Whether the creator's email has been confirmed with PayPal.
     /// </summary>
     public bool PrimaryEmailConfirmed { get; set; } = false;
 
@@ -78,48 +78,48 @@ public class Seller
 
     /// <summary>
     /// The rate paid per stream in USD (e.g., 0.005 for $5 per 1000 streams).
-    /// This is set when the seller is onboarded and locked in for the lifetime of the seller account.
+    /// This is set when the creator is onboarded and locked in for the lifetime of the creator account.
     /// </summary>
     [Column(TypeName = "decimal(10,6)")]
     public decimal StreamPayRate { get; set; } = 0.005m;
 
     /// <summary>
-    /// Display name for the seller (can be different from username).
+    /// Display name for the creator (can be different from username).
     /// </summary>
     [MaxLength(200)]
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// Optional bio or description for the seller.
+    /// Optional bio or description for the creator.
     /// </summary>
     [MaxLength(1000)]
     public string? Bio { get; set; }
 
     /// <summary>
-    /// When the seller record was created.
+    /// When the creator record was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// When the seller completed PayPal onboarding.
+    /// When the creator completed PayPal onboarding.
     /// </summary>
     public DateTime? OnboardedAt { get; set; }
 
     /// <summary>
-    /// When the seller record was last updated.
+    /// When the creator record was last updated.
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Whether the seller account is currently active and can sell music.
+    /// Whether the creator account is currently active and can sell music.
     /// </summary>
     public bool IsActive { get; set; } = false;
 }
 
 /// <summary>
-/// Represents the status of a seller's PayPal onboarding process.
+/// Represents the status of a creator's PayPal onboarding process.
 /// </summary>
-public enum SellerOnboardingStatus
+public enum CreatorOnboardingStatus
 {
     /// <summary>
     /// Onboarding has not been started.
@@ -127,17 +127,17 @@ public enum SellerOnboardingStatus
     NotStarted = 0,
 
     /// <summary>
-    /// Referral link has been generated, waiting for seller to complete PayPal signup.
+    /// Referral link has been generated, waiting for creator to complete PayPal signup.
     /// </summary>
     Pending = 1,
 
     /// <summary>
-    /// Seller has completed PayPal signup but additional verification may be needed.
+    /// Creator has completed PayPal signup but additional verification may be needed.
     /// </summary>
     InProgress = 2,
 
     /// <summary>
-    /// Seller has completed onboarding and can receive payments.
+    /// Creator has completed onboarding and can receive payments.
     /// </summary>
     Completed = 3,
 
@@ -147,13 +147,13 @@ public enum SellerOnboardingStatus
     Failed = 4,
 
     /// <summary>
-    /// Seller account has been suspended.
+    /// Creator account has been suspended.
     /// </summary>
     Suspended = 5,
 
     /// <summary>
-    /// Seller has revoked their consent to the platform via PayPal.
-    /// This typically happens when the seller removes the platform's permissions in their PayPal account.
+    /// Creator has revoked their consent to the platform via PayPal.
+    /// This typically happens when the creator removes the platform's permissions in their PayPal account.
     /// </summary>
     ConsentRevoked = 6
 }

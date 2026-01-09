@@ -47,18 +47,6 @@ public class SongMetadata
     public bool IsAlbumCover { get; set; }
 
     /// <summary>
-    /// The price of an album (for album cover images)
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal? AlbumPrice { get; set; }
-
-    /// <summary>
-    /// The price of a song (for MP3 files)
-    /// </summary>
-    [Column(TypeName = "decimal(18,2)")]
-    public decimal? SongPrice { get; set; }
-
-    /// <summary>
     /// The genre of the song (e.g., Rock, Country, Pop)
     /// </summary>
     [MaxLength(50)]
@@ -109,18 +97,18 @@ public class SongMetadata
     /// <summary>
     /// Indicates whether this song is active and available for playback.
     /// Inactive songs are not displayed anywhere on the website and cannot be played.
-    /// Songs are set to inactive when a seller deletes them or closes their account.
+    /// Songs are set to inactive when a creator deletes them or closes their account.
     /// </summary>
     public bool IsActive { get; set; } = true;
 
     /// <summary>
-    /// Foreign key to the Seller who uploaded this song.
+    /// Foreign key to the Creator who uploaded this song.
     /// If null, the song was uploaded by the platform admin.
     /// </summary>
-    public int? SellerId { get; set; }
+    public int? CreatorId { get; set; }
 
     /// <summary>
-    /// Navigation property to the Seller who owns this song.
+    /// Navigation property to the Creator who owns this song.
     /// </summary>
-    public virtual Seller Seller { get; set; }
+    public virtual Creator Creator { get; set; }
 }

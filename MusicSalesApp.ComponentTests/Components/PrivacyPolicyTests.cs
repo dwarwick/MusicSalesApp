@@ -141,7 +141,7 @@ public class PrivacyPolicyTests : BUnitTestBase
 
         // Assert - Verify last updated date
         Assert.That(cut.Markup, Does.Contain("Last Updated"));
-        Assert.That(cut.Markup, Does.Contain("2024"));
+        Assert.That(cut.Markup, Does.Contain("2026"));
     }
 
     [Test]

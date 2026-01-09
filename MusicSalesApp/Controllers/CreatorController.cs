@@ -11,29 +11,29 @@ using MusicSalesApp.Services;
 namespace MusicSalesApp.Controllers;
 
 /// <summary>
-/// API controller for seller onboarding and management operations.
+/// API controller for creator onboarding and management operations.
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(Roles = "Admin,User,Seller")]
-public class SellerController : ControllerBase
+[Authorize(Roles = "Admin,User,Creator")]
+public class CreatorController : ControllerBase
 {
-    private readonly ISellerService _sellerService;
+    private readonly ICreatorService _creatorService;
     private readonly IPayPalPartnerService _payPalPartnerService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
-    private readonly ILogger<SellerController> _logger;
+    private readonly ILogger<CreatorController> _logger;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
-    public SellerController(
-        ISellerService sellerService,
+    public CreatorController(
+        ICreatorService creatorService,
         IPayPalPartnerService payPalPartnerService,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
-        ILogger<SellerController> logger,
+        ILogger<CreatorController> logger,
         IDbContextFactory<AppDbContext> dbContextFactory)
     {
-        _sellerService = sellerService;
+        _creatorService = creatorService;
         _payPalPartnerService = payPalPartnerService;
         _userManager = userManager;
         _roleManager = roleManager;
@@ -42,44 +42,44 @@ public class SellerController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the current user's seller status and information.
+    /// Gets the current user's creator status and information.
     /// </summary>
     [HttpGet("status")]
-    public async Task<IActionResult> GetSellerStatus()
+    public async Task<IActionResult> GetCreatorStatus()
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
 
-        if (seller == null)
+        if (creator == null)
         {
-            return Ok(new SellerStatusResponse
+            return Ok(new CreatorStatusResponse
             {
-                IsSeller = false,
+                IsCreator = false,
                 OnboardingStatus = null,
                 IsActive = false
             });
         }
 
-        return Ok(new SellerStatusResponse
+        return Ok(new CreatorStatusResponse
         {
-            IsSeller = true,
-            SellerId = seller.Id,
-            OnboardingStatus = seller.OnboardingStatus.ToString(),
-            IsActive = seller.IsActive,
-            DisplayName = seller.DisplayName,
-            Bio = seller.Bio,
-            PaymentsReceivable = seller.PaymentsReceivable,
-            PrimaryEmailConfirmed = seller.PrimaryEmailConfirmed,
-            CommissionRate = seller.CommissionRate,
-            OnboardedAt = seller.OnboardedAt,
-            ReferralUrl = seller.OnboardingStatus == SellerOnboardingStatus.Pending ? seller.PayPalReferralUrl : null
+            IsCreator = true,
+            CreatorId = creator.Id,
+            OnboardingStatus = creator.OnboardingStatus.ToString(),
+            IsActive = creator.IsActive,
+            DisplayName = creator.DisplayName,
+            Bio = creator.Bio,
+            PaymentsReceivable = creator.PaymentsReceivable,
+            PrimaryEmailConfirmed = creator.PrimaryEmailConfirmed,
+            CommissionRate = creator.CommissionRate,
+            OnboardedAt = creator.OnboardedAt,
+            ReferralUrl = creator.OnboardingStatus == CreatorOnboardingStatus.Pending ? creator.PayPalReferralUrl : null
         });
     }
 
     /// <summary>
-    /// Starts the seller onboarding process by creating a PayPal partner referral.
+    /// Starts the creator onboarding process by creating a PayPal partner referral.
     /// </summary>
     [HttpPost("start-onboarding")]
     public async Task<IActionResult> StartOnboarding([FromBody] StartOnboardingRequest request)
@@ -89,46 +89,46 @@ public class SellerController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(user.Email))
         {
-            return BadRequest("User must have a verified email address to become a seller.");
+            return BadRequest("User must have a verified email address to become a creator.");
         }
 
         // Validate PayPal email is provided
         if (string.IsNullOrWhiteSpace(request.PayPalEmail))
         {
-            return BadRequest("PayPal email address is required to become a seller.");
+            return BadRequest("PayPal email address is required to become a creator.");
         }
 
-        // Check if user already has a seller record
-        var existingSeller = await _sellerService.GetSellerByUserIdAsync(user.Id);
-        if (existingSeller != null && existingSeller.IsActive)
+        // Check if user already has a creator record
+        var existingCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (existingCreator != null && existingCreator.IsActive)
         {
-            return BadRequest("You are already an active seller.");
+            return BadRequest("You are already an active creator.");
         }
 
-        // Create or update seller record
-        Seller seller;
-        if (existingSeller == null)
+        // Create or update creator record
+        Creator creator;
+        if (existingCreator == null)
         {
-            seller = await _sellerService.CreateSellerAsync(user.Id, request.DisplayName, request.Bio);
+            creator = await _creatorService.CreateCreatorAsync(user.Id, request.DisplayName, request.Bio);
         }
         else
         {
-            seller = existingSeller;
+            creator = existingCreator;
             if (!string.IsNullOrWhiteSpace(request.DisplayName))
             {
-                await _sellerService.UpdateSellerProfileAsync(seller.Id, request.DisplayName, request.Bio);
-                seller.DisplayName = request.DisplayName;
-                seller.Bio = request.Bio;
+                await _creatorService.UpdateCreatorProfileAsync(creator.Id, request.DisplayName, request.Bio);
+                creator.DisplayName = request.DisplayName;
+                creator.Bio = request.Bio;
             }
         }
 
-        // Update seller with PayPal email
+        // Update creator with PayPal email
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        var sellerToUpdate = await context.Sellers.FindAsync(seller.Id);
-        if (sellerToUpdate != null)
+        var creatorToUpdate = await context.Creators.FindAsync(creator.Id);
+        if (creatorToUpdate != null)
         {
-            sellerToUpdate.PayPalEmail = request.PayPalEmail;
-            sellerToUpdate.UpdatedAt = DateTime.UtcNow;
+            creatorToUpdate.PayPalEmail = request.PayPalEmail;
+            creatorToUpdate.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
         }
 
@@ -140,10 +140,10 @@ public class SellerController : ControllerBase
             return StatusCode(500, new { error = referralResult?.ErrorMessage ?? "Failed to create PayPal referral" });
         }
 
-        // Update seller with onboarding info
-        await _sellerService.UpdateOnboardingInfoAsync(seller.Id, referralResult.TrackingId, referralResult.ReferralUrl);
+        // Update creator with onboarding info
+        await _creatorService.UpdateOnboardingInfoAsync(creator.Id, referralResult.TrackingId, referralResult.ReferralUrl);
 
-        _logger.LogInformation("Started seller onboarding for user {UserId}, tracking ID: {TrackingId}, PayPal email: {PayPalEmail}", 
+        _logger.LogInformation("Started creator onboarding for user {UserId}, tracking ID: {TrackingId}, PayPal email: {PayPalEmail}", 
             user.Id, referralResult.TrackingId, request.PayPalEmail);
 
         return Ok(new StartOnboardingResponse
@@ -155,7 +155,7 @@ public class SellerController : ControllerBase
     }
 
     /// <summary>
-    /// Completes the seller onboarding after the user returns from PayPal.
+    /// Completes the creator onboarding after the user returns from PayPal.
     /// </summary>
     [HttpPost("complete-onboarding")]
     public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingRequest request)
@@ -163,27 +163,27 @@ public class SellerController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
-        if (seller == null)
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null)
         {
-            return BadRequest("Seller record not found. Please start the onboarding process first.");
+            return BadRequest("Creator record not found. Please start the onboarding process first.");
         }
 
-        if (string.IsNullOrWhiteSpace(seller.PayPalTrackingId))
+        if (string.IsNullOrWhiteSpace(creator.PayPalTrackingId))
         {
             return BadRequest("No pending onboarding found.");
         }
 
         // Get the merchant status from PayPal
-        var merchantStatus = await _payPalPartnerService.GetMerchantStatusByTrackingIdAsync(seller.PayPalTrackingId);
+        var merchantStatus = await _payPalPartnerService.GetMerchantStatusByTrackingIdAsync(creator.PayPalTrackingId);
         if (merchantStatus == null)
         {
-            _logger.LogWarning("Could not retrieve merchant status for tracking ID {TrackingId}", seller.PayPalTrackingId);
+            _logger.LogWarning("Could not retrieve merchant status for tracking ID {TrackingId}", creator.PayPalTrackingId);
             
             // If we can't get status but have a merchant ID from callback, try using that
             if (!string.IsNullOrWhiteSpace(request.MerchantId))
             {
-                await _sellerService.CompleteOnboardingAsync(seller.Id, request.MerchantId, true, true);
+                await _creatorService.CompleteOnboardingAsync(creator.Id, request.MerchantId, true, true);
             }
             else
             {
@@ -193,46 +193,46 @@ public class SellerController : ControllerBase
         else
         {
             // Complete onboarding with the status from PayPal
-            await _sellerService.CompleteOnboardingAsync(
-                seller.Id, 
+            await _creatorService.CompleteOnboardingAsync(
+                creator.Id, 
                 merchantStatus.MerchantId, 
                 merchantStatus.PaymentsReceivable, 
                 merchantStatus.PrimaryEmailConfirmed);
         }
 
-        // Reload seller to get updated status
-        seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
+        // Reload creator to get updated status
+        creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
 
-        // If onboarding is complete, add Seller role to user
-        if (seller != null && seller.IsActive)
+        // If onboarding is complete, add Creator role to user
+        if (creator != null && creator.IsActive)
         {
-            // Ensure the Seller role exists
-            if (!await _roleManager.RoleExistsAsync(Roles.Seller))
+            // Ensure the Creator role exists
+            if (!await _roleManager.RoleExistsAsync(Roles.Creator))
             {
-                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Seller, NormalizedName = Roles.Seller.ToUpper() });
+                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
             }
 
-            // Add Seller role if user doesn't already have it
-            if (!await _userManager.IsInRoleAsync(user, Roles.Seller))
+            // Add Creator role if user doesn't already have it
+            if (!await _userManager.IsInRoleAsync(user, Roles.Creator))
             {
-                await _userManager.AddToRoleAsync(user, Roles.Seller);
-                _logger.LogInformation("Added Seller role to user {UserId}", user.Id);
+                await _userManager.AddToRoleAsync(user, Roles.Creator);
+                _logger.LogInformation("Added Creator role to user {UserId}", user.Id);
             }
         }
 
-        _logger.LogInformation("Completed seller onboarding for user {UserId}, IsActive: {IsActive}", user.Id, seller?.IsActive);
+        _logger.LogInformation("Completed creator onboarding for user {UserId}, IsActive: {IsActive}", user.Id, creator?.IsActive);
 
         return Ok(new CompleteOnboardingResponse
         {
             Success = true,
-            IsActive = seller?.IsActive ?? false,
-            PaymentsReceivable = seller?.PaymentsReceivable ?? false,
-            PrimaryEmailConfirmed = seller?.PrimaryEmailConfirmed ?? false
+            IsActive = creator?.IsActive ?? false,
+            PaymentsReceivable = creator?.PaymentsReceivable ?? false,
+            PrimaryEmailConfirmed = creator?.PrimaryEmailConfirmed ?? false
         });
     }
 
     /// <summary>
-    /// Updates the seller's profile information.
+    /// Updates the creator's profile information.
     /// </summary>
     [HttpPut("profile")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
@@ -240,27 +240,27 @@ public class SellerController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
-        if (seller == null)
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null)
         {
-            return NotFound("Seller record not found.");
+            return NotFound("Creator record not found.");
         }
 
-        await _sellerService.UpdateSellerProfileAsync(seller.Id, request.DisplayName, request.Bio);
+        await _creatorService.UpdateCreatorProfileAsync(creator.Id, request.DisplayName, request.Bio);
 
         return Ok(new { success = true });
     }
 
     /// <summary>
-    /// Gets all sellers (admin only).
+    /// Gets all creators (admin only).
     /// </summary>
     [HttpGet("all")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetAllSellers()
+    public async Task<IActionResult> GetAllCreators()
     {
-        var sellers = await _sellerService.GetAllSellersAsync();
+        var creators = await _creatorService.GetAllCreatorsAsync();
 
-        return Ok(sellers.Select(s => new SellerListItem
+        return Ok(creators.Select(s => new CreatorListItem
         {
             Id = s.Id,
             UserId = s.UserId,
@@ -278,21 +278,21 @@ public class SellerController : ControllerBase
     }
 
     /// <summary>
-    /// Activates a seller account (admin only).
+    /// Activates a creator account (admin only).
     /// </summary>
-    [HttpPost("{sellerId}/activate")]
+    [HttpPost("{creatorId}/activate")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> ActivateSeller(int sellerId)
+    public async Task<IActionResult> ActivateCreator(int creatorId)
     {
         try
         {
-            var seller = await _sellerService.ActivateSellerAsync(sellerId);
+            var creator = await _creatorService.ActivateCreatorAsync(creatorId);
             
-            // Add Seller role to the user
-            var user = await _userManager.FindByIdAsync(seller.UserId.ToString());
-            if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Seller))
+            // Add Creator role to the user
+            var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+            if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Creator))
             {
-                await _userManager.AddToRoleAsync(user, Roles.Seller);
+                await _userManager.AddToRoleAsync(user, Roles.Creator);
             }
 
             return Ok(new { success = true });
@@ -304,21 +304,21 @@ public class SellerController : ControllerBase
     }
 
     /// <summary>
-    /// Deactivates a seller account (admin only).
+    /// Deactivates a creator account (admin only).
     /// </summary>
-    [HttpPost("{sellerId}/deactivate")]
+    [HttpPost("{creatorId}/deactivate")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeactivateSeller(int sellerId)
+    public async Task<IActionResult> DeactivateCreator(int creatorId)
     {
         try
         {
-            var seller = await _sellerService.DeactivateSellerAsync(sellerId);
+            var creator = await _creatorService.DeactivateCreatorAsync(creatorId);
 
-            // Remove Seller role from the user
-            var user = await _userManager.FindByIdAsync(seller.UserId.ToString());
-            if (user != null && await _userManager.IsInRoleAsync(user, Roles.Seller))
+            // Remove Creator role from the user
+            var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+            if (user != null && await _userManager.IsInRoleAsync(user, Roles.Creator))
             {
-                await _userManager.RemoveFromRoleAsync(user, Roles.Seller);
+                await _userManager.RemoveFromRoleAsync(user, Roles.Creator);
             }
 
             return Ok(new { success = true });
@@ -330,23 +330,23 @@ public class SellerController : ControllerBase
     }
 
     /// <summary>
-    /// Updates a seller's commission rate (admin only).
+    /// Updates a creator's commission rate (admin only).
     /// </summary>
-    [HttpPut("{sellerId}/commission")]
+    [HttpPut("{creatorId}/commission")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateCommissionRate(int sellerId, [FromBody] UpdateCommissionRequest request)
+    public async Task<IActionResult> UpdateCommissionRate(int creatorId, [FromBody] UpdateCommissionRequest request)
     {
         if (request.CommissionRate < 0 || request.CommissionRate > 1)
         {
             return BadRequest("Commission rate must be between 0 and 1 (0% to 100%).");
         }
 
-        // TODO: Implement commission rate update in SellerService
+        // TODO: Implement commission rate update in CreatorService
         return Ok(new { success = true });
     }
 
     /// <summary>
-    /// Allows a user to stop being a seller. This will remove all their music from Azure storage
+    /// Allows a user to stop being a creator. This will remove all their music from Azure storage
     /// and mark it as inactive in the database.
     /// </summary>
     [HttpPost("stop-selling")]
@@ -355,14 +355,14 @@ public class SellerController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var success = await _sellerService.StopBeingSellerAsync(user.Id);
+        var success = await _creatorService.StopBeingCreatorAsync(user.Id);
         if (!success)
         {
-            return BadRequest("You are not currently a seller or there was an error processing your request.");
+            return BadRequest("You are not currently a creator or there was an error processing your request.");
         }
 
-        _logger.LogInformation("User {UserId} stopped being a seller", user.Id);
-        return Ok(new { success = true, message = "You are no longer a seller. All your music has been removed." });
+        _logger.LogInformation("User {UserId} stopped being a creator", user.Id);
+        return Ok(new { success = true, message = "You are no longer a creator. All your music has been removed." });
     }
 
     /// <summary>
@@ -374,24 +374,24 @@ public class SellerController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
-        if (seller == null || !seller.IsActive)
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null || !creator.IsActive)
         {
-            return BadRequest("You are not an active seller.");
+            return BadRequest("You are not an active creator.");
         }
 
-        var success = await _sellerService.DeleteSellerSongAsync(songMetadataId, seller.Id);
+        var success = await _creatorService.DeleteCreatorSongAsync(songMetadataId, creator.Id);
         if (!success)
         {
             return BadRequest("Song not found or you do not have permission to delete it.");
         }
 
-        _logger.LogInformation("Seller {SellerId} deleted song {SongMetadataId}", seller.Id, songMetadataId);
+        _logger.LogInformation("Creator {CreatorId} deleted song {SongMetadataId}", creator.Id, songMetadataId);
         return Ok(new { success = true, message = "Song has been deleted." });
     }
 
     /// <summary>
-    /// Gets all songs owned by the current seller.
+    /// Gets all songs owned by the current creator.
     /// </summary>
     [HttpGet("songs")]
     public async Task<IActionResult> GetMySongs()
@@ -399,22 +399,20 @@ public class SellerController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var seller = await _sellerService.GetSellerByUserIdAsync(user.Id);
-        if (seller == null)
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null)
         {
             return Ok(new List<object>());
         }
 
-        var songs = await _sellerService.GetSellerSongsAsync(seller.Id);
-        return Ok(songs.Select(s => new SellerSongItem
+        var songs = await _creatorService.GetCreatorSongsAsync(creator.Id);
+        return Ok(songs.Select(s => new CreatorSongItem
         {
             Id = s.Id,
             Mp3BlobPath = s.Mp3BlobPath,
             ImageBlobPath = s.ImageBlobPath,
             AlbumName = s.AlbumName,
             IsAlbumCover = s.IsAlbumCover,
-            SongPrice = s.SongPrice,
-            AlbumPrice = s.AlbumPrice,
             Genre = s.Genre,
             TrackNumber = s.TrackNumber,
             TrackLength = s.TrackLength,
@@ -426,10 +424,10 @@ public class SellerController : ControllerBase
 
 #region Request/Response Models
 
-public class SellerStatusResponse
+public class CreatorStatusResponse
 {
-    public bool IsSeller { get; set; }
-    public int? SellerId { get; set; }
+    public bool IsCreator { get; set; }
+    public int? CreatorId { get; set; }
     public string? OnboardingStatus { get; set; }
     public bool IsActive { get; set; }
     public string? DisplayName { get; set; }
@@ -474,7 +472,7 @@ public class UpdateProfileRequest
     public string? Bio { get; set; }
 }
 
-public class SellerListItem
+public class CreatorListItem
 {
     public int Id { get; set; }
     public int UserId { get; set; }
@@ -495,15 +493,13 @@ public class UpdateCommissionRequest
     public decimal CommissionRate { get; set; }
 }
 
-public class SellerSongItem
+public class CreatorSongItem
 {
     public int Id { get; set; }
     public string? Mp3BlobPath { get; set; }
     public string? ImageBlobPath { get; set; }
     public string? AlbumName { get; set; }
     public bool IsAlbumCover { get; set; }
-    public decimal? SongPrice { get; set; }
-    public decimal? AlbumPrice { get; set; }
     public string? Genre { get; set; }
     public int? TrackNumber { get; set; }
     public double? TrackLength { get; set; }

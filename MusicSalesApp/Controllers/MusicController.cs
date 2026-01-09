@@ -13,18 +13,18 @@ namespace MusicSalesApp.Controllers
     public class MusicController : ControllerBase
     {
         private readonly IAzureStorageService _storageService;
-        private readonly ICartService _cartService;
+        private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
         private readonly UserManager<ApplicationUser> _userManager;
 
         public MusicController(
             IAzureStorageService storageService,
-            ICartService cartService,
+            ISubscriptionService subscriptionService,
             IStreamCountService streamCountService,
             UserManager<ApplicationUser> userManager)
         {
             _storageService = storageService;
-            _cartService = cartService;
+            _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
             _userManager = userManager;
         }
@@ -49,26 +49,26 @@ namespace MusicSalesApp.Controllers
         }
 
         // Preferred: obtain a short-lived SAS URL so the browser can stream directly from Blob Storage
-        // Non-owners and unauthenticated users get shorter-lived URLs (for preview only)
-        // Owners get longer-lived URLs for full access
+        // Non-subscribers and unauthenticated users get shorter-lived URLs (for preview only)
+        // Subscribers get longer-lived URLs for full access
         [HttpGet("url/{*fileName}")]
         public async Task<IActionResult> GetStreamUrl(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))
                 return BadRequest();
 
-            // Check if user is authenticated and owns the song
+            // Check if user is authenticated and has active subscription
             var user = await _userManager.GetUserAsync(User);
-            bool ownsContent = false;
+            bool hasAccess = false;
             
             if (user != null)
             {
-                ownsContent = await _cartService.UserOwnsSongAsync(user.Id, fileName);
+                hasAccess = await _subscriptionService.HasActiveSubscriptionAsync(user.Id);
             }
 
-            // Owners get 24 hour SAS URLs for full streaming
-            // Non-owners get 2 hour SAS URLs (sufficient for preview but needs refresh for extended use)
-            var lifetime = ownsContent ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
+            // Subscribers get 24 hour SAS URLs for full streaming
+            // Non-subscribers get 2 hour SAS URLs (sufficient for preview but needs refresh for extended use)
+            var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
             var uri = _storageService.GetReadSasUri(fileName, lifetime);
 
             return Ok(new { url = uri.ToString() });

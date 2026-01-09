@@ -33,18 +33,18 @@ public class UploadFilesModel : BlazorBase
     protected bool _showAlbumCoverPrompt = false;
     protected string _pendingAlbumName = string.Empty;
     
-    // Seller ID - will be populated if the current user is a seller
-    private int? _currentSellerId = null;
-    private bool _hasLoadedSellerId = false;
+    // Creator ID - will be populated if the current user is a creator
+    private int? _currentCreatorId = null;
+    private bool _hasLoadedCreatorId = false;
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg", ".png" };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_hasLoadedSellerId)
+        if (firstRender && !_hasLoadedCreatorId)
         {
-            _hasLoadedSellerId = true;
+            _hasLoadedCreatorId = true;
             try
             {
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -55,15 +55,15 @@ public class UploadFilesModel : BlazorBase
                     var appUser = await UserManager.GetUserAsync(user);
                     if (appUser != null)
                     {
-                        // Check if the user is a seller and get their seller ID
-                        _currentSellerId = await SellerService.GetSellerIdForUserAsync(appUser.Id);
+                        // Check if the user is a creator and get their creator ID
+                        _currentCreatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
                     }
                 }
             }
             catch (Exception)
             {
-                // If we can't determine seller status, uploads will be assigned to admin
-                _currentSellerId = null;
+                // If we can't determine creator status, uploads will be assigned to admin
+                _currentCreatorId = null;
             }
         }
     }
@@ -186,7 +186,7 @@ public class UploadFilesModel : BlazorBase
                 albumArtMemoryStream,
                 albumArtFile.Name,
                 _albumName,
-                _currentSellerId,
+                _currentCreatorId,
                 _cancellationToken);
 
             uploadItem.Progress = 100;
@@ -339,7 +339,7 @@ public class UploadFilesModel : BlazorBase
                 albumArtMemoryStream,
                 albumArtFile.Name,
                 _pendingAlbumName,
-                _currentSellerId,
+                _currentCreatorId,
                 _cancellationToken);
 
             uploadItem.Progress = 100;

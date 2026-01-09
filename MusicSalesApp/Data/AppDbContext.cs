@@ -13,8 +13,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     {
     }
 
-    public DbSet<CartItem> CartItems { get; set; }
-    public DbSet<OwnedSong> OwnedSongs { get; set; }
     public DbSet<PayPalOrder> PayPalOrders { get; set; }
     public DbSet<SongMetadata> SongMetadata { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
@@ -24,7 +22,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongLike> SongLikes { get; set; }
     public DbSet<RecommendedPlaylist> RecommendedPlaylists { get; set; }
     public DbSet<AppSettings> AppSettings { get; set; }
-    public DbSet<Seller> Sellers { get; set; }
+    public DbSet<Creator> Creators { get; set; }
     public DbSet<StreamPayout> StreamPayouts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -34,7 +32,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Seed roles
         var adminRoleId = 1;
         var userRoleId = 2;
-        var sellerRoleId = 4;
+        var creatorRoleId = 4;
 
         builder.Entity<IdentityRole<int>>().HasData(
             new IdentityRole<int>
@@ -53,9 +51,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             },
             new IdentityRole<int>
             {
-                Id = sellerRoleId,
-                Name = Common.Helpers.Roles.Seller,
-                NormalizedName = Common.Helpers.Roles.Seller.ToUpper(),
+                Id = creatorRoleId,
+                Name = Common.Helpers.Roles.Creator,
+                NormalizedName = Common.Helpers.Roles.Creator.ToUpper(),
                 ConcurrencyStamp = "c3d4e5f6-a7b8-6c7d-0e1f-2a3b4c5d6e7f"
             }
         );
@@ -140,25 +138,25 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             ClaimValue = Permissions.ValidatedUser
         });
 
-        // Seller role gets ValidatedUser, UploadFiles, and ManageOwnSongs permissions
+        // Creator role gets ValidatedUser, UploadFiles, and ManageOwnSongs permissions
         roleClaims.Add(new IdentityRoleClaim<int>
         {
             Id = nextId++,
-            RoleId = sellerRoleId,
+            RoleId = creatorRoleId,
             ClaimType = CustomClaimTypes.Permission,
             ClaimValue = Permissions.ValidatedUser
         });
         roleClaims.Add(new IdentityRoleClaim<int>
         {
             Id = nextId++,
-            RoleId = sellerRoleId,
+            RoleId = creatorRoleId,
             ClaimType = CustomClaimTypes.Permission,
             ClaimValue = Permissions.UploadFiles
         });
         roleClaims.Add(new IdentityRoleClaim<int>
         {
             Id = nextId++,
-            RoleId = sellerRoleId,
+            RoleId = creatorRoleId,
             ClaimType = CustomClaimTypes.Permission,
             ClaimValue = Permissions.ManageOwnSongs
         });
@@ -181,13 +179,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasForeignKey(up => up.PlaylistId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Use NoAction for OwnedSong to avoid multiple cascade paths
-        // (User->OwnedSongs->UserPlaylists and User->Playlists->UserPlaylists)
+        // When SongMetadata is deleted, remove it from all playlists
         builder.Entity<UserPlaylist>()
-            .HasOne(up => up.OwnedSong)
+            .HasOne(up => up.SongMetadata)
             .WithMany()
-            .HasForeignKey(up => up.OwnedSongId)
-            .OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(up => up.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Configure Passkey entity
         builder.Entity<Passkey>()
@@ -264,31 +261,31 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             }
         );
 
-        // Configure Seller entity
-        builder.Entity<Seller>()
+        // Configure Creator entity
+        builder.Entity<Creator>()
             .HasOne(s => s.User)
             .WithMany()
             .HasForeignKey(s => s.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Unique index on UserId - each user can only be one seller
-        builder.Entity<Seller>()
+        // Unique index on UserId - each user can only be one creator
+        builder.Entity<Creator>()
             .HasIndex(s => s.UserId)
             .IsUnique();
 
         // Index on PayPalMerchantId for lookups
-        builder.Entity<Seller>()
+        builder.Entity<Creator>()
             .HasIndex(s => s.PayPalMerchantId);
 
         // Index on PayPalTrackingId for webhook handling
-        builder.Entity<Seller>()
+        builder.Entity<Creator>()
             .HasIndex(s => s.PayPalTrackingId);
 
-        // Configure SongMetadata-Seller relationship
+        // Configure SongMetadata-Creator relationship
         builder.Entity<SongMetadata>()
-            .HasOne(sm => sm.Seller)
+            .HasOne(sm => sm.Creator)
             .WithMany()
-            .HasForeignKey(sm => sm.SellerId)
+            .HasForeignKey(sm => sm.CreatorId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -208,33 +208,20 @@ public class PlaylistServiceTests
         var songMetadata = new SongMetadata 
         { 
             Mp3BlobPath = "test.mp3", 
-            IsAlbumCover = false 
+            IsAlbumCover = false,
+            IsActive = true
         };
         await _context.SongMetadata.AddAsync(songMetadata);
-
-        var ownedSong = new OwnedSong 
-        { 
-            UserId = userId, 
-            SongFileName = "test.mp3",
-            SongMetadataId = songMetadata.Id
-        };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
         await _context.SaveChangesAsync();
 
-        // Need to reload to get navigation properties
-        ownedSong = await _context.OwnedSongs
-            .Include(os => os.SongMetadata)
-            .FirstAsync(os => os.Id == ownedSong.Id);
-
         // Act
-        var result = await _service.AddSongToPlaylistAsync(userId, playlist.Id, ownedSong.Id);
+        var result = await _service.AddSongToPlaylistAsync(userId, playlist.Id, songMetadata.Id);
 
         // Assert
         Assert.That(result, Is.True);
 
         var userPlaylist = await _context.UserPlaylists
-            .FirstOrDefaultAsync(up => up.PlaylistId == playlist.Id && up.OwnedSongId == ownedSong.Id);
+            .FirstOrDefaultAsync(up => up.PlaylistId == playlist.Id && up.SongMetadataId == songMetadata.Id);
         Assert.That(userPlaylist, Is.Not.Null);
     }
 
@@ -252,25 +239,16 @@ public class PlaylistServiceTests
             IsAlbumCover = true // Album cover should not be added
         };
         await _context.SongMetadata.AddAsync(songMetadata);
-
-        var ownedSong = new OwnedSong 
-        { 
-            UserId = userId, 
-            SongFileName = "cover.jpg",
-            SongMetadataId = songMetadata.Id
-        };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.AddSongToPlaylistAsync(userId, playlist.Id, ownedSong.Id);
+        var result = await _service.AddSongToPlaylistAsync(userId, playlist.Id, songMetadata.Id);
 
         // Assert
         Assert.That(result, Is.False);
 
         var userPlaylist = await _context.UserPlaylists
-            .FirstOrDefaultAsync(up => up.PlaylistId == playlist.Id && up.OwnedSongId == ownedSong.Id);
+            .FirstOrDefaultAsync(up => up.PlaylistId == playlist.Id && up.SongMetadataId == songMetadata.Id);
         Assert.That(userPlaylist, Is.Null);
     }
 
@@ -285,14 +263,11 @@ public class PlaylistServiceTests
         var songMetadata = new SongMetadata { Mp3BlobPath = "test.mp3", IsAlbumCover = false };
         await _context.SongMetadata.AddAsync(songMetadata);
 
-        var ownedSong = new OwnedSong { UserId = userId, SongFileName = "test.mp3", SongMetadataId = songMetadata.Id };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
         var userPlaylist = new UserPlaylist 
         { 
             UserId = userId, 
             PlaylistId = playlist.Id, 
-            OwnedSongId = ownedSong.Id 
+            SongMetadataId = songMetadata.Id 
         };
         await _context.UserPlaylists.AddAsync(userPlaylist);
 
@@ -322,12 +297,8 @@ public class PlaylistServiceTests
         var songMetadata2 = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
         await _context.SongMetadata.AddRangeAsync(songMetadata1, songMetadata2);
 
-        var ownedSong1 = new OwnedSong { UserId = 1, SongFileName = "song1.mp3", SongMetadataId = songMetadata1.Id };
-        var ownedSong2 = new OwnedSong { UserId = 1, SongFileName = "song2.mp3", SongMetadataId = songMetadata2.Id };
-        await _context.OwnedSongs.AddRangeAsync(ownedSong1, ownedSong2);
-
-        var userPlaylist1 = new UserPlaylist { UserId = 1, PlaylistId = playlist.Id, OwnedSongId = ownedSong1.Id };
-        var userPlaylist2 = new UserPlaylist { UserId = 1, PlaylistId = playlist.Id, OwnedSongId = ownedSong2.Id };
+        var userPlaylist1 = new UserPlaylist { UserId = 1, PlaylistId = playlist.Id, SongMetadataId = songMetadata1.Id };
+        var userPlaylist2 = new UserPlaylist { UserId = 1, PlaylistId = playlist.Id, SongMetadataId = songMetadata2.Id };
         await _context.UserPlaylists.AddRangeAsync(userPlaylist1, userPlaylist2);
 
         await _context.SaveChangesAsync();
@@ -341,20 +312,15 @@ public class PlaylistServiceTests
     }
 
     [Test]
-    public async Task CanAddSongToPlaylistAsync_ReturnsTrue_WhenUserOwnsSongAndNotAlbumCover()
+    public async Task CanAddSongToPlaylistAsync_ReturnsTrue_WhenSongIsNotAlbumCover()
     {
         // Arrange
-        var userId = 1;
         var songMetadata = new SongMetadata { Mp3BlobPath = "test.mp3", IsAlbumCover = false };
         await _context.SongMetadata.AddAsync(songMetadata);
-
-        var ownedSong = new OwnedSong { UserId = userId, SongFileName = "test.mp3", SongMetadataId = songMetadata.Id };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.CanAddSongToPlaylistAsync(userId, ownedSong.Id);
+        var result = await _service.CanAddSongToPlaylistAsync(songMetadata.Id);
 
         // Assert
         Assert.That(result, Is.True);
@@ -364,72 +330,37 @@ public class PlaylistServiceTests
     public async Task CanAddSongToPlaylistAsync_ReturnsFalse_WhenSongIsAlbumCover()
     {
         // Arrange
-        var userId = 1;
         var songMetadata = new SongMetadata { ImageBlobPath = "cover.jpg", IsAlbumCover = true };
         await _context.SongMetadata.AddAsync(songMetadata);
-
-        var ownedSong = new OwnedSong { UserId = userId, SongFileName = "cover.jpg", SongMetadataId = songMetadata.Id };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
         await _context.SaveChangesAsync();
 
         // Act
-        var result = await _service.CanAddSongToPlaylistAsync(userId, ownedSong.Id);
+        var result = await _service.CanAddSongToPlaylistAsync(songMetadata.Id);
 
         // Assert
         Assert.That(result, Is.False);
     }
 
     [Test]
-    public async Task CanAddSongToPlaylistAsync_ReturnsFalse_WhenUserDoesNotOwnSong()
-    {
-        // Arrange
-        var songMetadata = new SongMetadata { Mp3BlobPath = "test.mp3", IsAlbumCover = false };
-        await _context.SongMetadata.AddAsync(songMetadata);
-
-        var ownedSong = new OwnedSong { UserId = 1, SongFileName = "test.mp3", SongMetadataId = songMetadata.Id };
-        await _context.OwnedSongs.AddAsync(ownedSong);
-
-        await _context.SaveChangesAsync();
-
-        // Act - Check with different user
-        var result = await _service.CanAddSongToPlaylistAsync(2, ownedSong.Id);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public async Task GetAvailableSongsForPlaylistAsync_ReturnsOnlyValidSongs()
+    public async Task GetAvailableSongsForPlaylistAsync_ReturnsEmptyList_WhenNoSubscription()
     {
         // Arrange
         var userId = 1;
         var playlist = new Playlist { UserId = userId, PlaylistName = "Test Playlist" };
         await _context.Playlists.AddAsync(playlist);
 
-        var song1Metadata = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
-        var song2Metadata = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
-        var albumCoverMetadata = new SongMetadata { ImageBlobPath = "cover.jpg", IsAlbumCover = true };
-        await _context.SongMetadata.AddRangeAsync(song1Metadata, song2Metadata, albumCoverMetadata);
-
-        var ownedSong1 = new OwnedSong { UserId = userId, SongFileName = "song1.mp3", SongMetadataId = song1Metadata.Id };
-        var ownedSong2 = new OwnedSong { UserId = userId, SongFileName = "song2.mp3", SongMetadataId = song2Metadata.Id };
-        var ownedAlbumCover = new OwnedSong { UserId = userId, SongFileName = "cover.jpg", SongMetadataId = albumCoverMetadata.Id };
-        await _context.OwnedSongs.AddRangeAsync(ownedSong1, ownedSong2, ownedAlbumCover);
-
-        // Add song1 to playlist
-        var userPlaylist = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, OwnedSongId = ownedSong1.Id };
-        await _context.UserPlaylists.AddAsync(userPlaylist);
-
+        var song1Metadata = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false, IsActive = true };
+        var song2Metadata = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false, IsActive = true };
+        await _context.SongMetadata.AddRangeAsync(song1Metadata, song2Metadata);
         await _context.SaveChangesAsync();
+
+        // By default, subscription service returns false (no subscription)
 
         // Act
         var result = await _service.GetAvailableSongsForPlaylistAsync(userId, playlist.Id);
 
         // Assert
-        Assert.That(result, Has.Count.EqualTo(1)); // Only song2 should be available
-        Assert.That(result[0].Id, Is.EqualTo(ownedSong2.Id));
-        Assert.That(result[0].SongMetadata.IsAlbumCover, Is.False);
+        Assert.That(result, Has.Count.EqualTo(0)); // Empty list when no subscription
     }
 
     [Test]
@@ -440,23 +371,11 @@ public class PlaylistServiceTests
         var playlist = new Playlist { UserId = userId, PlaylistName = "Test Playlist" };
         await _context.Playlists.AddAsync(playlist);
 
-        // User owns song1
-        var song1Metadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false };
-        await _context.SongMetadata.AddAsync(song1Metadata);
-        var ownedSong1 = new OwnedSong 
-        { 
-            UserId = userId, 
-            SongFileName = "song1.mp3", 
-            SongMetadataId = song1Metadata.Id,
-            PayPalOrderId = "ORDER123" // Purchased song
-        };
-        await _context.OwnedSongs.AddAsync(ownedSong1);
-
-        // Song2 and Song3 exist in catalog but not owned by user
-        var song2Metadata = new SongMetadata { Mp3BlobPath = "albums/album2/song2.mp3", IsAlbumCover = false };
-        var song3Metadata = new SongMetadata { Mp3BlobPath = "albums/album3/song3.mp3", IsAlbumCover = false };
-        await _context.SongMetadata.AddRangeAsync(song2Metadata, song3Metadata);
-
+        // Songs exist in catalog
+        var song1Metadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false, IsActive = true };
+        var song2Metadata = new SongMetadata { Mp3BlobPath = "albums/album2/song2.mp3", IsAlbumCover = false, IsActive = true };
+        var song3Metadata = new SongMetadata { Mp3BlobPath = "albums/album3/song3.mp3", IsAlbumCover = false, IsActive = true };
+        await _context.SongMetadata.AddRangeAsync(song1Metadata, song2Metadata, song3Metadata);
         await _context.SaveChangesAsync();
 
         // Setup subscription service to return true
@@ -468,24 +387,7 @@ public class PlaylistServiceTests
         var result = await _service.GetAvailableSongsForPlaylistAsync(userId, playlist.Id);
 
         // Assert
-        // Should have 3 songs: owned song1 + subscription-based song2 and song3
         Assert.That(result, Has.Count.EqualTo(3));
-        
-        // Verify song1 is the purchased one
-        var song1Result = result.FirstOrDefault(s => s.SongMetadataId == song1Metadata.Id);
-        Assert.That(song1Result, Is.Not.Null);
-        Assert.That(song1Result.PayPalOrderId, Is.EqualTo("ORDER123"));
-
-        // Verify song2 and song3 were created as subscription-based (no PayPalOrderId)
-        var song2Result = result.FirstOrDefault(s => s.SongMetadataId == song2Metadata.Id);
-        Assert.That(song2Result, Is.Not.Null);
-        Assert.That(song2Result.PayPalOrderId, Is.Null);
-        Assert.That(song2Result.UserId, Is.EqualTo(userId));
-
-        var song3Result = result.FirstOrDefault(s => s.SongMetadataId == song3Metadata.Id);
-        Assert.That(song3Result, Is.Not.Null);
-        Assert.That(song3Result.PayPalOrderId, Is.Null);
-        Assert.That(song3Result.UserId, Is.EqualTo(userId));
     }
 
     [Test]
@@ -497,10 +399,9 @@ public class PlaylistServiceTests
         await _context.Playlists.AddAsync(playlist);
 
         // Add songs and album covers to catalog
-        var songMetadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false };
-        var albumCoverMetadata = new SongMetadata { ImageBlobPath = "albums/album1/cover.jpg", IsAlbumCover = true };
+        var songMetadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false, IsActive = true };
+        var albumCoverMetadata = new SongMetadata { ImageBlobPath = "albums/album1/cover.jpg", IsAlbumCover = true, IsActive = true };
         await _context.SongMetadata.AddRangeAsync(songMetadata, albumCoverMetadata);
-
         await _context.SaveChangesAsync();
 
         // Setup subscription
@@ -513,7 +414,7 @@ public class PlaylistServiceTests
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1)); // Only song, not album cover
-        Assert.That(result[0].SongMetadata.IsAlbumCover, Is.False);
+        Assert.That(result[0].IsAlbumCover, Is.False);
     }
 
     [Test]
@@ -525,28 +426,19 @@ public class PlaylistServiceTests
         await _context.Playlists.AddAsync(playlist);
 
         // Add songs to catalog
-        var song1Metadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false };
-        var song2Metadata = new SongMetadata { Mp3BlobPath = "albums/album2/song2.mp3", IsAlbumCover = false };
+        var song1Metadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false, IsActive = true };
+        var song2Metadata = new SongMetadata { Mp3BlobPath = "albums/album2/song2.mp3", IsAlbumCover = false, IsActive = true };
         await _context.SongMetadata.AddRangeAsync(song1Metadata, song2Metadata);
+        await _context.SaveChangesAsync();
 
-        // Create OwnedSong for song1 and add it to playlist
-        var ownedSong1 = new OwnedSong 
-        { 
-            UserId = userId, 
-            SongFileName = "song1.mp3", 
-            SongMetadataId = song1Metadata.Id,
-            PayPalOrderId = null // Subscription-based
-        };
-        await _context.OwnedSongs.AddAsync(ownedSong1);
-
+        // Add song1 to playlist
         var userPlaylist = new UserPlaylist 
         { 
             UserId = userId, 
             PlaylistId = playlist.Id, 
-            OwnedSongId = ownedSong1.Id 
+            SongMetadataId = song1Metadata.Id 
         };
         await _context.UserPlaylists.AddAsync(userPlaylist);
-
         await _context.SaveChangesAsync();
 
         // Setup subscription
@@ -559,53 +451,7 @@ public class PlaylistServiceTests
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1)); // Only song2 should be available
-        Assert.That(result[0].SongMetadataId, Is.EqualTo(song2Metadata.Id));
-    }
-
-    [Test]
-    public async Task GetAvailableSongsForPlaylistAsync_WithSubscription_ReuseExistingVirtualOwnedSong()
-    {
-        // Arrange
-        var userId = 1;
-        var playlist = new Playlist { UserId = userId, PlaylistName = "Test Playlist" };
-        await _context.Playlists.AddAsync(playlist);
-
-        // Add song to catalog
-        var songMetadata = new SongMetadata { Mp3BlobPath = "albums/album1/song1.mp3", IsAlbumCover = false };
-        await _context.SongMetadata.AddAsync(songMetadata);
-
-        // User already has a virtual OwnedSong for this (subscription-based)
-        var existingOwnedSong = new OwnedSong 
-        { 
-            UserId = userId, 
-            SongFileName = "song1.mp3", 
-            SongMetadataId = songMetadata.Id,
-            PayPalOrderId = null // Subscription-based, created earlier
-        };
-        await _context.OwnedSongs.AddAsync(existingOwnedSong);
-
-        await _context.SaveChangesAsync();
-
-        // Get the ID of the existing OwnedSong before the test
-        var existingId = existingOwnedSong.Id;
-
-        // Setup subscription
-        _mockSubscriptionService
-            .Setup(s => s.HasActiveSubscriptionAsync(userId))
-            .ReturnsAsync(true);
-
-        // Act
-        var result = await _service.GetAvailableSongsForPlaylistAsync(userId, playlist.Id);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Id, Is.EqualTo(existingId)); // Should reuse existing OwnedSong
-        
-        // Verify no duplicate was created
-        var allOwnedSongsForUser = await _context.OwnedSongs
-            .Where(os => os.UserId == userId && os.SongMetadataId == songMetadata.Id)
-            .ToListAsync();
-        Assert.That(allOwnedSongsForUser, Has.Count.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(song2Metadata.Id));
     }
 }
 
@@ -700,7 +546,7 @@ public class LikedSongsPlaylistTests
     }
 
     [Test]
-    public async Task SyncLikedSongsPlaylistAsync_AddsLikedSongs_ForUserWithOwnedSongs()
+    public async Task SyncLikedSongsPlaylistAsync_AddsLikedSongs()
     {
         // Arrange
         var userId = 1;
@@ -709,24 +555,6 @@ public class LikedSongsPlaylistTests
         var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
         var song2 = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
         await _context.SongMetadata.AddRangeAsync(song1, song2);
-        await _context.SaveChangesAsync();
-
-        // User owns these songs
-        var ownedSong1 = new OwnedSong
-        {
-            UserId = userId,
-            SongFileName = "song1.mp3",
-            SongMetadataId = song1.Id,
-            PayPalOrderId = "ORDER123"
-        };
-        var ownedSong2 = new OwnedSong
-        {
-            UserId = userId,
-            SongFileName = "song2.mp3",
-            SongMetadataId = song2.Id,
-            PayPalOrderId = "ORDER456"
-        };
-        await _context.OwnedSongs.AddRangeAsync(ownedSong1, ownedSong2);
         await _context.SaveChangesAsync();
 
         // User likes song1
@@ -741,12 +569,12 @@ public class LikedSongsPlaylistTests
         Assert.That(playlist, Is.Not.Null);
 
         var playlistSongs = await _context.UserPlaylists
-            .Include(up => up.OwnedSong)
+            .Include(up => up.SongMetadata)
             .Where(up => up.PlaylistId == playlist.Id)
             .ToListAsync();
 
         Assert.That(playlistSongs, Has.Count.EqualTo(1));
-        Assert.That(playlistSongs[0].OwnedSong.SongMetadataId, Is.EqualTo(song1.Id));
+        Assert.That(playlistSongs[0].SongMetadataId, Is.EqualTo(song1.Id));
     }
 
     [Test]
@@ -758,17 +586,6 @@ public class LikedSongsPlaylistTests
         // Create song metadata
         var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
         await _context.SongMetadata.AddAsync(song1);
-        await _context.SaveChangesAsync();
-
-        // User owns the song
-        var ownedSong1 = new OwnedSong
-        {
-            UserId = userId,
-            SongFileName = "song1.mp3",
-            SongMetadataId = song1.Id,
-            PayPalOrderId = "ORDER123"
-        };
-        await _context.OwnedSongs.AddAsync(ownedSong1);
         await _context.SaveChangesAsync();
 
         // Like and sync
@@ -870,49 +687,5 @@ public class LikedSongsPlaylistTests
         Assert.That(likedSongIds, Contains.Item(song1.Id));
         Assert.That(likedSongIds, Contains.Item(song2.Id));
         Assert.That(likedSongIds, Does.Not.Contain(song3.Id));
-    }
-
-    [Test]
-    public async Task SyncLikedSongsPlaylistAsync_AddsNonOwnedSongs_ForUserWithoutSubscription()
-    {
-        // Arrange
-        var userId = 1;
-
-        // Setup subscription service to return false (no subscription)
-        _mockSubscriptionService
-            .Setup(s => s.HasActiveSubscriptionAsync(userId))
-            .ReturnsAsync(false);
-
-        // Create song metadata that user does NOT own
-        var song1 = new SongMetadata { Mp3BlobPath = "song1.mp3", IsAlbumCover = false };
-        var song2 = new SongMetadata { Mp3BlobPath = "song2.mp3", IsAlbumCover = false };
-        await _context.SongMetadata.AddRangeAsync(song1, song2);
-        await _context.SaveChangesAsync();
-
-        // User likes song1 but does NOT own it
-        await _songLikeService.ToggleLikeAsync(userId, song1.Id);
-
-        // Act - Sync should work even without subscription
-        await _playlistService.SyncLikedSongsPlaylistAsync(userId);
-
-        // Assert
-        var playlist = await _context.Playlists
-            .FirstOrDefaultAsync(p => p.UserId == userId && p.IsSystemGenerated);
-        Assert.That(playlist, Is.Not.Null, "Liked Songs playlist should be created");
-
-        var playlistSongs = await _context.UserPlaylists
-            .Include(up => up.OwnedSong)
-            .Where(up => up.PlaylistId == playlist.Id)
-            .ToListAsync();
-
-        // The song should be added to the playlist even though user doesn't own it
-        Assert.That(playlistSongs, Has.Count.EqualTo(1), "Non-owned liked song should be in playlist");
-        Assert.That(playlistSongs[0].OwnedSong.SongMetadataId, Is.EqualTo(song1.Id));
-        
-        // Verify a virtual OwnedSong record was created
-        var virtualOwnedSong = await _context.OwnedSongs
-            .FirstOrDefaultAsync(os => os.UserId == userId && os.SongMetadataId == song1.Id);
-        Assert.That(virtualOwnedSong, Is.Not.Null, "Virtual OwnedSong record should be created");
-        Assert.That(virtualOwnedSong.PayPalOrderId, Is.Null, "PayPalOrderId should be null for non-purchased song");
     }
 }

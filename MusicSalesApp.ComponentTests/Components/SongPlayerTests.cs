@@ -98,7 +98,7 @@ public class SongPlayerTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -123,7 +123,7 @@ public class SongPlayerTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -149,7 +149,7 @@ public class SongPlayerTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -176,7 +176,7 @@ public class SongPlayerTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 UpdatedAt = DateTime.Now
             }
         };
@@ -193,64 +193,6 @@ public class SongPlayerTests : BUnitTestBase
     }
 
     [Test]
-    public void SongPlayer_DisplaysSongPriceFromMetadata()
-    {
-        // Arrange
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
-        
-        // Set up metadata with the expected song price
-        var metadata = new List<MusicSalesApp.Models.SongMetadata>
-        {
-            new MusicSalesApp.Models.SongMetadata 
-            { 
-                Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 1.99m,
-                UpdatedAt = DateTime.Now
-            }
-        };
-        
-        MockSongMetadataService.Setup(x => x.GetAllAsync())
-            .ReturnsAsync(metadata);
-
-        // Act
-        var cut = TestContext.Render<SongPlayer>(
-            pb => pb.Add(p => p.SongTitle, "TestSong"));
-
-        // Assert - should display price from metadata
-        Assert.That(cut.Markup, Does.Contain("$1.99"));
-    }
-
-    [Test]
-    public void SongPlayer_DisplaysDefaultPriceWhenTagMissing()
-    {
-        // Arrange
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
-
-        // Set up metadata without a song price
-        var metadata = new List<MusicSalesApp.Models.SongMetadata>
-        {
-            new MusicSalesApp.Models.SongMetadata 
-            { 
-                Mp3BlobPath = "TestSong.mp3",
-                SongPrice = null, // No price set
-                UpdatedAt = DateTime.Now
-            }
-        };
-        
-        MockSongMetadataService.Setup(x => x.GetAllAsync())
-            .ReturnsAsync(metadata);
-
-        // Act
-        var cut = TestContext.Render<SongPlayer>(
-            pb => pb.Add(p => p.SongTitle, "TestSong"));
-
-        // Assert - should display default price
-        Assert.That(cut.Markup, Does.Contain("$0.99"));
-    }
-
-    [Test]
     public void SongPlayer_DisplaysTrackLengthFromMetadata()
     {
         // Arrange
@@ -263,7 +205,7 @@ public class SongPlayerTests : BUnitTestBase
             new MusicSalesApp.Models.SongMetadata 
             { 
                 Mp3BlobPath = "TestSong.mp3",
-                SongPrice = 0.99m,
+                
                 TrackLength = 245.67,
                 UpdatedAt = DateTime.Now
             }

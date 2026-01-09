@@ -150,11 +150,11 @@ public class AppSettingsService : IAppSettingsService
         await SetSettingAsync(
             CommissionRateKey,
             rate.ToString("F4"),
-            "Platform commission rate for seller sales (0.15 = 15%)");
+            "Platform commission rate for creator sales (0.15 = 15%)");
     }
 
     /// <summary>
-    /// Gets the stream pay rate for sellers.
+    /// Gets the stream pay rate for creators.
     /// </summary>
     /// <returns>The stream pay rate as a decimal (0.005 = $5 per 1000 streams), or the default value if not set.</returns>
     public async Task<decimal> GetStreamPayRateAsync()
@@ -176,7 +176,7 @@ public class AppSettingsService : IAppSettingsService
     }
 
     /// <summary>
-    /// Sets the stream pay rate for sellers.
+    /// Sets the stream pay rate for creators.
     /// </summary>
     /// <param name="rate">The stream pay rate as a decimal (0.005 = $5 per 1000 streams).</param>
     public async Task SetStreamPayRateAsync(decimal rate)
@@ -184,6 +184,6 @@ public class AppSettingsService : IAppSettingsService
         await SetSettingAsync(
             StreamPayRateKey,
             rate.ToString("F6"),
-            "Stream pay rate for sellers in USD per stream (0.005 = $5 per 1000 streams)");
+            "Stream pay rate for creators in USD per stream (0.005 = $5 per 1000 streams)");
     }
 }

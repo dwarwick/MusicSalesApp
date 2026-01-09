@@ -42,9 +42,6 @@ public abstract class BlazorBase : ComponentBase
     protected IWebHostEnvironment Environment { get; set; } = default!;
 
     [Inject]
-    protected ICartService CartService { get; set; } = default!;
-
-    [Inject]
     protected ISongMetadataService SongMetadataService { get; set; } = default!;
 
     [Inject]
@@ -81,7 +78,7 @@ public abstract class BlazorBase : ComponentBase
     protected IAccountEmailService AccountEmailService { get; set; } = default!;
 
     [Inject]
-    protected ISellerService SellerService { get; set; } = default!;
+    protected ICreatorService CreatorService { get; set; } = default!;
 
     [Inject]
     protected IAzureStorageService AzureStorageService { get; set; } = default!;

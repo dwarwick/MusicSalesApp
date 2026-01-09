@@ -22,7 +22,7 @@ public class BackgroundJobService : IBackgroundJobService
         try
         {
             // Schedule weekly stream payouts every Monday at 1 AM UTC
-            // This processes payouts to sellers based on stream counts
+            // This processes payouts to creators based on stream counts
             RecurringJob.AddOrUpdate<IStreamPayoutService>(
                 "process-stream-payouts",
                 service => service.ProcessPendingPayoutsAsync(),

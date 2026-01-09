@@ -132,7 +132,7 @@ namespace MusicSalesApp.Services
             Stream albumArtStream,
             string albumArtFileName,
             string albumName = null,
-            int? sellerId = null,
+            int? creatorId = null,
             CancellationToken cancellationToken = default)
         {
             if (audioStream == null)
@@ -238,7 +238,7 @@ namespace MusicSalesApp.Services
                     AlbumName = albumName ?? string.Empty,
                     IsAlbumCover = false,
                     TrackLength = trackDuration,
-                    SellerId = sellerId
+                    CreatorId = creatorId
                 });
 
                 _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
@@ -260,7 +260,7 @@ namespace MusicSalesApp.Services
             Stream albumArtStream,
             string albumArtFileName,
             string albumName,
-            int? sellerId = null,
+            int? creatorId = null,
             CancellationToken cancellationToken = default)
         {
             if (albumArtStream == null)
@@ -313,7 +313,7 @@ namespace MusicSalesApp.Services
                 FileExtension = albumArtExtension,
                 AlbumName = albumName,
                 IsAlbumCover = true,
-                SellerId = sellerId
+                CreatorId = creatorId
             });
 
             _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);

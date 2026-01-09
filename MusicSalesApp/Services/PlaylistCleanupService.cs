@@ -4,7 +4,8 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for cleaning up playlist songs for users with lapsed subscriptions
+/// Service for cleaning up playlist songs for users with lapsed subscriptions.
+/// Since there are no purchased songs, all playlist songs are removed when subscription lapses.
 /// </summary>
 public class PlaylistCleanupService : IPlaylistCleanupService
 {
@@ -20,8 +21,7 @@ public class PlaylistCleanupService : IPlaylistCleanupService
     }
 
     /// <summary>
-    /// Removes songs from playlists and deletes OwnedSong records for users whose subscriptions have lapsed
-    /// and they don't own the songs outright (PayPalOrderId is null).
+    /// Removes songs from playlists for users whose subscriptions have lapsed.
     /// Uses a 48-hour grace period to account for potential job execution delays.
     /// </summary>
     /// <returns>Number of songs removed</returns>
@@ -69,58 +69,33 @@ public class PlaylistCleanupService : IPlaylistCleanupService
 
                 // Get all songs in user's playlists
                 var userPlaylistSongs = await context.UserPlaylists
-                    .Include(up => up.OwnedSong)
                     .Where(up => up.UserId == userId)
                     .ToListAsync();
 
-                // Find songs that are NOT owned (no PayPalOrderId means they were only accessible via subscription)
-                var nonOwnedSongs = userPlaylistSongs
-                    .Where(up => string.IsNullOrEmpty(up.OwnedSong.PayPalOrderId))
-                    .ToList();
-
-                if (nonOwnedSongs.Any())
+                if (userPlaylistSongs.Any())
                 {
-                    var ownedSongIdsToDelete = nonOwnedSongs.Select(up => up.OwnedSongId).Distinct().ToList();
-                    
                     _logger.LogInformation(
-                        "Removing {Count} non-owned songs from playlists for user {UserId}",
-                        nonOwnedSongs.Count,
+                        "Removing {Count} songs from playlists for user {UserId} with lapsed subscription",
+                        userPlaylistSongs.Count,
                         userId);
 
-                    // Remove from playlists first
-                    context.UserPlaylists.RemoveRange(nonOwnedSongs);
-                    totalRemoved += nonOwnedSongs.Count;
-                    
-                    // Now delete the OwnedSong records where PayPalOrderId is null (subscription-only access)
-                    var ownedSongsToDelete = await context.OwnedSongs
-                        .Where(os => ownedSongIdsToDelete.Contains(os.Id) && 
-                                    os.UserId == userId &&
-                                    string.IsNullOrEmpty(os.PayPalOrderId))
-                        .ToListAsync();
-                    
-                    if (ownedSongsToDelete.Any())
-                    {
-                        _logger.LogInformation(
-                            "Deleting {Count} subscription-only OwnedSong records for user {UserId}",
-                            ownedSongsToDelete.Count,
-                            userId);
-                        
-                        context.OwnedSongs.RemoveRange(ownedSongsToDelete);
-                    }
+                    // Remove all songs from playlists
+                    context.UserPlaylists.RemoveRange(userPlaylistSongs);
+                    totalRemoved += userPlaylistSongs.Count;
                 }
             }
 
             if (totalRemoved > 0)
             {
                 await context.SaveChangesAsync();
-                _logger.LogInformation("Successfully removed {Count} non-owned songs from playlists", totalRemoved);
+                _logger.LogInformation("Successfully removed {Count} songs from playlists", totalRemoved);
             }
 
             return totalRemoved;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing non-owned songs from lapsed subscriptions");
+            _logger.LogError(ex, "Error removing songs from lapsed subscriptions");
             throw;
         }
     }

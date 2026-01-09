@@ -8,17 +8,6 @@
     <h3>Music Library</h3>
 }
 
-@if (!_hasActiveSubscription && !ShowHomePageFeatured)
-{
-    <AuthorizeView>
-        <Authorized>
-            <SfRadioButton TChecked="string" Label="All Music" Name="musicFilter" Value="All" @bind-Checked="_filterModeString"></SfRadioButton>
-            <SfRadioButton TChecked="string" Label="Owned" Name="musicFilter" Value="Owned" @bind-Checked="_filterModeString"></SfRadioButton>
-            <SfRadioButton TChecked="string" Label="Not Owned" Name="musicFilter" Value="NotOwned" @bind-Checked="_filterModeString"></SfRadioButton>
-        </Authorized>
-    </AuthorizeView>
-}
-
 @if (_loading)
 {
     <div class="loading-state">
@@ -39,8 +28,6 @@ else
         {
             var cardId = GetAlbumCardId(album);
             var isPlaying = IsCardPlaying(cardId);
-            var owned = IsAlbumOwned(album);
-            var inCart = IsAlbumInCart(album);
 
             <SfCard CssClass="music-card album-card">
                 <!-- Album Art -->
@@ -54,14 +41,6 @@ else
                         <div class="card-album-art-placeholder">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
-                            </svg>
-                        </div>
-                    }
-                    @if (owned)
-                    {
-                        <div class="owned-badge">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                             </svg>
                         </div>
                     }
@@ -165,36 +144,8 @@ else
                     </div>
                 }
 
-                <!-- Bottom row: Add to Cart and Share buttons -->
+                <!-- Bottom row: Share button -->
                 <div class="card-bottom-row">
-                    <AuthorizeView>
-                        <Authorized>
-                            @if (!owned && !_hasActiveSubscription)
-                            {
-                                <div class="cart-button-wrapper">
-                                    <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(album.AlbumName) ? "animating" : "")}")"
-                                              OnClick="@(args => ToggleAlbumCartItem(album))"
-                                              Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                        @if (inCart)
-                                        {
-                                            <SfIcon IconCss="fas fa-regular fa-circle-check" />
-                                            <span>Added</span>
-                                        }
-                                        else
-                                        {
-                                            <SfIcon IconCss="fas fa-shopping-cart" />
-                                            <span>$@album.Price.ToString("F2")</span>
-                                        }
-                                    </SfButton>
-                                    @if (_animatingCartButtons.Contains(album.AlbumName))
-                                    {
-                                        <div class="music-note-float">♪</div>
-                                    }
-                                </div>
-                            }
-                        </Authorized>
-                    </AuthorizeView>
-                    
                     <!-- Facebook Share Button -->
                     <FacebookShareButton ShareUrl="@GetAlbumShareUrl(album.AlbumName)" 
                                        Layout="button_count" 
@@ -210,8 +161,6 @@ else
             var cardId = GetCardId(f.Name);
             var isPlaying = IsCardPlaying(cardId);
             var albumArtUrl = GetAlbumArtUrl(f.Name);
-            var owned = IsSongOwned(f.Name);
-            var inCart = IsSongInCart(f.Name);
 
             <SfCard CssClass="music-card">
                 <!-- Album Art -->
@@ -225,14 +174,6 @@ else
                         <div class="card-album-art-placeholder">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-placeholder-icon">
                                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                            </svg>
-                        </div>
-                    }
-                    @if (owned)
-                    {
-                        <div class="owned-badge">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                             </svg>
                         </div>
                     }
@@ -339,36 +280,8 @@ else
                     </div>
                 }
 
-                <!-- Bottom row: Add to Cart and Share buttons -->
+                <!-- Bottom row: Share button -->
                 <div class="card-bottom-row">
-                    <AuthorizeView>
-                        <Authorized>
-                            @if (!owned && !_hasActiveSubscription)
-                            {
-                                <div class="cart-button-wrapper">
-                                    <SfButton CssClass="@($"card-cart-button {(inCart ? "in-cart" : "")} {(_animatingCartButtons.Contains(f.Name) ? "animating" : "")}")"
-                                              OnClick="@(args => ToggleCartItem(f.Name))"
-                                              Title="@(inCart ? "Remove from Cart" : "Add to Cart")">
-                                        @if (inCart)
-                                        {
-                                            <SfIcon IconCss="fas fa-regular fa-circle-check" />
-                                            <span>Added</span>
-                                        }
-                                        else
-                                        {
-                                            <SfIcon IconCss="fas fa-shopping-cart" />
-                                            <span>$@GetSongPrice(f.Name).ToString("F2")</span>
-                                        }
-                                    </SfButton>
-                                    @if (_animatingCartButtons.Contains(f.Name))
-                                    {
-                                        <div class="music-note-float">♪</div>
-                                    }
-                                </div>
-                            }
-                        </Authorized>
-                    </AuthorizeView>
-                    
                     <!-- Facebook Share Button -->
                     <FacebookShareButton ShareUrl="@GetSongShareUrl(f.Name)" 
                                        Layout="button_count" 

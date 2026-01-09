@@ -166,8 +166,7 @@ public class PlaylistService : IPlaylistService
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.UserPlaylists
-                .Include(up => up.OwnedSong)
-                    .ThenInclude(os => os.SongMetadata)
+                .Include(up => up.SongMetadata)
                 .Where(up => up.PlaylistId == playlistId)
                 .OrderBy(up => up.AddedAt)
                 .ToListAsync();
@@ -179,7 +178,7 @@ public class PlaylistService : IPlaylistService
         }
     }
 
-    public async Task<bool> AddSongToPlaylistAsync(int userId, int playlistId, int ownedSongId)
+    public async Task<bool> AddSongToPlaylistAsync(int userId, int playlistId, int songMetadataId)
     {
         try
         {
@@ -195,20 +194,20 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
-            // Verify the user can add this song to the playlist
-            if (!await CanAddSongToPlaylistAsync(userId, ownedSongId))
+            // Verify the song can be added (not an album cover)
+            if (!await CanAddSongToPlaylistAsync(songMetadataId))
             {
-                _logger.LogWarning("User {UserId} cannot add song {OwnedSongId} to playlist", userId, ownedSongId);
+                _logger.LogWarning("Song {SongMetadataId} cannot be added to playlist", songMetadataId);
                 return false;
             }
 
             // Check if song is already in playlist
             var existingSong = await context.UserPlaylists
-                .FirstOrDefaultAsync(up => up.PlaylistId == playlistId && up.OwnedSongId == ownedSongId);
+                .FirstOrDefaultAsync(up => up.PlaylistId == playlistId && up.SongMetadataId == songMetadataId);
 
             if (existingSong != null)
             {
-                _logger.LogWarning("Song {OwnedSongId} already in playlist {PlaylistId}", ownedSongId, playlistId);
+                _logger.LogWarning("Song {SongMetadataId} already in playlist {PlaylistId}", songMetadataId, playlistId);
                 return false;
             }
 
@@ -217,19 +216,19 @@ public class PlaylistService : IPlaylistService
             {
                 UserId = userId,
                 PlaylistId = playlistId,
-                OwnedSongId = ownedSongId,
+                SongMetadataId = songMetadataId,
                 AddedAt = DateTime.UtcNow
             };
 
             context.UserPlaylists.Add(userPlaylist);
             await context.SaveChangesAsync();
 
-            _logger.LogInformation("Added song {OwnedSongId} to playlist {PlaylistId}", ownedSongId, playlistId);
+            _logger.LogInformation("Added song {SongMetadataId} to playlist {PlaylistId}", songMetadataId, playlistId);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding song {OwnedSongId} to playlist {PlaylistId}", ownedSongId, playlistId);
+            _logger.LogError(ex, "Error adding song {SongMetadataId} to playlist {PlaylistId}", songMetadataId, playlistId);
             throw;
         }
     }
@@ -267,42 +266,31 @@ public class PlaylistService : IPlaylistService
         }
     }
 
-    public async Task<bool> CanAddSongToPlaylistAsync(int userId, int ownedSongId)
+    public async Task<bool> CanAddSongToPlaylistAsync(int songMetadataId)
     {
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
 
-            // Check if user owns the song or has subscription access
-            var ownedSong = await context.OwnedSongs
-                .Include(os => os.SongMetadata)
-                .FirstOrDefaultAsync(os => os.Id == ownedSongId && os.UserId == userId);
+            var metadata = await context.SongMetadata
+                .FirstOrDefaultAsync(sm => sm.Id == songMetadataId);
 
-            if (ownedSong == null)
+            if (metadata == null)
             {
                 return false;
             }
 
             // Check if this is a valid song (not an album cover)
-            // If we have metadata, check IsAlbumCover
-            if (ownedSong.SongMetadata != null)
-            {
-                return !ownedSong.SongMetadata.IsAlbumCover;
-            }
-            
-            // If no metadata, fall back to filename check
-            // Album covers are typically .jpg, .jpeg, or .png, songs are .mp3
-            var fileName = ownedSong.SongFileName.ToLowerInvariant();
-            return fileName.EndsWith(".mp3");
+            return !metadata.IsAlbumCover && !string.IsNullOrEmpty(metadata.Mp3BlobPath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking if user {UserId} can add song {OwnedSongId} to playlist", userId, ownedSongId);
+            _logger.LogError(ex, "Error checking if song {SongMetadataId} can be added to playlist", songMetadataId);
             throw;
         }
     }
 
-    public async Task<List<OwnedSong>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId)
+    public async Task<List<SongMetadata>> GetAvailableSongsForPlaylistAsync(int userId, int playlistId)
     {
         try
         {
@@ -311,125 +299,31 @@ public class PlaylistService : IPlaylistService
             // Check if user has active subscription
             var hasActiveSubscription = await _subscriptionService.HasActiveSubscriptionAsync(userId);
 
-            // Get all songs already in the playlist (as OwnedSong IDs)
-            var playlistSongIds = await context.UserPlaylists
-                .Where(up => up.PlaylistId == playlistId)
-                .Select(up => up.OwnedSongId)
-                .ToListAsync();
-
-            // Get all owned songs by the user
-            var ownedSongs = await context.OwnedSongs
-                .Include(os => os.SongMetadata)
-                .Where(os => os.UserId == userId)
-                .Where(os => !playlistSongIds.Contains(os.Id))
-                .ToListAsync();
-
-            // Filter to exclude album covers
-            var availableOwnedSongs = ownedSongs
-                .Where(os => 
-                {
-                    // If we have metadata, use it to check
-                    if (os.SongMetadata != null)
-                    {
-                        return !os.SongMetadata.IsAlbumCover;
-                    }
-                    
-                    // If no metadata, fall back to filename check
-                    return os.SongFileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-                })
-                .ToList();
-
-            // If user has active subscription, include all songs from catalog
-            if (hasActiveSubscription)
+            if (!hasActiveSubscription)
             {
-                // Get all song metadata that are not album covers
-                var allSongMetadata = await context.SongMetadata
-                    .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null)
-                    .ToListAsync();
-
-                // Get the metadata IDs of songs already owned by this user
-                var ownedMetadataIds = new HashSet<int>(
-                    availableOwnedSongs
-                        .Where(os => os.SongMetadataId.HasValue)
-                        .Select(os => os.SongMetadataId.Value));
-
-                // Get metadata IDs of songs already in the playlist
-                var playlistMetadataIds = await context.UserPlaylists
-                    .Where(up => up.PlaylistId == playlistId)
-                    .Include(up => up.OwnedSong)
-                    .Where(up => up.OwnedSong.SongMetadataId.HasValue)
-                    .Select(up => up.OwnedSong.SongMetadataId.Value)
-                    .ToListAsync();
-
-                var playlistMetadataIdSet = new HashSet<int>(playlistMetadataIds);
-
-                // Load all existing OwnedSong records for this user upfront to avoid N+1 queries
-                var existingUserOwnedSongs = await context.OwnedSongs
-                    .Include(os => os.SongMetadata)
-                    .Where(os => os.UserId == userId && os.SongMetadataId != null)
-                    .ToListAsync();
-
-                var existingOwnedSongsByMetadata = existingUserOwnedSongs
-                    .Where(os => os.SongMetadataId.HasValue)
-                    .ToDictionary(os => os.SongMetadataId.Value, os => os);
-
-                // Collect new OwnedSong records to add in batch
-                var newOwnedSongs = new List<OwnedSong>();
-
-                // For each song metadata not already owned or in playlist, create/find an OwnedSong reference
-                foreach (var metadata in allSongMetadata)
-                {
-                    // Skip if user already owns this song
-                    if (ownedMetadataIds.Contains(metadata.Id))
-                        continue;
-
-                    // Skip if song is already in the playlist
-                    if (playlistMetadataIdSet.Contains(metadata.Id))
-                        continue;
-
-                    // Check if we already have an OwnedSong record for this user and metadata
-                    if (existingOwnedSongsByMetadata.TryGetValue(metadata.Id, out var userOwnedSong))
-                    {
-                        // Reuse existing OwnedSong record
-                        availableOwnedSongs.Add(userOwnedSong);
-                    }
-                    else
-                    {
-                        // Create a "virtual" OwnedSong record for subscription access
-                        // IMPORTANT: PayPalOrderId = null distinguishes subscription access from purchases
-                        // - Purchased songs: PayPalOrderId is set to the PayPal order ID
-                        // - Subscription songs: PayPalOrderId is null
-                        // When subscription lapses, PlaylistCleanupService removes songs where PayPalOrderId is null
-                        
-                        // Defensive check (Mp3BlobPath is filtered at query level but extra safety here)
-                        if (string.IsNullOrEmpty(metadata.Mp3BlobPath))
-                            continue;
-                            
-                        // Use full Mp3BlobPath to match how purchased songs are stored
-                        var newOwnedSong = new OwnedSong
-                        {
-                            UserId = userId,
-                            SongFileName = metadata.Mp3BlobPath,
-                            SongMetadataId = metadata.Id,
-                            SongMetadata = metadata,
-                            PurchasedAt = DateTime.UtcNow,
-                            PayPalOrderId = null // Null = subscription access (cleaned up when subscription lapses)
-                        };
-
-                        newOwnedSongs.Add(newOwnedSong);
-                        availableOwnedSongs.Add(newOwnedSong);
-                    }
-                }
-
-                // Save all new OwnedSong records in a single batch operation
-                if (newOwnedSongs.Any())
-                {
-                    context.OwnedSongs.AddRange(newOwnedSongs);
-                    await context.SaveChangesAsync();
-                }
+                // Users without subscription cannot add songs to playlists
+                _logger.LogInformation("User {UserId} does not have an active subscription", userId);
+                return new List<SongMetadata>();
             }
 
-            return availableOwnedSongs;
+            // Get song IDs already in the playlist
+            var playlistSongIds = await context.UserPlaylists
+                .Where(up => up.PlaylistId == playlistId)
+                .Select(up => up.SongMetadataId)
+                .ToListAsync();
+
+            // Get all active songs that are not album covers and not already in the playlist
+            var availableSongs = await context.SongMetadata
+                .Where(sm => sm.IsActive && 
+                             !sm.IsAlbumCover && 
+                             !string.IsNullOrEmpty(sm.Mp3BlobPath) &&
+                             !playlistSongIds.Contains(sm.Id))
+                .OrderBy(sm => sm.AlbumName)
+                .ThenBy(sm => sm.TrackNumber)
+                .ThenBy(sm => sm.SongTitle)
+                .ToListAsync();
+
+            return availableSongs;
         }
         catch (Exception ex)
         {
@@ -489,14 +383,12 @@ public class PlaylistService : IPlaylistService
 
             // Get current songs in the Liked Songs playlist
             var currentPlaylistSongs = await context.UserPlaylists
-                .Include(up => up.OwnedSong)
                 .Where(up => up.PlaylistId == likedSongsPlaylist.Id)
                 .ToListAsync();
 
             // Determine which songs need to be added
             var currentMetadataIds = currentPlaylistSongs
-                .Where(up => up.OwnedSong?.SongMetadataId.HasValue == true)
-                .Select(up => up.OwnedSong.SongMetadataId.Value)
+                .Select(up => up.SongMetadataId)
                 .ToHashSet();
 
             var songsToAdd = likedSongMetadataIds
@@ -505,77 +397,29 @@ public class PlaylistService : IPlaylistService
 
             // Determine which songs need to be removed
             var songsToRemove = currentPlaylistSongs
-                .Where(up => up.OwnedSong?.SongMetadataId.HasValue == true && 
-                            !likedSongMetadataIds.Contains(up.OwnedSong.SongMetadataId.Value))
+                .Where(up => !likedSongMetadataIds.Contains(up.SongMetadataId))
                 .ToList();
-
-            // Get all existing OwnedSong records for this user to avoid creating duplicates
-            var existingOwnedSongs = await context.OwnedSongs
-                .Where(os => os.UserId == userId && os.SongMetadataId != null)
-                .ToListAsync();
-
-            var existingOwnedSongsByMetadata = existingOwnedSongs
-                .Where(os => os.SongMetadataId.HasValue)
-                .ToDictionary(os => os.SongMetadataId.Value, os => os);
 
             // Add new liked songs to the playlist
             foreach (var songMetadataId in songsToAdd)
             {
-                OwnedSong ownedSong;
-
-                // Check if user already owns this song
-                if (existingOwnedSongsByMetadata.TryGetValue(songMetadataId, out var existingOwned))
+                // Verify the song exists and is valid
+                var songMetadata = await context.SongMetadata.FindAsync(songMetadataId);
+                if (songMetadata == null || string.IsNullOrEmpty(songMetadata.Mp3BlobPath) || songMetadata.IsAlbumCover)
                 {
-                    ownedSong = existingOwned;
-                }
-                else
-                {
-                    // User doesn't own the song - create a virtual OwnedSong record for the Liked Songs playlist
-                    // The Liked Songs playlist should contain all songs the user has liked, regardless of ownership
-                    
-                    // Get the song metadata
-                    var songMetadata = await context.SongMetadata.FindAsync(songMetadataId);
-                    if (songMetadata == null || string.IsNullOrEmpty(songMetadata.Mp3BlobPath))
-                    {
-                        _logger.LogWarning("Cannot add song {SongMetadataId} to Liked Songs - metadata not found or no MP3", songMetadataId);
-                        continue;
-                    }
-
-                    // Create a virtual OwnedSong record for the liked song
-                    // PayPalOrderId = null indicates this is not a purchased song
-                    // Use the full Mp3BlobPath to match how purchased songs are stored
-                    ownedSong = new OwnedSong
-                    {
-                        UserId = userId,
-                        SongFileName = songMetadata.Mp3BlobPath,
-                        SongMetadataId = songMetadataId,
-                        PurchasedAt = DateTime.UtcNow,
-                        PayPalOrderId = null // Null = not purchased
-                    };
-
-                    context.OwnedSongs.Add(ownedSong);
-                    await context.SaveChangesAsync(); // Save to get the ID
-
-                    // Cache it for future iterations
-                    existingOwnedSongsByMetadata[songMetadataId] = ownedSong;
+                    _logger.LogWarning("Cannot add song {SongMetadataId} to Liked Songs - invalid metadata", songMetadataId);
+                    continue;
                 }
 
-                // Add to the playlist if not already there
-                var existingPlaylistEntry = await context.UserPlaylists
-                    .FirstOrDefaultAsync(up => up.PlaylistId == likedSongsPlaylist.Id && up.OwnedSongId == ownedSong.Id);
-
-                if (existingPlaylistEntry == null)
+                var userPlaylist = new UserPlaylist
                 {
-                    var userPlaylist = new UserPlaylist
-                    {
-                        UserId = userId,
-                        PlaylistId = likedSongsPlaylist.Id,
-                        OwnedSongId = ownedSong.Id,
-                        AddedAt = DateTime.UtcNow
-                    };
+                    UserId = userId,
+                    PlaylistId = likedSongsPlaylist.Id,
+                    SongMetadataId = songMetadataId,
+                    AddedAt = DateTime.UtcNow
+                };
 
-                    context.UserPlaylists.Add(userPlaylist);
-                }
+                context.UserPlaylists.Add(userPlaylist);
             }
 
             // Remove unliked songs from the playlist
