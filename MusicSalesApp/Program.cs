@@ -233,6 +233,9 @@ try
     builder.Services.AddScoped<ICreatorService, CreatorService>();
     builder.Services.AddScoped<IPayPalPartnerService, PayPalPartnerService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
+    
+    // Register TaxBanditsService with HttpClient
+    builder.Services.AddHttpClient<ITaxBanditsService, TaxBanditsService>();
 
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
