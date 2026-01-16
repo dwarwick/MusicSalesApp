@@ -47,8 +47,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
         // 2) Get URL from configuration or use defaults
         var url = useSandbox
-            ? _configuration["TaxBandits:SandboxUrl"] ?? "https://testoauth.expressauth.net/v2/tbsauth"
-            : _configuration["TaxBandits:ProductionUrl"] ?? "https://oauth.expressauth.net/v2/tbsauth";
+            ? _configuration["TaxBandits:SandboxAuthUrl"] ?? "https://testoauth.expressauth.net/v2/tbsauth"
+            : _configuration["TaxBandits:ProductionAuthUrl"] ?? "https://oauth.expressauth.net/v2/tbsauth";
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
 
