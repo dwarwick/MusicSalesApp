@@ -24,6 +24,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<AppSettings> AppSettings { get; set; }
     public DbSet<Creator> Creators { get; set; }
     public DbSet<StreamPayout> StreamPayouts { get; set; }
+    public DbSet<W9Request> W9Requests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -287,5 +288,20 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(sm => sm.CreatorId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Configure W9Request entity
+        builder.Entity<W9Request>()
+            .HasOne(w => w.User)
+            .WithMany()
+            .HasForeignKey(w => w.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Index on UserId for efficient lookups
+        builder.Entity<W9Request>()
+            .HasIndex(w => w.UserId);
+
+        // Index on SubmissionId for webhook handling
+        builder.Entity<W9Request>()
+            .HasIndex(w => w.SubmissionId);
     }
 }

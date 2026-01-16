@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Moq.Protected;
+using MusicSalesApp.Data;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Tests.Services;
@@ -14,6 +16,8 @@ public class TaxBanditsServiceTests
     private HttpClient _httpClient;
     private Mock<Microsoft.Extensions.Logging.ILogger<TaxBanditsService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
+    private Mock<IDbContextFactory<AppDbContext>> _mockDbContextFactory;
+    private Mock<IEmailService> _mockEmailService;
     private TaxBanditsService _service;
 
     [SetUp]
@@ -23,6 +27,8 @@ public class TaxBanditsServiceTests
         _httpClient = new HttpClient(_mockHttpMessageHandler.Object);
         _mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<TaxBanditsService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _mockDbContextFactory = new Mock<IDbContextFactory<AppDbContext>>();
+        _mockEmailService = new Mock<IEmailService>();
         
         // Setup default configuration values
         _mockConfiguration.Setup(c => c["TaxBandits:SandboxUrl"])
@@ -30,7 +36,12 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ProductionUrl"])
             .Returns("https://oauth.expressauth.net/v2/tbsauth");
         
-        _service = new TaxBanditsService(_httpClient, _mockLogger.Object, _mockConfiguration.Object);
+        _service = new TaxBanditsService(
+            _httpClient, 
+            _mockLogger.Object, 
+            _mockConfiguration.Object,
+            _mockDbContextFactory.Object,
+            _mockEmailService.Object);
     }
 
     [TearDown]
@@ -245,5 +256,42 @@ public class TaxBanditsServiceTests
 
         // Assert
         Assert.That(jws1, Is.Not.EqualTo(jws2));
+    }
+
+    [Test]
+    public async Task RequestW9ByEmailAsync_ReturnsError_WhenEmailIsEmpty()
+    {
+        // Act
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.RequestW9ByEmailAsync(1, "", "https://example.com"));
+
+        // Assert
+        Assert.That(ex.ParamName, Is.EqualTo("email"));
+    }
+
+    [Test]
+    public async Task RequestW9ByEmailAsync_ReturnsError_WhenConfigurationIsMissing()
+    {
+        // Arrange - Configuration returns null for required fields
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:WebhookRef"]).Returns((string)null);
+        
+        // Setup the IConfigurationSection for GetValue<bool>
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+        
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        // Act
+        var result = await _service.RequestW9ByEmailAsync(1, "test@example.com", "https://example.com");
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("configuration"));
     }
 }
