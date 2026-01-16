@@ -24,8 +24,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
     private readonly IConfiguration _configuration;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IEmailService _emailService;
-
-    private const string AdminEmail = "admin@streamtunes.net";
+    private readonly string _adminEmail;
 
     public TaxBanditsService(
         HttpClient http, 
@@ -39,6 +38,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
         _configuration = configuration;
         _dbContextFactory = dbContextFactory;
         _emailService = emailService;
+        _adminEmail = configuration["EmailSettings:CustomerServiceEmail"] ?? "admin@streamtunes.net";
     }
 
     /// <inheritdoc />
@@ -316,7 +316,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                You will receive an email shortly from <strong>TaxBandits</strong> with a secure link to complete your tax form.</p>
             <p><strong>Important:</strong> Please look for an email from TaxBandits and complete the form as soon as possible 
                to finalize your creator account setup.</p>
-            <p>If you have any questions, please contact us at <a href='mailto:{AdminEmail}'>{AdminEmail}</a>.</p>
+            <p>If you have any questions, please contact us at <a href='mailto:{_adminEmail}'>{_adminEmail}</a>.</p>
             <p style='color: #999; font-size: 12px;'>
                 <a href='{baseUrl.TrimEnd('/')}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
             </p>";
@@ -329,6 +329,11 @@ public sealed class TaxBanditsService : ITaxBanditsService
     {
         var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
 
+        // Truncate raw response to avoid exposing too much sensitive information in emails
+        var truncatedResponse = rawResponse != null && rawResponse.Length > 500 
+            ? rawResponse.Substring(0, 500) + "... [truncated]" 
+            : rawResponse;
+
         // Email to admin
         var adminSubject = "W-9 Request Failed - Action Required";
         var adminBody = $@"
@@ -339,10 +344,10 @@ public sealed class TaxBanditsService : ITaxBanditsService
             <p>A W-9 request failed for the following user:</p>
             <p><strong>User Email:</strong> {userEmail}</p>
             <p><strong>Error:</strong> {errorMessage}</p>
-            {(rawResponse != null ? $"<p><strong>Raw Response:</strong></p><pre style='background: #f5f5f5; padding: 10px; overflow-x: auto;'>{System.Web.HttpUtility.HtmlEncode(rawResponse)}</pre>" : "")}
-            <p>Please investigate and take appropriate action.</p>";
+            {(truncatedResponse != null ? $"<p><strong>Response Summary:</strong></p><pre style='background: #f5f5f5; padding: 10px; overflow-x: auto;'>{System.Web.HttpUtility.HtmlEncode(truncatedResponse)}</pre>" : "")}
+            <p>Please investigate and take appropriate action. Full response details are available in the database.</p>";
 
-        await _emailService.SendEmailAsync(AdminEmail, adminSubject, adminBody);
+        await _emailService.SendEmailAsync(_adminEmail, adminSubject, adminBody);
         _logger.LogInformation("Sent W-9 error notification to admin for user {Email}", userEmail);
 
         // Email to user
@@ -353,9 +358,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
             </div>
             <h2>Issue with Your Tax Form Request</h2>
             <p>We encountered an issue while processing your tax form request.</p>
-            <p>Our team at <a href='mailto:{AdminEmail}'>{AdminEmail}</a> has been notified and is looking into this issue.</p>
+            <p>Our team at <a href='mailto:{_adminEmail}'>{_adminEmail}</a> has been notified and is looking into this issue.</p>
             <p>We apologize for any inconvenience and will reach out to you shortly with next steps.</p>
-            <p>If you have any questions, please contact us at <a href='mailto:{AdminEmail}'>{AdminEmail}</a>.</p>
+            <p>If you have any questions, please contact us at <a href='mailto:{_adminEmail}'>{_adminEmail}</a>.</p>
             <p style='color: #999; font-size: 12px;'>
                 <a href='{baseUrl.TrimEnd('/')}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
             </p>";
@@ -398,8 +403,11 @@ public sealed class TaxBanditsService : ITaxBanditsService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save W-9 request record for user {UserId}", userId);
+            // Log at critical level since audit records are important for compliance
+            _logger.LogCritical(ex, "CRITICAL: Failed to save W-9 request record for user {UserId}. Email: {Email}, Status: {Status}. Manual intervention may be required.", 
+                userId, email, status);
             // Don't throw - we don't want to fail the main operation if database save fails
+            // The critical log will be picked up by monitoring/alerting systems
         }
     }
 

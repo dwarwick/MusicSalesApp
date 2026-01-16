@@ -334,12 +334,13 @@ public class TaxBanditsController : ControllerBase
             }
 
             // Ensure the Creator role exists
+            var normalizedRoleName = _roleManager.NormalizeKey(Common.Helpers.Roles.Creator);
             if (!await _roleManager.RoleExistsAsync(Common.Helpers.Roles.Creator))
             {
                 await _roleManager.CreateAsync(new IdentityRole<int> 
                 { 
                     Name = Common.Helpers.Roles.Creator, 
-                    NormalizedName = Common.Helpers.Roles.Creator.ToUpper() 
+                    NormalizedName = normalizedRoleName
                 });
             }
 
@@ -383,6 +384,24 @@ public class TaxBanditsController : ControllerBase
             {
                 _logger.LogWarning("Missing TaxBandits webhook signature headers");
                 return false;
+            }
+
+            // Validate timestamp to prevent replay attacks (allow 5 minute window)
+            if (DateTimeOffset.TryParse(timestamp, out var webhookTime))
+            {
+                var timeDifference = DateTimeOffset.UtcNow - webhookTime;
+                if (Math.Abs(timeDifference.TotalMinutes) > 5)
+                {
+                    _logger.LogWarning(
+                        "TaxBandits webhook timestamp is outside acceptable window. Timestamp: {Timestamp}, Current: {Current}, Difference: {Difference} minutes",
+                        timestamp, DateTimeOffset.UtcNow, timeDifference.TotalMinutes);
+                    return false;
+                }
+            }
+            else
+            {
+                _logger.LogWarning("TaxBandits webhook timestamp could not be parsed: {Timestamp}", timestamp);
+                // Continue with signature validation - timestamp format may vary
             }
 
             // Compute expected signature: HMAC-SHA256(clientId + "\n" + timestamp, clientSecret)
