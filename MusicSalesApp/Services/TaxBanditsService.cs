@@ -468,7 +468,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
         string payeeRef,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(payeeRef)) throw new ArgumentException("payeeRef is required.", nameof(payeeRef));
+        if (string.IsNullOrWhiteSpace(payeeRef)) throw new ArgumentException("PayeeRef is required.", nameof(payeeRef));
 
         _logger.LogInformation("Deleting W-9 for PayeeRef {PayeeRef}", payeeRef);
 

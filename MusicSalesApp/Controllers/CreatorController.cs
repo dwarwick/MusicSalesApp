@@ -446,10 +446,13 @@ public class CreatorController : ControllerBase
 
             if (!deleteResult.Success)
             {
+                // Business Logic: We continue with the resend even if delete fails because:
+                // 1. The form might not exist in TaxBandits (user never started it)
+                // 2. The form was already deleted previously
+                // 3. TaxBandits had a transient error
+                // In all cases, requesting a new form is the desired outcome for the user.
                 _logger.LogWarning("W-9/W-8 delete returned error for user {UserId}: {Error}. Proceeding with resend anyway.", 
                     user.Id, deleteResult.ErrorMessage);
-                // Don't fail here - the form might not exist or was already deleted
-                // We still want to send a new request
             }
             else
             {
@@ -464,14 +467,7 @@ public class CreatorController : ControllerBase
                 _logger.LogInformation("W-9/W-8 resend successful for user {UserId}", user.Id);
 
                 // Update the creator's tax form status to Pending
-                await using var context = await _dbContextFactory.CreateDbContextAsync();
-                var creatorToUpdate = await context.Creators.FindAsync(creator.Id);
-                if (creatorToUpdate != null)
-                {
-                    creatorToUpdate.TaxFormStatus = TaxFormStatus.Pending;
-                    creatorToUpdate.UpdatedAt = DateTime.UtcNow;
-                    await context.SaveChangesAsync();
-                }
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
 
                 return Ok(new ResendTaxFormResponse
                 {
