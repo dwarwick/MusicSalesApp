@@ -2,6 +2,7 @@
 @inherits AdminUserManagementModel
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
 @attribute [Authorize(Policy = Permissions.ManageUsers)]
 
 <PageTitle>User Management</PageTitle>
@@ -59,6 +60,103 @@ else
                             if (user!.EmailConfirmed)
                             {
                                 <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.Roles)" HeaderText="Roles" Width="150"></GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.IsCreator)" HeaderText="Is Creator" Width="100">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.IsCreator)
+                            {
+                                <span class="badge bg-info">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.PayPalOnboardingStatusDisplay)" HeaderText="PayPal Status" Width="140">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (!user!.IsCreator)
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                            else
+                            {
+                                var badgeClass = user.PayPalOnboardingStatus switch
+                                {
+                                    CreatorOnboardingStatus.Completed => "bg-success",
+                                    CreatorOnboardingStatus.InProgress => "bg-warning",
+                                    CreatorOnboardingStatus.Pending => "bg-info",
+                                    CreatorOnboardingStatus.Failed => "bg-danger",
+                                    CreatorOnboardingStatus.Suspended => "bg-danger",
+                                    CreatorOnboardingStatus.ConsentRevoked => "bg-danger",
+                                    _ => "bg-secondary"
+                                };
+                                <span class="badge @badgeClass">@user.PayPalOnboardingStatusDisplay</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.TaxFormStatusDisplay)" HeaderText="Tax Form Status" Width="140">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (!user!.IsCreator)
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                            else
+                            {
+                                var badgeClass = user.TaxFormStatus switch
+                                {
+                                    TaxFormStatus.Completed => "bg-success",
+                                    TaxFormStatus.Pending => "bg-info",
+                                    TaxFormStatus.Failed => "bg-danger",
+                                    _ => "bg-secondary"
+                                };
+                                <span class="badge @badgeClass">@user.TaxFormStatusDisplay</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.CreatorIsActive)" HeaderText="Creator Active" Width="120">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (!user!.IsCreator)
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                            else if (user.CreatorIsActive)
+                            {
+                                <span class="badge bg-success">Active</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Inactive</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.IsSuspended)" HeaderText="User Suspended" Width="120">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.IsSuspended)
+                            {
+                                <span class="badge bg-danger">Yes</span>
                             }
                             else
                             {
@@ -137,21 +235,6 @@ else
                     </Template>
                 </GridColumn>
                 <GridColumn Field="@nameof(UserViewModel.Theme)" HeaderText="Theme" Width="100"></GridColumn>
-                <GridColumn Field="@nameof(UserViewModel.IsSuspended)" HeaderText="Suspended" Width="120">
-                    <Template>
-                        @{
-                            var user = (context as UserViewModel);
-                            if (user!.IsSuspended)
-                            {
-                                <span class="badge bg-danger">Yes</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-secondary">No</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
                 <GridColumn Field="@nameof(UserViewModel.SuspendedAt)" HeaderText="Suspended At" Width="180">
                     <Template>
                         @{
@@ -167,7 +250,6 @@ else
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(UserViewModel.Roles)" HeaderText="Roles" Width="150"></GridColumn>
             </GridColumns>
         </SfGrid>
 
@@ -178,7 +260,7 @@ else
 }
 
 <!-- Edit Dialog -->
-<SfDialog @bind-Visible="_showEditModal" Width="600px" IsModal="true" ShowCloseIcon="true">
+<SfDialog @bind-Visible="_showEditModal" Width="700px" IsModal="true" ShowCloseIcon="true">
     <DialogTemplates>
         <Header>Edit User</Header>
         <Content>
@@ -250,7 +332,7 @@ else
 
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <SfCheckBox @bind-Checked="_editIsSuspended" Label="Suspended" CssClass="e-outline"></SfCheckBox>
+                            <SfCheckBox @bind-Checked="_editIsSuspended" Label="User Suspended" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
 
@@ -294,6 +376,58 @@ else
                             </SfDropDownList>
                         </div>
                     </div>
+
+                    @if (_editingUser.IsCreator)
+                    {
+                        <hr />
+                        <h5>Creator Settings</h5>
+                        <p class="text-muted small">Manage the creator's onboarding status and active state. Setting "Creator Active" to off will hide all their music from the Music Library and playlists.</p>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="e-label">PayPal Onboarding Status</label>
+                                <SfDropDownList TValue="CreatorOnboardingStatus?" TItem="string" 
+                                              @bind-Value="_editPayPalOnboardingStatus" 
+                                              DataSource="@_payPalOnboardingStatusOptions"
+                                              Placeholder="Select Status"
+                                              CssClass="e-outline">
+                                </SfDropDownList>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="e-label">Tax Form Status</label>
+                                <SfDropDownList TValue="TaxFormStatus?" TItem="string" 
+                                              @bind-Value="_editTaxFormStatus" 
+                                              DataSource="@_taxFormStatusOptions"
+                                              Placeholder="Select Status"
+                                              CssClass="e-outline">
+                                </SfDropDownList>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <SfCheckBox @bind-Checked="_editCreatorIsActive" Label="Creator Active (can publish music)" CssClass="e-outline"></SfCheckBox>
+                            </div>
+                        </div>
+
+                        @if (_editingUser.PayPalOnboardedAt.HasValue)
+                        {
+                            <div class="row mb-2">
+                                <div class="col-md-12">
+                                    <small class="text-muted">PayPal Onboarded: @_editingUser.PayPalOnboardedAt.Value.ToString("g")</small>
+                                </div>
+                            </div>
+                        }
+
+                        @if (_editingUser.TaxFormCompletedAt.HasValue)
+                        {
+                            <div class="row mb-2">
+                                <div class="col-md-12">
+                                    <small class="text-muted">Tax Form Completed: @_editingUser.TaxFormCompletedAt.Value.ToString("g")</small>
+                                </div>
+                            </div>
+                        }
+                    }
                 </div>
             }
         </Content>

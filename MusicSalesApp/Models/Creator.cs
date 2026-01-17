@@ -6,7 +6,8 @@ namespace MusicSalesApp.Models;
 
 /// <summary>
 /// Represents a creator who can upload and sell music on the platform.
-/// Creators are onboarded through PayPal Partner Referrals and can receive payments for their music sales.
+/// Creators are onboarded through PayPal Partner Referrals and TaxBandits (W-9/W-8 forms),
+/// and can receive payments for their music sales once both onboarding processes are complete.
 /// </summary>
 public class Creator
 {
@@ -57,6 +58,16 @@ public class Creator
     /// The status of the creator's PayPal onboarding process.
     /// </summary>
     public CreatorOnboardingStatus OnboardingStatus { get; set; } = CreatorOnboardingStatus.NotStarted;
+
+    /// <summary>
+    /// The status of the creator's tax form (W-9/W-8) completion via TaxBandits.
+    /// </summary>
+    public TaxFormStatus TaxFormStatus { get; set; } = TaxFormStatus.NotStarted;
+
+    /// <summary>
+    /// When the creator completed their tax form (W-9/W-8).
+    /// </summary>
+    public DateTime? TaxFormCompletedAt { get; set; }
 
     /// <summary>
     /// Whether the creator has granted the necessary permissions to the platform.
@@ -112,8 +123,16 @@ public class Creator
 
     /// <summary>
     /// Whether the creator account is currently active and can sell music.
+    /// When set to false, the creator's music will not be available in the Music Library or playlists.
     /// </summary>
     public bool IsActive { get; set; } = false;
+
+    /// <summary>
+    /// Checks if both PayPal and tax form onboarding are complete.
+    /// </summary>
+    [NotMapped]
+    public bool IsFullyOnboarded => OnboardingStatus == CreatorOnboardingStatus.Completed 
+                                    && TaxFormStatus == TaxFormStatus.Completed;
 }
 
 /// <summary>
@@ -156,4 +175,30 @@ public enum CreatorOnboardingStatus
     /// This typically happens when the creator removes the platform's permissions in their PayPal account.
     /// </summary>
     ConsentRevoked = 6
+}
+
+/// <summary>
+/// Represents the status of a creator's tax form (W-9/W-8BEN) completion via TaxBandits.
+/// </summary>
+public enum TaxFormStatus
+{
+    /// <summary>
+    /// Tax form has not been started or requested.
+    /// </summary>
+    NotStarted = 0,
+
+    /// <summary>
+    /// Tax form request has been sent, waiting for creator to complete it.
+    /// </summary>
+    Pending = 1,
+
+    /// <summary>
+    /// Tax form has been completed successfully.
+    /// </summary>
+    Completed = 2,
+
+    /// <summary>
+    /// Tax form submission failed or was rejected.
+    /// </summary>
+    Failed = 3
 }

@@ -149,32 +149,35 @@ public class CreatorService : ICreatorService
             throw new InvalidOperationException($"Creator with ID {creatorId} not found");
         }
 
-        // In sandbox mode, having a valid merchant_id is sufficient for activation
+        // In sandbox mode, having a valid merchant_id is sufficient for PayPal onboarding completion
         // since sandbox accounts may not have payments_receivable or primary_email_confirmed set
         var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", baseUrl.Contains("sandbox", StringComparison.OrdinalIgnoreCase));
         
-        // Determine if onboarding is complete:
+        // Determine if PayPal onboarding is complete:
         // - In production: requires both paymentsReceivable and primaryEmailConfirmed
         // - In sandbox: having a valid merchantId is sufficient (optional override via PayPal:SandboxAllowPartialOnboarding)
         var allowPartialOnboarding = sandboxMode && _configuration.GetValue<bool>("PayPal:SandboxAllowPartialOnboarding", true);
-        var isComplete = (paymentsReceivable && primaryEmailConfirmed) || 
-                         (allowPartialOnboarding && !string.IsNullOrWhiteSpace(merchantId));
+        var isPayPalComplete = (paymentsReceivable && primaryEmailConfirmed) || 
+                               (allowPartialOnboarding && !string.IsNullOrWhiteSpace(merchantId));
 
         creator.PayPalMerchantId = merchantId;
         creator.PaymentsReceivable = paymentsReceivable;
         creator.PrimaryEmailConfirmed = primaryEmailConfirmed;
-        creator.OnboardingStatus = isComplete
+        creator.OnboardingStatus = isPayPalComplete
             ? CreatorOnboardingStatus.Completed
             : CreatorOnboardingStatus.InProgress;
-        creator.OnboardedAt = isComplete ? DateTime.UtcNow : null;
-        creator.IsActive = isComplete;
+        creator.OnboardedAt = isPayPalComplete ? DateTime.UtcNow : null;
         creator.UpdatedAt = DateTime.UtcNow;
+        
+        // Note: IsActive is NOT set here. Creator only becomes active when BOTH
+        // PayPal onboarding AND tax form (W-9/W-8) are complete.
+        // The webhooks from PayPal and TaxBandits will handle setting IsActive.
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Completed onboarding for creator {CreatorId} with merchant ID {MerchantId}, IsActive: {IsActive}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
-            creatorId, merchantId, creator.IsActive, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
+        _logger.LogInformation("Completed PayPal onboarding for creator {CreatorId} with merchant ID {MerchantId}, PayPalStatus: {PayPalStatus}, TaxFormStatus: {TaxFormStatus}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
+            creatorId, merchantId, creator.OnboardingStatus, creator.TaxFormStatus, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
         return creator;
     }
 
@@ -200,6 +203,31 @@ public class CreatorService : ICreatorService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Updated onboarding status for creator {CreatorId} to {Status}", creatorId, status);
+        return creator;
+    }
+
+    /// <inheritdoc />
+    public async Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        creator.TaxFormStatus = status;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        if (status == TaxFormStatus.Completed)
+        {
+            creator.TaxFormCompletedAt = DateTime.UtcNow;
+        }
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated tax form status for creator {CreatorId} to {Status}", creatorId, status);
         return creator;
     }
 

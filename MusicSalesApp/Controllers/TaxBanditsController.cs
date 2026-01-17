@@ -310,7 +310,8 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
-    /// Completes the creator onboarding process by adding the Creator role to the user.
+    /// Completes the creator onboarding process by updating the tax form status 
+    /// and adding the Creator role to the user if both onboarding processes are complete.
     /// </summary>
     private async Task CompleteCreatorOnboardingAsync(int userId)
     {
@@ -324,14 +325,30 @@ public class TaxBanditsController : ControllerBase
                 return;
             }
 
+            // Update the creator's tax form status
+            await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
+
+            // Reload creator to get updated status
+            creator = await _creatorService.GetCreatorByUserIdAsync(userId);
+            if (creator == null)
+            {
+                _logger.LogWarning("Creator record not found after update for user {UserId}", userId);
+                return;
+            }
+
             // Check if PayPal onboarding is also complete
             if (creator.OnboardingStatus != CreatorOnboardingStatus.Completed)
             {
                 _logger.LogInformation(
-                    "User {UserId} completed tax form but PayPal onboarding is not complete. Status: {Status}",
-                    userId, creator.OnboardingStatus);
+                    "User {UserId} completed tax form but PayPal onboarding is not complete. PayPal Status: {PayPalStatus}, Tax Form Status: {TaxFormStatus}",
+                    userId, creator.OnboardingStatus, creator.TaxFormStatus);
                 return;
             }
+
+            // Both onboarding processes are complete - add Creator role
+            _logger.LogInformation(
+                "Both PayPal and tax form onboarding complete for user {UserId}. Adding Creator role.",
+                userId);
 
             // Ensure the Creator role exists
             var normalizedRoleName = _roleManager.NormalizeKey(Common.Helpers.Roles.Creator);
@@ -349,8 +366,12 @@ public class TaxBanditsController : ControllerBase
             if (user != null && !await _userManager.IsInRoleAsync(user, Common.Helpers.Roles.Creator))
             {
                 await _userManager.AddToRoleAsync(user, Common.Helpers.Roles.Creator);
-                _logger.LogInformation("Added Creator role to user {UserId} after W-9/W-8 completion", userId);
+                _logger.LogInformation("Added Creator role to user {UserId} after both PayPal and tax form completion", userId);
             }
+
+            // Activate the creator
+            await _creatorService.ActivateCreatorAsync(creator.Id);
+            _logger.LogInformation("Activated creator {CreatorId} for user {UserId}", creator.Id, userId);
         }
         catch (Exception ex)
         {

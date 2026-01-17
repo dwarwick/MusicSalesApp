@@ -26,8 +26,12 @@ namespace MusicSalesApp.Services
         public async Task<List<SongMetadata>> GetAllAsync()
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            // Only return active songs
-            return await context.SongMetadata.Where(s => s.IsActive).ToListAsync();
+            // Only return active songs from active creators
+            // Songs uploaded by admin (CreatorId = null) are always shown
+            return await context.SongMetadata
+                .Include(s => s.Creator)
+                .Where(s => s.IsActive && (s.CreatorId == null || s.Creator == null || s.Creator.IsActive))
+                .ToListAsync();
         }
 
         public async Task<SongMetadata> GetByIdAsync(int id)
@@ -39,19 +43,25 @@ namespace MusicSalesApp.Services
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            // Only return active songs
+            // Only return active songs from active creators
             return await context.SongMetadata
-                .FirstOrDefaultAsync(s => s.IsActive && (s.BlobPath == blobPath || 
-                                         s.Mp3BlobPath == blobPath || 
-                                         s.ImageBlobPath == blobPath));
+                .Include(s => s.Creator)
+                .FirstOrDefaultAsync(s => s.IsActive 
+                    && (s.CreatorId == null || s.Creator == null || s.Creator.IsActive)
+                    && (s.BlobPath == blobPath || 
+                        s.Mp3BlobPath == blobPath || 
+                        s.ImageBlobPath == blobPath));
         }
 
         public async Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            // Only return active songs
+            // Only return active songs from active creators
             return await context.SongMetadata
-                .Where(s => s.IsActive && s.AlbumName == albumName)
+                .Include(s => s.Creator)
+                .Where(s => s.IsActive 
+                    && (s.CreatorId == null || s.Creator == null || s.Creator.IsActive)
+                    && s.AlbumName == albumName)
                 .ToListAsync();
         }
 
@@ -110,12 +120,14 @@ namespace MusicSalesApp.Services
         public async Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            var query = context.SongMetadata.AsQueryable();
+            var query = context.SongMetadata.Include(s => s.Creator).AsQueryable();
 
             // Only include active songs by default (unless specifically querying for inactive)
             if (!parameters.IncludeInactive)
             {
                 query = query.Where(s => s.IsActive);
+                // Also filter out songs from inactive creators (unless admin is viewing all)
+                query = query.Where(s => s.CreatorId == null || s.Creator == null || s.Creator.IsActive);
             }
 
             // Apply filters
