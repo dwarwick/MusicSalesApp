@@ -24,7 +24,6 @@ public partial class CreatorSongManagementModel : BlazorBase
     protected SongAdminViewModel _editingSong;
     protected string _editGenre = string.Empty;
     protected string _editSongTitle = string.Empty;
-    protected string _editAlbumName = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
 
@@ -79,20 +78,18 @@ public partial class CreatorSongManagementModel : BlazorBase
 
         var creatorSongs = await CreatorService.GetCreatorSongsAsync(_creatorId.Value);
         
-        _songs = creatorSongs.Select(m => new SongAdminViewModel
+        // Filter out album covers since we no longer use albums
+        _songs = creatorSongs
+            .Where(m => !m.IsAlbumCover)
+            .Select(m => new SongAdminViewModel
         {
             Id = m.Id.ToString(),
-            AlbumName = m.AlbumName ?? string.Empty,
             SongTitle = GetSongTitleFromMetadata(m),
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
-            JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
-            AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
-            IsAlbum = m.IsAlbumCover,
+            JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
-            TrackNumber = m.TrackNumber,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
-            HasAlbumCover = m.IsAlbumCover,
             CreatorId = m.CreatorId,
             IsActive = m.IsActive,
             NumberOfStreams = m.NumberOfStreams
@@ -104,10 +101,6 @@ public partial class CreatorSongManagementModel : BlazorBase
             if (!string.IsNullOrEmpty(song.JpegFileName))
             {
                 song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
-            }
-            if (!string.IsNullOrEmpty(song.AlbumCoverBlobName))
-            {
-                song.AlbumCoverImageUrl = AzureStorageService.GetReadSasUri(song.AlbumCoverBlobName, TimeSpan.FromHours(1)).ToString();
             }
         }
     }
@@ -209,7 +202,6 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = song;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
-        _editAlbumName = song.AlbumName;
         _validationErrors.Clear();
         _showEditDialog = true;
     }
@@ -219,7 +211,6 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = null;
         _showEditDialog = false;
         _validationErrors.Clear();
-        _editAlbumName = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -238,28 +229,10 @@ public partial class CreatorSongManagementModel : BlazorBase
                 _validationErrors.Add("Song title is required.");
             }
 
-            // Validate album name if editing an album
-            if (_editingSong.IsAlbum && string.IsNullOrWhiteSpace(_editAlbumName))
+            // Validate genre
+            if (string.IsNullOrWhiteSpace(_editGenre))
             {
-                _validationErrors.Add("Album name is required.");
-            }
-
-            // Validate other fields
-            if (!_editingSong.IsAlbum)
-            {
-                {
-                    _validationErrors.Add("Song price is required and must be greater than 0.");
-                }
-                if (string.IsNullOrWhiteSpace(_editGenre))
-                {
-                    _validationErrors.Add("Genre is required.");
-                }
-            }
-            else
-            {
-                {
-                    _validationErrors.Add("Album price is required and must be greater than 0.");
-                }
+                _validationErrors.Add("Genre is required.");
             }
 
             if (_validationErrors.Any())
@@ -276,31 +249,7 @@ public partial class CreatorSongManagementModel : BlazorBase
                 {
                     // Always update the title
                     metadata.SongTitle = _editSongTitle;
-
-                    if (_editingSong.IsAlbum)
-                    {
-                        
-                        // Update album name if changed
-                        var oldAlbumName = metadata.AlbumName;
-                        if (!string.IsNullOrEmpty(oldAlbumName) && oldAlbumName != _editAlbumName)
-                        {
-                            // Update album name for all tracks in this album
-                            var albumTracks = await SongMetadataService.GetByAlbumNameAsync(oldAlbumName);
-                            foreach (var track in albumTracks)
-                            {
-                                if (track.CreatorId == _creatorId) // Only update tracks owned by this creator
-                                {
-                                    track.AlbumName = _editAlbumName;
-                                    await SongMetadataService.UpsertAsync(track);
-                                }
-                            }
-                        }
-                        metadata.AlbumName = _editAlbumName;
-                    }
-                    else
-                    {
-                        metadata.Genre = _editGenre;
-                    }
+                    metadata.Genre = _editGenre;
 
                     await SongMetadataService.UpsertAsync(metadata);
                     
