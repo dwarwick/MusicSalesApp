@@ -164,11 +164,15 @@ public class CreatorController : ControllerBase
             if (w9Result.Success)
             {
                 _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
+                // Update the tax form status to Pending since the request was sent successfully
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
             }
             else
             {
                 // Log the error but don't fail the onboarding - admin will be notified via email
                 _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
+                // Update the tax form status to Failed since the request failed
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Failed);
             }
         }
         catch (Exception ex)
