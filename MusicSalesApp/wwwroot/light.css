@@ -19,7 +19,7 @@ body {
     box-shadow: 0 2px 4px rgba(var(--color-sf-black), 0.075);
 }
 
-.music-card, .album-art {
+.music-card, .playlist-art {
     box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -221,7 +221,7 @@ body {
     font-size: 24px;
 }
 
-.album-badge {
+.REMOVED_album-badge {
     background-color: rgba(29, 185, 84, 0.9);
     color: #fff;
     font-size: 10px;
@@ -305,7 +305,7 @@ body {
     color: inherit;
 }
 
-.stream-count-info, .album-track-info {
+.stream-count-info, .playlist-track-info {
     color: #282828;
 }
 

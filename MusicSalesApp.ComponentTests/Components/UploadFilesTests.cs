@@ -13,8 +13,8 @@ public class UploadFilesTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<UploadFiles>();
 
-        // Assert - Check for new instructions about pairing files
-        Assert.That(cut.Markup, Does.Contain("Upload MP3 files paired with their album art"));
+        // Assert - Check for instructions about pairing files
+        Assert.That(cut.Markup, Does.Contain("Upload MP3 files paired with their cover art"));
     }
 
     [Test]

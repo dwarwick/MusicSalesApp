@@ -203,44 +203,6 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_DisplaysAlbumFromMetadata()
-    {
-        // Arrange - authorize user
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
-        
-        // Set up metadata with the expected album
-        // The component looks for IsAlbumCover=true entries and then finds matching tracks by AlbumName
-        MockSongMetadataService.Setup(x => x.GetAllAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
-            {
-                // Album cover entry with price
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    BlobPath = "AlbumCover.jpg", 
-                    ImageBlobPath = "AlbumCover.jpg",
-                    IsAlbumCover = true, 
-                    AlbumName = "TestAlbum",
-                     
-                },
-                // Track entry that belongs to the album
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    BlobPath = "Track1.mp3",
-                    Mp3BlobPath = "Track1.mp3", 
-                    AlbumName = "TestAlbum"
-                }
-            });
-
-        // Act
-        SetupRendererInfo();
-        var cut = TestContext.Render<MusicLibrary>();
-
-        // Assert - should display album name (price no longer displayed since individual purchases removed)
-        Assert.That(cut.Markup, Does.Contain("TestAlbum"));
-    }
-
-    [Test]
     public void MusicLibrary_HidesTitle_WhenShowHomePageFeatured()
     {
         // Arrange - Set up empty metadata list
@@ -308,64 +270,6 @@ public class MusicLibraryTests : BUnitTestBase
         // Assert - should only show featured song
         Assert.That(cut.Markup, Does.Contain("FeaturedSong"));
         Assert.That(cut.Markup, Does.Not.Contain("RegularSong"));
-    }
-
-    [Test]
-    public void MusicLibrary_OnlyShowsFeaturedAlbums_WhenShowHomePageFeatured()
-    {
-        // Arrange - authorize user so cart button with price is visible
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
-        
-        // Set up metadata with featured and non-featured albums
-        MockSongMetadataService.Setup(x => x.GetAllAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
-            {
-                // Featured album cover with track
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    Id = 1,
-                    BlobPath = "FeaturedAlbumCover.jpg", 
-                    ImageBlobPath = "FeaturedAlbumCover.jpg",
-                    IsAlbumCover = true, 
-                    AlbumName = "FeaturedAlbum",
-                    
-                    DisplayOnHomePage = true
-                },
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    Id = 2,
-                    BlobPath = "FeaturedTrack.mp3",
-                    Mp3BlobPath = "FeaturedTrack.mp3", 
-                    AlbumName = "FeaturedAlbum"
-                },
-                // Non-featured album cover with track
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    Id = 3,
-                    BlobPath = "RegularAlbumCover.jpg", 
-                    ImageBlobPath = "RegularAlbumCover.jpg",
-                    IsAlbumCover = true, 
-                    AlbumName = "RegularAlbum",
-                    
-                    DisplayOnHomePage = false
-                },
-                new MusicSalesApp.Models.SongMetadata 
-                { 
-                    Id = 4,
-                    BlobPath = "RegularTrack.mp3",
-                    Mp3BlobPath = "RegularTrack.mp3", 
-                    AlbumName = "RegularAlbum"
-                }
-            });
-
-        // Act
-        SetupRendererInfo();
-        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
-
-        // Assert - should only show featured album
-        Assert.That(cut.Markup, Does.Contain("FeaturedAlbum"));
-        Assert.That(cut.Markup, Does.Not.Contain("RegularAlbum"));
     }
 
     private new class StubHttpMessageHandler : HttpMessageHandler
