@@ -53,18 +53,18 @@
                 <GridPageSettings PageSize="15"></GridPageSettings>
                 <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
                 <GridColumns>
-                    <GridColumn HeaderText="Actions" Width="250" AllowFiltering="false" AllowSorting="false">
+                    <GridColumn HeaderText="Actions" Width="150" AllowFiltering="false" AllowSorting="false">
                         <Template>
                             @{
                                 var item = (context as SongStatusHistoryViewModel);
                                 <div class="d-flex gap-2">
                                     <SfButton OnClick="() => NavigateToSongManagement(item)" CssClass="e-btn e-primary" title="Edit Song">
-                                        <span class="e-btn-icon e-icons e-edit-3 e-icon-left"></span>Song
+                                        Song
                                     </SfButton>
                                     @if (item.CreatorUserId.HasValue)
                                     {
                                         <SfButton OnClick="() => NavigateToUserManagement(item)" CssClass="e-btn e-info" title="View User">
-                                            <span class="e-btn-icon e-icons e-user e-icon-left"></span>User
+                                            User
                                         </SfButton>
                                     }
                                 </div>
