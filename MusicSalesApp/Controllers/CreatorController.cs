@@ -24,6 +24,8 @@ public class CreatorController : ControllerBase
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ILogger<CreatorController> _logger;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
+    private readonly ITaxBanditsService _taxBanditsService;
+    private readonly IConfiguration _configuration;
 
     public CreatorController(
         ICreatorService creatorService,
@@ -31,7 +33,9 @@ public class CreatorController : ControllerBase
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         ILogger<CreatorController> logger,
-        IDbContextFactory<AppDbContext> dbContextFactory)
+        IDbContextFactory<AppDbContext> dbContextFactory,
+        ITaxBanditsService taxBanditsService,
+        IConfiguration configuration)
     {
         _creatorService = creatorService;
         _payPalPartnerService = payPalPartnerService;
@@ -39,6 +43,8 @@ public class CreatorController : ControllerBase
         _roleManager = roleManager;
         _logger = logger;
         _dbContextFactory = dbContextFactory;
+        _taxBanditsService = taxBanditsService;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -142,6 +148,28 @@ public class CreatorController : ControllerBase
 
         // Update creator with onboarding info
         await _creatorService.UpdateOnboardingInfoAsync(creator.Id, referralResult.TrackingId, referralResult.ReferralUrl);
+
+        // Request W-9/W-8 tax form from TaxBandits
+        // The user will receive an email from our system and then from TaxBandits with a link to complete the form
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        try
+        {
+            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
+            if (w9Result.Success)
+            {
+                _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
+            }
+            else
+            {
+                // Log the error but don't fail the onboarding - admin will be notified via email
+                _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log the error but don't fail the onboarding - the W-9 can be requested again later
+            _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
+        }
 
         _logger.LogInformation("Started creator onboarding for user {UserId}, tracking ID: {TrackingId}, PayPal email: {PayPalEmail}", 
             user.Id, referralResult.TrackingId, request.PayPalEmail);
