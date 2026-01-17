@@ -202,20 +202,19 @@ namespace MusicSalesApp.Services
                 .ToListAsync();
 
             // Convert to SongAdminViewModel
-            var viewModels = items.Select(m => new SongAdminViewModel
+            // Note: Filter out album covers for legacy data that may still exist in the database.
+            // The IsAlbumCover field remains in the schema for backward compatibility but is no longer used for new uploads.
+            var viewModels = items
+                .Where(m => !m.IsAlbumCover)
+                .Select(m => new SongAdminViewModel
             {
                 Id = m.Id.ToString(),
-                AlbumName = m.AlbumName ?? string.Empty,
                 SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
                 Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
-                JpegFileName = m.IsAlbumCover ? string.Empty : (m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty)),
-                AlbumCoverBlobName = m.IsAlbumCover ? (m.ImageBlobPath ?? m.BlobPath) : string.Empty,
-                IsAlbum = m.IsAlbumCover,
+                JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
                 Genre = m.Genre ?? string.Empty,
-                TrackNumber = m.TrackNumber,
                 TrackLength = m.TrackLength,
                 DisplayOnHomePage = m.DisplayOnHomePage,
-                HasAlbumCover = m.IsAlbumCover,
                 CreatorId = m.CreatorId,
                 IsActive = m.IsActive
             }).ToList();

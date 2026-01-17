@@ -69,7 +69,7 @@
             margin-left: 0;
         }
 
-    .album-art {
+    .playlist-art {
         width: 85px;
         object-fit: cover;
         border-radius: 4px;
@@ -342,154 +342,154 @@
         height: 16px;
     }
 
-    /* AlbumPlayer - Container adjustments for extra small screens */
-    .album-player-spotify-container {
+    /* PlaylistPlayer - Container adjustments for extra small screens */
+    .playlist-player-container {
         grid-template-rows: auto auto auto 1fr 65px;
         height: calc(100vh - 115px);
     }
 
-        .album-player-spotify-container .album-image-title-row {
+        .playlist-player-container .playlist-image-title-row {
             padding: 8px 12px;
         }
 
-        .album-player-spotify-container .action-buttons-row {
+        .playlist-player-container .action-buttons-row {
             padding: 4px 12px;
         }
 
-        .album-player-spotify-container .status-info-row {
+        .playlist-player-container .status-info-row {
             padding: 4px 12px;
         }
 
-        .album-player-spotify-container .player-bar {
+        .playlist-player-container .player-bar {
             padding: 6px 8px;
             gap: 2px;
         }
 
-        /* AlbumPlayer - Player controls compact layout */
-        .album-player-spotify-container .controls-wrapper {
+        /* PlaylistPlayer - Player controls compact layout */
+        .playlist-player-container .controls-wrapper {
             gap: 2px;
             margin-bottom: 4px;
             max-width: 100%;
         }
 
-        .album-player-spotify-container .time-spacer {
+        .playlist-player-container .time-spacer {
             display: none;
             min-width: 0;
         }
 
-        .album-player-spotify-container .player-controls-row {
+        .playlist-player-container .player-controls-row {
             gap: 4px;
             width: 100%;
         }
 
-        .album-player-spotify-container .player-controls {
+        .playlist-player-container .player-controls {
             gap: 2px;
         }
 
-        .album-player-spotify-container .volume-controls {
+        .playlist-player-container .volume-controls {
             gap: 4px;
         }
 
-        .album-player-spotify-container .control-button {
+        .playlist-player-container .control-button {
             width: 28px;
             height: 28px;
         }
 
-        .album-player-spotify-container .control-icon {
+        .playlist-player-container .control-icon {
             width: 14px;
             height: 14px;
         }
 
-        .album-player-spotify-container .play-button-small {
+        .playlist-player-container .play-button-small {
             width: 28px;
             height: 28px;
         }
 
-        .album-player-spotify-container .play-icon-small {
+        .playlist-player-container .play-icon-small {
             width: 14px;
             height: 14px;
         }
 
-        .album-player-spotify-container .progress-container {
+        .playlist-player-container .progress-container {
             gap: 4px;
             max-width: 100%;
         }
 
-        .album-player-spotify-container .time-display {
+        .playlist-player-container .time-display {
             min-width: 28px;
             font-size: 10px;
         }
 
-        .album-player-spotify-container .volume-bar-container {
+        .playlist-player-container .volume-bar-container {
             width: 50px;
         }
 
-        .album-player-spotify-container .action-controls {
+        .playlist-player-container .action-controls {
             flex-wrap: wrap;
             gap: 12px;
         }
 
-        .album-player-spotify-container .cart-button-large {
+        .playlist-player-container .cart-button-large {
             padding: 8px 16px;
             font-size: 12px;
         }
 
-        .album-player-spotify-container .cart-icon-large {
+        .playlist-player-container .cart-icon-large {
             width: 16px;
             height: 16px;
         }
 
-    /* AlbumPlayer - Make action buttons smaller on XS */
-    .album-player-spotify-container .play-button-large {
+    /* PlaylistPlayer - Make action buttons smaller on XS */
+    .playlist-player-container .play-button-large {
         width: 36px;
         height: 36px;
     }
 
-    .album-player-spotify-container .play-icon {
+    .playlist-player-container .play-icon {
         width: 20px;
         height: 20px;
     }
 
-    .album-player-spotify-container .cart-button-large {
+    .playlist-player-container .cart-button-large {
         padding: 6px 12px;
         font-size: 11px;
     }
 
-    .album-player-spotify-container .cart-button-large span {
+    .playlist-player-container .cart-button-large span {
         display: none;
     }
 
-    .album-player-spotify-container .cart-button-large.in-cart span {
+    .playlist-player-container .cart-button-large.in-cart span {
         display: inline;
     }
 
-    .album-player-spotify-container .fb-share-btn {
+    .playlist-player-container .fb-share-btn {
         padding: 6px 10px;
         font-size: 11px;
         gap: 4px;
     }
 
-    .album-player-spotify-container .fb-share-btn .fb-icon {
+    .playlist-player-container .fb-share-btn .fb-icon {
         width: 14px;
         height: 14px;
     }
 
-    .album-player-spotify-container .fb-share-btn .share-text {
+    .playlist-player-container .fb-share-btn .share-text {
         display: none;
     }
 
     /* Make status text smaller */
-    .album-player-spotify-container .preview-label,
-    .album-player-spotify-container .subscription-badge {
+    .playlist-player-container .preview-label,
+    .playlist-player-container .subscription-badge {
         font-size: 11px;
     }
 
-    .album-player-spotify-container .subscription-badge svg {
+    .playlist-player-container .subscription-badge svg {
         width: 12px;
         height: 12px;
     }
 
-    .album-player-spotify-container .album-track-info {
+    .playlist-player-container .playlist-track-info {
         font-size: 11px;
     }
 
@@ -501,12 +501,12 @@
     }
 
     /* Now Playing info smaller */
-    .album-player-spotify-container .now-playing-info {
+    .playlist-player-container .now-playing-info {
         display: none;
     }
 
     /* Hide like/dislike buttons on XS to save space */
-    .album-player-spotify-container .track-like-dislike {
+    .playlist-player-container .track-like-dislike {
         /*display: none;*/
     }
 
@@ -520,20 +520,20 @@
     }
 
     /* Album image smaller on XS */
-    .album-player-spotify-container .album-art {
+    .playlist-player-container .playlist-art {
         width: 70px;
         height: 70px;
     }
 
     /* Title container adjustments */
-    .album-player-spotify-container .title-container {
+    .playlist-player-container .title-container {
         display: flex;
         flex-direction: row;
         align-items: center;
         gap: 8px;
     }
 
-    .album-player-spotify-container .song-title {
+    .playlist-player-container .song-title {
         font-size: 14px;
         margin: 0;
     }
