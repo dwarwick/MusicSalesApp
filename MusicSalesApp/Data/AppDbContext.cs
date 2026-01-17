@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Creator> Creators { get; set; }
     public DbSet<StreamPayout> StreamPayouts { get; set; }
     public DbSet<W9Request> W9Requests { get; set; }
+    public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -303,5 +304,26 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on SubmissionId for webhook handling
         builder.Entity<W9Request>()
             .HasIndex(w => w.SubmissionId);
+
+        // Configure SongStatusHistory entity
+        builder.Entity<SongStatusHistory>()
+            .HasOne(ssh => ssh.SongMetadata)
+            .WithMany()
+            .HasForeignKey(ssh => ssh.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<SongStatusHistory>()
+            .HasOne(ssh => ssh.ChangedByUser)
+            .WithMany()
+            .HasForeignKey(ssh => ssh.ChangedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Index on SongMetadataId for efficient lookups
+        builder.Entity<SongStatusHistory>()
+            .HasIndex(ssh => ssh.SongMetadataId);
+
+        // Index on ChangedAt for efficient querying of recent changes
+        builder.Entity<SongStatusHistory>()
+            .HasIndex(ssh => ssh.ChangedAt);
     }
 }

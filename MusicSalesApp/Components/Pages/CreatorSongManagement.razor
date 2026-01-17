@@ -98,12 +98,19 @@
                         @{
                             var song = (context as SongAdminViewModel);
                             <div class="d-flex gap-2">
-                                <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
-                                    <i class="bi bi-pencil me-1"></i> Edit
-                                </SfButton>
-                                <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger">
-                                    <i class="bi bi-trash me-1"></i> Delete
-                                </SfButton>
+                                @if (song.IsEnabled)
+                                {
+                                    <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
+                                        <i class="bi bi-pencil me-1"></i> Edit
+                                    </SfButton>
+                                    <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger">
+                                        <i class="bi bi-trash me-1"></i> Delete
+                                    </SfButton>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">No actions available</span>
+                                }
                             </div>
                         }
                     </Template>
@@ -142,6 +149,36 @@
                     </Template>
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.NumberOfStreams)" HeaderText="Streams" Width="100" Format="N0"></GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsEnabled)" HeaderText="Status" Width="120">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsEnabled)
+                            {
+                                <span class="badge bg-success">Enabled</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Disabled</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.DisableReason)" HeaderText="Disable Reason" Width="200">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (!string.IsNullOrEmpty(song.DisableReason))
+                            {
+                                <small class="text-break">@song.DisableReason</small>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
             </GridColumns>
         </SfGrid>
     }
