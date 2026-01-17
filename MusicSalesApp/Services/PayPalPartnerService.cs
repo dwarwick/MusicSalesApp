@@ -560,11 +560,11 @@ public class PayPalPartnerService : IPayPalPartnerService
                 _logger.LogInformation("PayPal Order ID: {OrderId}", orderId);
                 _logger.LogInformation("Creator ID: {CreatorId} (PayPal Merchant ID: {MerchantId})", creator.Id, creator.PayPalMerchantId);
                 _logger.LogInformation("Total Amount (Buyer Pays): ${TotalAmount:F2}", totalAmount);
-                _logger.LogInformation("Platform Commission (15%): ${PlatformFee:F2}", platformFee);
-                _logger.LogInformation("Creator Receives (Gross, 85%): ${CreatorAmount:F2}", totalAmount - platformFee);
+                _logger.LogInformation("Platform Fee: ${PlatformFee:F2}", platformFee);
+                _logger.LogInformation("Creator Receives (Gross): ${CreatorAmount:F2}", totalAmount - platformFee);
                 _logger.LogInformation("Creator Will Pay PayPal Fees: ~${PayPalFees:F2} (2.9% + $0.30)", (totalAmount * 0.029m) + 0.30m);
                 _logger.LogInformation("Creator Net (After PayPal Fees): ~${CreatorNet:F2}", (totalAmount - platformFee) - ((totalAmount * 0.029m) + 0.30m));
-                _logger.LogInformation("Platform Receives (Commission Only): ${PlatformFee:F2} (NO PayPal fees deducted)", platformFee);
+                _logger.LogInformation("Platform Receives: ${PlatformFee:F2} (NO PayPal fees deducted)", platformFee);
                 _logger.LogInformation("===============================================");
             }
 
@@ -743,7 +743,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                 var totalPayPalFees = creatorOrders.Sum(kvp => (kvp.Value.Amount * 0.029m) + 0.30m);
                 
                 _logger.LogInformation("Total Cart Amount (Buyer Pays): ${Total:F2}", totalCartAmount);
-                _logger.LogInformation("Total Platform Commission: ${TotalCommission:F2}", totalPlatformFees);
+                _logger.LogInformation("Total Platform Fees: ${TotalFees:F2}", totalPlatformFees);
                 _logger.LogInformation("Total PayPal Fees (Paid by Creators): ~${TotalPayPalFees:F2}", totalPayPalFees);
                 
                 var creatorIndex = 1;
@@ -757,14 +757,14 @@ public class PayPalPartnerService : IPayPalPartnerService
                     _logger.LogInformation("--- Creator {Index}: ID {CreatorId} (PayPal: {MerchantId}) ---", creatorIndex, creator.Id, creator.PayPalMerchantId);
                     _logger.LogInformation("  Items: {ItemCount} songs totaling ${Amount:F2}", items.Count(), amount);
                     _logger.LogInformation("  Creator Receives (Gross): ${Amount:F2}", amount);
-                    _logger.LogInformation("  Platform Commission: ${PlatformFee:F2}", platformFee);
-                    _logger.LogInformation("  Creator After Commission: ${AfterCommission:F2}", amount - platformFee);
+                    _logger.LogInformation("  Platform Fee: ${PlatformFee:F2}", platformFee);
+                    _logger.LogInformation("  Creator After Platform Fee: ${AfterFee:F2}", amount - platformFee);
                     _logger.LogInformation("  Estimated PayPal Fees (Creator Pays): ~${PayPalFees:F2}", estimatedPayPalFee);
                     _logger.LogInformation("  Creator Net (After All Fees): ~${Net:F2}", creatorNet);
                     creatorIndex++;
                 }
                 
-                _logger.LogInformation("Platform Receives (Total Commission): ${TotalCommission:F2} (NO PayPal fees)", totalPlatformFees);
+                _logger.LogInformation("Platform Receives (Total Fees): ${TotalFees:F2} (NO PayPal fees)", totalPlatformFees);
                 _logger.LogInformation("===============================================");
             }
 
@@ -907,7 +907,7 @@ public class PayPalPartnerService : IPayPalPartnerService
                                         {
                                             if (pf.TryGetProperty("amount", out var pfAmount) && pfAmount.TryGetProperty("value", out var pfValue))
                                             {
-                                                _logger.LogInformation("  Platform Fee (Commission): ${PlatformFee}", pfValue.GetString());
+                                                _logger.LogInformation("  Platform Fee: ${PlatformFee}", pfValue.GetString());
                                             }
                                             if (pf.TryGetProperty("payee", out var pfPayee) && pfPayee.TryGetProperty("merchant_id", out var pfMerchantId))
                                             {

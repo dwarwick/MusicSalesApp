@@ -90,9 +90,6 @@ public class CreatorService : ICreatorService
             return existingCreator;
         }
 
-        // Get the platform commission rate from settings (default 15%)
-        var commissionRate = await _appSettingsService.GetCommissionRateAsync();
-
         // Get the stream pay rate from settings (default $5 per 1000 streams)
         var streamPayRate = await _appSettingsService.GetStreamPayRateAsync();
 
@@ -101,7 +98,6 @@ public class CreatorService : ICreatorService
             UserId = userId,
             DisplayName = displayName,
             Bio = bio,
-            CommissionRate = commissionRate, // Set from app settings
             StreamPayRate = streamPayRate, // Set from app settings
             OnboardingStatus = CreatorOnboardingStatus.NotStarted,
             CreatedAt = DateTime.UtcNow,
@@ -111,8 +107,8 @@ public class CreatorService : ICreatorService
         context.Creators.Add(creator);
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Created creator record for user {UserId} with commission rate {Rate}% and stream pay rate ${StreamRate:F6} per stream", 
-            userId, commissionRate * 100, streamPayRate);
+        _logger.LogInformation("Created creator record for user {UserId} with stream pay rate ${StreamRate:F6} per stream", 
+            userId, streamPayRate);
         return creator;
     }
 

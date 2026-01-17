@@ -61,7 +61,6 @@ public partial class ManageAccountModel : BlazorBase
     protected string _creatorBio = string.Empty;
     protected string _creatorPayPalEmail = string.Empty;
     protected string _paypalEmail = string.Empty;
-    protected decimal _platformCommissionRate = 0.15m;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
@@ -703,7 +702,6 @@ public partial class ManageAccountModel : BlazorBase
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
-                _platformCommissionRate = creator.CommissionRate;
             }
             else
             {
