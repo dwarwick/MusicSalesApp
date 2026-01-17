@@ -43,14 +43,14 @@ public class PrivacyPolicyTests : BUnitTestBase
     }
 
     [Test]
-    public void PrivacyPolicy_ContainsPayPalIntegration()
+    public void PrivacyPolicy_ContainsPaymentProcessorIntegration()
     {
         // Act
         var cut = TestContext.Render<PrivacyPolicy>();
 
-        // Assert - Verify PayPal integration section
+        // Assert - Verify Payment Processor integration section
         Assert.That(cut.Markup, Does.Contain("Payment Processing"));
-        Assert.That(cut.Markup, Does.Contain("PayPal"));
+        Assert.That(cut.Markup, Does.Contain("Payment Processor"));
         Assert.That(cut.Markup, Does.Contain("Order ID"));
     }
 
