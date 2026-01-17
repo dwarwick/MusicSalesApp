@@ -408,6 +408,99 @@ public class CreatorController : ControllerBase
     }
 
     /// <summary>
+    /// Resends the W-9/W-8 tax form email by deleting the existing incomplete form and requesting a new one.
+    /// This is used when a user abandons the initial form and needs a new email invitation.
+    /// </summary>
+    [HttpPost("resend-tax-form")]
+    public async Task<IActionResult> ResendTaxForm()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null)
+        {
+            return BadRequest("Creator record not found. Please start the onboarding process first.");
+        }
+
+        // Check if tax form is already completed
+        if (creator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            return BadRequest("Your tax form has already been completed.");
+        }
+
+        // Get the PayeeRef (email) used in the original request
+        var payeeRef = creator.TaxBanditsPayeeRef ?? user.Email;
+        if (string.IsNullOrWhiteSpace(payeeRef))
+        {
+            return BadRequest("No email address found for tax form request.");
+        }
+
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+        try
+        {
+            // First, delete the incomplete W-9/W-8 form
+            _logger.LogInformation("Deleting incomplete W-9/W-8 for user {UserId}, PayeeRef {PayeeRef}", user.Id, payeeRef);
+            var deleteResult = await _taxBanditsService.DeleteW9Async(payeeRef);
+
+            if (!deleteResult.Success)
+            {
+                _logger.LogWarning("W-9/W-8 delete returned error for user {UserId}: {Error}. Proceeding with resend anyway.", 
+                    user.Id, deleteResult.ErrorMessage);
+                // Don't fail here - the form might not exist or was already deleted
+                // We still want to send a new request
+            }
+            else
+            {
+                _logger.LogInformation("Successfully deleted incomplete W-9/W-8 for user {UserId}", user.Id);
+            }
+
+            // Now request a new W-9/W-8 form
+            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, payeeRef, baseUrl);
+
+            if (w9Result.Success)
+            {
+                _logger.LogInformation("W-9/W-8 resend successful for user {UserId}", user.Id);
+
+                // Update the creator's tax form status to Pending
+                await using var context = await _dbContextFactory.CreateDbContextAsync();
+                var creatorToUpdate = await context.Creators.FindAsync(creator.Id);
+                if (creatorToUpdate != null)
+                {
+                    creatorToUpdate.TaxFormStatus = TaxFormStatus.Pending;
+                    creatorToUpdate.UpdatedAt = DateTime.UtcNow;
+                    await context.SaveChangesAsync();
+                }
+
+                return Ok(new ResendTaxFormResponse
+                {
+                    Success = true,
+                    Message = "A new tax form email has been sent. Please check your inbox."
+                });
+            }
+            else
+            {
+                _logger.LogError("W-9/W-8 resend failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
+                return StatusCode(500, new ResendTaxFormResponse
+                {
+                    Success = false,
+                    Message = $"Failed to send new tax form email: {w9Result.ErrorMessage}"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while resending W-9/W-8 for user {UserId}", user.Id);
+            return StatusCode(500, new ResendTaxFormResponse
+            {
+                Success = false,
+                Message = "An error occurred while resending the tax form email."
+            });
+        }
+    }
+
+    /// <summary>
     /// Gets all songs owned by the current creator.
     /// </summary>
     [HttpGet("songs")]
@@ -501,6 +594,12 @@ public class CreatorListItem
     public bool PrimaryEmailConfirmed { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? OnboardedAt { get; set; }
+}
+
+public class ResendTaxFormResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
 }
 
 public class CreatorSongItem

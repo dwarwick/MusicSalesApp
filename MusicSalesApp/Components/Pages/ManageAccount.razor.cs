@@ -56,6 +56,7 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _isCreator = false;
     protected bool _isActiveCreator = false;
     protected string _creatorOnboardingStatus = null;
+    protected string _creatorTaxFormStatus = null;
     protected string _creatorReferralUrl = null;
     protected string _creatorDisplayName = string.Empty;
     protected string _creatorBio = string.Empty;
@@ -65,6 +66,7 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
     protected string _stopSellingConfirmEmail = string.Empty;
+    protected bool _resendingTaxForm = false;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
@@ -698,6 +700,7 @@ public partial class ManageAccountModel : BlazorBase
                 _isCreator = true;
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
+                _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
                 _creatorReferralUrl = creator.PayPalReferralUrl;
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
@@ -708,6 +711,7 @@ public partial class ManageAccountModel : BlazorBase
                 _isCreator = false;
                 _isActiveCreator = false;
                 _creatorOnboardingStatus = null;
+                _creatorTaxFormStatus = null;
             }
         }
         catch (Exception ex)
@@ -873,6 +877,49 @@ public partial class ManageAccountModel : BlazorBase
         }
     }
 
+    protected async Task ResendTaxForm()
+    {
+        _resendingTaxForm = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsync("api/creator/resend-tax-form", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ResendTaxFormResponse>();
+                if (result != null && result.Success)
+                {
+                    _successMessage = result.Message;
+                }
+                else
+                {
+                    _errorMessage = result?.Message ?? "Failed to resend tax form email.";
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to resend tax form email: {error}";
+            }
+
+            await LoadCreatorStatus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error resending tax form");
+            _errorMessage = $"Error resending tax form: {ex.Message}";
+        }
+        finally
+        {
+            _resendingTaxForm = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     protected void NavigateToUpload()
     {
         NavigationManager.NavigateTo("/upload-files");
@@ -977,4 +1024,10 @@ public class CompleteCreatorOnboardingResponse
     public bool IsActive { get; set; }
     public bool PaymentsReceivable { get; set; }
     public bool PrimaryEmailConfirmed { get; set; }
+}
+
+public class ResendTaxFormResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
 }
