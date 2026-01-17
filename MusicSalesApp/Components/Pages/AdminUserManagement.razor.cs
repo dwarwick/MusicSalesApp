@@ -241,21 +241,35 @@ public class AdminUserManagementModel : BlazorBase
                 var creator = await context.Creators.FindAsync(_editingUser.CreatorId.Value);
                 if (creator != null)
                 {
-                    if (_editPayPalOnboardingStatus.HasValue)
+                    var statusChanged = false;
+                    
+                    if (_editPayPalOnboardingStatus.HasValue && creator.OnboardingStatus != _editPayPalOnboardingStatus.Value)
                     {
                         creator.OnboardingStatus = _editPayPalOnboardingStatus.Value;
+                        statusChanged = true;
                     }
-                    if (_editTaxFormStatus.HasValue)
+                    
+                    if (_editTaxFormStatus.HasValue && creator.TaxFormStatus != _editTaxFormStatus.Value)
                     {
                         creator.TaxFormStatus = _editTaxFormStatus.Value;
-                        // Update TaxFormCompletedAt if status changed to Completed
-                        if (_editTaxFormStatus.Value == TaxFormStatus.Completed && creator.TaxFormCompletedAt == null)
+                        statusChanged = true;
+                        // Set TaxFormCompletedAt when status changes to Completed
+                        if (_editTaxFormStatus.Value == TaxFormStatus.Completed)
                         {
-                            creator.TaxFormCompletedAt = DateTime.UtcNow;
+                            creator.TaxFormCompletedAt ??= DateTime.UtcNow;
                         }
                     }
-                    creator.IsActive = _editCreatorIsActive;
-                    creator.UpdatedAt = DateTime.UtcNow;
+                    
+                    if (creator.IsActive != _editCreatorIsActive)
+                    {
+                        creator.IsActive = _editCreatorIsActive;
+                        statusChanged = true;
+                    }
+                    
+                    if (statusChanged)
+                    {
+                        creator.UpdatedAt = DateTime.UtcNow;
+                    }
                 }
             }
 
