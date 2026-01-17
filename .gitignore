@@ -364,3 +364,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /MusicSalesApp/appsettings.Development.json
 /MusicSalesApp/wwwroot/sitemap.xml
+**/bin\\*
