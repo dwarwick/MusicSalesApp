@@ -193,27 +193,49 @@ public class PayPalWebhookController : ControllerBase
             // Reload creator to get updated status
             creator = await _creatorService.GetCreatorByIdAsync(creator.Id);
 
-            // If onboarding is complete, add Creator role to user
-            if (creator != null && creator.IsActive)
+            // Only add Creator role if BOTH PayPal onboarding AND tax form are complete
+            if (creator != null && creator.OnboardingStatus == CreatorOnboardingStatus.Completed)
             {
-                // Ensure the Creator role exists
-                if (!await _roleManager.RoleExistsAsync(Roles.Creator))
+                // Check if tax form is also complete
+                if (creator.TaxFormStatus == TaxFormStatus.Completed)
                 {
-                    await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
-                }
+                    // Both onboarding processes are complete - add Creator role
+                    _logger.LogInformation(
+                        "Both PayPal and tax form onboarding complete for user {UserId}. Adding Creator role.",
+                        creator.UserId);
 
-                // Add Creator role if user doesn't already have it
-                var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
-                if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Creator))
+                    // Ensure the Creator role exists
+                    if (!await _roleManager.RoleExistsAsync(Roles.Creator))
+                    {
+                        await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
+                    }
+
+                    // Add Creator role if user doesn't already have it
+                    var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+                    if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Creator))
+                    {
+                        await _userManager.AddToRoleAsync(user, Roles.Creator);
+                        _logger.LogInformation("Added Creator role to user {UserId} after both PayPal and tax form completion", creator.UserId);
+                    }
+
+                    // Activate the creator if not already active
+                    if (!creator.IsActive)
+                    {
+                        await _creatorService.ActivateCreatorAsync(creator.Id);
+                        _logger.LogInformation("Activated creator {CreatorId} for user {UserId}", creator.Id, creator.UserId);
+                    }
+                }
+                else
                 {
-                    await _userManager.AddToRoleAsync(user, Roles.Creator);
-                    _logger.LogInformation("Added Creator role to user {UserId} via webhook", creator.UserId);
+                    _logger.LogInformation(
+                        "PayPal onboarding complete for user {UserId} but tax form is not complete. Tax Form Status: {TaxFormStatus}",
+                        creator.UserId, creator.TaxFormStatus);
                 }
             }
 
             _logger.LogInformation(
-                "Successfully processed MERCHANT.ONBOARDING.COMPLETED for creator {CreatorId}, IsActive={IsActive}",
-                creator?.Id, creator?.IsActive);
+                "Successfully processed MERCHANT.ONBOARDING.COMPLETED for creator {CreatorId}, PayPalStatus={PayPalStatus}, TaxFormStatus={TaxFormStatus}, IsActive={IsActive}",
+                creator?.Id, creator?.OnboardingStatus, creator?.TaxFormStatus, creator?.IsActive);
 
             return Ok(new { status = "success" });
         }

@@ -43,6 +43,13 @@ public class AdminUserManagementModel : BlazorBase
     protected bool _isSaving = false;
     private bool _hasLoadedData = false;
 
+    // Creator status edit fields
+    protected CreatorOnboardingStatus? _editPayPalOnboardingStatus;
+    protected TaxFormStatus? _editTaxFormStatus;
+    protected bool _editCreatorIsActive;
+    protected List<string> _payPalOnboardingStatusOptions = Enum.GetNames<CreatorOnboardingStatus>().ToList();
+    protected List<string> _taxFormStatusOptions = Enum.GetNames<TaxFormStatus>().ToList();
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_hasLoadedData)
@@ -72,26 +79,41 @@ public class AdminUserManagementModel : BlazorBase
         var users = await context.Users.ToListAsync();
         var userRoles = await context.UserRoles.ToListAsync();
         var roles = await context.Roles.ToListAsync();
+        var creators = await context.Creators.ToListAsync();
 
-        _users = users.Select(u => new UserViewModel
+        _users = users.Select(u => 
         {
-            Id = u.Id,
-            UserName = u.UserName ?? string.Empty,
-            Email = u.Email ?? string.Empty,
-            EmailConfirmed = u.EmailConfirmed,
-            PhoneNumber = u.PhoneNumber ?? string.Empty,
-            PhoneNumberConfirmed = u.PhoneNumberConfirmed,
-            LockoutEnd = u.LockoutEnd,
-            LockoutEnabled = u.LockoutEnabled,
-            AccessFailedCount = u.AccessFailedCount,
-            LastVerificationEmailSent = u.LastVerificationEmailSent,
-            Theme = u.Theme,
-            IsSuspended = u.IsSuspended,
-            SuspendedAt = u.SuspendedAt,
-            Roles = string.Join(RolesDelimiter, userRoles
-                .Where(ur => ur.UserId == u.Id)
-                .Join(roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-                .Where(r => r != null))
+            var creator = creators.FirstOrDefault(c => c.UserId == u.Id);
+            return new UserViewModel
+            {
+                Id = u.Id,
+                UserName = u.UserName ?? string.Empty,
+                Email = u.Email ?? string.Empty,
+                EmailConfirmed = u.EmailConfirmed,
+                PhoneNumber = u.PhoneNumber ?? string.Empty,
+                PhoneNumberConfirmed = u.PhoneNumberConfirmed,
+                LockoutEnd = u.LockoutEnd,
+                LockoutEnabled = u.LockoutEnabled,
+                AccessFailedCount = u.AccessFailedCount,
+                LastVerificationEmailSent = u.LastVerificationEmailSent,
+                Theme = u.Theme,
+                IsSuspended = u.IsSuspended,
+                SuspendedAt = u.SuspendedAt,
+                Roles = string.Join(RolesDelimiter, userRoles
+                    .Where(ur => ur.UserId == u.Id)
+                    .Join(roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
+                    .Where(r => r != null)),
+                // Creator status fields
+                IsCreator = creator != null,
+                CreatorId = creator?.Id,
+                PayPalOnboardingStatus = creator?.OnboardingStatus,
+                PayPalOnboardingStatusDisplay = creator?.OnboardingStatus.ToString() ?? "-",
+                TaxFormStatus = creator?.TaxFormStatus,
+                TaxFormStatusDisplay = creator?.TaxFormStatus.ToString() ?? "-",
+                CreatorIsActive = creator?.IsActive ?? false,
+                TaxFormCompletedAt = creator?.TaxFormCompletedAt,
+                PayPalOnboardedAt = creator?.OnboardedAt
+            };
         }).ToList();
     }
 
@@ -115,6 +137,12 @@ public class AdminUserManagementModel : BlazorBase
         _editSelectedRoles = user.Roles.Split(RolesDelimiter, StringSplitOptions.RemoveEmptyEntries).ToList();
         _selectedRoleToAdd = null;
         _validationErrors.Clear();
+
+        // Creator status fields
+        _editPayPalOnboardingStatus = user.PayPalOnboardingStatus;
+        _editTaxFormStatus = user.TaxFormStatus;
+        _editCreatorIsActive = user.CreatorIsActive;
+
         _showEditModal = true;
     }
 
@@ -207,6 +235,44 @@ public class AdminUserManagementModel : BlazorBase
                 }
             }
 
+            // Update creator status if user is a creator
+            if (_editingUser.IsCreator && _editingUser.CreatorId.HasValue)
+            {
+                var creator = await context.Creators.FindAsync(_editingUser.CreatorId.Value);
+                if (creator != null)
+                {
+                    var statusChanged = false;
+                    
+                    if (_editPayPalOnboardingStatus.HasValue && creator.OnboardingStatus != _editPayPalOnboardingStatus.Value)
+                    {
+                        creator.OnboardingStatus = _editPayPalOnboardingStatus.Value;
+                        statusChanged = true;
+                    }
+                    
+                    if (_editTaxFormStatus.HasValue && creator.TaxFormStatus != _editTaxFormStatus.Value)
+                    {
+                        creator.TaxFormStatus = _editTaxFormStatus.Value;
+                        statusChanged = true;
+                        // Set TaxFormCompletedAt when status changes to Completed
+                        if (_editTaxFormStatus.Value == TaxFormStatus.Completed)
+                        {
+                            creator.TaxFormCompletedAt ??= DateTime.UtcNow;
+                        }
+                    }
+                    
+                    if (creator.IsActive != _editCreatorIsActive)
+                    {
+                        creator.IsActive = _editCreatorIsActive;
+                        statusChanged = true;
+                    }
+                    
+                    if (statusChanged)
+                    {
+                        creator.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+            }
+
             await context.SaveChangesAsync();
 
             // Update local model
@@ -220,6 +286,16 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
             _editingUser.Theme = _editTheme;
             _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
+
+            // Update creator status in local model
+            if (_editingUser.IsCreator)
+            {
+                _editingUser.PayPalOnboardingStatus = _editPayPalOnboardingStatus;
+                _editingUser.PayPalOnboardingStatusDisplay = _editPayPalOnboardingStatus?.ToString() ?? "-";
+                _editingUser.TaxFormStatus = _editTaxFormStatus;
+                _editingUser.TaxFormStatusDisplay = _editTaxFormStatus?.ToString() ?? "-";
+                _editingUser.CreatorIsActive = _editCreatorIsActive;
+            }
 
             // Close modal and refresh
             _showEditModal = false;
@@ -252,5 +328,16 @@ public class AdminUserManagementModel : BlazorBase
         public bool IsSuspended { get; set; }
         public DateTime? SuspendedAt { get; set; }
         public string Roles { get; set; } = string.Empty;
+
+        // Creator status fields
+        public bool IsCreator { get; set; }
+        public int? CreatorId { get; set; }
+        public CreatorOnboardingStatus? PayPalOnboardingStatus { get; set; }
+        public string PayPalOnboardingStatusDisplay { get; set; } = "-";
+        public TaxFormStatus? TaxFormStatus { get; set; }
+        public string TaxFormStatusDisplay { get; set; } = "-";
+        public bool CreatorIsActive { get; set; }
+        public DateTime? TaxFormCompletedAt { get; set; }
+        public DateTime? PayPalOnboardedAt { get; set; }
     }
 }
