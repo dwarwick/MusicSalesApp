@@ -462,4 +462,153 @@ public sealed class TaxBanditsService : ITaxBanditsService
     {
         PropertyNameCaseInsensitive = true
     };
+
+    /// <inheritdoc />
+    public async Task<W9DeleteResponse> DeleteW9Async(
+        string payeeRef,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(payeeRef)) throw new ArgumentException("PayeeRef is required.", nameof(payeeRef));
+
+        _logger.LogInformation("Deleting W-9 for PayeeRef {PayeeRef}", payeeRef);
+
+        var response = new W9DeleteResponse();
+
+        try
+        {
+            // Get configuration values
+            var clientId = _configuration["TaxBandits:ClientId"];
+            var clientSecret = _configuration["TaxBandits:ClientSecret"];
+            var userToken = _configuration["TaxBandits:UserToken"];
+            var businessId = _configuration["TaxBandits:BusinessId"];
+
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
+            {
+                var errorMsg = "TaxBandits configuration is incomplete. Please check ClientId, ClientSecret, UserToken, and BusinessId.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Get access token
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
+            {
+                var errorMsg = "Failed to obtain TaxBandits access token.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Build the API request
+            var apiUrl = useSandbox
+                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
+                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+
+            var requestBody = new
+            {
+                BusinessId = businessId,
+                PayeeRef = payeeRef
+            };
+
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{apiUrl.TrimEnd('/')}/WhCertificate/Delete");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
+            req.Content = content;
+
+            using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            response.RawResponse = responseBody;
+
+            if (resp.IsSuccessStatusCode)
+            {
+                // Parse the response to check for success
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    // Check for errors in the response
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var firstError = errors[0];
+                        var errorMsg = firstError.TryGetProperty("Message", out var msgElement)
+                            ? msgElement.GetString() ?? "Unknown error"
+                            : "Unknown error";
+
+                        response.Success = false;
+                        response.ErrorMessage = errorMsg;
+                        _logger.LogError("W-9 delete failed for PayeeRef {PayeeRef}: {ErrorMessage}", payeeRef, errorMsg);
+                    }
+                    else
+                    {
+                        response.Success = true;
+                        _logger.LogInformation("W-9 delete successful for PayeeRef {PayeeRef}", payeeRef);
+                    }
+                }
+                catch (JsonException)
+                {
+                    // If we can't parse but got 200, assume success
+                    response.Success = true;
+                    _logger.LogInformation("W-9 delete successful for PayeeRef {PayeeRef} (unparseable response)", payeeRef);
+                }
+            }
+            else
+            {
+                // HTTP error response
+                var errorMsg = $"TaxBandits API returned HTTP {(int)resp.StatusCode}";
+
+                // Try to extract error details from response
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var firstError = errors[0];
+                        if (firstError.TryGetProperty("Message", out var msgElement))
+                        {
+                            errorMsg = msgElement.GetString() ?? errorMsg;
+                        }
+                    }
+                    else if (root.TryGetProperty("StatusMessage", out var statusMsgElement))
+                    {
+                        errorMsg = statusMsgElement.GetString() ?? errorMsg;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Couldn't parse error response, use default message
+                }
+
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+
+                _logger.LogError("W-9 delete failed for PayeeRef {PayeeRef}. HTTP {StatusCode}: {ErrorMessage}",
+                    payeeRef, (int)resp.StatusCode, errorMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while deleting W-9 for PayeeRef {PayeeRef}", payeeRef);
+            response.Success = false;
+            response.ErrorMessage = ex.Message;
+        }
+
+        return response;
+    }
 }

@@ -281,40 +281,186 @@
                     else if (_creatorOnboardingStatus == "Pending")
                     {
                         <div class="creator-pending">
-                            <h4>Complete Your Payout Account Setup</h4>
-                            <p>You've started the creator signup process. Please complete your payout account setup with our payment processor to start earning royalties.</p>
+                            <h4>Complete Your Creator Onboarding</h4>
                             
-                            @if (!string.IsNullOrEmpty(_creatorReferralUrl))
-                            {
-                                <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue Setup</a></p>
-                            }
+                            <!-- PayPal Onboarding Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>1. PayPal Payout Account Setup</h5>
+                                <p class="text-warning"><strong>Status: Pending</strong></p>
+                                <p>Please complete your payout account setup with our payment processor.</p>
+                                
+                                @if (!string.IsNullOrEmpty(_creatorReferralUrl))
+                                {
+                                    <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue PayPal Setup</a></p>
+                                }
+                                
+                                <p class="mt-3">After completing the PayPal setup, click the button below:</p>
+                                @if (!_completingOnboarding)
+                                {
+                                    <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteCreatorOnboarding" />
+                                }
+                                else
+                                {
+                                    <p>Verifying your account setup...</p>
+                                }
+                            </div>
                             
-                            <p class="mt-3">After completing the setup, return here and click the button below:</p>
-                            @if (!_completingOnboarding)
-                            {
-                                <SfButton IsPrimary="true" Content="I've Completed Setup" OnClick="CompleteCreatorOnboarding" />
-                            }
-                            else
-                            {
-                                <p>Verifying your account setup...</p>
-                            }
+                            <!-- Tax Form Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>2. Tax Form (W-9/W-8)</h5>
+                                @if (_creatorTaxFormStatus == "Completed")
+                                {
+                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                                }
+                                else if (_creatorTaxFormStatus == "Pending")
+                                {
+                                    <p class="text-warning"><strong>Status: Pending</strong></p>
+                                    <p>We've sent you an email from TaxBandits with a link to complete your W-9 or W-8 tax form. Please check your inbox (and spam folder) for an email from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
+                                    <p>If you didn't receive the email or need a new one:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else if (_creatorTaxFormStatus == "Failed")
+                                {
+                                    <p class="text-danger"><strong>Status: Failed</strong></p>
+                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
+                                    <p>Your tax form request will be sent automatically as part of the onboarding process.</p>
+                                }
+                            </div>
                         </div>
                     }
                     else if (_creatorOnboardingStatus == "InProgress")
                     {
                         <div class="creator-in-progress">
-                            <h4>Verification In Progress</h4>
-                            <p>Your payout account is being verified. This may take a few minutes to a few hours.</p>
-                            <p>Once verified, you'll be able to start uploading music and earning royalties.</p>
+                            <h4>Creator Onboarding In Progress</h4>
                             
-                            @if (!_completingOnboarding)
-                            {
-                                <SfButton Content="Check Status" OnClick="CompleteCreatorOnboarding" />
-                            }
-                            else
-                            {
-                                <p>Checking status...</p>
-                            }
+                            <!-- PayPal Onboarding Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>1. PayPal Payout Account</h5>
+                                <p class="text-warning"><strong>Status: In Progress</strong></p>
+                                <p>Your payout account is being verified. This may take a few minutes to a few hours.</p>
+                                
+                                @if (!_completingOnboarding)
+                                {
+                                    <SfButton Content="Check PayPal Status" OnClick="CompleteCreatorOnboarding" />
+                                }
+                                else
+                                {
+                                    <p>Checking status...</p>
+                                }
+                            </div>
+                            
+                            <!-- Tax Form Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>2. Tax Form (W-9/W-8)</h5>
+                                @if (_creatorTaxFormStatus == "Completed")
+                                {
+                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                                }
+                                else if (_creatorTaxFormStatus == "Pending")
+                                {
+                                    <p class="text-warning"><strong>Status: Pending</strong></p>
+                                    <p>Please complete your tax form. Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
+                                    <p>If you didn't receive the email or need a new one:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else if (_creatorTaxFormStatus == "Failed")
+                                {
+                                    <p class="text-danger"><strong>Status: Failed</strong></p>
+                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (_creatorOnboardingStatus == "Completed" && !_isActiveCreator)
+                    {
+                        <div class="creator-pending-activation">
+                            <h4>PayPal Setup Complete - Tax Form Pending</h4>
+                            
+                            <!-- PayPal Onboarding Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>1. PayPal Payout Account</h5>
+                                <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                            </div>
+                            
+                            <!-- Tax Form Status -->
+                            <div class="onboarding-section mb-4">
+                                <h5>2. Tax Form (W-9/W-8)</h5>
+                                @if (_creatorTaxFormStatus == "Completed")
+                                {
+                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                                    <p>Both steps are complete. Your creator account will be activated shortly.</p>
+                                }
+                                else if (_creatorTaxFormStatus == "Pending")
+                                {
+                                    <p class="text-warning"><strong>Status: Pending</strong></p>
+                                    <p>Your PayPal setup is complete! Now please complete your tax form to activate your creator account.</p>
+                                    <p>Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
+                                    <p>If you didn't receive the email or need a new one:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else if (_creatorTaxFormStatus == "Failed")
+                                {
+                                    <p class="text-danger"><strong>Status: Failed</strong></p>
+                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
+                                    @if (!_resendingTaxForm)
+                                    {
+                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
+                                    }
+                                    else
+                                    {
+                                        <p>Sending new email...</p>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
+                                }
+                            </div>
                         </div>
                     }
                     else if (_creatorOnboardingStatus == "Failed")

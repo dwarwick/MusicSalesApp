@@ -294,4 +294,172 @@ public class TaxBanditsServiceTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.ErrorMessage, Does.Contain("configuration"));
     }
+
+    [Test]
+    public void DeleteW9Async_ThrowsArgumentException_WhenPayeeRefIsEmpty()
+    {
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.DeleteW9Async(""));
+
+        Assert.That(ex.ParamName, Is.EqualTo("payeeRef"));
+    }
+
+    [Test]
+    public async Task DeleteW9Async_ReturnsError_WhenConfigurationIsMissing()
+    {
+        // Arrange - Configuration returns null for required fields
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
+        
+        // Setup the IConfigurationSection for GetValue<bool>
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        // Act
+        var result = await _service.DeleteW9Async("test@example.com");
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("configuration"));
+    }
+
+    [Test]
+    public async Task DeleteW9Async_ReturnsSuccess_WhenApiReturnsSuccess()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        // First call returns auth token
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        // Second call is the delete request - returns success
+        var deleteResponseJson = "{}";
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    // Auth request
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    // Delete request
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(deleteResponseJson)
+                    };
+                }
+            });
+
+        // Act
+        var result = await _service.DeleteW9Async("test@example.com");
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.ErrorMessage, Is.Null);
+    }
+
+    [Test]
+    public async Task DeleteW9Async_ReturnsError_WhenApiReturnsError()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        // First call returns auth token
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        // Second call is the delete request - returns error
+        var deleteResponseJson = """{"Errors":[{"Id":"ERR-001","Message":"Record not found"}]}""";
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    // Auth request
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    // Delete request - HTTP success but contains error in body
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(deleteResponseJson)
+                    };
+                }
+            });
+
+        // Act
+        var result = await _service.DeleteW9Async("test@example.com");
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Is.EqualTo("Record not found"));
+    }
 }

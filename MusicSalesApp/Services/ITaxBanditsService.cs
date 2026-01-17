@@ -39,6 +39,17 @@ public interface ITaxBanditsService
         string email,
         string baseUrl,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes an incomplete W-9/W-8 form from TaxBandits.
+    /// This is used when a user abandons the form and needs to request a new one.
+    /// </summary>
+    /// <param name="payeeRef">The PayeeRef (email) used in the original W-9 request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The response indicating success or failure.</returns>
+    Task<W9DeleteResponse> DeleteW9Async(
+        string payeeRef,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -65,6 +76,16 @@ public sealed class W9RequestResponse
     public bool Success { get; set; }
     public string? SubmissionId { get; set; }
     public string? Status { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? RawResponse { get; set; }
+}
+
+/// <summary>
+/// Response from TaxBandits W-9 delete API.
+/// </summary>
+public sealed class W9DeleteResponse
+{
+    public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
     public string? RawResponse { get; set; }
 }
