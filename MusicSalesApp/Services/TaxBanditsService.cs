@@ -109,6 +109,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var userToken = _configuration["TaxBandits:UserToken"];
             var businessId = _configuration["TaxBandits:BusinessId"];
             var webhookRef = _configuration["TaxBandits:WebhookRef"];
+            var emailCustomizationId = _configuration["TaxBandits:EmailCustomizationId"];
+            var customizationId = _configuration["TaxBandits:CustomizationId"];
+
             var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) || 
@@ -154,6 +157,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 {
                     BusinessId = businessId
                 },
+                EmailCustomizationId = emailCustomizationId,
+                CustomizationId = customizationId,
                 Recipients = new[]
                 {
                     new
@@ -313,7 +318,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
             <h2>Tax Form Required</h2>
             <p>Thank you for joining StreamTunes as a creator!</p>
             <p>As part of the onboarding process, you need to complete your W-9 or W-8 tax form. 
-               You will receive an email shortly from <strong>TaxBandits</strong> with a secure link to complete your tax form.</p>
+               You will receive an email shortly from <strong>support.streamtunes@apptaxbandits.com</strong> with a secure link to complete your tax form.
+            The subject of the email will be <em>Form W9/W8 Request from David Russell Warwick, DBA Streamtunes</em>.</p>
+               Please check your inbox (and spam/junk folder) for this email.</p>
             <p><strong>Important:</strong> Please look for an email from TaxBandits and complete the form as soon as possible 
                to finalize your creator account setup.</p>
             <p>If you have any questions, please contact us at <a href='mailto:{_adminEmail}'>{_adminEmail}</a>.</p>
