@@ -45,7 +45,7 @@ public class AdminSongManagementModel : ComponentBase
 
     // Enable/Disable fields
     protected bool _editIsDisabled = false;
-    protected string _editDisableReason = string.Empty;
+    protected string _editStatusReason = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -86,7 +86,7 @@ public class AdminSongManagementModel : ComponentBase
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             IsEnabled = m.IsEnabled,
-            DisableReason = m.DisableReason ?? string.Empty
+            StatusReason = m.StatusReason ?? string.Empty
         }).ToList();
         
         // Generate SAS URLs for images
@@ -112,7 +112,7 @@ public class AdminSongManagementModel : ComponentBase
         _editGenre = song.Genre;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
         _editIsDisabled = !song.IsEnabled;
-        _editDisableReason = string.Empty; // Clear the reason field for new edits
+        _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
         _validationErrors.Clear();
         _showEditModal = true;
@@ -124,7 +124,7 @@ public class AdminSongManagementModel : ComponentBase
         _editingSong = null;
         _validationErrors.Clear();
         _songImageFile = null;
-        _editDisableReason = string.Empty;
+        _editStatusReason = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -159,7 +159,7 @@ public class AdminSongManagementModel : ComponentBase
             var statusIsChanging = wasEnabled != willBeEnabled;
 
             // Validate reason is required when enabling or disabling
-            if (statusIsChanging && string.IsNullOrWhiteSpace(_editDisableReason))
+            if (statusIsChanging && string.IsNullOrWhiteSpace(_editStatusReason))
             {
                 _validationErrors.Add("A reason is required when enabling or disabling a song.");
             }
@@ -185,16 +185,16 @@ public class AdminSongManagementModel : ComponentBase
                 {
                     if (willBeEnabled)
                     {
-                        await SongStatusService.EnableSongAsync(songMetadataId, _editDisableReason.Trim(), adminUserId, baseUrl);
+                        await SongStatusService.EnableSongAsync(songMetadataId, _editStatusReason.Trim(), adminUserId, baseUrl);
                     }
                     else
                     {
-                        await SongStatusService.DisableSongAsync(songMetadataId, _editDisableReason.Trim(), adminUserId, baseUrl);
+                        await SongStatusService.DisableSongAsync(songMetadataId, _editStatusReason.Trim(), adminUserId, baseUrl);
                     }
 
                     // Update local model
                     _editingSong.IsEnabled = willBeEnabled;
-                    _editingSong.DisableReason = _editDisableReason.Trim();
+                    _editingSong.StatusReason = _editStatusReason.Trim();
                 }
             }
 

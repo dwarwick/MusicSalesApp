@@ -120,9 +120,9 @@ public class SongMetadata
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// The reason the song was disabled or re-enabled by admin.
+    /// The reason for the most recent status change (enable or disable) by admin.
     /// Required when enabling or disabling a song.
     /// </summary>
     [MaxLength(1000)]
-    public string DisableReason { get; set; }
+    public string StatusReason { get; set; }
 }

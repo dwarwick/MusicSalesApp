@@ -153,13 +153,13 @@ else
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.DisableReason)" HeaderText="Disable Reason" Width="200">
+                <GridColumn Field="@nameof(SongAdminViewModel.StatusReason)" HeaderText="Status Reason" Width="200">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            if (!string.IsNullOrEmpty(song.DisableReason))
+                            if (!string.IsNullOrEmpty(song.StatusReason))
                             {
-                                <small class="text-break">@song.DisableReason</small>
+                                <small class="text-break">@song.StatusReason</small>
                             }
                             else
                             {
@@ -300,7 +300,7 @@ else
                         <div class="row mb-3">
                             <div class="col-md-12">
                                 <label class="e-label">Reason <span class="text-danger">*</span></label>
-                                <SfTextBox @bind-Value="_editDisableReason" 
+                                <SfTextBox @bind-Value="_editStatusReason" 
                                          Multiline="true" 
                                          CssClass="e-outline" 
                                          Placeholder="Enter the reason for disabling or enabling this song (required)"

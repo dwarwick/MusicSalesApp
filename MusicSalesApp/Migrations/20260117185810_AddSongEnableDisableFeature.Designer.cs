@@ -720,7 +720,7 @@ namespace MusicSalesApp.Migrations
                     b.Property<int?>("CreatorId")
                         .HasColumnType("int");
 
-                    b.Property<string>("DisableReason")
+                    b.Property<string>("StatusReason")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 

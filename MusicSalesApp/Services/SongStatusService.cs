@@ -48,7 +48,7 @@ public class SongStatusService : ISongStatusService
 
             // Update the song status
             song.IsEnabled = false;
-            song.DisableReason = reason;
+            song.StatusReason = reason;
             song.UpdatedAt = DateTime.UtcNow;
 
             // Add status history record
@@ -111,7 +111,7 @@ public class SongStatusService : ISongStatusService
 
             // Update the song status
             song.IsEnabled = true;
-            song.DisableReason = reason; // Store the reason for re-enabling
+            song.StatusReason = reason; // Store the reason for status change
             song.UpdatedAt = DateTime.UtcNow;
 
             // Add status history record

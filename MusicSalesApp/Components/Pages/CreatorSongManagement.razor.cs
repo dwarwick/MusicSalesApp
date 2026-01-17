@@ -94,7 +94,7 @@ public partial class CreatorSongManagementModel : BlazorBase
             CreatorId = m.CreatorId,
             IsActive = m.IsActive,
             IsEnabled = m.IsEnabled,
-            DisableReason = m.DisableReason ?? string.Empty,
+            StatusReason = m.StatusReason ?? string.Empty,
             NumberOfStreams = m.NumberOfStreams
         }).ToList();
 

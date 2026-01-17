@@ -21,5 +21,5 @@ public class SongAdminViewModel
 
     // Enable/Disable properties
     public bool IsEnabled { get; set; } = true;
-    public string DisableReason { get; set; } = string.Empty;
+    public string StatusReason { get; set; } = string.Empty;
 }

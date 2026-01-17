@@ -12,7 +12,7 @@ namespace MusicSalesApp.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
-                name: "DisableReason",
+                name: "StatusReason",
                 table: "SongMetadata",
                 type: "nvarchar(1000)",
                 maxLength: 1000,
@@ -23,7 +23,7 @@ namespace MusicSalesApp.Migrations
                 table: "SongMetadata",
                 type: "bit",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: true);
 
             migrationBuilder.CreateTable(
                 name: "SongStatusHistories",
@@ -77,7 +77,7 @@ namespace MusicSalesApp.Migrations
                 name: "SongStatusHistories");
 
             migrationBuilder.DropColumn(
-                name: "DisableReason",
+                name: "StatusReason",
                 table: "SongMetadata");
 
             migrationBuilder.DropColumn(

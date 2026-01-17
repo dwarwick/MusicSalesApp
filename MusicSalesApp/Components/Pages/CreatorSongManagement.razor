@@ -164,13 +164,13 @@
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.DisableReason)" HeaderText="Disable Reason" Width="200">
+                <GridColumn Field="@nameof(SongAdminViewModel.StatusReason)" HeaderText="Status Reason" Width="200">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            if (!string.IsNullOrEmpty(song.DisableReason))
+                            if (!string.IsNullOrEmpty(song.StatusReason))
                             {
-                                <small class="text-break">@song.DisableReason</small>
+                                <small class="text-break">@song.StatusReason</small>
                             }
                             else
                             {
