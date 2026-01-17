@@ -78,7 +78,8 @@ public partial class CreatorSongManagementModel : BlazorBase
 
         var creatorSongs = await CreatorService.GetCreatorSongsAsync(_creatorId.Value);
         
-        // Filter out album covers since we no longer use albums
+        // Filter out album covers for legacy data that may still exist in the database.
+        // The IsAlbumCover field remains in the schema for backward compatibility but is no longer used for new uploads.
         _songs = creatorSongs
             .Where(m => !m.IsAlbumCover)
             .Select(m => new SongAdminViewModel

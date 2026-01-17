@@ -201,7 +201,9 @@ namespace MusicSalesApp.Services
                 .Take(parameters.Take)
                 .ToListAsync();
 
-            // Convert to SongAdminViewModel (filter out album covers)
+            // Convert to SongAdminViewModel
+            // Note: Filter out album covers for legacy data that may still exist in the database.
+            // The IsAlbumCover field remains in the schema for backward compatibility but is no longer used for new uploads.
             var viewModels = items
                 .Where(m => !m.IsAlbumCover)
                 .Select(m => new SongAdminViewModel
