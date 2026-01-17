@@ -23,7 +23,7 @@ namespace MusicSalesApp.Migrations
                 table: "Creators",
                 type: "decimal(5,4)",
                 nullable: false,
-                defaultValue: 0m);
+                defaultValue: 0.15m);
         }
     }
 }
