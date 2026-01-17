@@ -90,13 +90,13 @@ public class TaxBanditsController : ControllerBase
             var formType = formTypeElement.GetString();
             _logger.LogInformation("Processing TaxBandits webhook for FormType: {FormType}", formType);
 
-            // Handle W-9 form completion
-            if (formType == "FormW9" && root.TryGetProperty("FormW9", out var formW9))
+            // Handle W-9 form completion (TaxBandits sends "FORMW9" as FormType)
+            if (string.Equals(formType, "FORMW9", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("FormW9", out var formW9))
             {
                 return await HandleFormW9WebhookAsync(formW9, body);
             }
-            // Handle W-8 form completion (for non-US persons)
-            else if (formType == "FormW8BEN" && root.TryGetProperty("FormW8BEN", out var formW8))
+            // Handle W-8 form completion (for non-US persons, TaxBandits sends "FORMW8BEN" as FormType)
+            else if (string.Equals(formType, "FORMW8BEN", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("FormW8Ben", out var formW8))
             {
                 return await HandleFormW8WebhookAsync(formW8, body);
             }
