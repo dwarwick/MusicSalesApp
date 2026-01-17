@@ -791,8 +791,12 @@ public partial class ManageAccountModel : BlazorBase
                 var result = await response.Content.ReadFromJsonAsync<StartCreatorOnboardingResponse>();
                 if (result != null && result.Success && !string.IsNullOrEmpty(result.ReferralUrl))
                 {
-                    // Redirect to PayPal for onboarding
-                    NavigationManager.NavigateTo(result.ReferralUrl, forceLoad: true);
+                    // Open PayPal in a new tab so user stays on StreamTunes
+                    await JS.InvokeVoidAsync("open", result.ReferralUrl, "_blank");
+                    
+                    // Update the UI to show the pending state with the referral URL
+                    _successMessage = "A new browser tab has been opened for PayPal setup. Please complete the setup there, then return here and click 'I've Completed PayPal Setup'.";
+                    await LoadCreatorStatus();
                 }
                 else
                 {
