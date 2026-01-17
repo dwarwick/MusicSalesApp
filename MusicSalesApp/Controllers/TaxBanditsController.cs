@@ -387,14 +387,49 @@ public class TaxBanditsController : ControllerBase
             }
 
             // Validate timestamp to prevent replay attacks (allow 5 minute window)
-            if (DateTimeOffset.TryParse(timestamp, out var webhookTime))
+            // TaxBandits may send timestamps in various formats, with or without timezone info
+            DateTimeOffset? webhookTime = null;
+            
+            // Try parsing with explicit formats first
+            var formats = new[]
             {
-                var timeDifference = DateTimeOffset.UtcNow - webhookTime;
+                "MM/dd/yyyy hh:mm:ss.fff tt zzz",    // With timezone offset
+                "MM/dd/yyyy hh:mm:ss.fff tt",        // Without timezone offset
+                "MM/dd/yyyy HH:mm:ss.fff zzz",       // 24-hour with timezone
+                "MM/dd/yyyy HH:mm:ss.fff",           // 24-hour without timezone
+                "yyyy-MM-dd'T'HH:mm:ss.fffK",        // ISO 8601
+                "yyyy-MM-dd HH:mm:ss zzz",           // ISO-like with timezone
+            };
+
+            foreach (var format in formats)
+            {
+                if (DateTimeOffset.TryParseExact(timestamp, format, 
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AllowWhiteSpaces, 
+                    out var parsed))
+                {
+                    webhookTime = parsed;
+                    break;
+                }
+            }
+
+            // Fallback to general parsing if specific formats don't work
+            if (!webhookTime.HasValue && DateTimeOffset.TryParse(timestamp, 
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AllowWhiteSpaces,
+                out var generalParsed))
+            {
+                webhookTime = generalParsed;
+            }
+
+            if (webhookTime.HasValue)
+            {
+                var timeDifference = DateTimeOffset.UtcNow - webhookTime.Value.ToUniversalTime();
                 if (Math.Abs(timeDifference.TotalMinutes) > 5)
                 {
                     _logger.LogWarning(
-                        "TaxBandits webhook timestamp is outside acceptable window. Timestamp: {Timestamp}, Current: {Current}, Difference: {Difference} minutes",
-                        timestamp, DateTimeOffset.UtcNow, timeDifference.TotalMinutes);
+                        "TaxBandits webhook timestamp is outside acceptable window. Timestamp: {Timestamp}, Parsed: {Parsed}, Current: {Current}, Difference: {Difference} minutes",
+                        timestamp, webhookTime.Value.ToUniversalTime(), DateTimeOffset.UtcNow, timeDifference.TotalMinutes);
                     return false;
                 }
             }
