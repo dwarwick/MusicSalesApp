@@ -71,8 +71,8 @@ h1:focus {
     cursor: default;
 }
 
-/* AlbumPlayer - New 5-row layout structure */
-.album-image-title-row {
+/* PlaylistPlayer - 5-row layout structure */
+.playlist-image-title-row {
     display: flex;
     flex-direction: column;
 }
@@ -89,7 +89,7 @@ h1:focus {
     flex-wrap: wrap;
 }
 
-.album-art-container {
+.playlist-art-container {
     position: relative;
 }
 
@@ -573,18 +573,6 @@ h1:focus {
     100% { opacity: 0; transform: translate(20px, -50px) rotate(30deg) scale(0.5); }
 }
 
-.album-card {
-    border: 1px solid rgba(29, 185, 84, 0.3);
-}
-
-.album-badge {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-}
-
 /* Song Title */
 .card-song-title {    
     font-size: 14px;
@@ -595,12 +583,6 @@ h1:focus {
     text-overflow: ellipsis;
 }
 
-/* Track Count */
-.card-track-count {
-    font-size: 12px;
-    margin-bottom: 8px;
-    opacity: 0.8;
-}
 /* Playlists Page Layout */
 .playlists-page-header {
     display: flex;

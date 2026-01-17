@@ -11,19 +11,6 @@ using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages;
 
-/// <summary>
-/// Represents an album with its cover art and tracks.
-/// </summary>
-public class AlbumInfo
-{
-    public string AlbumName { get; set; }
-    public string CoverArtUrl { get; set; }
-    public string CoverArtFileName { get; set; }
-    public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
-    public int MetadataId { get; set; } // ID of the album cover's SongMetadata record
-    public bool DisplayOnHomePage { get; set; } // Whether this album should be displayed on the home page
-}
-
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
@@ -37,7 +24,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();
-    protected List<AlbumInfo> _albums = new List<AlbumInfo>();
     
     // Track DisplayOnHomePage status for standalone songs
     private HashSet<string> _homePageSongs = new HashSet<string>();
@@ -54,18 +40,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private bool _isMuted;
     private double _previousVolume = 1.0;
 
-    // Album playback state
-    private AlbumInfo _playingAlbum;
-    private int _currentTrackIndex;
-    private List<string> _albumTrackUrls = new List<string>();
-
     // Single set of element references for the active card
     protected ElementReference _activeAudioElement;
     protected ElementReference _activeProgressBarElement;
     protected ElementReference _activeVolumeBarElement;
 
-    // Map file names to album art URLs
-    private Dictionary<string, string> _albumArtUrls = new Dictionary<string, string>();
+    // Map file names to song art URLs
+    private Dictionary<string, string> _songArtUrls = new Dictionary<string, string>();
     
     // Map file names to song prices
     
@@ -140,14 +121,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
             // Set the initial track source
             string initialTrackUrl = null;
-            if (_playingAlbum != null && _albumTrackUrls.Count > 0)
+            if (!string.IsNullOrEmpty(_playingFileName))
             {
-                // Playing an album - get the current track URL
-                initialTrackUrl = GetCurrentAlbumTrackUrl();
-            }
-            else if (!string.IsNullOrEmpty(_playingFileName))
-            {
-                // Playing an individual song - get the stream URL
+                // Playing a song - get the stream URL
                 initialTrackUrl = await GetTrackStreamUrlAsync(_playingFileName);
             }
 
@@ -256,67 +232,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Get all image files
             var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
 
-            // Find album covers from database metadata
-            var albumCoverMetadata = allMetadata.Where(m => m.IsAlbumCover).ToList();
+            // All audio files are standalone tracks
+            _files = audioFiles.ToList();
 
-            // Build albums from album covers
-            _albums.Clear();
-            var tracksInAlbums = new HashSet<string>();
-            
-            foreach (var coverMeta in albumCoverMetadata)
-            {
-                if (!string.IsNullOrWhiteSpace(coverMeta.AlbumName))
-                {
-                    // Find all tracks with the same album name from metadata
-                    var trackMetadata = allMetadata
-                        .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) &&
-                                    !string.IsNullOrEmpty(m.AlbumName) &&
-                                    string.Equals(m.AlbumName, coverMeta.AlbumName, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-
-                    // Map metadata to StorageFileInfo
-                    var albumTracks = new List<StorageFileInfo>();
-                    foreach (var trackMeta in trackMetadata)
-                    {
-                        var mp3Path = trackMeta.Mp3BlobPath ?? trackMeta.BlobPath;
-                        var fileInfo = allFiles.FirstOrDefault(f => f.Name == mp3Path);
-                        if (fileInfo != null)
-                        {
-                            albumTracks.Add(fileInfo);
-                            // Store the metadata ID
-                            _songMetadataIds[fileInfo.Name] = trackMeta.Id;
-                        }
-                    }
-
-                    if (albumTracks.Any())
-                    {
-                        // Get album price from database metadata
-
-                        var imagePath = coverMeta.ImageBlobPath ?? coverMeta.BlobPath;
-                        var album = new AlbumInfo
-                        {
-                            AlbumName = coverMeta.AlbumName,
-                            CoverArtUrl = $"api/music/{SafeEncodePath(imagePath)}",
-                            CoverArtFileName = imagePath,
-                            Tracks = albumTracks.OrderBy(f => Path.GetFileName(f.Name)).ToList(),
-                            MetadataId = coverMeta.Id,
-                            DisplayOnHomePage = coverMeta.DisplayOnHomePage
-                        };
-                        _albums.Add(album);
-
-                        // Mark these tracks as being part of an album
-                        foreach (var track in albumTracks)
-                        {
-                            tracksInAlbums.Add(track.Name);
-                        }
-                    }
-                }
-            }
-
-            // Filter audio files to only include standalone tracks (not part of any album)
-            _files = audioFiles.Where(f => !tracksInAlbums.Contains(f.Name)).ToList();
-
-            // Pre-compute image file lookup for faster album art matching (for standalone tracks)
+            // Pre-compute image file lookup for faster art matching
             var imageFilesLookup = imageFiles
                 .Select(f => new
                 {
@@ -329,7 +248,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Clear home page songs tracking
             _homePageSongs.Clear();
 
-            // Build album art URL mappings and extract song prices for standalone tracks
+            // Build song art URL mappings and extract metadata for tracks
             foreach (var audioFile in _files)
             {
                 var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
@@ -338,10 +257,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 var artFile = imageFilesLookup[(baseName, folder)].FirstOrDefault()?.File;
                 if (artFile != null)
                 {
-                    _albumArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                    _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
                 }
                 
-                // Read song price from database metadata (try Mp3BlobPath first, then BlobPath)
+                // Read song metadata from database
                 SongMetadata songMeta = null;
                 if (!metadataLookup.TryGetValue(audioFile.Name, out songMeta))
                 {
@@ -350,8 +269,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 }
                 if (songMeta != null)
                 {
-                    {
-                    }
                     // Store the metadata ID
                     _songMetadataIds[audioFile.Name] = songMeta.Id;
                     // Store the stream count
@@ -538,7 +455,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected string GetAlbumArtUrl(string fileName)
     {
-        return _albumArtUrls.TryGetValue(fileName, out var url) ? url : null;
+        return _songArtUrls.TryGetValue(fileName, out var url) ? url : null;
     }
 
     protected void GetSongPlayerUrl(string fileName)
@@ -581,13 +498,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected int GetCurrentPlayingSongMetadataId()
     {
-        // For albums, get the current track's metadata ID
-        if (_playingAlbum != null && _currentTrackIndex < _playingAlbum.Tracks.Count)
-        {
-            var trackFileName = _playingAlbum.Tracks[_currentTrackIndex].Name;
-            return GetSongMetadataId(trackFileName);
-        }
-
         // For individual songs, get the file's metadata ID
         if (!string.IsNullOrEmpty(_playingFileName))
         {
@@ -604,7 +514,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _playingFileName = fileName;
         _isActuallyPlaying = false;
         _needsJsInit = true;
-        _playingAlbum = null; // Clear album state since this is an individual song
 
         // Reset state for new card
         _volume = 1.0;
@@ -811,21 +720,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         if (_playingCardId == cardId)
         {
-            // Check if this is an album playing and we need to play the next track
-            if (_playingAlbum != null && _currentTrackIndex < _albumTrackUrls.Count - 1)
-            {
-                _currentTrackIndex++;
-                // Will need to trigger next track play via JS
-                InvokeAsync(async () =>
-                {
-                    await PlayNextAlbumTrack();
-                });
-                return;
-            }
-            
             _isActuallyPlaying = false;
-            _playingAlbum = null;
-            _currentTrackIndex = 0;
             InvokeAsync(StateHasChanged);
         }
     }
@@ -858,88 +753,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         public int SongMetadataId { get; set; }
         public int StreamCount { get; set; }
-    }
-
-    // Album-specific methods
-    protected IEnumerable<AlbumInfo> GetFilteredAlbums()
-    {
-        var albums = _albums.AsEnumerable();
-        
-        // When showing home page featured items, filter by DisplayOnHomePage
-        if (ShowHomePageFeatured)
-        {
-            albums = albums.Where(a => a.DisplayOnHomePage);
-        }
-        
-        return albums;
-    }
-
-    protected string GetAlbumCardId(AlbumInfo album)
-    {
-        // Create a stable card ID from the album name prefixed with "album:"
-        return "album_" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(album.AlbumName)).Replace("+", "-").Replace("/", "_");
-    }
-
-    protected async Task PlayAlbum(AlbumInfo album)
-    {
-        var cardId = GetAlbumCardId(album);
-        _playingCardId = cardId;
-        _isActuallyPlaying = false;
-        _needsJsInit = true;
-        _playingAlbum = album;
-        _playingFileName = null; // Clear individual song state since this is an album
-        _currentTrackIndex = 0;
-
-        // Build list of track URLs for the album using SAS URLs for direct blob streaming
-        // Use Task.WhenAll for parallel fetching to improve performance with many tracks
-        var trackUrlTasks = album.Tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-        _albumTrackUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
-
-        // Reset state for new card
-        _volume = 1.0;
-        _previousVolume = 1.0;
-        _isMuted = false;
-        _currentTime = 0;
-        _duration = 0;
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    protected string GetCurrentAlbumTrackUrl()
-    {
-        if (_playingAlbum == null || _currentTrackIndex >= _albumTrackUrls.Count)
-            return string.Empty;
-        return _albumTrackUrls[_currentTrackIndex];
-    }
-
-    protected string GetCurrentAlbumTrackName()
-    {
-        if (_playingAlbum == null || _currentTrackIndex >= _playingAlbum.Tracks.Count)
-            return string.Empty;
-        return GetDisplayTitle(_playingAlbum.Tracks[_currentTrackIndex].Name);
-    }
-
-    private async Task PlayNextAlbumTrack()
-    {
-        if (_jsModule != null && _playingAlbum != null && _currentTrackIndex < _albumTrackUrls.Count)
-        {
-            _currentTime = 0;
-            _duration = 0;
-            var isRestricted = IsCurrentPlayingTrackRestricted();
-            await _jsModule.InvokeVoidAsync("changeTrack", _activeAudioElement, _albumTrackUrls[_currentTrackIndex], _playingCardId, isRestricted);
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    protected void GetAlbumPlayerUrl(AlbumInfo album)
-    {
-        NavigationManager.NavigateTo($"/album/{Uri.EscapeDataString(album.AlbumName)}");
-    }
-
-    protected string GetAlbumShareUrl(string albumName)
-    {
-        var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
-        return $"{baseUrl}/album/{Uri.EscapeDataString(albumName)}";
     }
 
     protected string GetSongShareUrl(string fileName)
