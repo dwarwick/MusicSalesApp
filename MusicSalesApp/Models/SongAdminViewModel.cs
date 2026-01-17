@@ -18,4 +18,8 @@ public class SongAdminViewModel
     // Creator-related properties
     public int? CreatorId { get; set; }
     public bool IsActive { get; set; } = true;
+
+    // Enable/Disable properties
+    public bool IsEnabled { get; set; } = true;
+    public string StatusReason { get; set; } = string.Empty;
 }

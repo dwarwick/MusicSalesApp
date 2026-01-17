@@ -216,6 +216,7 @@ try
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();
+    builder.Services.AddScoped<ISongStatusService, SongStatusService>();
     builder.Services.AddScoped<IThemeService, ThemeService>();
     builder.Services.AddScoped<IPlaylistService, PlaylistService>();
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();

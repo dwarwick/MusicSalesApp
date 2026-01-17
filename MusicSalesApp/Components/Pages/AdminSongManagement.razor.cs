@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
@@ -22,6 +24,9 @@ public class AdminSongManagementModel : ComponentBase
     [Inject] protected ISongAdminService SongAdminService { get; set; }
     [Inject] protected ISongMetadataService MetadataService { get; set; }
     [Inject] protected NavigationManager NavigationManager { get; set; }
+    [Inject] protected ISongStatusService SongStatusService { get; set; }
+    [Inject] protected AuthenticationStateProvider AuthenticationStateProvider { get; set; }
+    [Inject] protected UserManager<ApplicationUser> UserManager { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -38,6 +43,10 @@ public class AdminSongManagementModel : ComponentBase
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
 
+    // Enable/Disable fields
+    protected bool _editIsDisabled = false;
+    protected string _editStatusReason = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -45,7 +54,7 @@ public class AdminSongManagementModel : ComponentBase
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
-            // Load all songs for the grid
+            // Load all songs for the grid (including disabled songs for admin view)
             await LoadSongsAsync();
             
             _totalCount = _allSongs.Count;
@@ -63,7 +72,8 @@ public class AdminSongManagementModel : ComponentBase
     protected async Task LoadSongsAsync()
     {
         // Load all metadata from database for validation purposes
-        var allMetadata = await MetadataService.GetAllAsync();
+        // For admin view, we need to include disabled songs as well
+        var allMetadata = await MetadataService.GetAllIncludingDisabledAsync();
         _allSongs = allMetadata
             .Where(m => !m.IsAlbumCover) // Filter out album covers since we no longer use albums
             .Select(m => new SongAdminViewModel
@@ -74,7 +84,9 @@ public class AdminSongManagementModel : ComponentBase
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
             TrackLength = m.TrackLength,
-            DisplayOnHomePage = m.DisplayOnHomePage
+            DisplayOnHomePage = m.DisplayOnHomePage,
+            IsEnabled = m.IsEnabled,
+            StatusReason = m.StatusReason ?? string.Empty
         }).ToList();
         
         // Generate SAS URLs for images
@@ -99,6 +111,8 @@ public class AdminSongManagementModel : ComponentBase
         _editingSong = song;
         _editGenre = song.Genre;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
+        _editIsDisabled = !song.IsEnabled;
+        _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
         _validationErrors.Clear();
         _showEditModal = true;
@@ -110,6 +124,7 @@ public class AdminSongManagementModel : ComponentBase
         _editingSong = null;
         _validationErrors.Clear();
         _songImageFile = null;
+        _editStatusReason = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -138,10 +153,49 @@ public class AdminSongManagementModel : ComponentBase
                 }
             }
 
+            // Check if enabled/disabled status is changing
+            var wasEnabled = _editingSong.IsEnabled;
+            var willBeEnabled = !_editIsDisabled;
+            var statusIsChanging = wasEnabled != willBeEnabled;
+
+            // Validate reason is required when enabling or disabling
+            if (statusIsChanging && string.IsNullOrWhiteSpace(_editStatusReason))
+            {
+                _validationErrors.Add("A reason is required when enabling or disabling a song.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
                 return;
+            }
+
+            // Handle enable/disable status change
+            if (statusIsChanging)
+            {
+                // Get current user ID for audit trail
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+                var appUser = await UserManager.GetUserAsync(user);
+                var adminUserId = appUser?.Id ?? 0;
+
+                var baseUrl = NavigationManager.BaseUri;
+
+                if (int.TryParse(_editingSong.Id, out var songMetadataId))
+                {
+                    if (willBeEnabled)
+                    {
+                        await SongStatusService.EnableSongAsync(songMetadataId, _editStatusReason.Trim(), adminUserId, baseUrl);
+                    }
+                    else
+                    {
+                        await SongStatusService.DisableSongAsync(songMetadataId, _editStatusReason.Trim(), adminUserId, baseUrl);
+                    }
+
+                    // Update local model
+                    _editingSong.IsEnabled = willBeEnabled;
+                    _editingSong.StatusReason = _editStatusReason.Trim();
+                }
             }
 
             // Upload new images if provided
@@ -212,42 +266,45 @@ public class AdminSongManagementModel : ComponentBase
                 }
             }
 
-            // Update metadata in database for existing files
-            var filesToUpdate = new List<string>();
-
-            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
+            // Update metadata in database for existing files (only if status didn't change, as status service handles that)
+            if (!statusIsChanging)
             {
-                filesToUpdate.Add(_editingSong.Mp3FileName);
-            }
+                var filesToUpdate = new List<string>();
 
-            if (!string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
-            {
-                filesToUpdate.Add(_editingSong.JpegFileName);
-            }
-
-            // Process updates sequentially to avoid DbContext concurrency issues
-            foreach (var fileName in filesToUpdate)
-            {
-                var metadata = await MetadataService.GetByBlobPathAsync(fileName);
-                if (metadata == null) continue;
-
-                var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
-
-                // Update DisplayOnHomePage for all file types
-                metadata.DisplayOnHomePage = _editDisplayOnHomePage;
-
-                // Update MP3 metadata
-                if (isMP3)
+                if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
                 {
-                    // Set genre for all MP3s
-                    if (!string.IsNullOrEmpty(_editGenre))
-                    {
-                        metadata.Genre = _editGenre;
-                    }
+                    filesToUpdate.Add(_editingSong.Mp3FileName);
                 }
 
-                // Each upsert awaited sequentially
-                await MetadataService.UpsertAsync(metadata);
+                if (!string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
+                {
+                    filesToUpdate.Add(_editingSong.JpegFileName);
+                }
+
+                // Process updates sequentially to avoid DbContext concurrency issues
+                foreach (var fileName in filesToUpdate)
+                {
+                    var metadata = await MetadataService.GetByBlobPathAsync(fileName);
+                    if (metadata == null) continue;
+
+                    var isMP3 = fileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase);
+
+                    // Update DisplayOnHomePage for all file types
+                    metadata.DisplayOnHomePage = _editDisplayOnHomePage;
+
+                    // Update MP3 metadata
+                    if (isMP3)
+                    {
+                        // Set genre for all MP3s
+                        if (!string.IsNullOrEmpty(_editGenre))
+                        {
+                            metadata.Genre = _editGenre;
+                        }
+                    }
+
+                    // Each upsert awaited sequentially
+                    await MetadataService.UpsertAsync(metadata);
+                }
             }
 
             // Update local model

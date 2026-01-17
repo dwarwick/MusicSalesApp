@@ -111,4 +111,18 @@ public class SongMetadata
     /// Navigation property to the Creator who owns this song.
     /// </summary>
     public virtual Creator Creator { get; set; }
+
+    /// <summary>
+    /// Indicates whether this song is enabled and available for playback and playlists.
+    /// Disabled songs are hidden from the media library, cannot be played, and are removed from playlists.
+    /// Songs are disabled by admin when content violates terms or policies.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// The reason for the most recent status change (enable or disable) by admin.
+    /// Required when enabling or disabling a song.
+    /// </summary>
+    [MaxLength(1000)]
+    public string StatusReason { get; set; }
 }

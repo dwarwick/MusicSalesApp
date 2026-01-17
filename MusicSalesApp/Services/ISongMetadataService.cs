@@ -10,9 +10,14 @@ namespace MusicSalesApp.Services
     public interface ISongMetadataService
     {
         /// <summary>
-        /// Get all song metadata records
+        /// Get all song metadata records (only enabled songs)
         /// </summary>
         Task<List<SongMetadata>> GetAllAsync();
+
+        /// <summary>
+        /// Get all song metadata records including disabled songs (for admin use)
+        /// </summary>
+        Task<List<SongMetadata>> GetAllIncludingDisabledAsync();
 
         /// <summary>
         /// Get metadata by ID

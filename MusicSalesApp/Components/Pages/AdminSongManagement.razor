@@ -138,6 +138,36 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsEnabled)" HeaderText="Enabled" Width="100">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsEnabled)
+                            {
+                                <span class="badge bg-success">Enabled</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Disabled</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.StatusReason)" HeaderText="Status Reason" Width="200">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (!string.IsNullOrEmpty(song.StatusReason))
+                            {
+                                <small class="text-break">@song.StatusReason</small>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
             </GridColumns>
         </SfGrid>
 
@@ -239,6 +269,46 @@ else
                             <SfCheckBox @bind-Checked="_editDisplayOnHomePage" Label="Display on Home Page" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
+
+                    <hr class="my-3" />
+                    <h5>Song Status</h5>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <SfCheckBox @bind-Checked="_editIsDisabled" Label="Disable this song" CssClass="e-outline"></SfCheckBox>
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    @if (_editIsDisabled)
+                                    {
+                                        <span class="text-danger">When disabled, the song will not appear in the media library, cannot be played, and will be removed from all playlists. The creator will be notified.</span>
+                                    }
+                                    else if (!_editingSong.IsEnabled)
+                                    {
+                                        <span class="text-success">Enabling this song will make it available again in the media library and for playlists. The creator will be notified.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Check this box to disable the song and prevent it from being played or added to playlists.</span>
+                                    }
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (_editIsDisabled || !_editingSong.IsEnabled)
+                    {
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label class="e-label">Reason <span class="text-danger">*</span></label>
+                                <SfTextBox @bind-Value="_editStatusReason" 
+                                         Multiline="true" 
+                                         CssClass="e-outline" 
+                                         Placeholder="Enter the reason for disabling or enabling this song (required)"
+                                         HtmlAttributes="@(new Dictionary<string, object> { { "rows", "3" } })" />
+                                <small class="text-muted">This reason will be included in the notification email sent to the creator.</small>
+                            </div>
+                        </div>
+                    }
                 </div>
             }
         </Content>

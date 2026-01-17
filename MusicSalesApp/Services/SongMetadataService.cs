@@ -21,8 +21,16 @@ namespace MusicSalesApp.Services
         /// <summary>
         /// Expression to filter songs by active status and active creator.
         /// Songs without a creator (admin-uploaded) are always included.
+        /// Also filters out disabled songs.
         /// </summary>
         private static readonly Expression<Func<SongMetadata, bool>> ActiveSongFromActiveCreator = 
+            s => s.IsActive && s.IsEnabled && (s.CreatorId == null || s.Creator!.IsActive);
+
+        /// <summary>
+        /// Expression to filter songs by active status and active creator (including disabled songs for admin use).
+        /// Songs without a creator (admin-uploaded) are always included.
+        /// </summary>
+        private static readonly Expression<Func<SongMetadata, bool>> ActiveSongFromActiveCreatorIncludingDisabled = 
             s => s.IsActive && (s.CreatorId == null || s.Creator!.IsActive);
 
         public SongMetadataService(IDbContextFactory<AppDbContext> contextFactory, ILogger<SongMetadataService> logger)
@@ -40,6 +48,15 @@ namespace MusicSalesApp.Services
                 .ToListAsync();
         }
 
+        public async Task<List<SongMetadata>> GetAllIncludingDisabledAsync()
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata
+                .Include(s => s.Creator)
+                .Where(ActiveSongFromActiveCreatorIncludingDisabled)
+                .ToListAsync();
+        }
+
         public async Task<SongMetadata> GetByIdAsync(int id)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
@@ -49,9 +66,10 @@ namespace MusicSalesApp.Services
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            // Include disabled songs for admin operations
             return await context.SongMetadata
                 .Include(s => s.Creator)
-                .Where(ActiveSongFromActiveCreator)
+                .Where(ActiveSongFromActiveCreatorIncludingDisabled)
                 .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
                     s.Mp3BlobPath == blobPath || 
                     s.ImageBlobPath == blobPath);
