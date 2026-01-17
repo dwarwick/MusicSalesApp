@@ -1,13 +1,12 @@
-@page "/album/{AlbumName}"
 @page "/playlist/{PlaylistId:int}"
 @page "/recommended-playlist/{RecommendedUserId:int}"
-@inherits AlbumPlayerModel
+@inherits PlaylistPlayerModel
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
 
 <PageTitle>@GetDisplayTitle()</PageTitle>
 
-<div class="album-player-spotify-container">
+<div class="playlist-player-container">
     @if (_loading)
     {
         <div class="loading-state">
@@ -22,20 +21,20 @@
     }
     else
     {
-        <!-- Row 1: Album Image and Title -->
-        <div class="album-image-title-row">
-            <div class="album-art-container">
+        <!-- Row 1: Playlist Image and Title -->
+        <div class="playlist-image-title-row">
+            <div class="playlist-art-container">
                 <div class="title-container">
                     @{
-                        var displayImageUrl = _isPlaylistMode ? GetTrackImageUrl(_currentTrackIndex) : _albumInfo?.CoverArtUrl;
+                        var displayImageUrl = GetTrackImageUrl(_currentTrackIndex);
                     }
                     @if (!string.IsNullOrEmpty(displayImageUrl))
                     {
-                        <img src="@displayImageUrl" alt="@(_isPlaylistMode ? "Track Art" : "Album Art")" class="album-art" />
+                        <img src="@displayImageUrl" alt="Track Art" class="playlist-art" />
                     }
                     else
                     {
-                        <div class="album-art-placeholder">
+                        <div class="playlist-art-placeholder">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="placeholder-icon">
                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" />
                             </svg>
@@ -64,15 +63,6 @@
                     }
                 </button>
 
-                <!-- Facebook Share Button (only show for albums, not playlists) -->
-                @if (!_isPlaylistMode)
-                {
-                    <FacebookShareButton ShareUrl="@GetShareUrl()" 
-                                       Layout="button_count" 
-                                       Size="large" 
-                                       CssClass="share-button-action" />
-                }
-
                 <!-- Now Playing Track Info -->
                 @if (_isPlaying || _currentTime > 0)
                 {
@@ -83,7 +73,7 @@
                 }
 
                 <!-- Like/Dislike Buttons for current track -->
-                @if (_currentTrackIndex >= 0 && _currentTrackIndex < _albumInfo.Tracks.Count)
+                @if (_currentTrackIndex >= 0 && _currentTrackIndex < _playlistInfo.Tracks.Count)
                 {
                     <div class="track-like-dislike">
                         <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
@@ -107,7 +97,7 @@
             {
                 <span class="preview-label">Preview Only (60 seconds per track)</span>
             }
-            <span class="album-track-info">@_albumInfo.Tracks.Count track@(_albumInfo.Tracks.Count != 1 ? "s" : "")</span>                
+            <span class="playlist-track-info">@_playlistInfo.Tracks.Count track@(_playlistInfo.Tracks.Count != 1 ? "s" : "")</span>                
         </div>
 
         <!-- Row 4: Track List -->
@@ -124,10 +114,10 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @for (int i = 0; i < _albumInfo.Tracks.Count; i++)
+                    @for (int i = 0; i < _playlistInfo.Tracks.Count; i++)
                     {
                         var index = i;
-                        var track = _albumInfo.Tracks[i];
+                        var track = _playlistInfo.Tracks[i];
                         var isCurrentTrack = IsCurrentTrack(index);
 
                         <tr class="track-row @(isCurrentTrack ? "current-track" : "")" @onclick="() => PlayTrack(index)">

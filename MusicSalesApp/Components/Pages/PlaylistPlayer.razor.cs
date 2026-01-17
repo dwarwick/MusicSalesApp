@@ -9,13 +9,22 @@ using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages
 {
-    public partial class AlbumPlayerModel : BlazorBase, IAsyncDisposable
+    /// <summary>
+    /// Represents a playlist with its tracks.
+    /// </summary>
+    public class PlaylistInfo
+    {
+        public string PlaylistName { get; set; }
+        public string CoverArtUrl { get; set; }
+        public string CoverArtFileName { get; set; }
+        public List<StorageFileInfo> Tracks { get; set; } = new List<StorageFileInfo>();
+        public int MetadataId { get; set; } // ID of the first track's SongMetadata record
+    }
+
+    public partial class PlaylistPlayerModel : BlazorBase, IAsyncDisposable
     {
         private const double PREVIEW_DURATION_SECONDS = 60.0;
         private const string UNKNOWN_DURATION_PLACEHOLDER = "--:--";
-
-        [Parameter]
-        public string AlbumName { get; set; }
 
         [Parameter]
         public int? PlaylistId { get; set; }
@@ -25,9 +34,8 @@ namespace MusicSalesApp.Components.Pages
 
         protected bool _loading = true;
         protected string _error;
-        protected AlbumInfo _albumInfo;
+        protected PlaylistInfo _playlistInfo;
         protected string _playlistName;
-        protected bool _isPlaylistMode;
         protected bool _isRecommendedMode;
         protected string _streamUrl;
         protected bool _isPlaying;
@@ -51,11 +59,10 @@ namespace MusicSalesApp.Components.Pages
         private Dictionary<int, string> _trackImageUrls = new Dictionary<int, string>();
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
         private IJSObjectReference _jsModule;
-        private DotNetObjectReference<AlbumPlayerModel> _dotNetRef;
+        private DotNetObjectReference<PlaylistPlayerModel> _dotNetRef;
         private bool invokedJs = false;
 
         private bool _hasLoadedData = false;
-        private string _lastLoadedAlbum;
         private int? _lastLoadedPlaylistId;
         private int? _lastLoadedRecommendedUserId;
         protected bool _hasActiveSubscription;
@@ -87,7 +94,6 @@ namespace MusicSalesApp.Components.Pages
         protected override void OnParametersSet()
         {
             // Only set the mode flags, don't load data here
-            _isPlaylistMode = PlaylistId.HasValue;
             _isRecommendedMode = RecommendedUserId.HasValue;
             
             // Check if parameters have changed and reset the flag if needed
@@ -96,13 +102,9 @@ namespace MusicSalesApp.Components.Pages
             {
                 parametersChanged = RecommendedUserId != _lastLoadedRecommendedUserId;
             }
-            else if (_isPlaylistMode)
-            {
-                parametersChanged = PlaylistId != _lastLoadedPlaylistId;
-            }
             else
             {
-                parametersChanged = AlbumName != _lastLoadedAlbum;
+                parametersChanged = PlaylistId != _lastLoadedPlaylistId;
             }
             
             if (parametersChanged)
@@ -126,15 +128,10 @@ namespace MusicSalesApp.Components.Pages
                         _lastLoadedRecommendedUserId = RecommendedUserId;
                         await LoadRecommendedPlaylistInfo();
                     }
-                    else if (_isPlaylistMode)
+                    else
                     {
                         _lastLoadedPlaylistId = PlaylistId;
                         await LoadPlaylistInfo();
-                    }
-                    else
-                    {
-                        _lastLoadedAlbum = AlbumName;
-                        await LoadAlbumInfo();
                     }
                 }
                 finally
@@ -144,11 +141,11 @@ namespace MusicSalesApp.Components.Pages
             }
 
             // Initialize JS after data is loaded
-            if (!invokedJs && !_loading && _albumInfo != null && _albumInfo.Tracks.Any())
+            if (!invokedJs && !_loading && _playlistInfo != null && _playlistInfo.Tracks.Any())
             {
                 invokedJs = true;
                 _dotNetRef = DotNetObjectReference.Create(this);
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/AlbumPlayer.razor.js");
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/PlaylistPlayer.razor.js");
 
                 await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId());
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
@@ -185,154 +182,10 @@ namespace MusicSalesApp.Components.Pages
             }
             catch (JSDisconnectedException ex)
             {
-                Logger.LogDebug(ex, "Album player JS runtime disconnected during disposal");
+                Logger.LogDebug(ex, "Playlist player JS runtime disconnected during disposal");
             }
 
             _dotNetRef?.Dispose();
-        }
-
-        private async Task LoadAlbumInfo()
-        {
-            _loading = true;
-            _error = null;
-
-            if (string.IsNullOrWhiteSpace(AlbumName))
-            {
-                _error = "No album name provided.";
-                _loading = false;
-                return;
-            }
-
-            try
-            {
-                // Check authentication status
-                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
-
-                // URL decode the album name
-                var decodedAlbumName = Uri.UnescapeDataString(AlbumName);
-
-                // Get metadata from database for this album
-                var albumMetadata = await SongMetadataService.GetByAlbumNameAsync(decodedAlbumName);
-                
-                if (albumMetadata == null || !albumMetadata.Any())
-                {
-                    _error = $"Album '{decodedAlbumName}' not found.";
-                    _loading = false;
-                    return;
-                }
-
-                // Find album cover metadata
-                var albumCoverMeta = albumMetadata.FirstOrDefault(m => m.IsAlbumCover);
-                
-                if (albumCoverMeta == null)
-                {
-                    _error = $"Album cover not found for '{decodedAlbumName}'.";
-                    _loading = false;
-                    return;
-                }
-
-                // Find track metadata - use SQL metadata directly, no need for controller call
-                var trackMetadata = albumMetadata
-                    .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) || m.FileExtension == ".mp3")
-                    .OrderBy(m => m.TrackNumber ?? 9999) // Sort by track number
-                    .ThenBy(m => Path.GetFileName(m.Mp3BlobPath ?? m.BlobPath))
-                    .ToList();
-
-                // Convert metadata to StorageFileInfo for compatibility with existing code
-                var tracks = trackMetadata.Select(trackMeta =>
-                {
-                    var mp3Path = trackMeta.Mp3BlobPath ?? trackMeta.BlobPath;
-                    return new StorageFileInfo
-                    {
-                        Name = mp3Path,
-                        Length = 0, // Not needed for playback
-                        ContentType = "audio/mpeg",
-                        LastModified = trackMeta.UpdatedAt,
-                        Tags = new Dictionary<string, string>() // No longer using tags
-                    };
-                }).ToList();
-
-                if (!tracks.Any())
-                {
-                    _error = $"No tracks found for album '{decodedAlbumName}'.";
-                    _loading = false;
-                    return;
-                }
-
-                // Get album price from database metadata
-
-                // Build metadata lookup for track info (use Mp3BlobPath if available)
-                _metadataLookup = albumMetadata.ToDictionary(m => m.Mp3BlobPath ?? m.BlobPath, m => m);
-
-                // Initialize stream counts from metadata
-                _trackStreamCounts.Clear();
-                foreach (var meta in albumMetadata.Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath)))
-                {
-                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
-                }
-
-                var coverImagePath = albumCoverMeta.ImageBlobPath ?? albumCoverMeta.BlobPath;
-                _albumInfo = new AlbumInfo
-                {
-                    AlbumName = decodedAlbumName,
-                    CoverArtUrl = $"api/music/{SafeEncodePath(coverImagePath)}", // Cover art from metadata
-                    CoverArtFileName = coverImagePath,
-                    Tracks = tracks,
-                    MetadataId = albumCoverMeta.Id
-                };
-
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
-
-                // Find and store track images from metadata (JPEGs with same base name as MP3, not album covers)
-                var trackImageMetadata = albumMetadata
-                    .Where(m => !m.IsAlbumCover && !string.IsNullOrEmpty(m.ImageBlobPath))
-                    .ToList();
-                
-                for (int i = 0; i < tracks.Count; i++)
-                {
-                    var track = tracks[i];
-                    var trackBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(track.Name));
-                    var trackFolder = Path.GetDirectoryName(track.Name)?.Replace("\\", "/") ?? "";
-                    
-                    // Look for image metadata with same base name in same folder
-                    var trackImageMeta = trackImageMetadata.FirstOrDefault(imgMeta =>
-                    {
-                        var imgPath = imgMeta.ImageBlobPath;
-                        var imgBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(imgPath));
-                        var imgFolder = Path.GetDirectoryName(imgPath)?.Replace("\\", "/") ?? "";
-                        
-                        return string.Equals(imgBaseName, trackBaseName, StringComparison.OrdinalIgnoreCase) &&
-                               string.Equals(imgFolder, trackFolder, StringComparison.OrdinalIgnoreCase);
-                    });
-                    
-                    if (trackImageMeta != null)
-                    {
-                        _trackImageUrls[i] = $"api/music/{SafeEncodePath(trackImageMeta.ImageBlobPath)}";
-                    }
-                }
-
-                // Set up the first track
-                _currentTrackIndex = 0;
-                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status if authenticated
-                if (_isAuthenticated)
-                {
-                    await LoadSubscriptionStatus();
-                }
-            }
-            catch (Exception ex)
-            {
-                _error = ex.Message;
-                Logger.LogError(ex, "Error loading album info for {AlbumName}", AlbumName);
-            }
-            finally
-            {
-                _loading = false;
-            }
         }
 
         private async Task LoadSubscriptionStatus()
@@ -466,9 +319,9 @@ namespace MusicSalesApp.Components.Pages
                     ? $"api/music/{SafeEncodePath(coverImagePath)}" 
                     : "";
 
-                _albumInfo = new AlbumInfo
+                _playlistInfo = new PlaylistInfo
                 {
-                    AlbumName = _playlistName,
+                    PlaylistName = _playlistName,
                     CoverArtUrl = coverImageUrl,
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
@@ -611,9 +464,9 @@ namespace MusicSalesApp.Components.Pages
                     ? $"api/music/{SafeEncodePath(coverImagePath)}" 
                     : "";
 
-                _albumInfo = new AlbumInfo
+                _playlistInfo = new PlaylistInfo
                 {
-                    AlbumName = _playlistName,
+                    PlaylistName = _playlistName,
                     CoverArtUrl = coverImageUrl,
                     CoverArtFileName = coverImagePath,
                     Tracks = tracks,
@@ -753,11 +606,7 @@ namespace MusicSalesApp.Components.Pages
             {
                 return "Recommended For You";
             }
-            if (_isPlaylistMode)
-            {
-                return _playlistName ?? "Unknown Playlist";
-            }
-            return _albumInfo?.AlbumName ?? AlbumName ?? "Unknown Album";
+            return _playlistName ?? _playlistInfo?.PlaylistName ?? "Unknown Playlist";
         }
 
         protected string GetShareUrl()
@@ -769,25 +618,21 @@ namespace MusicSalesApp.Components.Pages
                 // Return empty string to disable sharing functionality
                 return string.Empty;
             }
-            if (_isPlaylistMode)
-            {
-                return $"{baseUrl}/playlist/{PlaylistId}";
-            }
-            return $"{baseUrl}/album/{Uri.EscapeDataString(AlbumName)}";
+            return $"{baseUrl}/playlist/{PlaylistId}";
         }
 
         /// <summary>
-        /// Indicates if the current content can be shared (albums and playlists can be shared, 
+        /// Indicates if the current content can be shared (playlists can be shared, 
         /// but recommended playlists are personal and cannot be shared)
         /// </summary>
         protected bool CanShare => !_isRecommendedMode;
 
         protected string GetTrackTitle(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return "";
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return "";
             
             // Check for stored SongTitle in metadata
-            var track = _albumInfo.Tracks[index];
+            var track = _playlistInfo.Tracks[index];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata) && !string.IsNullOrEmpty(metadata.SongTitle))
             {
                 return metadata.SongTitle;
@@ -799,9 +644,9 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetTrackNumber(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return (index + 1).ToString();
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return (index + 1).ToString();
             
-            var track = _albumInfo.Tracks[index];
+            var track = _playlistInfo.Tracks[index];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.TrackNumber.HasValue)
             {
                 return metadata.TrackNumber.Value.ToString();
@@ -817,9 +662,9 @@ namespace MusicSalesApp.Components.Pages
 
         protected double? GetTrackLengthSeconds(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return null;
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return null;
             
-            var track = _albumInfo.Tracks[index];
+            var track = _playlistInfo.Tracks[index];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.TrackLength.HasValue)
             {
                 return metadata.TrackLength.Value;
@@ -830,9 +675,9 @@ namespace MusicSalesApp.Components.Pages
 
         protected int GetTrackStreamCount(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return 0;
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return 0;
             
-            var track = _albumInfo.Tracks[index];
+            var track = _playlistInfo.Tracks[index];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata))
             {
                 if (_trackStreamCounts.TryGetValue(metadata.Id, out var count))
@@ -847,9 +692,9 @@ namespace MusicSalesApp.Components.Pages
 
         protected int GetCurrentTrackMetadataId()
         {
-            if (_albumInfo == null || _currentTrackIndex >= _albumInfo.Tracks.Count) return 0;
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return 0;
             
-            var track = _albumInfo.Tracks[_currentTrackIndex];
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata))
             {
                 return metadata.Id;
@@ -870,8 +715,8 @@ namespace MusicSalesApp.Components.Pages
             }
 
             // Fall back to fetching on-demand
-            if (_albumInfo == null || index < 0 || index >= _albumInfo.Tracks.Count) return string.Empty;
-            return await GetTrackStreamUrlAsync(_albumInfo.Tracks[index].Name);
+            if (_playlistInfo == null || index < 0 || index >= _playlistInfo.Tracks.Count) return string.Empty;
+            return await GetTrackStreamUrlAsync(_playlistInfo.Tracks[index].Name);
         }
 
         /// <summary>
@@ -900,10 +745,10 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetTrackAlbumArtUrl(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return "";
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return "";
 
             // For now, all tracks share the album cover art
-            return _albumInfo.CoverArtUrl;
+            return _playlistInfo.CoverArtUrl;
         }
 
         protected bool IsCurrentTrack(int index)
@@ -941,7 +786,7 @@ namespace MusicSalesApp.Components.Pages
 
         protected async Task PlayTrack(int index)
         {
-            if (_albumInfo == null || index >= _albumInfo.Tracks.Count) return;
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return;
 
             _currentTrackIndex = index;
             
@@ -1091,11 +936,11 @@ namespace MusicSalesApp.Components.Pages
         /// </summary>
         private void GenerateShuffleOrder()
         {
-            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+            if (_playlistInfo == null || _playlistInfo.Tracks.Count == 0)
                 return;
 
             // Create a list of all track indices except the current one
-            var remainingIndices = Enumerable.Range(0, _albumInfo.Tracks.Count)
+            var remainingIndices = Enumerable.Range(0, _playlistInfo.Tracks.Count)
                 .Where(i => i != _currentTrackIndex)
                 .ToList();
 
@@ -1120,7 +965,7 @@ namespace MusicSalesApp.Components.Pages
         /// </summary>
         private int? GetNextTrackIndex()
         {
-            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+            if (_playlistInfo == null || _playlistInfo.Tracks.Count == 0)
                 return null;
 
             if (_shuffleEnabled)
@@ -1151,7 +996,7 @@ namespace MusicSalesApp.Components.Pages
             else
             {
                 // Normal sequential playback
-                if (_currentTrackIndex < _albumInfo.Tracks.Count - 1)
+                if (_currentTrackIndex < _playlistInfo.Tracks.Count - 1)
                 {
                     return _currentTrackIndex + 1;
                 }
@@ -1172,7 +1017,7 @@ namespace MusicSalesApp.Components.Pages
         /// </summary>
         private int? GetPreviousTrackIndex()
         {
-            if (_albumInfo == null || _albumInfo.Tracks.Count == 0)
+            if (_playlistInfo == null || _playlistInfo.Tracks.Count == 0)
                 return null;
 
             if (_shuffleEnabled)

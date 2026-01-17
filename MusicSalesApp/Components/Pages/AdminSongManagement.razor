@@ -56,62 +56,17 @@ else
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            if (!song.IsAlbum)
+                            if (!string.IsNullOrEmpty(song.SongImageUrl))
                             {
-                                if (!string.IsNullOrEmpty(song.SongImageUrl))
-                                {
-                                    <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
-                                }
-                                else
-                                {
-                                    <span class="text-muted">No image</span>
-                                }
+                                <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
                             }
                             else
                             {
-                                <span class="text-muted">N/A</span>
+                                <span class="text-muted">No image</span>
                             }
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn HeaderText="Album Cover" Width="120" Field="@nameof(SongAdminViewModel.AlbumCoverImageUrl)" AllowFiltering="false">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (song.IsAlbum)
-                            {
-                                if (!string.IsNullOrEmpty(song.AlbumCoverImageUrl))
-                                {
-                                    <img src="@song.AlbumCoverImageUrl" alt="Album cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
-                                }
-                                else
-                                {
-                                    <span class="text-muted">No image</span>
-                                }
-                            }
-                            else
-                            {
-                                <span class="text-muted">N/A</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.IsAlbum)" HeaderText="Album" Width="100">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (song.IsAlbum)
-                            {
-                                <span class="badge bg-success">Yes</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-secondary">No</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.AlbumName)" HeaderText="Album Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.SongTitle)" HeaderText="Song Title" Width="150"></GridColumn>
                 <GridColumn HeaderText="MP3 Blob Path" Width="200" Field="@nameof(SongAdminViewModel.Mp3FileName)">
                     <Template>
@@ -132,10 +87,9 @@ else
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
-                            var imagePath = song.IsAlbum ? song.AlbumCoverBlobName : song.JpegFileName;
-                            if (!string.IsNullOrEmpty(imagePath))
+                            if (!string.IsNullOrEmpty(song.JpegFileName))
                             {
-                                <small class="text-break">@imagePath</small>
+                                <small class="text-break">@song.JpegFileName</small>
                             }
                             else
                             {
@@ -152,21 +106,7 @@ else
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.TrackNumber)" HeaderText="Track #" Width="100">
-                    <Template>
-                        @{
-                            var song = (context as SongAdminViewModel);
-                            if (song.TrackNumber.HasValue)
-                            {
-                                <span>@song.TrackNumber.Value</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">-</span>
-                            }
-                        }
-                    </Template>
-                </GridColumn>
+
                 <GridColumn Field="@nameof(SongAdminViewModel.TrackLength)" HeaderText="Track Length" Width="120">
                     <Template>
                         @{
@@ -202,7 +142,7 @@ else
         </SfGrid>
 
         <div class="mt-3">
-            <p class="text-muted">Total: @_totalCount songs/albums</p>
+            <p class="text-muted">Total: @_totalCount songs</p>
         </div>
     </div>
 }
@@ -239,16 +179,7 @@ else
                         </div>
                     </div>
 
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="e-label">Album (True/False)</label>
-                            <SfTextBox Value="@(_editingSong.IsAlbum ? "True" : "False")" Enabled="false" CssClass="e-outline" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="e-label">Album Name</label>
-                            <SfTextBox Value="@_editingSong.AlbumName" Enabled="false" CssClass="e-outline" />
-                        </div>
-                    </div>
+
 
                     <div class="row mb-3">
                         <div class="col-md-12">
@@ -263,16 +194,8 @@ else
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
                                           DataSource="@(new List<string> { "Rock", "Country", "Pop" })" 
                                           Placeholder="-- Select Genre --"
-                                          Enabled="@(!_editingSong.IsAlbum)"
                                           CssClass="e-outline">
                             </SfDropDownList>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="e-label">Track # @(_editingSong.IsAlbum ? "*" : "")</label>
-                            <SfNumericTextBox @bind-Value="_editTrackNumber" Format="N0" 
-                                            Enabled="@(!_editingSong.IsAlbum && !string.IsNullOrEmpty(_editingSong.AlbumName))"
-                                            Placeholder="@(_editingSong.IsAlbum ? "Required" : "N/A")"
-                                            CssClass="e-outline" />
                         </div>
                     </div>
 
@@ -294,54 +217,19 @@ else
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Song Cover Image</label>
-                            @if (!_editingSong.IsAlbum)
+                            @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
                             {
-                                @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
-                                {
-                                    <div class="mb-2">
-                                        <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
-                                    </div>
-                                }
-                                <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
-                                <small class="text-muted">Upload a new song cover image (JPEG or PNG)</small>
-                                @if (_songImageFile != null)
-                                {
-                                    <div class="mt-2 text-success">
-                                        <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
-                                    </div>
-                                }
+                                <div class="mb-2">
+                                    <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
+                                </div>
                             }
-                            else
+                            <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
+                            <small class="text-muted">Upload a new song cover image (JPEG or PNG)</small>
+                            @if (_songImageFile != null)
                             {
-                                <p class="text-muted">N/A (Album entries don't have song covers)</p>
-                            }
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Album Cover Image</label>
-                            @if (_editingSong.IsAlbum)
-                            {
-                                @if (!string.IsNullOrEmpty(_editingSong.AlbumCoverImageUrl))
-                                {
-                                    <div class="mb-2">
-                                        <img src="@_editingSong.AlbumCoverImageUrl" alt="Current album cover" class="img-thumbnail" style="max-width: 200px;" />
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="alert alert-warning mb-2">No album cover found</div>
-                                }
-                                <InputFile OnChange="HandleAlbumImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
-                                <small class="text-muted">Upload a new album cover image (JPEG or PNG)</small>
-                                @if (_albumImageFile != null)
-                                {
-                                    <div class="mt-2 text-success">
-                                        <i class="bi bi-check-circle"></i> New file selected: @_albumImageFile.Name
-                                    </div>
-                                }
-                            }
-                            else
-                            {
-                                <p class="text-muted">N/A (Not an album)</p>
+                                <div class="mt-2 text-success">
+                                    <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
+                                </div>
                             }
                         </div>
                     </div>

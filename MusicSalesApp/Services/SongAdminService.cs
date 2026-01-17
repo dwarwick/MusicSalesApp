@@ -45,10 +45,6 @@ namespace MusicSalesApp.Services
                 {
                     song.SongImageUrl = _storageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
                 }
-                if (!string.IsNullOrEmpty(song.AlbumCoverBlobName))
-                {
-                    song.AlbumCoverImageUrl = _storageService.GetReadSasUri(song.AlbumCoverBlobName, TimeSpan.FromHours(1)).ToString();
-                }
             }
 
             _logger.LogDebug("Returning {Count} of {Total} songs (Skip: {Skip}, Take: {Take})", 
