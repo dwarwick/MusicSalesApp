@@ -90,6 +90,7 @@ public class RecommendationService : IRecommendationService
                 return await context.RecommendedPlaylists
                     .Include(rp => rp.SongMetadata)
                     .Where(rp => rp.UserId == userId)
+                    .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled) // Filter out disabled songs
                     .OrderBy(rp => rp.DisplayOrder)
                     .ToListAsync();
             }
@@ -145,9 +146,10 @@ public class RecommendationService : IRecommendationService
 
             // Validate that recommended song IDs exist in SQL Server SongMetadata table
             // (Supabase may return IDs that don't exist locally)
+            // Also filter out disabled songs
             var recommendedSongIds = recommendedSongs.Select(r => r.SongId).ToList();
             var validSongIds = await context.SongMetadata
-                .Where(sm => recommendedSongIds.Contains(sm.Id) && !sm.IsAlbumCover)
+                .Where(sm => recommendedSongIds.Contains(sm.Id) && !sm.IsAlbumCover && sm.IsEnabled)
                 .Select(sm => sm.Id)
                 .ToListAsync();
             
@@ -424,10 +426,10 @@ public class RecommendationService : IRecommendationService
             .Take(MaxRecommendations)
             .ToListAsync();
 
-        // Verify these songs exist and are playable (have Mp3BlobPath)
+        // Verify these songs exist and are playable (have Mp3BlobPath) and enabled
         var validSongIds = await context.SongMetadata
             .Where(sm => songScores.Select(s => s.SongId).Contains(sm.Id))
-            .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null)
+            .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null && sm.IsEnabled)
             .Select(sm => sm.Id)
             .ToListAsync();
 
@@ -471,10 +473,10 @@ public class RecommendationService : IRecommendationService
             .Take(limit * 2) // Get extra to account for filtering
             .ToListAsync();
 
-        // Verify these songs exist and are playable
+        // Verify these songs exist and are playable and enabled
         var validSongs = await context.SongMetadata
             .Where(sm => popularByLikes.Select(p => p.SongId).Contains(sm.Id))
-            .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null)
+            .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null && sm.IsEnabled)
             .Select(sm => new { sm.Id, sm.NumberOfStreams })
             .ToListAsync();
 
@@ -497,7 +499,7 @@ public class RecommendationService : IRecommendationService
             var existingSongIds = results.Select(r => r.SongId).Concat(excludeSongIds).ToHashSet();
             
             var additionalSongs = await context.SongMetadata
-                .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null)
+                .Where(sm => !sm.IsAlbumCover && sm.Mp3BlobPath != null && sm.IsEnabled)
                 .Where(sm => !existingSongIds.Contains(sm.Id))
                 .OrderByDescending(sm => sm.NumberOfStreams)
                 .Take(limit - results.Count)

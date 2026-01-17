@@ -161,6 +161,26 @@ public class SongStatusService : ISongStatusService
         }
     }
 
+    public async Task<List<SongStatusHistory>> GetAllStatusHistoryAsync()
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongStatusHistories
+                .Include(h => h.SongMetadata)
+                    .ThenInclude(s => s.Creator)
+                    .ThenInclude(c => c.User)
+                .Include(h => h.ChangedByUser)
+                .OrderByDescending(h => h.ChangedAt)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all status history");
+            throw;
+        }
+    }
+
     private async Task SendDisableNotificationEmailAsync(SongMetadata song, string reason, string baseUrl)
     {
         try

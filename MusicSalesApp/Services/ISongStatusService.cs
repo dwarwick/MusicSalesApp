@@ -33,4 +33,10 @@ public interface ISongStatusService
     /// <param name="songMetadataId">The ID of the song</param>
     /// <returns>List of status history records</returns>
     Task<List<SongStatusHistory>> GetSongStatusHistoryAsync(int songMetadataId);
+
+    /// <summary>
+    /// Gets all status history records for all songs
+    /// </summary>
+    /// <returns>List of all status history records with related data</returns>
+    Task<List<SongStatusHistory>> GetAllStatusHistoryAsync();
 }

@@ -1,0 +1,117 @@
+@page "/admin/song-status-history"
+@inherits AdminSongStatusHistoryModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Song Status History</PageTitle>
+
+<div class="container-fluid my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-clock-history me-2"></i>Song Status History</h3>
+            <p class="text-muted mb-0">View history of song enable/disable actions</p>
+        </div>
+        <div class="d-flex gap-2">
+            <SfButton CssClass="e-info" OnClick="ExportToExcel">
+                <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+            </SfButton>
+            <SfButton CssClass="e-primary" OnClick="ExportToPdf">
+                <i class="bi bi-file-earmark-pdf me-1"></i> Export to PDF
+            </SfButton>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading status history...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        <div id="grid-container">
+            <SfGrid @ref="_grid" 
+                    TValue="SongStatusHistoryViewModel"
+                    DataSource="@_statusHistory"
+                    AllowPaging="true" 
+                    AllowSorting="true" 
+                    AllowFiltering="true"
+                    AllowExcelExport="true"
+                    AllowPdfExport="true"
+                    Height="500px">
+                <GridPageSettings PageSize="15"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn HeaderText="Actions" Width="200" AllowFiltering="false" AllowSorting="false">
+                        <Template>
+                            @{
+                                var item = (context as SongStatusHistoryViewModel);
+                                <div class="d-flex gap-2">
+                                    <SfButton OnClick="() => NavigateToSongManagement(item)" CssClass="e-btn e-small e-primary" title="Edit Song">
+                                        <i class="bi bi-music-note-beamed"></i>
+                                    </SfButton>
+                                    @if (item.CreatorUserId.HasValue)
+                                    {
+                                        <SfButton OnClick="() => NavigateToUserManagement(item)" CssClass="e-btn e-small e-info" title="View User">
+                                            <i class="bi bi-person"></i>
+                                        </SfButton>
+                                    }
+                                </div>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.CreatorName)" HeaderText="Creator" Width="150"></GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.SongTitle)" HeaderText="Song Title" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.IsEnabled)" HeaderText="Status" Width="100">
+                        <Template>
+                            @{
+                                var item = (context as SongStatusHistoryViewModel);
+                                if (item.IsEnabled)
+                                {
+                                    <span class="badge bg-success">Enabled</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Disabled</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.StatusText)" HeaderText="Status" Width="100" Visible="false"></GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.Reason)" HeaderText="Reason" Width="250">
+                        <Template>
+                            @{
+                                var item = (context as SongStatusHistoryViewModel);
+                                <small class="text-break">@item.Reason</small>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.ChangedAt)" HeaderText="Date" Width="180" Format="g">
+                        <Template>
+                            @{
+                                var item = (context as SongStatusHistoryViewModel);
+                                <span>@item.ChangedAt.ToLocalTime().ToString("g")</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(SongStatusHistoryViewModel.ChangedByUserName)" HeaderText="Changed By" Width="150"></GridColumn>
+                </GridColumns>
+            </SfGrid>
+
+            <div class="mt-3">
+                <p class="text-muted">Total: @_statusHistory.Count records</p>
+            </div>
+        </div>
+    }
+</div>

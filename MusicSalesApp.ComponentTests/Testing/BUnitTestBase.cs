@@ -50,6 +50,7 @@ public abstract class BUnitTestBase
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
+    protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -79,6 +80,7 @@ public abstract class BUnitTestBase
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
+        MockSongStatusService = new Mock<ISongStatusService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -235,6 +237,16 @@ public abstract class BUnitTestBase
         MockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(It.IsAny<int>()))
             .ReturnsAsync((int?)null);
 
+        // Setup default returns for ISongStatusService methods
+        MockSongStatusService.Setup(x => x.GetAllStatusHistoryAsync())
+            .ReturnsAsync(new List<SongStatusHistory>());
+        MockSongStatusService.Setup(x => x.GetSongStatusHistoryAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<SongStatusHistory>());
+        MockSongStatusService.Setup(x => x.DisableSongAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        MockSongStatusService.Setup(x => x.EnableSongAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -267,6 +279,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
+        TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

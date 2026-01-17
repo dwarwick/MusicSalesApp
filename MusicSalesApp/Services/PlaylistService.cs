@@ -168,6 +168,7 @@ public class PlaylistService : IPlaylistService
             return await context.UserPlaylists
                 .Include(up => up.SongMetadata)
                 .Where(up => up.PlaylistId == playlistId)
+                .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled) // Filter out disabled songs
                 .OrderBy(up => up.AddedAt)
                 .ToListAsync();
         }
@@ -280,8 +281,10 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
-            // Check if this is a valid song (not an album cover)
-            return !metadata.IsAlbumCover && !string.IsNullOrEmpty(metadata.Mp3BlobPath);
+            // Check if this is a valid song (not an album cover, is enabled, and has MP3)
+            return !metadata.IsAlbumCover && 
+                   metadata.IsEnabled && 
+                   !string.IsNullOrEmpty(metadata.Mp3BlobPath);
         }
         catch (Exception ex)
         {
@@ -312,9 +315,10 @@ public class PlaylistService : IPlaylistService
                 .Select(up => up.SongMetadataId)
                 .ToListAsync();
 
-            // Get all active songs that are not album covers and not already in the playlist
+            // Get all active and enabled songs that are not album covers and not already in the playlist
             var availableSongs = await context.SongMetadata
                 .Where(sm => sm.IsActive && 
+                             sm.IsEnabled && // Filter out disabled songs
                              !sm.IsAlbumCover && 
                              !string.IsNullOrEmpty(sm.Mp3BlobPath) &&
                              !playlistSongIds.Contains(sm.Id))
