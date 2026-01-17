@@ -377,71 +377,28 @@ public class TaxBanditsController : ControllerBase
             }
 
             // Get the signature and timestamp from headers
+            // Note: Header names may vary in casing, try both variations
             var signature = Request.Headers["Signature"].FirstOrDefault();
-            var timestamp = Request.Headers["TimeStamp"].FirstOrDefault();
+            var timestamp = Request.Headers["TimeStamp"].FirstOrDefault() 
+                         ?? Request.Headers["Timestamp"].FirstOrDefault();
 
             if (string.IsNullOrWhiteSpace(signature) || string.IsNullOrWhiteSpace(timestamp))
             {
-                _logger.LogWarning("Missing TaxBandits webhook signature headers");
+                _logger.LogWarning("Missing TaxBandits webhook signature headers. Signature present: {SigPresent}, Timestamp present: {TsPresent}", 
+                    !string.IsNullOrWhiteSpace(signature), !string.IsNullOrWhiteSpace(timestamp));
                 return false;
             }
 
-            // Validate timestamp to prevent replay attacks (allow 5 minute window)
-            // TaxBandits may send timestamps in various formats, with or without timezone info
-            DateTimeOffset? webhookTime = null;
-            
-            // Try parsing with explicit formats first
-            var formats = new[]
-            {
-                "MM/dd/yyyy hh:mm:ss.fff tt zzz",    // With timezone offset
-                "MM/dd/yyyy hh:mm:ss.fff tt",        // Without timezone offset
-                "MM/dd/yyyy HH:mm:ss.fff zzz",       // 24-hour with timezone
-                "MM/dd/yyyy HH:mm:ss.fff",           // 24-hour without timezone
-                "yyyy-MM-dd'T'HH:mm:ss.fffK",        // ISO 8601
-                "yyyy-MM-dd HH:mm:ss zzz",           // ISO-like with timezone
-            };
+            // Log for debugging
+            _logger.LogInformation("TaxBandits webhook signature validation - Timestamp: {Timestamp}", timestamp);
 
-            foreach (var format in formats)
-            {
-                if (DateTimeOffset.TryParseExact(timestamp, format, 
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AllowWhiteSpaces, 
-                    out var parsed))
-                {
-                    webhookTime = parsed;
-                    break;
-                }
-            }
-
-            // Fallback to general parsing if specific formats don't work
-            if (!webhookTime.HasValue && DateTimeOffset.TryParse(timestamp, 
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AllowWhiteSpaces,
-                out var generalParsed))
-            {
-                webhookTime = generalParsed;
-            }
-
-            if (webhookTime.HasValue)
-            {
-                var timeDifference = DateTimeOffset.UtcNow - webhookTime.Value.ToUniversalTime();
-                if (Math.Abs(timeDifference.TotalMinutes) > 5)
-                {
-                    _logger.LogWarning(
-                        "TaxBandits webhook timestamp is outside acceptable window. Timestamp: {Timestamp}, Parsed: {Parsed}, Current: {Current}, Difference: {Difference} minutes",
-                        timestamp, webhookTime.Value.ToUniversalTime(), DateTimeOffset.UtcNow, timeDifference.TotalMinutes);
-                    return false;
-                }
-            }
-            else
-            {
-                _logger.LogWarning("TaxBandits webhook timestamp could not be parsed: {Timestamp}", timestamp);
-                // Continue with signature validation - timestamp format may vary
-            }
-
-            // Compute expected signature: HMAC-SHA256(clientId + "\n" + timestamp, clientSecret)
+            // Per TaxBandits docs: message = ClientId + '\n' + Timestamp
+            // Then compute HMAC-SHA256 with ClientSecret and compare base64 result
             var message = $"{clientId}\n{timestamp}";
             var expectedSignature = ComputeHmacSha256Base64(message, clientSecret);
+
+            _logger.LogDebug("TaxBandits signature validation - Message: {Message}, ClientId: {ClientId}", 
+                message.Replace("\n", "\\n"), clientId);
 
             // Use timing-safe comparison
             var isValid = CryptographicOperations.FixedTimeEquals(
@@ -451,8 +408,12 @@ public class TaxBanditsController : ControllerBase
             if (!isValid)
             {
                 _logger.LogWarning(
-                    "TaxBandits webhook signature mismatch. Expected: {Expected}, Received: {Received}",
-                    expectedSignature, signature);
+                    "TaxBandits webhook signature mismatch. Expected: {Expected}, Received: {Received}, Message used: {Message}",
+                    expectedSignature, signature, message.Replace("\n", "\\n"));
+            }
+            else
+            {
+                _logger.LogInformation("TaxBandits webhook signature validated successfully");
             }
 
             return isValid;
