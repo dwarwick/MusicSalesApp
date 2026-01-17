@@ -88,13 +88,6 @@ public class Creator
     public bool PrimaryEmailConfirmed { get; set; } = false;
 
     /// <summary>
-    /// The commission percentage that the platform takes from each sale.
-    /// Default is 15% (0.15).
-    /// </summary>
-    [Column(TypeName = "decimal(5,4)")]
-    public decimal CommissionRate { get; set; } = 0.15m;
-
-    /// <summary>
     /// The rate paid per stream in USD (e.g., 0.005 for $5 per 1000 streams).
     /// This is set when the creator is onboarded and locked in for the lifetime of the creator account.
     /// </summary>

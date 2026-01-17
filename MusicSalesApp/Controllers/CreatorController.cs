@@ -78,7 +78,6 @@ public class CreatorController : ControllerBase
             Bio = creator.Bio,
             PaymentsReceivable = creator.PaymentsReceivable,
             PrimaryEmailConfirmed = creator.PrimaryEmailConfirmed,
-            CommissionRate = creator.CommissionRate,
             OnboardedAt = creator.OnboardedAt,
             ReferralUrl = creator.OnboardingStatus == CreatorOnboardingStatus.Pending ? creator.PayPalReferralUrl : null
         });
@@ -306,7 +305,6 @@ public class CreatorController : ControllerBase
             IsActive = s.IsActive,
             PaymentsReceivable = s.PaymentsReceivable,
             PrimaryEmailConfirmed = s.PrimaryEmailConfirmed,
-            CommissionRate = s.CommissionRate,
             CreatedAt = s.CreatedAt,
             OnboardedAt = s.OnboardedAt
         }));
@@ -362,22 +360,6 @@ public class CreatorController : ControllerBase
         {
             return NotFound(ex.Message);
         }
-    }
-
-    /// <summary>
-    /// Updates a creator's commission rate (admin only).
-    /// </summary>
-    [HttpPut("{creatorId}/commission")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateCommissionRate(int creatorId, [FromBody] UpdateCommissionRequest request)
-    {
-        if (request.CommissionRate < 0 || request.CommissionRate > 1)
-        {
-            return BadRequest("Commission rate must be between 0 and 1 (0% to 100%).");
-        }
-
-        // TODO: Implement commission rate update in CreatorService
-        return Ok(new { success = true });
     }
 
     /// <summary>
@@ -469,7 +451,6 @@ public class CreatorStatusResponse
     public string? Bio { get; set; }
     public bool PaymentsReceivable { get; set; }
     public bool PrimaryEmailConfirmed { get; set; }
-    public decimal CommissionRate { get; set; }
     public DateTime? OnboardedAt { get; set; }
     public string? ReferralUrl { get; set; }
 }
@@ -518,14 +499,8 @@ public class CreatorListItem
     public bool IsActive { get; set; }
     public bool PaymentsReceivable { get; set; }
     public bool PrimaryEmailConfirmed { get; set; }
-    public decimal CommissionRate { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? OnboardedAt { get; set; }
-}
-
-public class UpdateCommissionRequest
-{
-    public decimal CommissionRate { get; set; }
 }
 
 public class CreatorSongItem

@@ -35,18 +35,6 @@ public interface IAppSettingsService
     Task SetSubscriptionPriceAsync(decimal price);
 
     /// <summary>
-    /// Gets the platform commission rate for creator sales.
-    /// </summary>
-    /// <returns>The commission rate as a decimal (0.15 = 15%), or the default value if not set.</returns>
-    Task<decimal> GetCommissionRateAsync();
-
-    /// <summary>
-    /// Sets the platform commission rate for creator sales.
-    /// </summary>
-    /// <param name="rate">The commission rate as a decimal (0.15 = 15%).</param>
-    Task SetCommissionRateAsync(decimal rate);
-
-    /// <summary>
     /// Gets the stream pay rate for creators.
     /// </summary>
     /// <returns>The stream pay rate as a decimal (0.005 = $5 per 1000 streams), or the default value if not set.</returns>

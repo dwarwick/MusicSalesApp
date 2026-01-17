@@ -43,12 +43,12 @@ public interface IPayPalPartnerService
 
     /// <summary>
     /// Creates a multi-party order where the creator is the merchant of record.
-    /// Platform commission is split using PayPal's payment platform partner fee.
+    /// Platform fee is split using PayPal's payment platform partner fee.
     /// </summary>
     /// <param name="creator">The creator who is the merchant of record.</param>
     /// <param name="items">The items being purchased.</param>
     /// <param name="totalAmount">The total amount of the order.</param>
-    /// <param name="platformFee">The platform fee (commission) amount.</param>
+    /// <param name="platformFee">The platform fee amount.</param>
     /// <returns>The created order details.</returns>
     Task<MultiPartyOrderResult?> CreateMultiPartyOrderAsync(Creator creator, IEnumerable<OrderItem> items, decimal totalAmount, decimal platformFee);
 
