@@ -154,6 +154,13 @@ public class CreatorController : ControllerBase
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
         try
         {
+            // Store the PayeeRef (email) used for the W-9 request
+            // Note: user.Email is already validated as non-empty at the start of this method
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
+            }
+            
             var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
             if (w9Result.Success)
             {

@@ -232,6 +232,26 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<Creator> UpdateTaxBanditsPayeeRefAsync(int creatorId, string payeeRef)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        creator.TaxBanditsPayeeRef = payeeRef;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated TaxBandits PayeeRef for creator {CreatorId} to {PayeeRef}", creatorId, payeeRef);
+        return creator;
+    }
+
+    /// <inheritdoc />
     public async Task<bool> IsActiveCreatorAsync(int userId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

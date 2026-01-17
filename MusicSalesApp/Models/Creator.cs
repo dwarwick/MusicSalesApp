@@ -70,6 +70,13 @@ public class Creator
     public DateTime? TaxFormCompletedAt { get; set; }
 
     /// <summary>
+    /// The PayeeRef used in TaxBandits W-9/W-8 requests.
+    /// This is typically the user's email address and is used to correlate webhook callbacks.
+    /// </summary>
+    [MaxLength(255)]
+    public string? TaxBanditsPayeeRef { get; set; }
+
+    /// <summary>
     /// Whether the creator has granted the necessary permissions to the platform.
     /// This is required for multi-party payments.
     /// </summary>

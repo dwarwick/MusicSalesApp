@@ -57,6 +57,14 @@ public interface ICreatorService
     Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status);
 
     /// <summary>
+    /// Updates the creator's TaxBandits PayeeRef (typically the email used for W-9/W-8 requests).
+    /// </summary>
+    /// <param name="creatorId">The creator ID</param>
+    /// <param name="payeeRef">The PayeeRef value (typically the user's email)</param>
+    /// <returns>The updated creator</returns>
+    Task<Creator> UpdateTaxBanditsPayeeRefAsync(int creatorId, string payeeRef);
+
+    /// <summary>
     /// Checks if a user is an active creator who can upload and sell music.
     /// </summary>
     Task<bool> IsActiveCreatorAsync(int userId);
