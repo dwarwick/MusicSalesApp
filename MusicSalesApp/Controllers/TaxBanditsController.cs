@@ -479,7 +479,10 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Converts a country name to ISO-2 country code.
-    /// This is a simplified implementation - in production, use a proper country mapping library.
+    /// This is a simplified implementation - in production, consider:
+    /// - Using a library like NuGet package ISO3166 for comprehensive country data
+    /// - Extracting mappings to a configuration file or database
+    /// - Using TaxBandits' country code directly if available in the response
     /// </summary>
     private static string? ConvertCountryNameToIso2(string? countryName)
     {
@@ -491,6 +494,7 @@ public class TaxBanditsController : ControllerBase
             return null;
 
         // Common country mappings - extend as needed
+        // TODO: Consider moving to configuration or using a country code library
         var countryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             { "Mexico", "MX" },

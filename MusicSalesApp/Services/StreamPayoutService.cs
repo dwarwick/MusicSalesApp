@@ -155,7 +155,11 @@ public class StreamPayoutService : IStreamPayoutService
 
         var totalNetAmount = totalGrossAmount - totalWithheldAmount;
 
-        // Check if total gross meets minimum threshold
+        // Check if total gross meets minimum threshold.
+        // Using GROSS amount because:
+        // 1. The threshold represents minimum earnings to process a payout
+        // 2. Even with withholding, the creator has earned this amount
+        // 3. For 1099-NEC reporting, the gross amount is what gets reported
         if (totalGrossAmount < MinimumPayoutThreshold)
         {
             _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
@@ -411,6 +415,12 @@ public class StreamPayoutService : IStreamPayoutService
                 return false;
             }
 
+            if (string.IsNullOrWhiteSpace(creator.User.Email))
+            {
+                _logger.LogError("Creator {CreatorId} user has no email address", creatorId);
+                return false;
+            }
+
             // Load song metadata for each payout record
             var songIds = payoutRecords.Select(p => p.SongMetadataId).ToList();
             var songs = await context.SongMetadata
@@ -433,7 +443,7 @@ public class StreamPayoutService : IStreamPayoutService
 
             var subject = $"StreamTunes - Stream Payout Receipt (${totalNetAmount:F2})";
             
-            return await _emailService.SendEmailAsync(creator.User.Email!, subject, body);
+            return await _emailService.SendEmailAsync(creator.User.Email, subject, body);
         }
         catch (Exception ex)
         {
