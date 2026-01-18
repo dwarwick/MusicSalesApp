@@ -120,33 +120,46 @@ public class StreamPayoutService : IStreamPayoutService
 
         // Calculate total earnings for this payout
         var payoutRecords = new List<StreamPayout>();
-        decimal totalAmount = 0;
+        decimal totalGrossAmount = 0;
+        decimal totalWithheldAmount = 0;
+
+        // Get the effective withholding rate for this creator
+        var withholdingRate = creator.EffectiveWithholdingRate;
 
         foreach (var song in creatorSongs)
         {
             var unpaidStreams = song.NumberOfStreams - song.StreamsAtLastPayout;
-            var amountForSong = unpaidStreams * creator.StreamPayRate;
+            var grossAmountForSong = unpaidStreams * creator.StreamPayRate;
 
-            if (amountForSong > 0)
+            if (grossAmountForSong > 0)
             {
+                var withheldAmountForSong = grossAmountForSong * withholdingRate;
+                var netAmountForSong = grossAmountForSong - withheldAmountForSong;
+
                 payoutRecords.Add(new StreamPayout
                 {
                     CreatorId = creator.Id,
                     SongMetadataId = song.Id,
                     NumberOfStreams = unpaidStreams,
                     RatePerStream = creator.StreamPayRate,
-                    AmountPaid = amountForSong
+                    GrossAmount = grossAmountForSong,
+                    WithholdingRate = withholdingRate,
+                    WithheldAmount = withheldAmountForSong,
+                    NetAmount = netAmountForSong
                 });
 
-                totalAmount += amountForSong;
+                totalGrossAmount += grossAmountForSong;
+                totalWithheldAmount += withheldAmountForSong;
             }
         }
 
-        // Check if total meets minimum threshold
-        if (totalAmount < MinimumPayoutThreshold)
+        var totalNetAmount = totalGrossAmount - totalWithheldAmount;
+
+        // Check if total gross meets minimum threshold
+        if (totalGrossAmount < MinimumPayoutThreshold)
         {
             _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
-                creator.Id, totalAmount, MinimumPayoutThreshold);
+                creator.Id, totalGrossAmount, MinimumPayoutThreshold);
             return false;
         }
 
@@ -157,23 +170,27 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("=== Stream Payout Calculation Summary (Development Mode) ===");
             _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
             _logger.LogInformation("PayPal Email: {PayPalEmail}", creator.PayPalEmail ?? "NOT SET");
+            _logger.LogInformation("Tax Residency: {TaxResidency}", creator.TaxResidencyType);
+            _logger.LogInformation("Withholding Rate: {Rate:P2}", withholdingRate);
             _logger.LogInformation("Number of Songs with Unpaid Streams: {SongCount}", payoutRecords.Count);
             _logger.LogInformation("Total Unpaid Streams: {TotalStreams:N0}", payoutRecords.Sum(p => p.NumberOfStreams));
             _logger.LogInformation("Stream Pay Rate: ${Rate:F6} per stream", creator.StreamPayRate);
-            _logger.LogInformation("Total Calculated Amount: ${Amount:F2} USD", totalAmount);
+            _logger.LogInformation("Total Gross Amount: ${Amount:F2} USD", totalGrossAmount);
+            _logger.LogInformation("Total Withheld Amount: ${Amount:F2} USD", totalWithheldAmount);
+            _logger.LogInformation("Total Net Amount (to PayPal): ${Amount:F2} USD", totalNetAmount);
             
             _logger.LogInformation("--- Per-Song Breakdown ---");
-            foreach (var record in payoutRecords.OrderByDescending(p => p.AmountPaid))
+            foreach (var record in payoutRecords.OrderByDescending(p => p.GrossAmount))
             {
                 var songTitle = creatorSongs.FirstOrDefault(s => s.Id == record.SongMetadataId)?.SongTitle ?? "Unknown";
-                _logger.LogInformation("  Song: {Title} | Streams: {Streams:N0} | Amount: ${Amount:F2}",
-                    songTitle, record.NumberOfStreams, record.AmountPaid);
+                _logger.LogInformation("  Song: {Title} | Streams: {Streams:N0} | Gross: ${Gross:F2} | Withheld: ${Withheld:F2} | Net: ${Net:F2}",
+                    songTitle, record.NumberOfStreams, record.GrossAmount, record.WithheldAmount, record.NetAmount);
             }
             _logger.LogInformation("=== END Calculation Summary ===");
         }
 
-        // Process PayPal payout
-        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalAmount);
+        // Process PayPal payout - send the NET amount (after withholding)
+        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalNetAmount);
 
         if (string.IsNullOrEmpty(payPalTransactionId))
         {
@@ -195,11 +212,11 @@ public class StreamPayoutService : IStreamPayoutService
 
         await context.SaveChangesAsync();
 
-        // Send receipt email
-        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalAmount, payPalTransactionId);
+        // Send receipt email with gross amount for tax reporting purposes
+        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId);
 
-        _logger.LogInformation("Processed payout for creator {CreatorId}: ${Amount:F2} for {Songs} songs",
-            creator.Id, totalAmount, payoutRecords.Count);
+        _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2} for {Songs} songs",
+            creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, payoutRecords.Count);
 
         return true;
     }
@@ -375,7 +392,9 @@ public class StreamPayoutService : IStreamPayoutService
     public async Task<bool> SendPayoutReceiptEmailAsync(
         int creatorId,
         List<StreamPayout> payoutRecords,
-        decimal totalAmount,
+        decimal totalGrossAmount,
+        decimal totalWithheldAmount,
+        decimal totalNetAmount,
         string payPalTransactionId)
     {
         try
@@ -405,14 +424,16 @@ public class StreamPayoutService : IStreamPayoutService
                 creator,
                 payoutRecords,
                 songs,
-                totalAmount,
+                totalGrossAmount,
+                totalWithheldAmount,
+                totalNetAmount,
                 payPalTransactionId,
                 logoUrl,
                 baseUrl);
 
-            var subject = $"StreamTunes - Stream Payout Receipt (${totalAmount:F2})";
+            var subject = $"StreamTunes - Stream Payout Receipt (${totalNetAmount:F2})";
             
-            return await _emailService.SendEmailAsync(creator.User.Email, subject, body);
+            return await _emailService.SendEmailAsync(creator.User.Email!, subject, body);
         }
         catch (Exception ex)
         {
@@ -428,7 +449,9 @@ public class StreamPayoutService : IStreamPayoutService
         Creator creator,
         List<StreamPayout> payoutRecords,
         Dictionary<int, SongMetadata> songs,
-        decimal totalAmount,
+        decimal totalGrossAmount,
+        decimal totalWithheldAmount,
+        decimal totalNetAmount,
         string payPalTransactionId,
         string logoUrl,
         string baseUrl)
@@ -451,18 +474,83 @@ public class StreamPayoutService : IStreamPayoutService
         <p>You've received a payout for streams of your music on StreamTunes!</p>
         ");
 
-        // Payout summary
+        // Payout summary with withholding information
         body.Append($@"
         <div style='background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;'>
             <h3 style='margin-top: 0;'>Payout Summary</h3>
             <p><strong>Payment Date:</strong> {DateTime.UtcNow:MMMM dd, yyyy}</p>
             <p><strong>PayPal Transaction ID:</strong> {encodedTransactionId}</p>
-            <p><strong>Total Amount:</strong> <span style='font-size: 20px; color: #28a745;'>${totalAmount:F2}</span></p>
+            <p><strong>Gross Amount:</strong> ${totalGrossAmount:F2}</p>");
+
+        // Only show withholding if applicable
+        if (totalWithheldAmount > 0)
+        {
+            body.Append($@"
+            <p><strong>Tax Withheld:</strong> <span style='color: #dc3545;'>-${totalWithheldAmount:F2}</span></p>");
+        }
+
+        body.Append($@"
+            <p><strong>Net Amount Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalNetAmount:F2}</span></p>
         </div>
         ");
 
+        // Determine table columns based on whether there's withholding
+        var hasWithholding = payoutRecords.Any(p => p.WithheldAmount > 0);
+
         // Itemized song details table
-        body.Append(@"
+        if (hasWithholding)
+        {
+            body.Append(@"
+        <h3>Itemized Details</h3>
+        <table style='width: 100%; border-collapse: collapse; margin: 20px 0;'>
+            <thead>
+                <tr style='background-color: #e9ecef;'>
+                    <th style='padding: 10px; text-align: left; border: 1px solid #dee2e6;'>Song Title</th>
+                    <th style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>Streams</th>
+                    <th style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>Gross</th>
+                    <th style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>Withheld</th>
+                    <th style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>Net</th>
+                </tr>
+            </thead>
+            <tbody>
+        ");
+
+            foreach (var payout in payoutRecords.OrderByDescending(p => p.GrossAmount))
+            {
+                if (songs.TryGetValue(payout.SongMetadataId, out var song))
+                {
+                    var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                    var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
+                    
+                    body.Append($@"
+                <tr>
+                    <td style='padding: 10px; border: 1px solid #dee2e6;'>{encodedSongTitle}</td>
+                    <td style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>{payout.NumberOfStreams:N0}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.GrossAmount:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.WithheldAmount:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.NetAmount:F2}</td>
+                </tr>
+                ");
+                }
+            }
+
+            body.Append($@"
+            </tbody>
+            <tfoot>
+                <tr style='background-color: #f8f9fa; font-weight: bold;'>
+                    <td colspan='2' style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>Total:</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${totalGrossAmount:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${totalWithheldAmount:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${totalNetAmount:F2}</td>
+                </tr>
+            </tfoot>
+        </table>
+        ");
+        }
+        else
+        {
+            // Simplified table without withholding columns for US creators
+            body.Append(@"
         <h3>Itemized Details</h3>
         <table style='width: 100%; border-collapse: collapse; margin: 20px 0;'>
             <thead>
@@ -476,34 +564,35 @@ public class StreamPayoutService : IStreamPayoutService
             <tbody>
         ");
 
-        foreach (var payout in payoutRecords.OrderByDescending(p => p.AmountPaid))
-        {
-            if (songs.TryGetValue(payout.SongMetadataId, out var song))
+            foreach (var payout in payoutRecords.OrderByDescending(p => p.GrossAmount))
             {
-                var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
-                var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
-                
-                body.Append($@"
+                if (songs.TryGetValue(payout.SongMetadataId, out var song))
+                {
+                    var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                    var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
+                    
+                    body.Append($@"
                 <tr>
                     <td style='padding: 10px; border: 1px solid #dee2e6;'>{encodedSongTitle}</td>
                     <td style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>{payout.NumberOfStreams:N0}</td>
                     <td style='padding: 10px; text-align: center; border: 1px solid #dee2e6;'>${payout.RatePerStream:F6}</td>
-                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.AmountPaid:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${payout.GrossAmount:F2}</td>
                 </tr>
                 ");
+                }
             }
-        }
 
-        body.Append($@"
+            body.Append($@"
             </tbody>
             <tfoot>
                 <tr style='background-color: #f8f9fa; font-weight: bold;'>
                     <td colspan='3' style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>Total:</td>
-                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${totalAmount:F2}</td>
+                    <td style='padding: 10px; text-align: right; border: 1px solid #dee2e6;'>${totalNetAmount:F2}</td>
                 </tr>
             </tfoot>
         </table>
         ");
+        }
 
         // Footer
         body.Append($@"

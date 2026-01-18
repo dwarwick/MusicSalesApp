@@ -13,7 +13,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     {
     }
 
-    public DbSet<PayPalOrder> PayPalOrders { get; set; }
     public DbSet<SongMetadata> SongMetadata { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<UserPlaylist> UserPlaylists { get; set; }

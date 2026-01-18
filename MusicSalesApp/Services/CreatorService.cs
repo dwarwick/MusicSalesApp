@@ -139,6 +139,53 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<Creator> UpdateTaxFormStatusWithTaxDataAsync(
+        int creatorId,
+        TaxFormStatus status,
+        TaxResidencyType taxResidencyType,
+        string? taxResidencyCountry,
+        string? treatyCountry,
+        string? claimedTreatyArticle,
+        decimal withholdingRate,
+        DateTime? taxFormExpirationDate,
+        Guid? taxBanditsSubmissionId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        // Update tax form status
+        creator.TaxFormStatus = status;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        if (status == TaxFormStatus.Completed)
+        {
+            creator.TaxFormCompletedAt = DateTime.UtcNow;
+        }
+
+        // Update tax residency data
+        creator.TaxResidencyType = taxResidencyType;
+        creator.TaxResidencyCountry = taxResidencyCountry;
+        creator.TreatyCountry = treatyCountry;
+        creator.ClaimedTreatyArticle = claimedTreatyArticle;
+        creator.WithholdingRate = withholdingRate;
+        creator.TaxFormExpirationDate = taxFormExpirationDate;
+        creator.TaxBanditsSubmissionId = taxBanditsSubmissionId;
+        creator.LastVerifiedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Updated tax form status and tax data for creator {CreatorId}: Status={Status}, ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}",
+            creatorId, status, taxResidencyType, taxResidencyCountry, withholdingRate);
+        return creator;
+    }
+
+    /// <inheritdoc />
     public async Task<Creator> UpdateTaxBanditsPayeeRefAsync(int creatorId, string payeeRef)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

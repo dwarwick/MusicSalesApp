@@ -37,6 +37,31 @@ public interface ICreatorService
     Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status);
 
     /// <summary>
+    /// Updates the creator's tax form status along with full tax residency data.
+    /// Called when W-9 or W-8BEN form is completed via TaxBandits webhook.
+    /// </summary>
+    /// <param name="creatorId">The creator ID</param>
+    /// <param name="status">The new tax form status</param>
+    /// <param name="taxResidencyType">US for W-9 filers, Foreign for W-8BEN filers</param>
+    /// <param name="taxResidencyCountry">ISO-2 country code of tax residency</param>
+    /// <param name="treatyCountry">ISO-2 code of treaty country if claiming treaty benefits</param>
+    /// <param name="claimedTreatyArticle">The treaty article being claimed</param>
+    /// <param name="withholdingRate">The withholding rate as decimal (e.g., 0.30 for 30%)</param>
+    /// <param name="taxFormExpirationDate">When the tax form expires (W-8 only)</param>
+    /// <param name="taxBanditsSubmissionId">The TaxBandits submission ID for reference</param>
+    /// <returns>The updated creator</returns>
+    Task<Creator> UpdateTaxFormStatusWithTaxDataAsync(
+        int creatorId,
+        TaxFormStatus status,
+        TaxResidencyType taxResidencyType,
+        string? taxResidencyCountry,
+        string? treatyCountry,
+        string? claimedTreatyArticle,
+        decimal withholdingRate,
+        DateTime? taxFormExpirationDate,
+        Guid? taxBanditsSubmissionId);
+
+    /// <summary>
     /// Updates the creator's TaxBandits PayeeRef (typically the email used for W-9/W-8 requests).
     /// </summary>
     /// <param name="creatorId">The creator ID</param>

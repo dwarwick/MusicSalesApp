@@ -124,7 +124,8 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
-    /// Handles W-9 form status change webhook.
+    /// Handles W-9 form status change webhook for US persons.
+    /// Sets tax residency type to US with no withholding.
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
@@ -204,8 +205,24 @@ public class TaxBanditsController : ControllerBase
                     "W-9 completed for user {UserId}. Proceeding with creator role assignment.",
                     w9Request.UserId);
 
-                // Complete the creator onboarding - add Creator role
-                await CompleteCreatorOnboardingAsync(w9Request.UserId);
+                // Parse submission ID as Guid if possible
+                Guid? submissionGuid = null;
+                if (Guid.TryParse(submissionId, out var parsedGuid))
+                {
+                    submissionGuid = parsedGuid;
+                }
+
+                // Complete the creator onboarding with US tax residency
+                // US creators have 0% withholding (unless subject to backup withholding, which is handled separately)
+                await CompleteCreatorOnboardingWithTaxDataAsync(
+                    w9Request.UserId,
+                    TaxResidencyType.US,
+                    taxResidencyCountry: "US",
+                    treatyCountry: null,
+                    claimedTreatyArticle: null,
+                    withholdingRate: 0m, // No withholding for US creators
+                    taxFormExpirationDate: null, // W-9 forms don't expire
+                    taxBanditsSubmissionId: submissionGuid);
 
                 // Broadcast SignalR update to notify the user's browser
                 await BroadcastWebhookStatusAsync(
@@ -243,6 +260,7 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Handles W-8BEN form status change webhook (for non-US persons).
+    /// Extracts tax residency data including treaty benefits and withholding rates.
     /// </summary>
     private async Task<IActionResult> HandleFormW8WebhookAsync(JsonElement formW8, string rawBody)
     {
@@ -311,10 +329,29 @@ public class TaxBanditsController : ControllerBase
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-8BEN completed for user {UserId}. Proceeding with creator role assignment.",
+                    "W-8BEN completed for user {UserId}. Proceeding with creator role assignment and tax data extraction.",
                     w9Request.UserId);
 
-                await CompleteCreatorOnboardingAsync(w9Request.UserId);
+                // Extract W-8BEN tax residency data from FormData
+                var taxData = ExtractW8BenTaxData(formW8);
+                
+                // Parse submission ID as Guid if possible
+                Guid? submissionGuid = null;
+                if (Guid.TryParse(submissionId, out var parsedGuid))
+                {
+                    submissionGuid = parsedGuid;
+                }
+
+                // Complete creator onboarding with tax data
+                await CompleteCreatorOnboardingWithTaxDataAsync(
+                    w9Request.UserId,
+                    TaxResidencyType.Foreign,
+                    taxData.TaxResidencyCountry,
+                    taxData.TreatyCountry,
+                    taxData.ClaimedTreatyArticle,
+                    taxData.WithholdingRate,
+                    taxData.ExpirationDate,
+                    submissionGuid);
 
                 // Broadcast SignalR update to notify the user's browser
                 await BroadcastWebhookStatusAsync(
@@ -351,10 +388,170 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
-    /// Completes the creator onboarding process by updating the tax form status 
-    /// and adding the Creator role to the user if both onboarding processes are complete.
+    /// Extracts tax residency data from W-8BEN FormData.
     /// </summary>
-    private async Task CompleteCreatorOnboardingAsync(int userId)
+    private (string? TaxResidencyCountry, string? TreatyCountry, string? ClaimedTreatyArticle, decimal WithholdingRate, DateTime? ExpirationDate) ExtractW8BenTaxData(JsonElement formW8)
+    {
+        string? taxResidencyCountry = null;
+        string? treatyCountry = null;
+        string? claimedTreatyArticle = null;
+        decimal withholdingRate = 0.30m; // Default 30% if no treaty
+        DateTime? expirationDate = null;
+
+        try
+        {
+            if (formW8.TryGetProperty("FormData", out var formData))
+            {
+                // Extract CitizenOfCountry and convert to ISO-2 code
+                if (formData.TryGetProperty("CitizenOfCountry", out var citizenOfCountry))
+                {
+                    var countryName = citizenOfCountry.GetString();
+                    taxResidencyCountry = ConvertCountryNameToIso2(countryName);
+                    _logger.LogInformation("Extracted tax residency country: {Country} -> {Iso2}", countryName, taxResidencyCountry);
+                }
+
+                // Extract expiration date
+                if (formData.TryGetProperty("ExpiryDate", out var expiryDateElement))
+                {
+                    var expiryDateStr = expiryDateElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(expiryDateStr) && DateTime.TryParse(expiryDateStr, out var parsedDate))
+                    {
+                        expirationDate = parsedDate;
+                        _logger.LogInformation("Extracted tax form expiration date: {Date}", expirationDate);
+                    }
+                }
+
+                // Extract Tax Treaty Benefits if claimed
+                if (formData.TryGetProperty("TaxTreatyBenefits", out var taxTreatyBenefits) && 
+                    taxTreatyBenefits.ValueKind != JsonValueKind.Null)
+                {
+                    // Extract treaty country
+                    if (taxTreatyBenefits.TryGetProperty("BeneficiaryCountry", out var beneficiaryCountry))
+                    {
+                        var treatyCountryName = beneficiaryCountry.GetString();
+                        treatyCountry = ConvertCountryNameToIso2(treatyCountryName);
+                        _logger.LogInformation("Extracted treaty country: {Country} -> {Iso2}", treatyCountryName, treatyCountry);
+                    }
+
+                    // Extract claimed article
+                    if (taxTreatyBenefits.TryGetProperty("ClaimingProvArticlePara", out var articleElement))
+                    {
+                        var article = articleElement.GetString();
+                        if (taxTreatyBenefits.TryGetProperty("TypeOfIncome", out var incomeTypeElement))
+                        {
+                            var incomeType = incomeTypeElement.GetString();
+                            claimedTreatyArticle = !string.IsNullOrWhiteSpace(incomeType) 
+                                ? $"Article {article} – {incomeType}" 
+                                : $"Article {article}";
+                        }
+                        else
+                        {
+                            claimedTreatyArticle = $"Article {article}";
+                        }
+                        _logger.LogInformation("Extracted claimed treaty article: {Article}", claimedTreatyArticle);
+                    }
+
+                    // Extract withholding rate from treaty
+                    if (taxTreatyBenefits.TryGetProperty("RateOfWH", out var rateElement))
+                    {
+                        // RateOfWH is typically a percentage (e.g., 10 for 10%)
+                        if (rateElement.TryGetDecimal(out var ratePercent))
+                        {
+                            withholdingRate = ratePercent / 100m; // Convert to decimal (10 -> 0.10)
+                            _logger.LogInformation("Extracted treaty withholding rate: {Percent}% -> {Decimal}", ratePercent, withholdingRate);
+                        }
+                    }
+                }
+                else
+                {
+                    // No treaty benefits claimed - use default 30%
+                    _logger.LogInformation("No tax treaty benefits claimed, using default 30% withholding rate");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting W-8BEN tax data, using defaults");
+        }
+
+        return (taxResidencyCountry, treatyCountry, claimedTreatyArticle, withholdingRate, expirationDate);
+    }
+
+    /// <summary>
+    /// Converts a country name to ISO-2 country code.
+    /// This is a simplified implementation - in production, use a proper country mapping library.
+    /// </summary>
+    private static string? ConvertCountryNameToIso2(string? countryName)
+    {
+        if (string.IsNullOrWhiteSpace(countryName))
+            return null;
+
+        // Handle special case of "Other Country" first
+        if (countryName.Equals("Other Country", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Common country mappings - extend as needed
+        var countryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Mexico", "MX" },
+            { "Canada", "CA" },
+            { "United Kingdom", "GB" },
+            { "UK", "GB" },
+            { "Germany", "DE" },
+            { "France", "FR" },
+            { "Spain", "ES" },
+            { "Italy", "IT" },
+            { "Japan", "JP" },
+            { "China", "CN" },
+            { "India", "IN" },
+            { "Australia", "AU" },
+            { "Brazil", "BR" },
+            { "Argentina", "AR" },
+            { "Netherlands", "NL" },
+            { "Belgium", "BE" },
+            { "Switzerland", "CH" },
+            { "Sweden", "SE" },
+            { "Norway", "NO" },
+            { "Denmark", "DK" },
+            { "Finland", "FI" },
+            { "Ireland", "IE" },
+            { "Portugal", "PT" },
+            { "Austria", "AT" },
+            { "Poland", "PL" },
+            { "Russia", "RU" },
+            { "South Korea", "KR" },
+            { "Korea", "KR" },
+            { "Singapore", "SG" },
+            { "Hong Kong", "HK" },
+            { "Taiwan", "TW" },
+            { "New Zealand", "NZ" },
+            { "South Africa", "ZA" },
+            { "Mongolia", "MN" }
+        };
+
+        if (countryMap.TryGetValue(countryName, out var iso2))
+            return iso2;
+
+        // If country name is already a 2-letter code, return it
+        if (countryName.Length == 2)
+            return countryName.ToUpperInvariant();
+
+        return null;
+    }
+
+    /// <summary>
+    /// Completes the creator onboarding process with tax residency data.
+    /// Updates tax form status, stores tax data, and adds Creator role if both onboarding processes are complete.
+    /// </summary>
+    private async Task CompleteCreatorOnboardingWithTaxDataAsync(
+        int userId,
+        TaxResidencyType taxResidencyType,
+        string? taxResidencyCountry,
+        string? treatyCountry,
+        string? claimedTreatyArticle,
+        decimal withholdingRate,
+        DateTime? taxFormExpirationDate,
+        Guid? taxBanditsSubmissionId)
     {
         try
         {
@@ -366,8 +563,21 @@ public class TaxBanditsController : ControllerBase
                 return;
             }
 
-            // Update the creator's tax form status
-            await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
+            // Update the creator's tax form status and tax residency data
+            await _creatorService.UpdateTaxFormStatusWithTaxDataAsync(
+                creator.Id, 
+                TaxFormStatus.Completed,
+                taxResidencyType,
+                taxResidencyCountry,
+                treatyCountry,
+                claimedTreatyArticle,
+                withholdingRate,
+                taxFormExpirationDate,
+                taxBanditsSubmissionId);
+
+            _logger.LogInformation(
+                "Updated creator {CreatorId} tax data: ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}",
+                creator.Id, taxResidencyType, taxResidencyCountry, withholdingRate);
 
             // Reload creator to get updated status
             creator = await _creatorService.GetCreatorByUserIdAsync(userId);
