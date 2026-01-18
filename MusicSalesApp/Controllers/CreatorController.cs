@@ -139,6 +139,9 @@ public class CreatorController : ControllerBase
             creatorToUpdate.PayPalEmail = request.PayPalEmail;
             creatorToUpdate.PayPalAccountAffirmed = request.PayPalAccountAffirmed;
             creatorToUpdate.OnboardingStatus = CreatorOnboardingStatus.Completed;
+            // PaymentsReceivable and PrimaryEmailConfirmed are set to true based on user affirmation
+            // rather than PayPal verification. The business account onboarding flow has been removed.
+            // These fields are kept for backward compatibility with existing queries.
             creatorToUpdate.PaymentsReceivable = true;
             creatorToUpdate.PrimaryEmailConfirmed = true;
             creatorToUpdate.OnboardedAt = DateTime.UtcNow;
@@ -572,7 +575,11 @@ public class StartOnboardingResponse
 
 public class CompleteOnboardingRequest
 {
-    // No longer needed but kept for API compatibility
+    /// <summary>
+    /// PayPal Merchant ID. This field is no longer used since the PayPal business account
+    /// onboarding flow has been removed. Kept for API backward compatibility.
+    /// </summary>
+    [Obsolete("MerchantId is no longer used. PayPal business account onboarding has been removed.")]
     public string? MerchantId { get; set; }
 }
 

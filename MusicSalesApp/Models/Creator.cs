@@ -77,20 +77,24 @@ public class Creator
     public string? TaxBanditsPayeeRef { get; set; }
 
     /// <summary>
-    /// Whether the creator has granted the necessary permissions to the platform.
-    /// This is required for multi-party payments.
+    /// Whether the creator can receive payments. Previously verified by PayPal during business
+    /// account onboarding. Now set to true based on user affirmation (see PayPalAccountAffirmed).
+    /// Kept for backward compatibility with existing queries.
     /// </summary>
     public bool PaymentsReceivable { get; set; } = false;
 
     /// <summary>
-    /// Whether the creator's email has been confirmed with PayPal.
+    /// Whether the creator's primary email was confirmed. Previously verified by PayPal during
+    /// business account onboarding. Now set to true based on user affirmation.
+    /// Kept for backward compatibility with existing queries.
     /// </summary>
     public bool PrimaryEmailConfirmed { get; set; } = false;
 
     /// <summary>
     /// Whether the creator has affirmed they have a valid PayPal account in good standing
     /// that can receive payouts. This replaces the business account onboarding flow.
-    /// If false, the creator will not receive royalty payouts.
+    /// Note: This constraint is enforced in StreamPayoutService.ProcessCreatorPayoutAsync()
+    /// which checks PayPalAccountAffirmed before sending payouts.
     /// </summary>
     public bool PayPalAccountAffirmed { get; set; } = false;
 
