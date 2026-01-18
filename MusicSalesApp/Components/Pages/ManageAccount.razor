@@ -232,30 +232,29 @@
                                     <li>Upload your original music to our streaming platform</li>
                                     <li>Reach a global audience of music lovers</li>
                                     <li>Earn royalties for every stream of your music</li>
-                                    <li>Get paid directly via our payment processor (Stripe)</li>
-                                    <li>Stripe handles all tax reporting (1099s and W-9s)</li>
+                                    <li>Get paid directly to your PayPal account</li>
                                 </ul>
                             </div>
 
                             <div class="creator-requirements mt-3">
                                 <h5>Requirements:</h5>
                                 <ul>
-                                    <li>Complete payout onboarding with our payment processor</li>
-                                    <li>Provide accurate tax and identity information for royalty payments</li>
+                                    <li>A valid PayPal account in good standing to receive royalty payments</li>
+                                    <li>Complete tax form (W-9/W-8) for tax reporting</li>
                                     <li>Original music that you have the rights to distribute</li>
                                     <li>Agreement to our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a></li>
                                 </ul>
                             </div>
 
                             <div class="mt-3">
-                                <p><strong>How You Earn:</strong> You earn royalties based on the number of qualifying streams (30+ seconds of continuous playback). Your royalty rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
+                                <p><strong>How You Earn:</strong> You earn royalties based on the number of qualifying streams (30+ seconds of continuous playback). Your royalty rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
                             </div>
 
                             <div class="creator-signup-form mt-4">
                                 <div class="mb-3">
-                                    <label for="paypalEmailOnboarding" class="e-label">Payout Email Address <span class="text-danger">*</span></label>
-                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This email will be used for all royalty payouts. You can use a different email than your login email.</small>
+                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
+                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive royalty payments.</small>
                                 </div>
 
                                 <div class="mb-3">
@@ -269,46 +268,40 @@
                                     <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell listeners about yourself and your music" CssClass="e-outline" />
                                 </div>
 
+                                <div class="mb-3">
+                                    <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
+                                    <span class="ms-2">I affirm that I have a valid PayPal account in good standing that can receive payments. I understand that if my PayPal account is not valid or cannot receive payments, I will not receive royalty payouts. StreamTunes is not responsible for ensuring my PayPal account can receive payments.</span>
+                                </div>
+
+                                <div class="alert alert-warning mt-3">
+                                    <strong>Important:</strong> You only need a personal PayPal account to receive royalty payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your royalty payments may fail and StreamTunes is not responsible for recovering failed payments.
+                                </div>
+
                                 @if (!_startingOnboarding)
                                 {
-                                    <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@string.IsNullOrWhiteSpace(_creatorPayPalEmail)" />
-                                    @if (string.IsNullOrWhiteSpace(_creatorPayPalEmail))
+                                    <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" />
+                                    @if (!CanStartOnboarding)
                                     {
-                                        <p class="text-danger mt-2">Please enter your payout email address to continue.</p>
+                                        <p class="text-danger mt-2">Please enter your PayPal email address and confirm you have a valid PayPal account.</p>
                                     }
                                 }
                                 else
                                 {
-                                    <p>Preparing your signup...</p>
+                                    <p>Processing your signup...</p>
                                 }
                             </div>
                         </div>
                     }
-                    else if (_creatorOnboardingStatus == "Pending")
+                    else if (_creatorOnboardingStatus == "Pending" || _creatorOnboardingStatus == "InProgress" || _creatorOnboardingStatus == "Completed")
                     {
                         <div class="creator-pending">
                             <h4>Complete Your Creator Onboarding</h4>
                             
-                            <!-- PayPal Onboarding Status -->
+                            <!-- PayPal Email Status -->
                             <div class="onboarding-section mb-4">
-                                <h5>1. PayPal Payout Account Setup</h5>
-                                <p class="text-warning"><strong>Status: Pending</strong></p>
-                                <p>Please complete your payout account setup with our payment processor.</p>
-                                
-                                @if (!string.IsNullOrEmpty(_creatorReferralUrl))
-                                {
-                                    <p><a href="@_creatorReferralUrl" target="_blank" class="btn btn-primary">Continue PayPal Setup</a></p>
-                                }
-                                
-                                <p class="mt-3">After completing the PayPal setup, click the button below:</p>
-                                @if (!_completingOnboarding)
-                                {
-                                    <SfButton IsPrimary="true" Content="I've Completed PayPal Setup" OnClick="CompleteCreatorOnboarding" />
-                                }
-                                else
-                                {
-                                    <p>Verifying your account setup...</p>
-                                }
+                                <h5>1. PayPal Account</h5>
+                                <p class="text-success"><strong>Status: Confirmed ✓</strong></p>
+                                <p>You have confirmed that you have a valid PayPal account to receive royalty payments.</p>
                             </div>
                             
                             <!-- Tax Form Status -->
@@ -317,11 +310,21 @@
                                 @if (_creatorTaxFormStatus == "Completed")
                                 {
                                     <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                                    <p>Both steps are complete. Your creator account will be activated shortly.</p>
+                                    @if (!_completingOnboarding)
+                                    {
+                                        <SfButton IsPrimary="true" Content="Activate My Creator Account" OnClick="CompleteCreatorOnboarding" />
+                                    }
+                                    else
+                                    {
+                                        <p>Activating your account...</p>
+                                    }
                                 }
                                 else if (_creatorTaxFormStatus == "Pending")
                                 {
                                     <p class="text-warning"><strong>Status: Pending</strong></p>
-                                    <p>We've sent you an email from TaxBandits with a link to complete your W-9 or W-8 tax form. Please check your inbox (and spam folder) for an email from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
+                                    <p>Please complete your tax form to activate your creator account.</p>
+                                    <p>Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
                                     <p>If you didn't receive the email or need a new one:</p>
                                     @if (!_resendingTaxForm)
                                     {
@@ -353,127 +356,11 @@
                             </div>
                         </div>
                     }
-                    else if (_creatorOnboardingStatus == "InProgress")
-                    {
-                        <div class="creator-in-progress">
-                            <h4>Creator Onboarding In Progress</h4>
-                            
-                            <!-- PayPal Onboarding Status -->
-                            <div class="onboarding-section mb-4">
-                                <h5>1. PayPal Payout Account</h5>
-                                <p class="text-warning"><strong>Status: In Progress</strong></p>
-                                <p>Your payout account is being verified. This may take a few minutes to a few hours.</p>
-                                
-                                @if (!_completingOnboarding)
-                                {
-                                    <SfButton Content="Check PayPal Status" OnClick="CompleteCreatorOnboarding" />
-                                }
-                                else
-                                {
-                                    <p>Checking status...</p>
-                                }
-                            </div>
-                            
-                            <!-- Tax Form Status -->
-                            <div class="onboarding-section mb-4">
-                                <h5>2. Tax Form (W-9/W-8)</h5>
-                                @if (_creatorTaxFormStatus == "Completed")
-                                {
-                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
-                                }
-                                else if (_creatorTaxFormStatus == "Pending")
-                                {
-                                    <p class="text-warning"><strong>Status: Pending</strong></p>
-                                    <p>Please complete your tax form. Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
-                                    <p>If you didn't receive the email or need a new one:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
-                                }
-                                else if (_creatorTaxFormStatus == "Failed")
-                                {
-                                    <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
-                                }
-                                else
-                                {
-                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
-                                }
-                            </div>
-                        </div>
-                    }
-                    else if (_creatorOnboardingStatus == "Completed" && !_isActiveCreator)
-                    {
-                        <div class="creator-pending-activation">
-                            <h4>PayPal Setup Complete - Tax Form Pending</h4>
-                            
-                            <!-- PayPal Onboarding Status -->
-                            <div class="onboarding-section mb-4">
-                                <h5>1. PayPal Payout Account</h5>
-                                <p class="text-success"><strong>Status: Completed ✓</strong></p>
-                            </div>
-                            
-                            <!-- Tax Form Status -->
-                            <div class="onboarding-section mb-4">
-                                <h5>2. Tax Form (W-9/W-8)</h5>
-                                @if (_creatorTaxFormStatus == "Completed")
-                                {
-                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
-                                    <p>Both steps are complete. Your creator account will be activated shortly.</p>
-                                }
-                                else if (_creatorTaxFormStatus == "Pending")
-                                {
-                                    <p class="text-warning"><strong>Status: Pending</strong></p>
-                                    <p>Your PayPal setup is complete! Now please complete your tax form to activate your creator account.</p>
-                                    <p>Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
-                                    <p>If you didn't receive the email or need a new one:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
-                                }
-                                else if (_creatorTaxFormStatus == "Failed")
-                                {
-                                    <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
-                                }
-                                else
-                                {
-                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
-                                }
-                            </div>
-                        </div>
-                    }
                     else if (_creatorOnboardingStatus == "Failed")
                     {
                         <div class="creator-failed">
                             <h4>Onboarding Failed</h4>
-                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed. This may be due to verification issues with our payment processor.</p>
+                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed.</p>
                             <p>Please contact support for assistance or try again:</p>
                             
                             @if (!_startingOnboarding)

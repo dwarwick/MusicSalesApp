@@ -54,30 +54,6 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
-    public async Task<Creator?> GetCreatorByMerchantIdAsync(string merchantId)
-    {
-        if (string.IsNullOrWhiteSpace(merchantId))
-            return null;
-
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Creators
-            .Include(s => s.User)
-            .FirstOrDefaultAsync(s => s.PayPalMerchantId == merchantId);
-    }
-
-    /// <inheritdoc />
-    public async Task<Creator?> GetCreatorByTrackingIdAsync(string trackingId)
-    {
-        if (string.IsNullOrWhiteSpace(trackingId))
-            return null;
-
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.Creators
-            .Include(s => s.User)
-            .FirstOrDefaultAsync(s => s.PayPalTrackingId == trackingId);
-    }
-
-    /// <inheritdoc />
     public async Task<Creator> CreateCreatorAsync(int userId, string? displayName = null, string? bio = null)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -109,71 +85,6 @@ public class CreatorService : ICreatorService
 
         _logger.LogInformation("Created creator record for user {UserId} with stream pay rate ${StreamRate:F6} per stream", 
             userId, streamPayRate);
-        return creator;
-    }
-
-    /// <inheritdoc />
-    public async Task<Creator> UpdateOnboardingInfoAsync(int creatorId, string trackingId, string referralUrl)
-    {
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-
-        var creator = await context.Creators.FindAsync(creatorId);
-        if (creator == null)
-        {
-            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
-        }
-
-        creator.PayPalTrackingId = trackingId;
-        creator.PayPalReferralUrl = referralUrl;
-        creator.OnboardingStatus = CreatorOnboardingStatus.Pending;
-        creator.UpdatedAt = DateTime.UtcNow;
-
-        await context.SaveChangesAsync();
-
-        _logger.LogInformation("Updated onboarding info for creator {CreatorId} with tracking ID {TrackingId}", creatorId, trackingId);
-        return creator;
-    }
-
-    /// <inheritdoc />
-    public async Task<Creator> CompleteOnboardingAsync(int creatorId, string merchantId, bool paymentsReceivable, bool primaryEmailConfirmed)
-    {
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-
-        var creator = await context.Creators.FindAsync(creatorId);
-        if (creator == null)
-        {
-            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
-        }
-
-        // In sandbox mode, having a valid merchant_id is sufficient for PayPal onboarding completion
-        // since sandbox accounts may not have payments_receivable or primary_email_confirmed set
-        var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
-        var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", baseUrl.Contains("sandbox", StringComparison.OrdinalIgnoreCase));
-        
-        // Determine if PayPal onboarding is complete:
-        // - In production: requires both paymentsReceivable and primaryEmailConfirmed
-        // - In sandbox: having a valid merchantId is sufficient (optional override via PayPal:SandboxAllowPartialOnboarding)
-        var allowPartialOnboarding = sandboxMode && _configuration.GetValue<bool>("PayPal:SandboxAllowPartialOnboarding", true);
-        var isPayPalComplete = (paymentsReceivable && primaryEmailConfirmed) || 
-                               (allowPartialOnboarding && !string.IsNullOrWhiteSpace(merchantId));
-
-        creator.PayPalMerchantId = merchantId;
-        creator.PaymentsReceivable = paymentsReceivable;
-        creator.PrimaryEmailConfirmed = primaryEmailConfirmed;
-        creator.OnboardingStatus = isPayPalComplete
-            ? CreatorOnboardingStatus.Completed
-            : CreatorOnboardingStatus.InProgress;
-        creator.OnboardedAt = isPayPalComplete ? DateTime.UtcNow : null;
-        creator.UpdatedAt = DateTime.UtcNow;
-        
-        // Note: IsActive is NOT set here. Creator only becomes active when BOTH
-        // PayPal onboarding AND tax form (W-9/W-8) are complete.
-        // The webhooks from PayPal and TaxBandits will handle setting IsActive.
-
-        await context.SaveChangesAsync();
-
-        _logger.LogInformation("Completed PayPal onboarding for creator {CreatorId} with merchant ID {MerchantId}, PayPalStatus: {PayPalStatus}, TaxFormStatus: {TaxFormStatus}, SandboxMode: {SandboxMode}, PaymentsReceivable: {PaymentsReceivable}, PrimaryEmailConfirmed: {PrimaryEmailConfirmed}",
-            creatorId, merchantId, creator.OnboardingStatus, creator.TaxFormStatus, sandboxMode, paymentsReceivable, primaryEmailConfirmed);
         return creator;
     }
 

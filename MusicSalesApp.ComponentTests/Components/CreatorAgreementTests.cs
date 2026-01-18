@@ -49,7 +49,7 @@ public class CreatorAgreementTests : BUnitTestBase
         // Assert - Verify eligibility section
         Assert.That(cut.Markup, Does.Contain("Eligibility and Account Setup"));
         Assert.That(cut.Markup, Does.Contain("at least 18 years old"));
-        Assert.That(cut.Markup, Does.Contain("payment provider"));
+        Assert.That(cut.Markup, Does.Contain("PayPal account"));
     }
 
     [Test]

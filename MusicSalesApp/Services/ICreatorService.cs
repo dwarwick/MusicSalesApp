@@ -19,29 +19,9 @@ public interface ICreatorService
     Task<Creator?> GetCreatorByUserIdAsync(int userId);
 
     /// <summary>
-    /// Gets a creator by their PayPal Merchant ID.
-    /// </summary>
-    Task<Creator?> GetCreatorByMerchantIdAsync(string merchantId);
-
-    /// <summary>
-    /// Gets a creator by their PayPal tracking ID (used during onboarding).
-    /// </summary>
-    Task<Creator?> GetCreatorByTrackingIdAsync(string trackingId);
-
-    /// <summary>
     /// Creates a new creator record for a user who wants to become a creator.
     /// </summary>
     Task<Creator> CreateCreatorAsync(int userId, string? displayName = null, string? bio = null);
-
-    /// <summary>
-    /// Updates the creator's PayPal onboarding information.
-    /// </summary>
-    Task<Creator> UpdateOnboardingInfoAsync(int creatorId, string trackingId, string referralUrl);
-
-    /// <summary>
-    /// Completes the creator's PayPal onboarding after they've finished the PayPal flow.
-    /// </summary>
-    Task<Creator> CompleteOnboardingAsync(int creatorId, string merchantId, bool paymentsReceivable, bool primaryEmailConfirmed);
 
     /// <summary>
     /// Updates the creator's onboarding status.
@@ -134,8 +114,7 @@ public interface ICreatorService
     Task<int> DeactivateAllCreatorSongsAsync(int creatorId);
 
     /// <summary>
-    /// Revokes a creator's consent to the platform. This is called when PayPal sends a
-    /// MERCHANT.PARTNER-CONSENT.REVOKED webhook. This will:
+    /// Revokes a creator's consent to the platform. This will:
     /// - Mark all their songs as inactive
     /// - Remove all their music from Azure storage
     /// - Mark the creator as inactive with ConsentRevoked status

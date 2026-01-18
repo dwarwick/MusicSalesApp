@@ -275,14 +275,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasIndex(s => s.UserId)
             .IsUnique();
 
-        // Index on PayPalMerchantId for lookups
-        builder.Entity<Creator>()
-            .HasIndex(s => s.PayPalMerchantId);
-
-        // Index on PayPalTrackingId for webhook handling
-        builder.Entity<Creator>()
-            .HasIndex(s => s.PayPalTrackingId);
-
         // Configure SongMetadata-Creator relationship
         builder.Entity<SongMetadata>()
             .HasOne(sm => sm.Creator)
