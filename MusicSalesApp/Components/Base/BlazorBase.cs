@@ -69,6 +69,9 @@ public abstract class BlazorBase : ComponentBase
     protected IStreamCountHubClient StreamCountHubClient { get; set; } = default!;
 
     [Inject]
+    protected IWebhookStatusHubClient WebhookStatusHubClient { get; set; } = default!;
+
+    [Inject]
     protected IRecommendationService RecommendationService { get; set; } = default!;
 
     [Inject]

@@ -228,6 +228,7 @@ try
     builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
+    builder.Services.AddScoped<IWebhookStatusHubClient, WebhookStatusHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
@@ -349,8 +350,9 @@ try
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
 
-    // Map SignalR hub for real-time stream count updates
+    // Map SignalR hubs for real-time updates
     app.MapHub<MusicSalesApp.Hubs.StreamCountHub>("/streamcounthub");
+    app.MapHub<MusicSalesApp.Hubs.WebhookStatusHub>("/webhookstatushub");
 
     app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
     {

@@ -2,12 +2,14 @@ using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Controllers;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -22,6 +24,7 @@ public class TaxBanditsControllerTests
     private Mock<ICreatorService> _mockCreatorService;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<TaxBanditsController>> _mockLogger;
+    private Mock<IHubContext<WebhookStatusHub>> _mockHubContext;
     private TaxBanditsController _controller;
 
     [SetUp]
@@ -42,6 +45,13 @@ public class TaxBanditsControllerTests
         _mockCreatorService = new Mock<ICreatorService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<TaxBanditsController>>();
+        
+        // Setup HubContext mock
+        _mockHubContext = new Mock<IHubContext<WebhookStatusHub>>();
+        var mockClients = new Mock<IHubClients>();
+        var mockClientProxy = new Mock<IClientProxy>();
+        mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
+        _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
         _controller = new TaxBanditsController(
             _mockDbContextFactory.Object,
@@ -49,7 +59,8 @@ public class TaxBanditsControllerTests
             _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockConfiguration.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockHubContext.Object);
     }
 
     [Test]
