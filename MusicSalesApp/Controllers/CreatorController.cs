@@ -76,7 +76,7 @@ public class CreatorController : ControllerBase
             PaymentsReceivable = creator.PaymentsReceivable,
             PrimaryEmailConfirmed = creator.PrimaryEmailConfirmed,
             OnboardedAt = creator.OnboardedAt,
-            ReferralUrl = creator.OnboardingStatus == CreatorOnboardingStatus.Pending ? creator.PayPalReferralUrl : null
+            ReferralUrl = null // PayPal business account onboarding has been removed
         });
     }
 

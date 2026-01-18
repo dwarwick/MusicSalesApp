@@ -156,7 +156,7 @@ public class StreamPayoutService : IStreamPayoutService
         {
             _logger.LogInformation("=== Stream Payout Calculation Summary (Development Mode) ===");
             _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
-            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
+            _logger.LogInformation("PayPal Email: {PayPalEmail}", creator.PayPalEmail ?? "NOT SET");
             _logger.LogInformation("Number of Songs with Unpaid Streams: {SongCount}", payoutRecords.Count);
             _logger.LogInformation("Total Unpaid Streams: {TotalStreams:N0}", payoutRecords.Sum(p => p.NumberOfStreams));
             _logger.LogInformation("Stream Pay Rate: ${Rate:F6} per stream", creator.StreamPayRate);
@@ -216,7 +216,6 @@ public class StreamPayoutService : IStreamPayoutService
         {
             _logger.LogInformation("=== PayPal Payout Request (Development Mode) ===");
             _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
-            _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
             _logger.LogInformation("Payout Amount: ${Amount:F2} USD", amount);
             _logger.LogInformation("PayPal Email (for payout): {PayPalEmail}", creator.PayPalEmail ?? "NOT SET");
             _logger.LogInformation("User Login Email: {LoginEmail}", creator.User?.Email ?? "NOT AVAILABLE");
@@ -309,7 +308,6 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 _logger.LogInformation("=== PayPal Payout Response (Development Mode) ===");
                 _logger.LogInformation("Creator ID: {CreatorId}", creator.Id);
-                _logger.LogInformation("PayPal Merchant ID: {MerchantId}", creator.PayPalMerchantId ?? "NOT SET");
                 _logger.LogInformation("Transaction ID (payout_batch_id): {TransactionId}", payoutBatchId);
                 _logger.LogInformation("Amount Paid: ${Amount:F2} USD", amount);
                 _logger.LogInformation("Status: SUCCESS");

@@ -718,7 +718,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
-                _creatorReferralUrl = creator.PayPalReferralUrl;
+                _creatorReferralUrl = null; // PayPal business account onboarding has been removed
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
