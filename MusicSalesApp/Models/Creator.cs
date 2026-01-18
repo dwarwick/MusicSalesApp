@@ -88,6 +88,13 @@ public class Creator
     public bool PrimaryEmailConfirmed { get; set; } = false;
 
     /// <summary>
+    /// Whether the creator has affirmed they have a valid PayPal account in good standing
+    /// that can receive payouts. This replaces the business account onboarding flow.
+    /// If false, the creator will not receive royalty payouts.
+    /// </summary>
+    public bool PayPalAccountAffirmed { get; set; } = false;
+
+    /// <summary>
     /// The rate paid per stream in USD (e.g., 0.005 for $5 per 1000 streams).
     /// This is set when the creator is onboarded and locked in for the lifetime of the creator account.
     /// </summary>

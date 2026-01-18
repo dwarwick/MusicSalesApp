@@ -19,7 +19,6 @@ namespace MusicSalesApp.Controllers;
 public class CreatorController : ControllerBase
 {
     private readonly ICreatorService _creatorService;
-    private readonly IPayPalPartnerService _payPalPartnerService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ILogger<CreatorController> _logger;
@@ -29,7 +28,6 @@ public class CreatorController : ControllerBase
 
     public CreatorController(
         ICreatorService creatorService,
-        IPayPalPartnerService payPalPartnerService,
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         ILogger<CreatorController> logger,
@@ -38,7 +36,6 @@ public class CreatorController : ControllerBase
         IConfiguration configuration)
     {
         _creatorService = creatorService;
-        _payPalPartnerService = payPalPartnerService;
         _userManager = userManager;
         _roleManager = roleManager;
         _logger = logger;
@@ -84,7 +81,8 @@ public class CreatorController : ControllerBase
     }
 
     /// <summary>
-    /// Starts the creator onboarding process by creating a PayPal partner referral.
+    /// Starts the creator onboarding process. Now simplified to just require PayPal email and affirmation.
+    /// No longer requires PayPal business account onboarding.
     /// </summary>
     [HttpPost("start-onboarding")]
     public async Task<IActionResult> StartOnboarding([FromBody] StartOnboardingRequest request)
@@ -101,6 +99,12 @@ public class CreatorController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.PayPalEmail))
         {
             return BadRequest("PayPal email address is required to become a creator.");
+        }
+
+        // Validate that the user has affirmed they have a valid PayPal account
+        if (!request.PayPalAccountAffirmed)
+        {
+            return BadRequest("You must affirm that you have a valid PayPal account in good standing to receive royalty payments.");
         }
 
         // Check if user already has a creator record
@@ -127,26 +131,20 @@ public class CreatorController : ControllerBase
             }
         }
 
-        // Update creator with PayPal email
+        // Update creator with PayPal email and affirmation
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         var creatorToUpdate = await context.Creators.FindAsync(creator.Id);
         if (creatorToUpdate != null)
         {
             creatorToUpdate.PayPalEmail = request.PayPalEmail;
+            creatorToUpdate.PayPalAccountAffirmed = request.PayPalAccountAffirmed;
+            creatorToUpdate.OnboardingStatus = CreatorOnboardingStatus.Completed;
+            creatorToUpdate.PaymentsReceivable = true;
+            creatorToUpdate.PrimaryEmailConfirmed = true;
+            creatorToUpdate.OnboardedAt = DateTime.UtcNow;
             creatorToUpdate.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
         }
-
-        // Create PayPal partner referral
-        var referralResult = await _payPalPartnerService.CreatePartnerReferralAsync(user.Id, user.Email);
-        if (referralResult == null || !referralResult.Success)
-        {
-            _logger.LogError("Failed to create partner referral for user {UserId}: {Error}", user.Id, referralResult?.ErrorMessage);
-            return StatusCode(500, new { error = referralResult?.ErrorMessage ?? "Failed to create PayPal referral" });
-        }
-
-        // Update creator with onboarding info
-        await _creatorService.UpdateOnboardingInfoAsync(creator.Id, referralResult.TrackingId, referralResult.ReferralUrl);
 
         // Request W-9/W-8 tax form from TaxBandits
         // The user will receive an email from our system and then from TaxBandits with a link to complete the form
@@ -181,19 +179,45 @@ public class CreatorController : ControllerBase
             _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
         }
 
-        _logger.LogInformation("Started creator onboarding for user {UserId}, tracking ID: {TrackingId}, PayPal email: {PayPalEmail}", 
-            user.Id, referralResult.TrackingId, request.PayPalEmail);
+        // Reload to get the latest state including tax form status
+        var updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+
+        // Check if both PayPal affirmation and tax form are complete to activate
+        if (updatedCreator != null && updatedCreator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            // Activate the creator
+            await _creatorService.ActivateCreatorAsync(updatedCreator.Id);
+            
+            // Ensure the Creator role exists
+            if (!await _roleManager.RoleExistsAsync(Roles.Creator))
+            {
+                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
+            }
+
+            // Add Creator role if user doesn't already have it
+            if (!await _userManager.IsInRoleAsync(user, Roles.Creator))
+            {
+                await _userManager.AddToRoleAsync(user, Roles.Creator);
+                _logger.LogInformation("Added Creator role to user {UserId}", user.Id);
+            }
+
+            updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        }
+
+        _logger.LogInformation("Started creator onboarding for user {UserId}, PayPal email: {PayPalEmail}, PayPal affirmed: {PayPalAffirmed}", 
+            user.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
 
         return Ok(new StartOnboardingResponse
         {
             Success = true,
-            ReferralUrl = referralResult.ReferralUrl,
-            TrackingId = referralResult.TrackingId
+            IsActive = updatedCreator?.IsActive ?? false,
+            TaxFormPending = updatedCreator?.TaxFormStatus == TaxFormStatus.Pending
         });
     }
 
     /// <summary>
-    /// Completes the creator onboarding after the user returns from PayPal.
+    /// Completes the creator onboarding. This is now a simplified check that returns the current status.
+    /// The PayPal business account flow has been removed - we just need tax form completion.
     /// </summary>
     [HttpPost("complete-onboarding")]
     public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingRequest request)
@@ -207,43 +231,23 @@ public class CreatorController : ControllerBase
             return BadRequest("Creator record not found. Please start the onboarding process first.");
         }
 
-        if (string.IsNullOrWhiteSpace(creator.PayPalTrackingId))
+        // Check if the creator has completed PayPal affirmation
+        if (!creator.PayPalAccountAffirmed)
         {
-            return BadRequest("No pending onboarding found.");
+            return BadRequest("Please complete the creator signup process first.");
         }
 
-        // Get the merchant status from PayPal
-        var merchantStatus = await _payPalPartnerService.GetMerchantStatusByTrackingIdAsync(creator.PayPalTrackingId);
-        if (merchantStatus == null)
+        // Check if both PayPal affirmation and tax form are complete
+        if (creator.OnboardingStatus == CreatorOnboardingStatus.Completed && 
+            creator.TaxFormStatus == TaxFormStatus.Completed)
         {
-            _logger.LogWarning("Could not retrieve merchant status for tracking ID {TrackingId}", creator.PayPalTrackingId);
-            
-            // If we can't get status but have a merchant ID from callback, try using that
-            if (!string.IsNullOrWhiteSpace(request.MerchantId))
+            // Activate the creator if not already active
+            if (!creator.IsActive)
             {
-                await _creatorService.CompleteOnboardingAsync(creator.Id, request.MerchantId, true, true);
+                await _creatorService.ActivateCreatorAsync(creator.Id);
+                creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
             }
-            else
-            {
-                return BadRequest("Could not verify PayPal onboarding status. Please try again.");
-            }
-        }
-        else
-        {
-            // Complete onboarding with the status from PayPal
-            await _creatorService.CompleteOnboardingAsync(
-                creator.Id, 
-                merchantStatus.MerchantId, 
-                merchantStatus.PaymentsReceivable, 
-                merchantStatus.PrimaryEmailConfirmed);
-        }
 
-        // Reload creator to get updated status
-        creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-
-        // If onboarding is complete, add Creator role to user
-        if (creator != null && creator.IsActive)
-        {
             // Ensure the Creator role exists
             if (!await _roleManager.RoleExistsAsync(Roles.Creator))
             {
@@ -258,7 +262,7 @@ public class CreatorController : ControllerBase
             }
         }
 
-        _logger.LogInformation("Completed creator onboarding for user {UserId}, IsActive: {IsActive}", user.Id, creator?.IsActive);
+        _logger.LogInformation("Checked creator onboarding status for user {UserId}, IsActive: {IsActive}", user.Id, creator?.IsActive);
 
         return Ok(new CompleteOnboardingResponse
         {
@@ -553,17 +557,22 @@ public class StartOnboardingRequest
     public string? DisplayName { get; set; }
     public string? Bio { get; set; }
     public string? PayPalEmail { get; set; }
+    /// <summary>
+    /// Whether the user affirms they have a valid PayPal account in good standing.
+    /// </summary>
+    public bool PayPalAccountAffirmed { get; set; }
 }
 
 public class StartOnboardingResponse
 {
     public bool Success { get; set; }
-    public string ReferralUrl { get; set; } = string.Empty;
-    public string TrackingId { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool TaxFormPending { get; set; }
 }
 
 public class CompleteOnboardingRequest
 {
+    // No longer needed but kept for API compatibility
     public string? MerchantId { get; set; }
 }
 

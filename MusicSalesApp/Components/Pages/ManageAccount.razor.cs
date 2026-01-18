@@ -64,11 +64,17 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string _creatorBio = string.Empty;
     protected string _creatorPayPalEmail = string.Empty;
     protected string _paypalEmail = string.Empty;
+    protected bool _paypalAccountAffirmed = false;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
     protected string _stopSellingConfirmEmail = string.Empty;
     protected bool _resendingTaxForm = false;
+    
+    /// <summary>
+    /// Returns true if the user can start the creator onboarding process.
+    /// </summary>
+    protected bool CanStartOnboarding => !string.IsNullOrWhiteSpace(_creatorPayPalEmail) && _paypalAccountAffirmed;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
@@ -790,23 +796,39 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 return;
             }
 
+            // Validate PayPal account affirmation
+            if (!_paypalAccountAffirmed)
+            {
+                _errorMessage = "Please confirm that you have a valid PayPal account in good standing.";
+                _startingOnboarding = false;
+                return;
+            }
+
             var response = await Http.PostAsJsonAsync("api/creator/start-onboarding", new
             {
                 DisplayName = _creatorDisplayName,
                 Bio = _creatorBio,
-                PayPalEmail = _creatorPayPalEmail
+                PayPalEmail = _creatorPayPalEmail,
+                PayPalAccountAffirmed = _paypalAccountAffirmed
             });
 
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<StartCreatorOnboardingResponse>();
-                if (result != null && result.Success && !string.IsNullOrEmpty(result.ReferralUrl))
+                if (result != null && result.Success)
                 {
-                    // Open PayPal in a new tab so user stays on StreamTunes
-                    await JS.InvokeVoidAsync("open", result.ReferralUrl, "_blank");
-                    
-                    // Update the UI to show the pending state with the referral URL
-                    _successMessage = "A new browser tab has been opened for PayPal setup. Please complete the setup there, then return here and click 'I've Completed PayPal Setup'.";
+                    if (result.IsActive)
+                    {
+                        _successMessage = "Congratulations! Your creator account is now active. You can start uploading music!";
+                    }
+                    else if (result.TaxFormPending)
+                    {
+                        _successMessage = "Your PayPal email has been confirmed! Please complete your tax form to activate your creator account. Check your email for a link from TaxBandits.";
+                    }
+                    else
+                    {
+                        _successMessage = "Your creator signup is being processed. Please check back soon.";
+                    }
                     await LoadCreatorStatus();
                 }
                 else
@@ -1086,8 +1108,8 @@ public class CancelSubscriptionResponse
 public class StartCreatorOnboardingResponse
 {
     public bool Success { get; set; }
-    public string ReferralUrl { get; set; } = string.Empty;
-    public string TrackingId { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool TaxFormPending { get; set; }
 }
 
 public class CompleteCreatorOnboardingResponse
