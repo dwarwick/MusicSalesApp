@@ -1,8 +1,14 @@
 @page "/manage-account"
 @using MusicSalesApp.Models
+@using Syncfusion.Blazor.Notifications
 @inherits ManageAccountModel
 
 <PageTitle>Manage Account</PageTitle>
+
+<!-- Toast notification for real-time updates -->
+<SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
+    <ToastPosition X="Right" Y="Top"></ToastPosition>
+</SfToast>
 
 <div class="container mt-4">
     <h2>Manage Account</h2>

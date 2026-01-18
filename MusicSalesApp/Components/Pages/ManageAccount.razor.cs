@@ -4,12 +4,14 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+using Syncfusion.Blazor.Notifications;
 using Syncfusion.Blazor.Popups;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
 
-public partial class ManageAccountModel : BlazorBase
+public partial class ManageAccountModel : BlazorBase, IDisposable
 {
     protected bool _loading = true;
     protected bool _isAuthenticated = false;
@@ -77,7 +79,11 @@ public partial class ManageAccountModel : BlazorBase
     protected SfDialog _deleteAccountDialog;
     protected SfDialog _stopSellingDialog;
     
+    // Toast for webhook status notifications
+    protected SfToast _toastRef;
+    
     private ApplicationUser _currentUser;
+    private Action<WebhookStatusMessage> _webhookStatusHandler;
 
     [Inject]
     private IDbContextFactory<AppDbContext> DbContextFactory { get; set; }
@@ -115,6 +121,11 @@ public partial class ManageAccountModel : BlazorBase
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
                         await LoadCreatorStatus();
+
+                        // Subscribe to SignalR webhook status updates
+                        _webhookStatusHandler = OnWebhookStatusReceived;
+                        WebhookStatusHubClient.OnWebhookStatusReceived += _webhookStatusHandler;
+                        await WebhookStatusHubClient.StartAsync();
 
                         // Handle return from PayPal creator onboarding
                         if (!string.IsNullOrEmpty(CreatorOnboardingResult) && CreatorOnboardingResult == "complete")
@@ -986,6 +997,63 @@ public partial class ManageAccountModel : BlazorBase
         {
             _stoppingCreatorStatus = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Handles webhook status updates received via SignalR.
+    /// </summary>
+    private void OnWebhookStatusReceived(WebhookStatusMessage message)
+    {
+        // Only process messages for the current user
+        if (_currentUser == null || message.UserId != _currentUser.Id)
+        {
+            return;
+        }
+
+        InvokeAsync(async () =>
+        {
+            try
+            {
+                // Show toast notification
+                var toastModel = new ToastModel
+                {
+                    Title = message.IsSuccess ? "Success" : "Status Update",
+                    Content = message.Message,
+                    CssClass = message.IsSuccess ? "e-toast-success" : "e-toast-warning",
+                    Icon = message.IsSuccess ? "e-success" : "e-warning"
+                };
+
+                if (_toastRef != null)
+                {
+                    await _toastRef.ShowAsync(toastModel);
+                }
+
+                // Reload the relevant data based on webhook type
+                if (message.WebhookType.Contains("PayPal", StringComparison.OrdinalIgnoreCase) ||
+                    message.WebhookType.Contains("Creator", StringComparison.OrdinalIgnoreCase) ||
+                    message.WebhookType.Contains("TaxForm", StringComparison.OrdinalIgnoreCase))
+                {
+                    await LoadCreatorStatus();
+                }
+
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error handling webhook status update");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Disposes of the SignalR event handler subscription.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_webhookStatusHandler != null)
+        {
+            WebhookStatusHubClient.OnWebhookStatusReceived -= _webhookStatusHandler;
         }
     }
 }

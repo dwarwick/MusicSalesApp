@@ -2,8 +2,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Security.Cryptography;
@@ -27,6 +29,7 @@ public class TaxBanditsController : ControllerBase
     private readonly ICreatorService _creatorService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaxBanditsController> _logger;
+    private readonly IHubContext<WebhookStatusHub> _hubContext;
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
@@ -37,7 +40,8 @@ public class TaxBanditsController : ControllerBase
         RoleManager<IdentityRole<int>> roleManager,
         ICreatorService creatorService,
         IConfiguration configuration,
-        ILogger<TaxBanditsController> logger)
+        ILogger<TaxBanditsController> logger,
+        IHubContext<WebhookStatusHub> hubContext)
     {
         _dbContextFactory = dbContextFactory;
         _userManager = userManager;
@@ -45,6 +49,7 @@ public class TaxBanditsController : ControllerBase
         _creatorService = creatorService;
         _configuration = configuration;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     /// <summary>
@@ -90,13 +95,13 @@ public class TaxBanditsController : ControllerBase
             var formType = formTypeElement.GetString();
             _logger.LogInformation("Processing TaxBandits webhook for FormType: {FormType}", formType);
 
-            // Handle W-9 form completion
-            if (formType == "FormW9" && root.TryGetProperty("FormW9", out var formW9))
+            // Handle W-9 form completion (TaxBandits sends "FORMW9" as FormType)
+            if (string.Equals(formType, "FORMW9", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("FormW9", out var formW9))
             {
                 return await HandleFormW9WebhookAsync(formW9, body);
             }
-            // Handle W-8 form completion (for non-US persons)
-            else if (formType == "FormW8BEN" && root.TryGetProperty("FormW8BEN", out var formW8))
+            // Handle W-8 form completion (for non-US persons, TaxBandits sends "FORMW8BEN" as FormType)
+            else if (string.Equals(formType, "FORMW8BEN", StringComparison.OrdinalIgnoreCase) && root.TryGetProperty("FormW8Ben", out var formW8))
             {
                 return await HandleFormW8WebhookAsync(formW8, body);
             }
@@ -201,6 +206,24 @@ public class TaxBanditsController : ControllerBase
 
                 // Complete the creator onboarding - add Creator role
                 await CompleteCreatorOnboardingAsync(w9Request.UserId);
+
+                // Broadcast SignalR update to notify the user's browser
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId, 
+                    "TaxFormCompleted", 
+                    true, 
+                    "Your tax form has been completed successfully!",
+                    "Completed");
+            }
+            else
+            {
+                // Broadcast failure status if form failed
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    false,
+                    $"Tax form status: {w9Status}",
+                    w9Status);
             }
 
             await context.SaveChangesAsync();
@@ -292,6 +315,24 @@ public class TaxBanditsController : ControllerBase
                     w9Request.UserId);
 
                 await CompleteCreatorOnboardingAsync(w9Request.UserId);
+
+                // Broadcast SignalR update to notify the user's browser
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormCompleted",
+                    true,
+                    "Your tax form has been completed successfully!",
+                    "Completed");
+            }
+            else
+            {
+                // Broadcast failure status if form failed
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    false,
+                    $"Tax form status: {w8Status}",
+                    w8Status);
             }
 
             await context.SaveChangesAsync();
@@ -304,7 +345,7 @@ public class TaxBanditsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling W-8BEN webhook");
+            _logger.LogError(ex, "Error handling W-8BEN webhook");;
             return StatusCode(500, "Error processing webhook");
         }
     }
@@ -457,5 +498,35 @@ public class TaxBanditsController : ControllerBase
         using var hmac = new HMACSHA256(keyBytes);
         var hashBytes = hmac.ComputeHash(messageBytes);
         return Convert.ToBase64String(hashBytes);
+    }
+
+    /// <summary>
+    /// Broadcasts a webhook status update via SignalR to notify the user's browser.
+    /// </summary>
+    private async Task BroadcastWebhookStatusAsync(int userId, string webhookType, bool isSuccess, string message, string? newStatus)
+    {
+        try
+        {
+            var statusMessage = new WebhookStatusMessage
+            {
+                UserId = userId,
+                WebhookType = webhookType,
+                IsSuccess = isSuccess,
+                Message = message,
+                NewStatus = newStatus
+            };
+
+            // Broadcast to all connected clients - the client will filter by UserId
+            await _hubContext.Clients.All.SendAsync("ReceiveWebhookStatus", statusMessage);
+
+            _logger.LogInformation(
+                "Broadcasted webhook status via SignalR: UserId={UserId}, Type={WebhookType}, Success={IsSuccess}",
+                userId, webhookType, isSuccess);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting webhook status via SignalR for user {UserId}", userId);
+            // Don't throw - webhook processing should continue even if SignalR broadcast fails
+        }
     }
 }

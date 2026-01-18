@@ -2,7 +2,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Net.Http.Headers;
@@ -26,6 +28,7 @@ public class PayPalWebhookController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<PayPalWebhookController> _logger;
+    private readonly IHubContext<WebhookStatusHub> _hubContext;
 
     // PayPal webhook event types for merchant onboarding
     private const string MerchantOnboardingCompleted = "MERCHANT.ONBOARDING.COMPLETED";
@@ -37,7 +40,8 @@ public class PayPalWebhookController : ControllerBase
         RoleManager<IdentityRole<int>> roleManager,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
-        ILogger<PayPalWebhookController> logger)
+        ILogger<PayPalWebhookController> logger,
+        IHubContext<WebhookStatusHub> hubContext)
     {
         _creatorService = creatorService;
         _userManager = userManager;
@@ -45,6 +49,7 @@ public class PayPalWebhookController : ControllerBase
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     /// <summary>
@@ -224,13 +229,41 @@ public class PayPalWebhookController : ControllerBase
                         await _creatorService.ActivateCreatorAsync(creator.Id);
                         _logger.LogInformation("Activated creator {CreatorId} for user {UserId}", creator.Id, creator.UserId);
                     }
+
+                    // Broadcast SignalR update for full activation
+                    await BroadcastWebhookStatusAsync(
+                        creator.UserId,
+                        "CreatorActivated",
+                        true,
+                        "Congratulations! Your creator account is now active. You can start uploading music!",
+                        "Active");
                 }
                 else
                 {
                     _logger.LogInformation(
                         "PayPal onboarding complete for user {UserId} but tax form is not complete. Tax Form Status: {TaxFormStatus}",
                         creator.UserId, creator.TaxFormStatus);
+
+                    // Broadcast SignalR update for PayPal-only completion
+                    await BroadcastWebhookStatusAsync(
+                        creator.UserId,
+                        "PayPalOnboardingCompleted",
+                        true,
+                        "PayPal setup completed! Please complete your tax form to activate your creator account.",
+                        "Completed");
                 }
+            }
+            else if (creator != null)
+            {
+                // PayPal onboarding is in progress (not yet completed)
+                await BroadcastWebhookStatusAsync(
+                    creator.UserId,
+                    "PayPalOnboardingStatus",
+                    paymentsReceivable || primaryEmailConfirmed,
+                    paymentsReceivable || primaryEmailConfirmed 
+                        ? "PayPal verification is in progress. Please check back soon."
+                        : "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.",
+                    "InProgress");
             }
 
             _logger.LogInformation(
@@ -299,6 +332,8 @@ public class PayPalWebhookController : ControllerBase
                 return Ok(new { status = "creator_not_found" });
             }
 
+            var userId = creator.UserId;
+
             // Revoke the creator's consent - this will deactivate their account and songs
             await _creatorService.RevokeCreatorConsentAsync(creator.Id);
 
@@ -309,6 +344,14 @@ public class PayPalWebhookController : ControllerBase
                 await _userManager.RemoveFromRoleAsync(user, Roles.Creator);
                 _logger.LogInformation("Removed Creator role from user {UserId} via consent revocation webhook", creator.UserId);
             }
+
+            // Broadcast SignalR update for consent revocation
+            await BroadcastWebhookStatusAsync(
+                userId,
+                "CreatorConsentRevoked",
+                false,
+                "Your creator consent has been revoked. Your songs have been removed from the platform.",
+                "Revoked");
 
             _logger.LogInformation(
                 "Successfully processed MERCHANT.PARTNER-CONSENT.REVOKED for creator {CreatorId}",
@@ -501,5 +544,35 @@ public class PayPalWebhookController : ControllerBase
         var hash = crc.GetCurrentHash();
         // Convert to uint (little-endian)
         return BitConverter.ToUInt32(hash, 0);
+    }
+
+    /// <summary>
+    /// Broadcasts a webhook status update via SignalR to notify the user's browser.
+    /// </summary>
+    private async Task BroadcastWebhookStatusAsync(int userId, string webhookType, bool isSuccess, string message, string? newStatus)
+    {
+        try
+        {
+            var statusMessage = new WebhookStatusMessage
+            {
+                UserId = userId,
+                WebhookType = webhookType,
+                IsSuccess = isSuccess,
+                Message = message,
+                NewStatus = newStatus
+            };
+
+            // Broadcast to all connected clients - the client will filter by UserId
+            await _hubContext.Clients.All.SendAsync("ReceiveWebhookStatus", statusMessage);
+
+            _logger.LogInformation(
+                "Broadcasted webhook status via SignalR: UserId={UserId}, Type={WebhookType}, Success={IsSuccess}",
+                userId, webhookType, isSuccess);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting webhook status via SignalR for user {UserId}", userId);
+            // Don't throw - webhook processing should continue even if SignalR broadcast fails
+        }
     }
 }
