@@ -664,21 +664,27 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
 
             // Build TxnData array with all transactions grouped by recipient
-            // TaxBandits API structure: TxnData[] -> each has Business, Recipients[], Txns[]
+            // TaxBandits API structure: TxnData[] -> each has Business, Recipients[] where each recipient has Txns[]
             // We group by PayeeRef so each recipient has their transactions together
             var txnDataList = transactions
                 .GroupBy(t => t.PayeeRef)
                 .Select(g => new
                 {
                     Business = new { BusinessId = businessId },
-                    Recipients = new[] { new { PayeeRef = g.Key } },
-                    Txns = g.Select(t => new
-                    {
-                        SequenceID = t.SequenceId,
-                        TxnDate = t.TransactionDate.ToString("MM/dd/yyyy"),
-                        TxnAmt = t.GrossAmount,
-                        WHAmt = t.WithheldAmount
-                    }).ToArray()
+                    Recipients = new[] 
+                    { 
+                        new 
+                        { 
+                            PayeeRef = g.Key,
+                            Txns = g.Select(t => new
+                            {
+                                SequenceId = t.SequenceId,
+                                TxnDate = t.TransactionDate.ToString("MM/dd/yyyy"),
+                                TxnAmt = t.GrossAmount.ToString("F2"),
+                                WHAmt = t.WithheldAmount.ToString("F2")
+                            }).ToArray()
+                        } 
+                    }
                 })
                 .ToArray();
 
@@ -691,7 +697,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
             req.Content = content;
 
-            _logger.LogDebug("Sending Form1099Transactions batch request to TaxBandits: {RequestBody}", jsonContent);
+            _logger.LogInformation("Sending Form1099Transactions batch request to TaxBandits: {RequestBody}", jsonContent);
 
             using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
             var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
