@@ -772,7 +772,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 }
                 catch (JsonException)
                 {
-                    // If we can't parse, treat as failure since we can't verify success
+                    // INTENTIONAL: Treat unparseable responses as failures rather than assuming success.
+                    // For tax compliance (1099 reporting), we must verify the transaction was saved successfully.
+                    // If we can't parse the response, we cannot confirm success and must alert admin for investigation.
                     response.Success = false;
                     response.ErrorMessage = "Failed to parse TaxBandits response";
                     response.StatusMessage = "Parse Error";
@@ -855,9 +857,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var body = $@"
                 <h2>Form 1099 Transaction Submission Failed</h2>
                 <p>A Form 1099 transaction submission to TaxBandits has failed.</p>
-                <p><strong>Endpoint:</strong> {System.Web.HttpUtility.HtmlEncode(endpoint)}</p>
-                <p><strong>Submission ID:</strong> {System.Web.HttpUtility.HtmlEncode(submissionId ?? "N/A")}</p>
-                <p><strong>Error:</strong> {System.Web.HttpUtility.HtmlEncode(errorDetails)}</p>
+                <p><strong>Endpoint:</strong> {System.Net.WebUtility.HtmlEncode(endpoint)}</p>
+                <p><strong>Submission ID:</strong> {System.Net.WebUtility.HtmlEncode(submissionId ?? "N/A")}</p>
+                <p><strong>Error:</strong> {System.Net.WebUtility.HtmlEncode(errorDetails)}</p>
                 <p><strong>Time:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
                 <p>Please investigate and take appropriate action. The affected payout records may need to be manually reported to TaxBandits.</p>";
 

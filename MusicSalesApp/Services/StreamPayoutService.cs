@@ -109,7 +109,7 @@ public class StreamPayoutService : IStreamPayoutService
                         {
                             payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
                             payout.TaxBanditsStatus = form1099Response.StatusMessage ?? 
-                                (form1099Response.Success ? "Success" : form1099Response.ErrorMessage);
+                                (form1099Response.Success ? "Success" : (form1099Response.ErrorMessage ?? "Unknown Error"));
                         }
 
                         await updateContext.SaveChangesAsync();
