@@ -179,8 +179,10 @@ public class TaxBanditsController : ControllerBase
                 w9Status = w9StatusElement.GetString();
             }
 
-            // Extract TIN Match status if present
-            if (formW9.TryGetProperty("TINMatchStatus", out var tinMatchStatusElement))
+            // Extract TIN Match status from TINMatching.Status (nested object)
+            if (formW9.TryGetProperty("TINMatching", out var tinMatchingElement) &&
+                tinMatchingElement.ValueKind != JsonValueKind.Null &&
+                tinMatchingElement.TryGetProperty("Status", out var tinMatchStatusElement))
             {
                 tinMatchStatus = tinMatchStatusElement.GetString();
             }
