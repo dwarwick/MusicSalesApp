@@ -31,5 +31,12 @@
         /// <param name="body">The HTML body content of the email.</param>
         /// <returns>True if the email was sent successfully, false otherwise.</returns>
         Task<bool> SendEmailAsync(string toEmail, string subject, string body);
+
+        /// <summary>
+        /// Gets the application base URL from configuration, defaulting to https://streamtunes.net.
+        /// Use this method when constructing URLs for email content (e.g., logo images, links).
+        /// </summary>
+        /// <returns>The application base URL.</returns>
+        string GetAppBaseUrl();
     }
 }

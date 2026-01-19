@@ -520,7 +520,7 @@ public class StreamPayoutService : IStreamPayoutService
                 .Where(sm => songIds.Contains(sm.Id))
                 .ToDictionaryAsync(sm => sm.Id);
 
-            var baseUrl = _configuration["BaseUrl"] ?? "https://localhost:5001";
+            var baseUrl = _emailService.GetAppBaseUrl();
             var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
 
             var body = BuildPayoutReceiptEmail(

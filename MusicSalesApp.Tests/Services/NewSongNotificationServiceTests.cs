@@ -45,6 +45,8 @@ public class NewSongNotificationServiceTests
         // Default email service setup
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        _mockEmailService.Setup(x => x.GetAppBaseUrl())
+            .Returns("https://streamtunes.net");
 
         // Default Azure storage setup
         _mockAzureStorageService.Setup(x => x.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))

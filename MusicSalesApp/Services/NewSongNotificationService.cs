@@ -74,8 +74,8 @@ public class NewSongNotificationService : INewSongNotificationService
 
             _logger.LogInformation("Found {Count} users to notify", optedInUsers.Count);
 
-            // Get base URL from configuration
-            var baseUrl = _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
+            // Get base URL from email service helper method for consistency
+            var baseUrl = _emailService.GetAppBaseUrl();
 
             // Generate email content once
             var emailBody = BuildEmailBody(newSongs, baseUrl);
