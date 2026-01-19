@@ -270,7 +270,7 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Extracts backup withholding flag from W-9 webhook FormData.
-    /// TaxBandits includes BackupWithholding section with IsSubjectToBackupWithholding field.
+    /// TaxBandits includes the backup withholding flag in FormData.IsBackUpWH field.
     /// </summary>
     private bool ExtractBackupWithholdingFromW9(JsonElement formW9)
     {
@@ -288,10 +288,18 @@ public class TaxBanditsController : ControllerBase
                 }
             }
 
-            // Alternative: Check FormData section for SubjectToBackupWithholding
+            // Alternative: Check FormData section for backup withholding fields
             if (formW9.TryGetProperty("FormData", out var formData) &&
                 formData.ValueKind != JsonValueKind.Null)
             {
+                // Check for IsBackUpWH (primary field from TaxBandits W-9 webhook)
+                if (formData.TryGetProperty("IsBackUpWH", out var isBackUpWH))
+                {
+                    var result = isBackUpWH.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.IsBackUpWH: {Value}", result);
+                    return result;
+                }
+
                 if (formData.TryGetProperty("SubjectToBackupWithholding", out var subjectField))
                 {
                     var result = subjectField.ValueKind == JsonValueKind.True;
