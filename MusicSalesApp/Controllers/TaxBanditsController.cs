@@ -27,12 +27,27 @@ public class TaxBanditsController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ICreatorService _creatorService;
+    private readonly ICreatorEmailService _creatorEmailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaxBanditsController> _logger;
     private readonly IHubContext<WebhookStatusHub> _hubContext;
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
+    private const string StatusCompletedTinMatchInProgress = "COMPLETED_AND_TIN_MATCH_INPROGRESS";
+    
+    // W-8/W-9 failure statuses that require user notification
+    private static readonly HashSet<string> FailureStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "INVALID",
+        "BOUNCED",
+        "ORDER_NOT_CREATED"
+    };
+    
+    // TIN Match statuses
+    private const string TinMatchStatusSuccess = "Success";
+    private const string TinMatchStatusFailed = "Failed";
+    private const string TinMatchStatusCanceled = "Canceled";
     
     // Backup withholding rate for US creators (24% per IRS regulations)
     private const decimal BackupWithholdingRate = 0.24m;
@@ -42,6 +57,7 @@ public class TaxBanditsController : ControllerBase
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         ICreatorService creatorService,
+        ICreatorEmailService creatorEmailService,
         IConfiguration configuration,
         ILogger<TaxBanditsController> logger,
         IHubContext<WebhookStatusHub> hubContext)
@@ -50,6 +66,7 @@ public class TaxBanditsController : ControllerBase
         _userManager = userManager;
         _roleManager = roleManager;
         _creatorService = creatorService;
+        _creatorEmailService = creatorEmailService;
         _configuration = configuration;
         _logger = logger;
         _hubContext = hubContext;
@@ -129,15 +146,21 @@ public class TaxBanditsController : ControllerBase
     /// <summary>
     /// Handles W-9 form status change webhook for US persons.
     /// Sets tax residency type to US. Applies 24% backup withholding if indicated on the W-9.
+    /// Only sends emails for terminal states: COMPLETED (success) or INVALID/BOUNCED/ORDER_NOT_CREATED (failure).
+    /// TIN Match is also checked for W-9: Success means passed, Failed/Canceled require user notification.
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
+        string? userEmail = null;
+        string? submissionId = null;
+        var baseUrl = GetBaseUrl();
+
         try
         {
             // Extract key fields
-            string? submissionId = null;
             string? payeeRef = null;
             string? w9Status = null;
+            string? tinMatchStatus = null;
             string? recipientId = null;
             bool subjectToBackupWithholding = false;
 
@@ -149,11 +172,20 @@ public class TaxBanditsController : ControllerBase
             if (formW9.TryGetProperty("PayeeRef", out var payeeRefElement))
             {
                 payeeRef = payeeRefElement.GetString();
+                userEmail = payeeRef; // PayeeRef is typically the email
             }
 
             if (formW9.TryGetProperty("W9Status", out var w9StatusElement))
             {
                 w9Status = w9StatusElement.GetString();
+            }
+
+            // Extract TIN Match status from TINMatching.Status (nested object)
+            if (formW9.TryGetProperty("TINMatching", out var tinMatchingElement) &&
+                tinMatchingElement.ValueKind != JsonValueKind.Null &&
+                tinMatchingElement.TryGetProperty("Status", out var tinMatchStatusElement))
+            {
+                tinMatchStatus = tinMatchStatusElement.GetString();
             }
 
             if (formW9.TryGetProperty("RecipientId", out var recipientIdElement))
@@ -165,8 +197,8 @@ public class TaxBanditsController : ControllerBase
             subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
 
             _logger.LogInformation(
-                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, BackupWithholding={BackupWithholding}",
-                submissionId, payeeRef, w9Status, subjectToBackupWithholding);
+                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, TINMatchStatus={TINMatchStatus}, BackupWithholding={BackupWithholding}",
+                submissionId, payeeRef, w9Status, tinMatchStatus, subjectToBackupWithholding);
 
             // Find and update the W9Request record
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -194,22 +226,42 @@ public class TaxBanditsController : ControllerBase
                 _logger.LogWarning(
                     "Could not find W9Request for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
+
+                // Send processing error email if we have a user email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                        userEmail, baseUrl, submissionId, "W9Request record not found in database.");
+                }
+
                 // Return 200 OK to prevent TaxBandits from retrying
                 return Ok(new { status = "request_not_found" });
             }
+
+            // Update userEmail from w9Request if we didn't have it
+            userEmail ??= w9Request.Email;
 
             // Update the W9Request record
             w9Request.Status = w9Status;
             w9Request.UpdatedAt = DateTime.UtcNow;
             w9Request.RawResponse = rawBody;
 
-            if (w9Status == StatusCompleted)
+            // For W-9 to be successful: W9Status must be COMPLETED AND TINMatchStatus must be Success
+            var isW9Completed = string.Equals(w9Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
+            var isTinMatchInProgress = string.Equals(w9Status, StatusCompletedTinMatchInProgress, StringComparison.OrdinalIgnoreCase);
+            var isTinMatchSuccess = string.Equals(tinMatchStatus, TinMatchStatusSuccess, StringComparison.OrdinalIgnoreCase);
+            var isTinMatchFailed = string.Equals(tinMatchStatus, TinMatchStatusFailed, StringComparison.OrdinalIgnoreCase);
+            var isTinMatchCanceled = string.Equals(tinMatchStatus, TinMatchStatusCanceled, StringComparison.OrdinalIgnoreCase);
+            var isFormStatusFailure = !string.IsNullOrWhiteSpace(w9Status) && FailureStatuses.Contains(w9Status);
+
+            if (isW9Completed && isTinMatchSuccess)
             {
+                // W-9 fully successful: form completed AND TIN match passed
                 w9Request.IsCompleted = true;
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-9 completed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                    "W-9 completed and TIN match passed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
                     w9Request.UserId, subjectToBackupWithholding);
 
                 // Parse submission ID as Guid if possible
@@ -241,10 +293,62 @@ public class TaxBanditsController : ControllerBase
                     true, 
                     "Your tax form has been completed successfully!",
                     "Completed");
+
+                // Send success/welcome email to user and admin notification
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+                }
             }
-            else
+            else if (isTinMatchFailed)
             {
-                // Broadcast failure status if form failed
+                // TIN match failed - send failure email
+                _logger.LogWarning("TIN match failed for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}",
+                    w9Request.UserId, w9Status, tinMatchStatus);
+
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9", 
+                        "TIN verification failed. Please double-check your Tax Identification Number and resubmit.");
+                }
+
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    false,
+                    "TIN verification failed",
+                    tinMatchStatus);
+            }
+            else if (isTinMatchCanceled)
+            {
+                // TIN match canceled - notify the user
+                _logger.LogWarning("TIN match canceled for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}",
+                    w9Request.UserId, w9Status, tinMatchStatus);
+
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
+                        "Your TIN matching request was canceled. Please request a new tax form and try again.");
+                }
+
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    false,
+                    "TIN matching was canceled",
+                    tinMatchStatus);
+            }
+            else if (isFormStatusFailure)
+            {
+                // W-9 form status indicates failure (INVALID, BOUNCED, ORDER_NOT_CREATED)
+                _logger.LogWarning("W-9 form failed for user {UserId}. W9Status={W9Status}",
+                    w9Request.UserId, w9Status);
+
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9", w9Status);
+                }
+
                 await BroadcastWebhookStatusAsync(
                     w9Request.UserId,
                     "TaxFormStatus",
@@ -252,18 +356,55 @@ public class TaxBanditsController : ControllerBase
                     $"Tax form status: {w9Status}",
                     w9Status);
             }
+            else if (isTinMatchInProgress)
+            {
+                // W-9 form completed but TIN match is still in progress
+                _logger.LogInformation(
+                    "W-9 completed but TIN match in progress for user {UserId}. This may take up to 1 hour.",
+                    w9Request.UserId);
+
+                // Update the creator's tax form status to TinMatchInProgress
+                var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+                if (creator != null)
+                {
+                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+                }
+
+                // Broadcast SignalR update to notify the user's browser
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    true,
+                    "Your tax form is completed. TIN verification is in progress and may take up to 1 hour. This status will update automatically when complete.",
+                    "TinMatchInProgress");
+            }
+            else
+            {
+                // Intermediate status - just log and update, don't send emails
+                _logger.LogInformation(
+                    "W-9 intermediate status for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}. No email sent.",
+                    w9Request.UserId, w9Status, tinMatchStatus);
+            }
 
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
-                w9Request.UserId, w9Status, w9Request.IsCompleted, subjectToBackupWithholding);
+                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, TINMatchStatus: {TINMatchStatus}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
+                w9Request.UserId, w9Status, tinMatchStatus, w9Request.IsCompleted, subjectToBackupWithholding);
 
             return Ok(new { status = "success" });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling W-9 webhook");
+
+            // Send processing error email if we have a user email
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                    userEmail, baseUrl, submissionId, ex.Message);
+            }
+
             return StatusCode(500, "Error processing webhook");
         }
     }
@@ -329,13 +470,18 @@ public class TaxBanditsController : ControllerBase
     /// <summary>
     /// Handles W-8BEN form status change webhook (for non-US persons).
     /// Extracts tax residency data including treaty benefits and withholding rates.
+    /// Only sends emails for terminal states: COMPLETED (success) or INVALID/BOUNCED/ORDER_NOT_CREATED (failure).
+    /// W-8 forms do not require TIN matching.
     /// </summary>
     private async Task<IActionResult> HandleFormW8WebhookAsync(JsonElement formW8, string rawBody)
     {
+        string? userEmail = null;
+        string? submissionId = null;
+        var baseUrl = GetBaseUrl();
+
         try
         {
             // Extract key fields - W-8BEN uses similar structure
-            string? submissionId = null;
             string? payeeRef = null;
             string? w8Status = null;
 
@@ -347,6 +493,7 @@ public class TaxBanditsController : ControllerBase
             if (formW8.TryGetProperty("PayeeRef", out var payeeRefElement))
             {
                 payeeRef = payeeRefElement.GetString();
+                userEmail = payeeRef; // PayeeRef is typically the email
             }
 
             // W-8BEN uses W8BENStatus instead of W9Status
@@ -383,16 +530,31 @@ public class TaxBanditsController : ControllerBase
                 _logger.LogWarning(
                     "Could not find W9Request for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
+
+                // Send processing error email if we have a user email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                        userEmail, baseUrl, submissionId, "W9Request record not found in database.");
+                }
+
                 return Ok(new { status = "request_not_found" });
             }
+
+            // Update userEmail from w9Request if we didn't have it
+            userEmail ??= w9Request.Email;
 
             // Update the W9Request record
             w9Request.Status = w8Status;
             w9Request.UpdatedAt = DateTime.UtcNow;
             w9Request.RawResponse = rawBody;
 
-            if (w8Status == StatusCompleted)
+            var isW8Completed = string.Equals(w8Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
+            var isFormStatusFailure = !string.IsNullOrWhiteSpace(w8Status) && FailureStatuses.Contains(w8Status);
+
+            if (isW8Completed)
             {
+                // W-8 fully successful: form completed (W-8 doesn't require TIN matching)
                 w9Request.IsCompleted = true;
                 w9Request.CompletedAt = DateTime.UtcNow;
 
@@ -428,16 +590,37 @@ public class TaxBanditsController : ControllerBase
                     true,
                     "Your tax form has been completed successfully!",
                     "Completed");
+
+                // Send success/welcome email to user and admin notification (with country code for W-8)
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-8", taxData.TaxResidencyCountry);
+                }
             }
-            else
+            else if (isFormStatusFailure)
             {
-                // Broadcast failure status if form failed
+                // W-8 form status indicates failure (INVALID, BOUNCED, ORDER_NOT_CREATED)
+                _logger.LogWarning("W-8 form failed for user {UserId}. W8Status={W8Status}",
+                    w9Request.UserId, w8Status);
+
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-8", w8Status);
+                }
+
                 await BroadcastWebhookStatusAsync(
                     w9Request.UserId,
                     "TaxFormStatus",
                     false,
                     $"Tax form status: {w8Status}",
                     w8Status);
+            }
+            else
+            {
+                // Intermediate status - just log and update, don't send emails
+                _logger.LogInformation(
+                    "W-8 intermediate status for user {UserId}. W8Status={W8Status}. No email sent.",
+                    w9Request.UserId, w8Status);
             }
 
             await context.SaveChangesAsync();
@@ -450,7 +633,15 @@ public class TaxBanditsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling W-8BEN webhook");;
+            _logger.LogError(ex, "Error handling W-8BEN webhook");
+
+            // Send processing error email if we have a user email
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                    userEmail, baseUrl, submissionId, ex.Message);
+            }
+
             return StatusCode(500, "Error processing webhook");
         }
     }
@@ -1000,5 +1191,13 @@ public class TaxBanditsController : ControllerBase
             _logger.LogError(ex, "Error broadcasting webhook status via SignalR for user {UserId}", userId);
             // Don't throw - webhook processing should continue even if SignalR broadcast fails
         }
+    }
+
+    /// <summary>
+    /// Gets the base URL for constructing email links.
+    /// </summary>
+    private string GetBaseUrl()
+    {
+        return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
     }
 }
