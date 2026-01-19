@@ -141,10 +141,15 @@ public sealed class Form1099TransactionResponse
     public bool Success { get; set; }
     
     /// <summary>
-    /// The transaction ID returned by TaxBandits for tracking.
+    /// The transaction ID (SubmissionId) returned by TaxBandits for tracking.
     /// This can be used to update StreamPayout records.
     /// </summary>
     public string? TransactionId { get; set; }
+    
+    /// <summary>
+    /// The status message from TaxBandits (e.g., "Transactions saved successfully").
+    /// </summary>
+    public string? StatusMessage { get; set; }
     
     public string? ErrorMessage { get; set; }
     public string? RawResponse { get; set; }

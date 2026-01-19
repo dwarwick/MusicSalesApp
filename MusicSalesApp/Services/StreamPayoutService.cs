@@ -97,31 +97,35 @@ public class StreamPayoutService : IStreamPayoutService
                 {
                     var form1099Response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(form1099Transactions);
 
+                    // Update StreamPayout records with TaxBandits transaction ID and status (for both success and failure)
+                    if (usCreatorPayoutIds.Count > 0)
+                    {
+                        await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                        var payoutsToUpdate = await updateContext.StreamPayouts
+                            .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
+                            .ToListAsync();
+
+                        foreach (var payout in payoutsToUpdate)
+                        {
+                            payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
+                            payout.TaxBanditsStatus = form1099Response.StatusMessage ?? 
+                                (form1099Response.Success ? "Success" : form1099Response.ErrorMessage);
+                        }
+
+                        await updateContext.SaveChangesAsync();
+                        _logger.LogInformation("Updated {Count} StreamPayout records with TaxBandits status: {Status}", 
+                            payoutsToUpdate.Count, form1099Response.StatusMessage ?? "N/A");
+                    }
+
                     if (form1099Response.Success)
                     {
                         _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits. TransactionId: {TransactionId}", 
                             form1099Transactions.Count, form1099Response.TransactionId ?? "N/A");
-                        
-                        // Update StreamPayout records with the TaxBandits transaction ID
-                        if (!string.IsNullOrWhiteSpace(form1099Response.TransactionId) && usCreatorPayoutIds.Count > 0)
-                        {
-                            await using var updateContext = await _contextFactory.CreateDbContextAsync();
-                            var payoutsToUpdate = await updateContext.StreamPayouts
-                                .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
-                                .ToListAsync();
-
-                            foreach (var payout in payoutsToUpdate)
-                            {
-                                payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
-                            }
-
-                            await updateContext.SaveChangesAsync();
-                            _logger.LogInformation("Updated {Count} StreamPayout records with TaxBandits transaction ID", payoutsToUpdate.Count);
-                        }
                     }
                     else
                     {
                         // Log warning but don't fail - the transactions can be reported manually if needed
+                        // Admin email notification is already sent by TaxBanditsService
                         _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}",
                             form1099Response.ErrorMessage, form1099Transactions.Count);
                     }
@@ -131,6 +135,29 @@ public class StreamPayoutService : IStreamPayoutService
                     // Log error but don't fail - the transactions can be reported manually if needed
                     _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}",
                         form1099Transactions.Count);
+                    
+                    // Update StreamPayout records with failure status
+                    if (usCreatorPayoutIds.Count > 0)
+                    {
+                        try
+                        {
+                            await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                            var payoutsToUpdate = await updateContext.StreamPayouts
+                                .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
+                                .ToListAsync();
+
+                            foreach (var payout in payoutsToUpdate)
+                            {
+                                payout.TaxBanditsStatus = $"Exception: {ex.Message}";
+                            }
+
+                            await updateContext.SaveChangesAsync();
+                        }
+                        catch (Exception updateEx)
+                        {
+                            _logger.LogError(updateEx, "Failed to update StreamPayout records with error status");
+                        }
+                    }
                 }
             }
 
