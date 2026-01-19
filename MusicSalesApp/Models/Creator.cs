@@ -119,11 +119,91 @@ public class Creator
     public bool IsActive { get; set; } = false;
 
     /// <summary>
+    /// The tax residency type of the creator. US for W-9 filers, FOREIGN for W-8BEN filers.
+    /// Derived from the completed tax form type.
+    /// </summary>
+    public TaxResidencyType TaxResidencyType { get; set; } = TaxResidencyType.Unknown;
+
+    /// <summary>
+    /// The ISO-2 country code of the creator's tax residency (e.g., "MX" for Mexico).
+    /// Derived from the CitizenOfCountry field in W-8BEN FormData.
+    /// Null for US creators.
+    /// </summary>
+    [MaxLength(2)]
+    public string? TaxResidencyCountry { get; set; }
+
+    /// <summary>
+    /// The ISO-2 country code of the treaty country if claiming tax treaty benefits.
+    /// Derived from TaxTreatyBenefits.BeneficiaryCountry in W-8BEN.
+    /// Null if no treaty benefits are claimed.
+    /// </summary>
+    [MaxLength(2)]
+    public string? TreatyCountry { get; set; }
+
+    /// <summary>
+    /// The treaty article being claimed for reduced withholding (e.g., "Article A").
+    /// Derived from TaxTreatyBenefits.ClaimingProvArticlePara in W-8BEN.
+    /// Null if no treaty benefits are claimed.
+    /// </summary>
+    [MaxLength(50)]
+    public string? ClaimedTreatyArticle { get; set; }
+
+    /// <summary>
+    /// The withholding rate as a decimal (e.g., 0.10 for 10%, 0.30 for 30%).
+    /// For US creators: 0 (unless subject to backup withholding, then 0.24).
+    /// For foreign creators: derived from treaty rate or default 0.30.
+    /// Snapshot at tax form completion time - never recomputed.
+    /// </summary>
+    [Column(TypeName = "decimal(5,4)")]
+    public decimal WithholdingRate { get; set; } = 0m;
+
+    /// <summary>
+    /// Whether the US creator is subject to backup withholding per their W-9 form.
+    /// When true, WithholdingRate should be 0.24 (24%).
+    /// Always false for foreign creators (they have standard or treaty-based withholding instead).
+    /// </summary>
+    public bool SubjectToBackupWithholding { get; set; } = false;
+
+    /// <summary>
+    /// The expiration date of the W-8 tax form.
+    /// W-8 forms expire Dec 31 of the 3rd year after signing.
+    /// After expiration, treaty benefits are invalid and 30% withholding applies.
+    /// Null for W-9 forms (no expiration).
+    /// </summary>
+    public DateTime? TaxFormExpirationDate { get; set; }
+
+    /// <summary>
+    /// The TaxBandits submission ID for the completed tax form.
+    /// Used for reference and audit purposes.
+    /// </summary>
+    public Guid? TaxBanditsSubmissionId { get; set; }
+
+    /// <summary>
+    /// When the creator's tax information was last verified.
+    /// Used to track when tax form data was captured from webhook.
+    /// </summary>
+    public DateTime? LastVerifiedAt { get; set; }
+
+    /// <summary>
     /// Checks if both PayPal and tax form onboarding are complete.
     /// </summary>
     [NotMapped]
     public bool IsFullyOnboarded => OnboardingStatus == CreatorOnboardingStatus.Completed 
                                     && TaxFormStatus == TaxFormStatus.Completed;
+
+    /// <summary>
+    /// Checks if the creator's tax form has expired (for W-8 forms).
+    /// Returns false for US creators (W-9 has no expiration).
+    /// </summary>
+    [NotMapped]
+    public bool IsTaxFormExpired => TaxFormExpirationDate.HasValue && TaxFormExpirationDate.Value < DateTime.UtcNow;
+
+    /// <summary>
+    /// Gets the effective withholding rate, considering tax form expiration.
+    /// If W-8 form is expired, returns 30% regardless of treaty rate.
+    /// </summary>
+    [NotMapped]
+    public decimal EffectiveWithholdingRate => IsTaxFormExpired ? 0.30m : WithholdingRate;
 }
 
 /// <summary>
@@ -192,4 +272,25 @@ public enum TaxFormStatus
     /// Tax form submission failed or was rejected.
     /// </summary>
     Failed = 3
+}
+
+/// <summary>
+/// Represents the tax residency type of a creator, determined by the tax form they complete.
+/// </summary>
+public enum TaxResidencyType
+{
+    /// <summary>
+    /// Tax residency has not been determined yet (tax form not completed).
+    /// </summary>
+    Unknown = 0,
+
+    /// <summary>
+    /// US tax resident - completed W-9 form.
+    /// </summary>
+    US = 1,
+
+    /// <summary>
+    /// Foreign (non-US) tax resident - completed W-8BEN or W-8BEN-E form.
+    /// </summary>
+    Foreign = 2
 }

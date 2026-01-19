@@ -250,12 +250,7 @@
                                 <p><strong>How You Earn:</strong> You earn royalties based on the number of qualifying streams (30+ seconds of continuous playback). Your royalty rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
                             </div>
 
-                            <div class="creator-signup-form mt-4">
-                                <div class="mb-3">
-                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
-                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive royalty payments.</small>
-                                </div>
+                            <div class="creator-signup-form mt-4">                               
 
                                 <div class="mb-3">
                                     <label for="creatorDisplayName" class="e-label">Display Name (optional)</label>
@@ -266,6 +261,12 @@
                                 <div class="mb-3">
                                     <label for="creatorBio" class="e-label">Bio (optional)</label>
                                     <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell listeners about yourself and your music" CssClass="e-outline" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
+                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive royalty payments.</small>
                                 </div>
 
                                 <div class="mb-3">

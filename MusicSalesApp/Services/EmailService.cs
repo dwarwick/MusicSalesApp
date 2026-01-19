@@ -200,5 +200,11 @@ namespace MusicSalesApp.Services
                 return false;
             }
         }
+
+        /// <inheritdoc />
+        public string GetAppBaseUrl()
+        {
+            return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
+        }
     }
 }

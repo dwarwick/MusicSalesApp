@@ -33,6 +33,9 @@ public class TaxBanditsController : ControllerBase
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
+    
+    // Backup withholding rate for US creators (24% per IRS regulations)
+    private const decimal BackupWithholdingRate = 0.24m;
 
     public TaxBanditsController(
         IDbContextFactory<AppDbContext> dbContextFactory,
@@ -124,7 +127,8 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
-    /// Handles W-9 form status change webhook.
+    /// Handles W-9 form status change webhook for US persons.
+    /// Sets tax residency type to US. Applies 24% backup withholding if indicated on the W-9.
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
@@ -135,6 +139,7 @@ public class TaxBanditsController : ControllerBase
             string? payeeRef = null;
             string? w9Status = null;
             string? recipientId = null;
+            bool subjectToBackupWithholding = false;
 
             if (formW9.TryGetProperty("SubmissionId", out var submissionIdElement))
             {
@@ -156,9 +161,12 @@ public class TaxBanditsController : ControllerBase
                 recipientId = recipientIdElement.GetString();
             }
 
+            // Extract backup withholding flag from FormData or BackupWithholding section
+            subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
+
             _logger.LogInformation(
-                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}",
-                submissionId, payeeRef, w9Status);
+                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, BackupWithholding={BackupWithholding}",
+                submissionId, payeeRef, w9Status, subjectToBackupWithholding);
 
             // Find and update the W9Request record
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -201,11 +209,30 @@ public class TaxBanditsController : ControllerBase
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-9 completed for user {UserId}. Proceeding with creator role assignment.",
-                    w9Request.UserId);
+                    "W-9 completed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                    w9Request.UserId, subjectToBackupWithholding);
 
-                // Complete the creator onboarding - add Creator role
-                await CompleteCreatorOnboardingAsync(w9Request.UserId);
+                // Parse submission ID as Guid if possible
+                Guid? submissionGuid = null;
+                if (Guid.TryParse(submissionId, out var parsedGuid))
+                {
+                    submissionGuid = parsedGuid;
+                }
+
+                // Determine withholding rate: 24% if subject to backup withholding, 0% otherwise
+                var withholdingRate = subjectToBackupWithholding ? BackupWithholdingRate : 0m;
+
+                // Complete the creator onboarding with US tax residency
+                await CompleteCreatorOnboardingWithTaxDataAsync(
+                    w9Request.UserId,
+                    TaxResidencyType.US,
+                    taxResidencyCountry: "US",
+                    treatyCountry: null,
+                    claimedTreatyArticle: null,
+                    withholdingRate: withholdingRate,
+                    taxFormExpirationDate: null, // W-9 forms don't expire
+                    taxBanditsSubmissionId: submissionGuid,
+                    subjectToBackupWithholding: subjectToBackupWithholding);
 
                 // Broadcast SignalR update to notify the user's browser
                 await BroadcastWebhookStatusAsync(
@@ -229,8 +256,8 @@ public class TaxBanditsController : ControllerBase
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}",
-                w9Request.UserId, w9Status, w9Request.IsCompleted);
+                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
+                w9Request.UserId, w9Status, w9Request.IsCompleted, subjectToBackupWithholding);
 
             return Ok(new { status = "success" });
         }
@@ -242,7 +269,66 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
+    /// Extracts backup withholding flag from W-9 webhook FormData.
+    /// TaxBandits includes the backup withholding flag in FormData.IsBackUpWH field.
+    /// </summary>
+    private bool ExtractBackupWithholdingFromW9(JsonElement formW9)
+    {
+        try
+        {
+            // Try to extract from BackupWithholding section
+            if (formW9.TryGetProperty("BackupWithholding", out var backupWithholding) &&
+                backupWithholding.ValueKind != JsonValueKind.Null)
+            {
+                if (backupWithholding.TryGetProperty("IsSubjectToBackupWithholding", out var isSubject))
+                {
+                    var result = isSubject.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from BackupWithholding section: {Value}", result);
+                    return result;
+                }
+            }
+
+            // Alternative: Check FormData section for backup withholding fields
+            if (formW9.TryGetProperty("FormData", out var formData) &&
+                formData.ValueKind != JsonValueKind.Null)
+            {
+                // Check for IsBackUpWH (primary field from TaxBandits W-9 webhook)
+                if (formData.TryGetProperty("IsBackUpWH", out var isBackUpWH))
+                {
+                    var result = isBackUpWH.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.IsBackUpWH: {Value}", result);
+                    return result;
+                }
+
+                if (formData.TryGetProperty("SubjectToBackupWithholding", out var subjectField))
+                {
+                    var result = subjectField.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.SubjectToBackupWithholding: {Value}", result);
+                    return result;
+                }
+
+                // Check for IsSubjectToBackupWithholding in FormData
+                if (formData.TryGetProperty("IsSubjectToBackupWithholding", out var isSubjectFormData))
+                {
+                    var result = isSubjectFormData.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.IsSubjectToBackupWithholding: {Value}", result);
+                    return result;
+                }
+            }
+
+            _logger.LogInformation("No backup withholding flag found in W-9 webhook, defaulting to false");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting backup withholding from W-9 webhook, defaulting to false");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Handles W-8BEN form status change webhook (for non-US persons).
+    /// Extracts tax residency data including treaty benefits and withholding rates.
     /// </summary>
     private async Task<IActionResult> HandleFormW8WebhookAsync(JsonElement formW8, string rawBody)
     {
@@ -311,10 +397,29 @@ public class TaxBanditsController : ControllerBase
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-8BEN completed for user {UserId}. Proceeding with creator role assignment.",
+                    "W-8BEN completed for user {UserId}. Proceeding with creator role assignment and tax data extraction.",
                     w9Request.UserId);
 
-                await CompleteCreatorOnboardingAsync(w9Request.UserId);
+                // Extract W-8BEN tax residency data from FormData
+                var taxData = ExtractW8BenTaxData(formW8);
+                
+                // Parse submission ID as Guid if possible
+                Guid? submissionGuid = null;
+                if (Guid.TryParse(submissionId, out var parsedGuid))
+                {
+                    submissionGuid = parsedGuid;
+                }
+
+                // Complete creator onboarding with tax data
+                await CompleteCreatorOnboardingWithTaxDataAsync(
+                    w9Request.UserId,
+                    TaxResidencyType.Foreign,
+                    taxData.TaxResidencyCountry,
+                    taxData.TreatyCountry,
+                    taxData.ClaimedTreatyArticle,
+                    taxData.WithholdingRate,
+                    taxData.ExpirationDate,
+                    submissionGuid);
 
                 // Broadcast SignalR update to notify the user's browser
                 await BroadcastWebhookStatusAsync(
@@ -351,10 +456,363 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
-    /// Completes the creator onboarding process by updating the tax form status 
-    /// and adding the Creator role to the user if both onboarding processes are complete.
+    /// Extracts tax residency data from W-8BEN FormData.
     /// </summary>
-    private async Task CompleteCreatorOnboardingAsync(int userId)
+    private (string? TaxResidencyCountry, string? TreatyCountry, string? ClaimedTreatyArticle, decimal WithholdingRate, DateTime? ExpirationDate) ExtractW8BenTaxData(JsonElement formW8)
+    {
+        string? taxResidencyCountry = null;
+        string? treatyCountry = null;
+        string? claimedTreatyArticle = null;
+        decimal withholdingRate = 0.30m; // Default 30% if no treaty
+        DateTime? expirationDate = null;
+
+        try
+        {
+            if (formW8.TryGetProperty("FormData", out var formData))
+            {
+                // Extract CitizenOfCountry and convert to ISO-2 code
+                if (formData.TryGetProperty("CitizenOfCountry", out var citizenOfCountry))
+                {
+                    var countryName = citizenOfCountry.GetString();
+                    taxResidencyCountry = ConvertCountryNameToIso2(countryName);
+                    _logger.LogInformation("Extracted tax residency country: {Country} -> {Iso2}", countryName, taxResidencyCountry);
+                }
+
+                // Extract expiration date
+                if (formData.TryGetProperty("ExpiryDate", out var expiryDateElement))
+                {
+                    var expiryDateStr = expiryDateElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(expiryDateStr) && DateTime.TryParse(expiryDateStr, out var parsedDate))
+                    {
+                        expirationDate = parsedDate;
+                        _logger.LogInformation("Extracted tax form expiration date: {Date}", expirationDate);
+                    }
+                }
+
+                // Extract Tax Treaty Benefits if claimed
+                if (formData.TryGetProperty("TaxTreatyBenefits", out var taxTreatyBenefits) && 
+                    taxTreatyBenefits.ValueKind != JsonValueKind.Null)
+                {
+                    // Extract treaty country
+                    if (taxTreatyBenefits.TryGetProperty("BeneficiaryCountry", out var beneficiaryCountry))
+                    {
+                        var treatyCountryName = beneficiaryCountry.GetString();
+                        treatyCountry = ConvertCountryNameToIso2(treatyCountryName);
+                        _logger.LogInformation("Extracted treaty country: {Country} -> {Iso2}", treatyCountryName, treatyCountry);
+                    }
+
+                    // Extract claimed article
+                    if (taxTreatyBenefits.TryGetProperty("ClaimingProvArticlePara", out var articleElement))
+                    {
+                        var article = articleElement.GetString();
+                        if (taxTreatyBenefits.TryGetProperty("TypeOfIncome", out var incomeTypeElement))
+                        {
+                            var incomeType = incomeTypeElement.GetString();
+                            claimedTreatyArticle = !string.IsNullOrWhiteSpace(incomeType) 
+                                ? $"Article {article} – {incomeType}" 
+                                : $"Article {article}";
+                        }
+                        else
+                        {
+                            claimedTreatyArticle = $"Article {article}";
+                        }
+                        _logger.LogInformation("Extracted claimed treaty article: {Article}", claimedTreatyArticle);
+                    }
+
+                    // Extract withholding rate from treaty
+                    if (taxTreatyBenefits.TryGetProperty("RateOfWH", out var rateElement))
+                    {
+                        // RateOfWH is typically a percentage (e.g., 10 for 10%)
+                        if (rateElement.TryGetDecimal(out var ratePercent))
+                        {
+                            withholdingRate = ratePercent / 100m; // Convert to decimal (10 -> 0.10)
+                            _logger.LogInformation("Extracted treaty withholding rate: {Percent}% -> {Decimal}", ratePercent, withholdingRate);
+                        }
+                    }
+                }
+                else
+                {
+                    // No treaty benefits claimed - use default 30%
+                    _logger.LogInformation("No tax treaty benefits claimed, using default 30% withholding rate");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting W-8BEN tax data, using defaults");
+        }
+
+        return (taxResidencyCountry, treatyCountry, claimedTreatyArticle, withholdingRate, expirationDate);
+    }
+
+    /// <summary>
+    /// Converts a country name to ISO-2 country code.
+    /// This is a simplified implementation - in production, consider:
+    /// - Using a library like NuGet package ISO3166 for comprehensive country data
+    /// - Extracting mappings to a configuration file or database
+    /// - Using TaxBandits' country code directly if available in the response
+    /// </summary>
+    private static string? ConvertCountryNameToIso2(string? countryName)
+    {
+        if (string.IsNullOrWhiteSpace(countryName))
+            return null;
+
+        // Handle special case of "Other Country" first
+        if (countryName.Equals("Other Country", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Comprehensive country mappings for tax treaty countries
+        // This list includes all countries that may have tax treaties with the US
+        var countryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // A
+            { "Afghanistan", "AF" },
+            { "Albania", "AL" },
+            { "Algeria", "DZ" },
+            { "Andorra", "AD" },
+            { "Angola", "AO" },
+            { "Antigua and Barbuda", "AG" },
+            { "Argentina", "AR" },
+            { "Armenia", "AM" },
+            { "Australia", "AU" },
+            { "Austria", "AT" },
+            { "Azerbaijan", "AZ" },
+            // B
+            { "Bahamas", "BS" },
+            { "Bahrain", "BH" },
+            { "Bangladesh", "BD" },
+            { "Barbados", "BB" },
+            { "Belarus", "BY" },
+            { "Belgium", "BE" },
+            { "Belize", "BZ" },
+            { "Benin", "BJ" },
+            { "Bhutan", "BT" },
+            { "Bolivia", "BO" },
+            { "Bosnia and Herzegovina", "BA" },
+            { "Botswana", "BW" },
+            { "Brazil", "BR" },
+            { "Brunei", "BN" },
+            { "Bulgaria", "BG" },
+            { "Burkina Faso", "BF" },
+            { "Burundi", "BI" },
+            // C
+            { "Cambodia", "KH" },
+            { "Cameroon", "CM" },
+            { "Canada", "CA" },
+            { "Cape Verde", "CV" },
+            { "Central African Republic", "CF" },
+            { "Chad", "TD" },
+            { "Chile", "CL" },
+            { "China", "CN" },
+            { "Colombia", "CO" },
+            { "Comoros", "KM" },
+            { "Congo", "CG" },
+            { "Costa Rica", "CR" },
+            { "Croatia", "HR" },
+            { "Cuba", "CU" },
+            { "Cyprus", "CY" },
+            { "Czech Republic", "CZ" },
+            { "Czechia", "CZ" },
+            // D
+            { "Denmark", "DK" },
+            { "Djibouti", "DJ" },
+            { "Dominica", "DM" },
+            { "Dominican Republic", "DO" },
+            // E
+            { "Ecuador", "EC" },
+            { "Egypt", "EG" },
+            { "El Salvador", "SV" },
+            { "Equatorial Guinea", "GQ" },
+            { "Eritrea", "ER" },
+            { "Estonia", "EE" },
+            { "Eswatini", "SZ" },
+            { "Ethiopia", "ET" },
+            // F
+            { "Fiji", "FJ" },
+            { "Finland", "FI" },
+            { "France", "FR" },
+            // G
+            { "Gabon", "GA" },
+            { "Gambia", "GM" },
+            { "Georgia", "GE" },
+            { "Germany", "DE" },
+            { "Ghana", "GH" },
+            { "Greece", "GR" },
+            { "Grenada", "GD" },
+            { "Guatemala", "GT" },
+            { "Guinea", "GN" },
+            { "Guinea-Bissau", "GW" },
+            { "Guyana", "GY" },
+            // H
+            { "Haiti", "HT" },
+            { "Honduras", "HN" },
+            { "Hong Kong", "HK" },
+            { "Hungary", "HU" },
+            // I
+            { "Iceland", "IS" },
+            { "India", "IN" },
+            { "Indonesia", "ID" },
+            { "Iran", "IR" },
+            { "Iraq", "IQ" },
+            { "Ireland", "IE" },
+            { "Israel", "IL" },
+            { "Italy", "IT" },
+            { "Ivory Coast", "CI" },
+            // J
+            { "Jamaica", "JM" },
+            { "Japan", "JP" },
+            { "Jordan", "JO" },
+            // K
+            { "Kazakhstan", "KZ" },
+            { "Kenya", "KE" },
+            { "Kiribati", "KI" },
+            { "Korea", "KR" },
+            { "South Korea", "KR" },
+            { "North Korea", "KP" },
+            { "Kuwait", "KW" },
+            { "Kyrgyzstan", "KG" },
+            // L
+            { "Laos", "LA" },
+            { "Latvia", "LV" },
+            { "Lebanon", "LB" },
+            { "Lesotho", "LS" },
+            { "Liberia", "LR" },
+            { "Libya", "LY" },
+            { "Liechtenstein", "LI" },
+            { "Lithuania", "LT" },
+            { "Luxembourg", "LU" },
+            // M
+            { "Madagascar", "MG" },
+            { "Malawi", "MW" },
+            { "Malaysia", "MY" },
+            { "Maldives", "MV" },
+            { "Mali", "ML" },
+            { "Malta", "MT" },
+            { "Marshall Islands", "MH" },
+            { "Mauritania", "MR" },
+            { "Mauritius", "MU" },
+            { "Mexico", "MX" },
+            { "Micronesia", "FM" },
+            { "Moldova", "MD" },
+            { "Monaco", "MC" },
+            { "Mongolia", "MN" },
+            { "Montenegro", "ME" },
+            { "Morocco", "MA" },
+            { "Mozambique", "MZ" },
+            { "Myanmar", "MM" },
+            // N
+            { "Namibia", "NA" },
+            { "Nauru", "NR" },
+            { "Nepal", "NP" },
+            { "Netherlands", "NL" },
+            { "New Zealand", "NZ" },
+            { "Nicaragua", "NI" },
+            { "Niger", "NE" },
+            { "Nigeria", "NG" },
+            { "Norway", "NO" },
+            // O
+            { "Oman", "OM" },
+            // P
+            { "Pakistan", "PK" },
+            { "Palau", "PW" },
+            { "Palestine", "PS" },
+            { "Panama", "PA" },
+            { "Papua New Guinea", "PG" },
+            { "Paraguay", "PY" },
+            { "Peru", "PE" },
+            { "Philippines", "PH" },
+            { "Poland", "PL" },
+            { "Portugal", "PT" },
+            // Q
+            { "Qatar", "QA" },
+            // R
+            { "Romania", "RO" },
+            { "Russia", "RU" },
+            { "Russian Federation", "RU" },
+            { "Rwanda", "RW" },
+            // S
+            { "Saint Kitts and Nevis", "KN" },
+            { "Saint Lucia", "LC" },
+            { "Saint Vincent and the Grenadines", "VC" },
+            { "Samoa", "WS" },
+            { "San Marino", "SM" },
+            { "Saudi Arabia", "SA" },
+            { "Senegal", "SN" },
+            { "Serbia", "RS" },
+            { "Seychelles", "SC" },
+            { "Sierra Leone", "SL" },
+            { "Singapore", "SG" },
+            { "Slovakia", "SK" },
+            { "Slovenia", "SI" },
+            { "Solomon Islands", "SB" },
+            { "Somalia", "SO" },
+            { "South Africa", "ZA" },
+            { "South Sudan", "SS" },
+            { "Spain", "ES" },
+            { "Sri Lanka", "LK" },
+            { "Sudan", "SD" },
+            { "Suriname", "SR" },
+            { "Sweden", "SE" },
+            { "Switzerland", "CH" },
+            { "Syria", "SY" },
+            // T
+            { "Taiwan", "TW" },
+            { "Tajikistan", "TJ" },
+            { "Tanzania", "TZ" },
+            { "Thailand", "TH" },
+            { "Timor-Leste", "TL" },
+            { "Togo", "TG" },
+            { "Tonga", "TO" },
+            { "Trinidad and Tobago", "TT" },
+            { "Tunisia", "TN" },
+            { "Turkey", "TR" },
+            { "Turkmenistan", "TM" },
+            { "Tuvalu", "TV" },
+            // U
+            { "Uganda", "UG" },
+            { "Ukraine", "UA" },
+            { "United Arab Emirates", "AE" },
+            { "UAE", "AE" },
+            { "United Kingdom", "GB" },
+            { "UK", "GB" },
+            { "Uruguay", "UY" },
+            { "Uzbekistan", "UZ" },
+            // V
+            { "Vanuatu", "VU" },
+            { "Vatican City", "VA" },
+            { "Venezuela", "VE" },
+            { "Vietnam", "VN" },
+            // Y
+            { "Yemen", "YE" },
+            // Z
+            { "Zambia", "ZM" },
+            { "Zimbabwe", "ZW" }
+        };
+
+        if (countryMap.TryGetValue(countryName, out var iso2))
+            return iso2;
+
+        // If country name is already a 2-letter code, return it
+        if (countryName.Length == 2)
+            return countryName.ToUpperInvariant();
+
+        return null;
+    }
+
+    /// <summary>
+    /// Completes the creator onboarding process with tax residency data.
+    /// Updates tax form status, stores tax data, and adds Creator role if both onboarding processes are complete.
+    /// </summary>
+    private async Task CompleteCreatorOnboardingWithTaxDataAsync(
+        int userId,
+        TaxResidencyType taxResidencyType,
+        string? taxResidencyCountry,
+        string? treatyCountry,
+        string? claimedTreatyArticle,
+        decimal withholdingRate,
+        DateTime? taxFormExpirationDate,
+        Guid? taxBanditsSubmissionId,
+        bool subjectToBackupWithholding = false)
     {
         try
         {
@@ -366,8 +824,22 @@ public class TaxBanditsController : ControllerBase
                 return;
             }
 
-            // Update the creator's tax form status
-            await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
+            // Update the creator's tax form status and tax residency data
+            await _creatorService.UpdateTaxFormStatusWithTaxDataAsync(
+                creator.Id, 
+                TaxFormStatus.Completed,
+                taxResidencyType,
+                taxResidencyCountry,
+                treatyCountry,
+                claimedTreatyArticle,
+                withholdingRate,
+                taxFormExpirationDate,
+                taxBanditsSubmissionId,
+                subjectToBackupWithholding);
+
+            _logger.LogInformation(
+                "Updated creator {CreatorId} tax data: ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}, BackupWithholding={BackupWithholding}",
+                creator.Id, taxResidencyType, taxResidencyCountry, withholdingRate, subjectToBackupWithholding);
 
             // Reload creator to get updated status
             creator = await _creatorService.GetCreatorByUserIdAsync(userId);

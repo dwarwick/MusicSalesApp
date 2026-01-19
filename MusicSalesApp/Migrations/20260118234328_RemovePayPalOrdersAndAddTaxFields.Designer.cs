@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260118234328_RemovePayPalOrdersAndAddTaxFields")]
+    partial class RemovePayPalOrdersAndAddTaxFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -473,9 +476,6 @@ namespace MusicSalesApp.Migrations
                     b.Property<decimal>("StreamPayRate")
                         .HasColumnType("decimal(10,6)");
 
-                    b.Property<bool>("SubjectToBackupWithholding")
-                        .HasColumnType("bit");
-
                     b.Property<string>("TaxBanditsPayeeRef")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -827,10 +827,6 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<int>("SongMetadataId")
                         .HasColumnType("int");
-
-                    b.Property<string>("TaxBandits1099TransactionId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal>("WithheldAmount")
                         .HasColumnType("decimal(18,2)");

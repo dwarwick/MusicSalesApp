@@ -611,4 +611,192 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
         return response;
     }
+
+    /// <inheritdoc />
+    public async Task<Form1099TransactionResponse> ReportForm1099TransactionsBatchAsync(
+        List<Form1099Transaction> transactions,
+        CancellationToken cancellationToken = default)
+    {
+        if (transactions == null || transactions.Count == 0)
+        {
+            return new Form1099TransactionResponse { Success = true };
+        }
+
+        _logger.LogInformation("Reporting {Count} Form 1099 transactions to TaxBandits", transactions.Count);
+
+        var response = new Form1099TransactionResponse();
+
+        try
+        {
+            // Get configuration values
+            var clientId = _configuration["TaxBandits:ClientId"];
+            var clientSecret = _configuration["TaxBandits:ClientSecret"];
+            var userToken = _configuration["TaxBandits:UserToken"];
+            var businessId = _configuration["TaxBandits:BusinessId"];
+
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
+            {
+                var errorMsg = "TaxBandits configuration is incomplete. Please check ClientId, ClientSecret, UserToken, and BusinessId.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Get access token
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
+            {
+                var errorMsg = "Failed to obtain TaxBandits access token.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Build the API request
+            var apiUrl = useSandbox
+                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
+                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+
+            // Build TxnData array with all transactions grouped by recipient
+            // TaxBandits API structure: TxnData[] -> each has Business, Recipients[] where each recipient has Txns[]
+            // We group by PayeeRef so each recipient has their transactions together
+            var txnDataList = transactions
+                .GroupBy(t => t.PayeeRef)
+                .Select(g => new
+                {
+                    Business = new { BusinessId = businessId },
+                    Recipients = new[] 
+                    { 
+                        new 
+                        { 
+                            PayeeRef = g.Key,
+                            Txns = g.Select(t => new
+                            {
+                                SequenceId = t.SequenceId,
+                                TxnDate = t.TransactionDate.ToString("MM/dd/yyyy"),
+                                TxnAmt = t.GrossAmount.ToString("F2"),
+                                WHAmt = t.WithheldAmount.ToString("F2")
+                            }).ToArray()
+                        } 
+                    }
+                })
+                .ToArray();
+
+            var requestBody = new { TxnData = txnDataList };
+
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{apiUrl.TrimEnd('/')}/Form1099Transactions");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
+            req.Content = content;
+
+            _logger.LogInformation("Sending Form1099Transactions batch request to TaxBandits: {RequestBody}", jsonContent);
+
+            using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            response.RawResponse = responseBody;
+
+            if (resp.IsSuccessStatusCode)
+            {
+                // Parse the response to check for success
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    // Check for errors in the response
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var firstError = errors[0];
+                        var errorMsg = firstError.TryGetProperty("Message", out var msgElement)
+                            ? msgElement.GetString() ?? "Unknown error"
+                            : "Unknown error";
+
+                        response.Success = false;
+                        response.ErrorMessage = errorMsg;
+                        _logger.LogError("Form 1099 transactions batch failed: {ErrorMessage}", errorMsg);
+                    }
+                    else
+                    {
+                        response.Success = true;
+                        
+                        // Try to extract transaction ID from response
+                        // TaxBandits may return a SubmissionId or TransactionId
+                        if (root.TryGetProperty("SubmissionId", out var submissionIdElement))
+                        {
+                            response.TransactionId = submissionIdElement.GetString();
+                        }
+                        else if (root.TryGetProperty("TransactionId", out var txnIdElement))
+                        {
+                            response.TransactionId = txnIdElement.GetString();
+                        }
+                        
+                        _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits. TransactionId: {TransactionId}", 
+                            transactions.Count, response.TransactionId ?? "N/A");
+                    }
+                }
+                catch (JsonException)
+                {
+                    // If we can't parse but got 200, assume success
+                    response.Success = true;
+                    _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits (unparseable response)", transactions.Count);
+                }
+            }
+            else
+            {
+                // HTTP error response
+                var errorMsg = $"TaxBandits API returned HTTP {(int)resp.StatusCode}";
+
+                // Try to extract error details from response
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var firstError = errors[0];
+                        if (firstError.TryGetProperty("Message", out var msgElement))
+                        {
+                            errorMsg = msgElement.GetString() ?? errorMsg;
+                        }
+                    }
+                    else if (root.TryGetProperty("StatusMessage", out var statusMsgElement))
+                    {
+                        errorMsg = statusMsgElement.GetString() ?? errorMsg;
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Couldn't parse error response, use default message
+                }
+
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+
+                _logger.LogError("Form 1099 transactions batch failed. HTTP {StatusCode}: {ErrorMessage}",
+                    (int)resp.StatusCode, errorMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while reporting Form 1099 transactions batch");
+            response.Success = false;
+            response.ErrorMessage = ex.Message;
+        }
+
+        return response;
+    }
 }
