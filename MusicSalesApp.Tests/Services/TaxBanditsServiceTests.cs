@@ -462,4 +462,367 @@ public class TaxBanditsServiceTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.ErrorMessage, Is.EqualTo("Record not found"));
     }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_ReturnsSuccess_WhenStatusMsgIsTransactionsSavedSuccessfully()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        // Success response with the expected StatusMsg
+        var form1099ResponseJson = """
+        {
+            "SubmissionId": "c1c5670b-5af2-49c5-9f70-8537a89a1c3b",
+            "StatusMsg": "Transactions saved successfully",
+            "StatusTs": "2026-01-19 15:03:39 -05:00",
+            "Errors": null
+        }
+        """;
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(form1099ResponseJson)
+                    };
+                }
+            });
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "TXN-001", TransactionDate = DateTime.UtcNow, GrossAmount = 100m, WithheldAmount = 0m }
+        };
+
+        // Act
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TransactionId, Is.EqualTo("c1c5670b-5af2-49c5-9f70-8537a89a1c3b"));
+        Assert.That(result.StatusMessage, Is.EqualTo("Transactions saved successfully"));
+        Assert.That(result.ErrorMessage, Is.Null);
+
+        // Verify no admin email was sent
+        _mockEmailService.Verify(
+            e => e.SendEmailAsync(It.IsAny<string>(), It.Is<string>(s => s.Contains("Failed")), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_ReturnsFailure_WhenStatusMsgIsNotSuccess()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        // Failure response with a different StatusMsg
+        var form1099ResponseJson = """
+        {
+            "SubmissionId": "c1c5670b-5af2-49c5-9f70-8537a89a1c3b",
+            "StatusMsg": "Some transactions failed validation",
+            "StatusTs": "2026-01-19 15:03:39 -05:00",
+            "Errors": null
+        }
+        """;
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(form1099ResponseJson)
+                    };
+                }
+            });
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "TXN-001", TransactionDate = DateTime.UtcNow, GrossAmount = 100m, WithheldAmount = 0m }
+        };
+
+        // Act
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.TransactionId, Is.EqualTo("c1c5670b-5af2-49c5-9f70-8537a89a1c3b"));
+        Assert.That(result.StatusMessage, Is.EqualTo("Some transactions failed validation"));
+        Assert.That(result.ErrorMessage, Is.EqualTo("Some transactions failed validation"));
+
+        // Verify admin email was sent with the endpoint and submission ID
+        _mockEmailService.Verify(
+            e => e.SendEmailAsync(
+                "admin@streamtunes.net",
+                It.Is<string>(s => s.Contains("Failed")),
+                It.Is<string>(body => 
+                    body.Contains("Form1099Transactions") && 
+                    body.Contains("c1c5670b-5af2-49c5-9f70-8537a89a1c3b"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_SendsAdminEmail_WhenErrorsInResponse()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        // Response with errors
+        var form1099ResponseJson = """
+        {
+            "SubmissionId": "abc123",
+            "StatusMsg": "Error",
+            "Errors": [{"Id": "ERR-001", "Message": "Invalid PayeeRef"}]
+        }
+        """;
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(form1099ResponseJson)
+                    };
+                }
+            });
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "TXN-001", TransactionDate = DateTime.UtcNow, GrossAmount = 100m, WithheldAmount = 0m }
+        };
+
+        // Act
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Is.EqualTo("Invalid PayeeRef"));
+
+        // Verify admin email was sent
+        _mockEmailService.Verify(
+            e => e.SendEmailAsync(
+                "admin@streamtunes.net",
+                It.Is<string>(s => s.Contains("Failed")),
+                It.Is<string>(body => body.Contains("Invalid PayeeRef"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_SendsAdminEmail_WhenHttpError()
+    {
+        // Arrange
+        var clientId = "test-client-id";
+        var userToken = "test-user-token";
+        var clientSecret = "test-secret";
+        var businessId = "test-business-id";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns(clientId);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var authResponse = new TaxBanditsAuthResponse
+        {
+            StatusCode = 200,
+            AccessToken = "test-access-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600
+        };
+        var authResponseJson = JsonSerializer.Serialize(authResponse);
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.InternalServerError)
+                    {
+                        Content = new StringContent("Internal Server Error")
+                    };
+                }
+            });
+
+        var transactions = new List<Form1099Transaction>
+        {
+            new() { PayeeRef = "test@example.com", SequenceId = "TXN-001", TransactionDate = DateTime.UtcNow, GrossAmount = 100m, WithheldAmount = 0m }
+        };
+
+        // Act
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("HTTP 500"));
+
+        // Verify admin email was sent
+        _mockEmailService.Verify(
+            e => e.SendEmailAsync(
+                "admin@streamtunes.net",
+                It.Is<string>(s => s.Contains("Failed")),
+                It.IsAny<string>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ReportForm1099TransactionsBatchAsync_ReturnsEmptySuccess_WhenNoTransactions()
+    {
+        // Arrange - empty transaction list
+        var transactions = new List<Form1099Transaction>();
+
+        // Act
+        var result = await _service.ReportForm1099TransactionsBatchAsync(transactions);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.StatusMessage, Is.EqualTo("No transactions to report"));
+
+        // Verify no email was sent
+        _mockEmailService.Verify(
+            e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+    }
 }

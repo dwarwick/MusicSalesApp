@@ -99,6 +99,14 @@ public class StreamPayout
     public string? TaxBandits1099TransactionId { get; set; }
 
     /// <summary>
+    /// The status of the TaxBandits Form 1099 transaction submission.
+    /// Examples: "Transactions saved successfully", "Failed", "Pending", etc.
+    /// Only populated for US creators.
+    /// </summary>
+    [MaxLength(200)]
+    public string? TaxBanditsStatus { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

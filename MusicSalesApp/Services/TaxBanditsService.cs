@@ -619,7 +619,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
     {
         if (transactions == null || transactions.Count == 0)
         {
-            return new Form1099TransactionResponse { Success = true };
+            return new Form1099TransactionResponse { Success = true, StatusMessage = "No transactions to report" };
         }
 
         _logger.LogInformation("Reporting {Count} Form 1099 transactions to TaxBandits", transactions.Count);
@@ -643,6 +643,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 _logger.LogError(errorMsg);
                 response.Success = false;
                 response.ErrorMessage = errorMsg;
+                response.StatusMessage = "Configuration Error";
+                await SendForm1099FailureEmailAsync("Form1099Transactions", null, errorMsg);
                 return response;
             }
 
@@ -655,6 +657,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 _logger.LogError(errorMsg);
                 response.Success = false;
                 response.ErrorMessage = errorMsg;
+                response.StatusMessage = "Authentication Error";
+                await SendForm1099FailureEmailAsync("Form1099Transactions", null, errorMsg);
                 return response;
             }
 
@@ -693,7 +697,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
             using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            using var req = new HttpRequestMessage(HttpMethod.Post, $"{apiUrl.TrimEnd('/')}/Form1099Transactions");
+            var endpoint = $"{apiUrl.TrimEnd('/')}/Form1099Transactions";
+            using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
             req.Content = content;
 
@@ -712,6 +717,24 @@ public sealed class TaxBanditsService : ITaxBanditsService
                     using var doc = JsonDocument.Parse(responseBody);
                     var root = doc.RootElement;
 
+                    // Extract SubmissionId
+                    if (root.TryGetProperty("SubmissionId", out var submissionIdElement))
+                    {
+                        response.TransactionId = submissionIdElement.GetString();
+                    }
+                    else if (root.TryGetProperty("TransactionId", out var txnIdElement))
+                    {
+                        response.TransactionId = txnIdElement.GetString();
+                    }
+
+                    // Extract StatusMsg - the key field for determining success/failure
+                    string? statusMsg = null;
+                    if (root.TryGetProperty("StatusMsg", out var statusMsgElement))
+                    {
+                        statusMsg = statusMsgElement.GetString();
+                        response.StatusMessage = statusMsg;
+                    }
+
                     // Check for errors in the response
                     if (root.TryGetProperty("Errors", out var errors) &&
                         errors.ValueKind == JsonValueKind.Array &&
@@ -724,32 +747,40 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
                         response.Success = false;
                         response.ErrorMessage = errorMsg;
+                        response.StatusMessage = statusMsg ?? "Error";
                         _logger.LogError("Form 1099 transactions batch failed: {ErrorMessage}", errorMsg);
+                        
+                        await SendForm1099FailureEmailAsync(endpoint, response.TransactionId, errorMsg);
+                    }
+                    // Check if StatusMsg indicates success - must be exactly "Transactions saved successfully"
+                    else if (statusMsg == "Transactions saved successfully")
+                    {
+                        response.Success = true;
+                        _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits. SubmissionId: {SubmissionId}, StatusMsg: {StatusMsg}", 
+                            transactions.Count, response.TransactionId ?? "N/A", statusMsg);
                     }
                     else
                     {
-                        response.Success = true;
+                        // StatusMsg is not the expected success message - treat as failure
+                        response.Success = false;
+                        response.ErrorMessage = statusMsg ?? "Unexpected response from TaxBandits";
+                        _logger.LogError("Form 1099 transactions batch failed. SubmissionId: {SubmissionId}, StatusMsg: {StatusMsg}", 
+                            response.TransactionId ?? "N/A", statusMsg ?? "null");
                         
-                        // Try to extract transaction ID from response
-                        // TaxBandits may return a SubmissionId or TransactionId
-                        if (root.TryGetProperty("SubmissionId", out var submissionIdElement))
-                        {
-                            response.TransactionId = submissionIdElement.GetString();
-                        }
-                        else if (root.TryGetProperty("TransactionId", out var txnIdElement))
-                        {
-                            response.TransactionId = txnIdElement.GetString();
-                        }
-                        
-                        _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits. TransactionId: {TransactionId}", 
-                            transactions.Count, response.TransactionId ?? "N/A");
+                        await SendForm1099FailureEmailAsync(endpoint, response.TransactionId, statusMsg ?? "Unexpected response");
                     }
                 }
                 catch (JsonException)
                 {
-                    // If we can't parse but got 200, assume success
-                    response.Success = true;
-                    _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits (unparseable response)", transactions.Count);
+                    // INTENTIONAL: Treat unparseable responses as failures rather than assuming success.
+                    // For tax compliance (1099 reporting), we must verify the transaction was saved successfully.
+                    // If we can't parse the response, we cannot confirm success and must alert admin for investigation.
+                    response.Success = false;
+                    response.ErrorMessage = "Failed to parse TaxBandits response";
+                    response.StatusMessage = "Parse Error";
+                    _logger.LogError("Failed to parse Form 1099 transactions response from TaxBandits");
+                    
+                    await SendForm1099FailureEmailAsync(endpoint, null, "Failed to parse TaxBandits response");
                 }
             }
             else
@@ -763,6 +794,16 @@ public sealed class TaxBanditsService : ITaxBanditsService
                     using var doc = JsonDocument.Parse(responseBody);
                     var root = doc.RootElement;
 
+                    if (root.TryGetProperty("SubmissionId", out var submissionIdElement))
+                    {
+                        response.TransactionId = submissionIdElement.GetString();
+                    }
+
+                    if (root.TryGetProperty("StatusMsg", out var statusMsgElement))
+                    {
+                        response.StatusMessage = statusMsgElement.GetString();
+                    }
+
                     if (root.TryGetProperty("Errors", out var errors) &&
                         errors.ValueKind == JsonValueKind.Array &&
                         errors.GetArrayLength() > 0)
@@ -773,9 +814,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
                             errorMsg = msgElement.GetString() ?? errorMsg;
                         }
                     }
-                    else if (root.TryGetProperty("StatusMessage", out var statusMsgElement))
+                    else if (root.TryGetProperty("StatusMessage", out var statusMessageElement))
                     {
-                        errorMsg = statusMsgElement.GetString() ?? errorMsg;
+                        errorMsg = statusMessageElement.GetString() ?? errorMsg;
                     }
                 }
                 catch (JsonException)
@@ -788,6 +829,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
                 _logger.LogError("Form 1099 transactions batch failed. HTTP {StatusCode}: {ErrorMessage}",
                     (int)resp.StatusCode, errorMsg);
+                
+                await SendForm1099FailureEmailAsync(endpoint, response.TransactionId, errorMsg);
             }
         }
         catch (Exception ex)
@@ -795,8 +838,38 @@ public sealed class TaxBanditsService : ITaxBanditsService
             _logger.LogError(ex, "Exception while reporting Form 1099 transactions batch");
             response.Success = false;
             response.ErrorMessage = ex.Message;
+            response.StatusMessage = "Exception";
+            
+            await SendForm1099FailureEmailAsync("Form1099Transactions", null, ex.Message);
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Sends an email notification to admin when Form 1099 transaction submission fails.
+    /// </summary>
+    private async Task SendForm1099FailureEmailAsync(string endpoint, string? submissionId, string errorDetails)
+    {
+        try
+        {
+            var subject = "Form 1099 Transaction Submission Failed - Action Required";
+            var body = $@"
+                <h2>Form 1099 Transaction Submission Failed</h2>
+                <p>A Form 1099 transaction submission to TaxBandits has failed.</p>
+                <p><strong>Endpoint:</strong> {System.Net.WebUtility.HtmlEncode(endpoint)}</p>
+                <p><strong>Submission ID:</strong> {System.Net.WebUtility.HtmlEncode(submissionId ?? "N/A")}</p>
+                <p><strong>Error:</strong> {System.Net.WebUtility.HtmlEncode(errorDetails)}</p>
+                <p><strong>Time:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                <p>Please investigate and take appropriate action. The affected payout records may need to be manually reported to TaxBandits.</p>";
+
+            await _emailService.SendEmailAsync(_adminEmail, subject, body);
+            _logger.LogInformation("Sent Form 1099 failure notification email to admin");
+        }
+        catch (Exception ex)
+        {
+            // Log but don't throw - email failure shouldn't affect the main flow
+            _logger.LogError(ex, "Failed to send Form 1099 failure notification email to admin");
+        }
     }
 }
