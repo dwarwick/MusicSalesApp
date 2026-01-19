@@ -34,6 +34,7 @@ public class TaxBanditsController : ControllerBase
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
+    private const string StatusCompletedTinMatchInProgress = "COMPLETED_AND_TIN_MATCH_INPROGRESS";
     
     // W-8/W-9 failure statuses that require user notification
     private static readonly HashSet<string> FailureStatuses = new(StringComparer.OrdinalIgnoreCase)
@@ -247,6 +248,7 @@ public class TaxBanditsController : ControllerBase
 
             // For W-9 to be successful: W9Status must be COMPLETED AND TINMatchStatus must be Success
             var isW9Completed = string.Equals(w9Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
+            var isTinMatchInProgress = string.Equals(w9Status, StatusCompletedTinMatchInProgress, StringComparison.OrdinalIgnoreCase);
             var isTinMatchSuccess = string.Equals(tinMatchStatus, TinMatchStatusSuccess, StringComparison.OrdinalIgnoreCase);
             var isTinMatchFailed = string.Equals(tinMatchStatus, TinMatchStatusFailed, StringComparison.OrdinalIgnoreCase);
             var isTinMatchCanceled = string.Equals(tinMatchStatus, TinMatchStatusCanceled, StringComparison.OrdinalIgnoreCase);
@@ -353,6 +355,28 @@ public class TaxBanditsController : ControllerBase
                     false,
                     $"Tax form status: {w9Status}",
                     w9Status);
+            }
+            else if (isTinMatchInProgress)
+            {
+                // W-9 form completed but TIN match is still in progress
+                _logger.LogInformation(
+                    "W-9 completed but TIN match in progress for user {UserId}. This may take up to 1 hour.",
+                    w9Request.UserId);
+
+                // Update the creator's tax form status to TinMatchInProgress
+                var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+                if (creator != null)
+                {
+                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+                }
+
+                // Broadcast SignalR update to notify the user's browser
+                await BroadcastWebhookStatusAsync(
+                    w9Request.UserId,
+                    "TaxFormStatus",
+                    true,
+                    "Your tax form is completed. TIN verification is in progress and may take up to 1 hour. This status will update automatically when complete.",
+                    "TinMatchInProgress");
             }
             else
             {

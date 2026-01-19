@@ -336,6 +336,13 @@
                                         <p>Sending new email...</p>
                                     }
                                 }
+                                else if (_creatorTaxFormStatus == "TinMatchInProgress")
+                                {
+                                    <p class="text-info"><strong>Status: TIN Match in Progress</strong></p>
+                                    <p>Your tax form has been completed successfully!</p>
+                                    <p>TIN verification with the IRS is currently in progress. This process may take up to 1 hour.</p>
+                                    <p>This status will update automatically when the verification is complete. You will receive an email notification.</p>
+                                }
                                 else if (_creatorTaxFormStatus == "Failed")
                                 {
                                     <p class="text-danger"><strong>Status: Failed</strong></p>

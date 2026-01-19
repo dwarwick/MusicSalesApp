@@ -271,7 +271,13 @@ public enum TaxFormStatus
     /// <summary>
     /// Tax form submission failed or was rejected.
     /// </summary>
-    Failed = 3
+    Failed = 3,
+
+    /// <summary>
+    /// Tax form is completed but TIN matching with IRS is still in progress.
+    /// This typically takes up to 1 hour to complete.
+    /// </summary>
+    TinMatchInProgress = 4
 }
 
 /// <summary>
