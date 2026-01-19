@@ -91,6 +91,14 @@ public class StreamPayout
     public string? PayPalTransactionId { get; set; }
 
     /// <summary>
+    /// The TaxBandits Form 1099 transaction ID for this payout.
+    /// Only populated for US creators after the transaction is reported to TaxBandits.
+    /// Used for tracking and reconciliation of 1099-NEC filings.
+    /// </summary>
+    [MaxLength(100)]
+    public string? TaxBandits1099TransactionId { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

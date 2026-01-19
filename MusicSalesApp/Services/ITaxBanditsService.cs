@@ -50,6 +50,49 @@ public interface ITaxBanditsService
     Task<W9DeleteResponse> DeleteW9Async(
         string payeeRef,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports multiple 1099-NEC transactions to TaxBandits for US-based creators in a single batch.
+    /// This should be called after payouts are successfully sent to US creators.
+    /// TaxBandits will track these transactions for end-of-year 1099-NEC filing.
+    /// </summary>
+    /// <param name="transactions">List of transactions to report.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The response from TaxBandits API.</returns>
+    Task<Form1099TransactionResponse> ReportForm1099TransactionsBatchAsync(
+        List<Form1099Transaction> transactions,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Represents a single 1099-NEC transaction to report to TaxBandits.
+/// </summary>
+public sealed class Form1099Transaction
+{
+    /// <summary>
+    /// The PayeeRef (email) of the creator.
+    /// </summary>
+    public required string PayeeRef { get; set; }
+
+    /// <summary>
+    /// A unique identifier for this transaction (e.g., PayPal transaction ID).
+    /// </summary>
+    public required string SequenceId { get; set; }
+
+    /// <summary>
+    /// The date of the transaction.
+    /// </summary>
+    public DateTime TransactionDate { get; set; }
+
+    /// <summary>
+    /// The gross amount of the payout (before any withholding).
+    /// </summary>
+    public decimal GrossAmount { get; set; }
+
+    /// <summary>
+    /// The amount withheld for backup withholding (if any).
+    /// </summary>
+    public decimal WithheldAmount { get; set; }
 }
 
 /// <summary>
@@ -86,6 +129,23 @@ public sealed class W9RequestResponse
 public sealed class W9DeleteResponse
 {
     public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? RawResponse { get; set; }
+}
+
+/// <summary>
+/// Response from TaxBandits Form1099Transactions API.
+/// </summary>
+public sealed class Form1099TransactionResponse
+{
+    public bool Success { get; set; }
+    
+    /// <summary>
+    /// The transaction ID returned by TaxBandits for tracking.
+    /// This can be used to update StreamPayout records.
+    /// </summary>
+    public string? TransactionId { get; set; }
+    
     public string? ErrorMessage { get; set; }
     public string? RawResponse { get; set; }
 }

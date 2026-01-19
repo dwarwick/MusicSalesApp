@@ -1,3 +1,4 @@
+#nullable enable
 using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ public class StreamPayoutService : IStreamPayoutService
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StreamPayoutService> _logger;
+    private readonly ITaxBanditsService _taxBanditsService;
 
     // Minimum payout threshold in USD
     private const decimal MinimumPayoutThreshold = 5.00m;
@@ -26,12 +28,14 @@ public class StreamPayoutService : IStreamPayoutService
         IDbContextFactory<AppDbContext> contextFactory,
         IEmailService emailService,
         IConfiguration configuration,
-        ILogger<StreamPayoutService> logger)
+        ILogger<StreamPayoutService> logger,
+        ITaxBanditsService taxBanditsService)
     {
         _contextFactory = contextFactory;
         _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
+        _taxBanditsService = taxBanditsService;
     }
 
     /// <inheritdoc />
@@ -42,6 +46,8 @@ public class StreamPayoutService : IStreamPayoutService
         await using var context = await _contextFactory.CreateDbContextAsync();
         
         var creatorsProcessed = 0;
+        var form1099Transactions = new List<Form1099Transaction>();
+        var usCreatorPayoutIds = new List<int>(); // Collect payout IDs for US creators to update with TaxBandits transaction ID
 
         try
         {
@@ -55,10 +61,26 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 try
                 {
-                    var payoutProcessed = await ProcessCreatorPayoutAsync(creator);
-                    if (payoutProcessed)
+                    var payoutResult = await ProcessCreatorPayoutAsync(creator);
+                    if (payoutResult != null)
                     {
                         creatorsProcessed++;
+                        
+                        // If this is a US creator with a valid PayeeRef, collect for Form 1099 reporting
+                        if (payoutResult.Value.IsUsCreator && !string.IsNullOrWhiteSpace(payoutResult.Value.PayeeRef))
+                        {
+                            form1099Transactions.Add(new Form1099Transaction
+                            {
+                                PayeeRef = payoutResult.Value.PayeeRef,
+                                SequenceId = payoutResult.Value.PayPalTransactionId,
+                                TransactionDate = DateTime.UtcNow,
+                                GrossAmount = payoutResult.Value.GrossAmount,
+                                WithheldAmount = payoutResult.Value.WithheldAmount
+                            });
+                            
+                            // Collect payout IDs so we can update them with TaxBandits transaction ID
+                            usCreatorPayoutIds.AddRange(payoutResult.Value.StreamPayoutIds);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -68,7 +90,52 @@ public class StreamPayoutService : IStreamPayoutService
                 }
             }
 
-            _logger.LogInformation("Stream payout processing completed. Processed {Count} creators", creatorsProcessed);
+            // Report all US creator transactions to TaxBandits in a single batch
+            if (form1099Transactions.Count > 0)
+            {
+                try
+                {
+                    var form1099Response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(form1099Transactions);
+
+                    if (form1099Response.Success)
+                    {
+                        _logger.LogInformation("Successfully reported {Count} Form 1099 transactions to TaxBandits. TransactionId: {TransactionId}", 
+                            form1099Transactions.Count, form1099Response.TransactionId ?? "N/A");
+                        
+                        // Update StreamPayout records with the TaxBandits transaction ID
+                        if (!string.IsNullOrWhiteSpace(form1099Response.TransactionId) && usCreatorPayoutIds.Count > 0)
+                        {
+                            await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                            var payoutsToUpdate = await updateContext.StreamPayouts
+                                .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
+                                .ToListAsync();
+
+                            foreach (var payout in payoutsToUpdate)
+                            {
+                                payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
+                            }
+
+                            await updateContext.SaveChangesAsync();
+                            _logger.LogInformation("Updated {Count} StreamPayout records with TaxBandits transaction ID", payoutsToUpdate.Count);
+                        }
+                    }
+                    else
+                    {
+                        // Log warning but don't fail - the transactions can be reported manually if needed
+                        _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}",
+                            form1099Response.ErrorMessage, form1099Transactions.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log error but don't fail - the transactions can be reported manually if needed
+                    _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}",
+                        form1099Transactions.Count);
+                }
+            }
+
+            _logger.LogInformation("Stream payout processing completed. Processed {Count} creators, {Form1099Count} US creators for 1099 reporting", 
+                creatorsProcessed, form1099Transactions.Count);
         }
         catch (Exception ex)
         {
@@ -80,10 +147,24 @@ public class StreamPayoutService : IStreamPayoutService
     }
 
     /// <summary>
+    /// Result of a successful payout for a creator.
+    /// </summary>
+    private struct PayoutResult
+    {
+        public bool IsUsCreator { get; init; }
+        public string? PayeeRef { get; init; }
+        public string PayPalTransactionId { get; init; }
+        public decimal GrossAmount { get; init; }
+        public decimal WithheldAmount { get; init; }
+        public List<int> StreamPayoutIds { get; init; }
+    }
+
+    /// <summary>
     /// Processes payout for a single creator if they have reached the minimum threshold
     /// and haven't received a payout in the past week.
     /// </summary>
-    private async Task<bool> ProcessCreatorPayoutAsync(Creator creator)
+    /// <returns>PayoutResult if payout was processed, null otherwise.</returns>
+    private async Task<PayoutResult?> ProcessCreatorPayoutAsync(Creator creator)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
@@ -100,7 +181,7 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 _logger.LogDebug("Creator {CreatorId} received a payout {Days:F1} days ago, skipping (weekly minimum not met)",
                     creator.Id, daysSinceLastPayout);
-                return false;
+                return null;
             }
         }
 
@@ -115,7 +196,7 @@ public class StreamPayoutService : IStreamPayoutService
         if (!creatorSongs.Any())
         {
             _logger.LogDebug("No unpaid streams for creator {CreatorId}", creator.Id);
-            return false;
+            return null;
         }
 
         // Calculate total earnings for this payout
@@ -164,7 +245,7 @@ public class StreamPayoutService : IStreamPayoutService
         {
             _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
                 creator.Id, totalGrossAmount, MinimumPayoutThreshold);
-            return false;
+            return null;
         }
 
         // Detailed logging for development/sandbox mode - Calculated data before PayPal call
@@ -199,10 +280,11 @@ public class StreamPayoutService : IStreamPayoutService
         if (string.IsNullOrEmpty(payPalTransactionId))
         {
             _logger.LogError("Failed to process PayPal payout for creator {CreatorId}", creator.Id);
-            return false;
+            return null;
         }
 
         // Save payout records and update StreamsAtLastPayout
+        var payoutIds = new List<int>();
         foreach (var payoutRecord in payoutRecords)
         {
             payoutRecord.PayPalTransactionId = payPalTransactionId;
@@ -216,13 +298,24 @@ public class StreamPayoutService : IStreamPayoutService
 
         await context.SaveChangesAsync();
 
+        // Collect payout IDs after save (they're now assigned)
+        payoutIds.AddRange(payoutRecords.Select(p => p.Id));
+
         // Send receipt email with gross amount for tax reporting purposes
         await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId);
 
         _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2} for {Songs} songs",
             creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, payoutRecords.Count);
 
-        return true;
+        return new PayoutResult
+        {
+            IsUsCreator = creator.TaxResidencyType == TaxResidencyType.US,
+            PayeeRef = creator.TaxBanditsPayeeRef,
+            PayPalTransactionId = payPalTransactionId,
+            GrossAmount = totalGrossAmount,
+            WithheldAmount = totalWithheldAmount,
+            StreamPayoutIds = payoutIds
+        };
     }
 
     /// <summary>
@@ -322,7 +415,7 @@ public class StreamPayoutService : IStreamPayoutService
 
             // Parse the payout batch ID from response
             using var doc = System.Text.Json.JsonDocument.Parse(responseBody);
-            var payoutBatchId = doc.RootElement.GetProperty("batch_header").GetProperty("payout_batch_id").GetString();
+            var payoutBatchId = doc.RootElement.GetProperty("batch_header").GetProperty("payout_batch_id").GetString() ?? string.Empty;
 
             // Detailed logging for development/sandbox mode - Response
             if (sandboxMode)
