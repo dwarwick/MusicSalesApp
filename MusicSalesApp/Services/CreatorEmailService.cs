@@ -1,4 +1,6 @@
 #nullable enable
+using System.Net;
+
 namespace MusicSalesApp.Services;
 
 /// <summary>
@@ -105,7 +107,7 @@ public class CreatorEmailService : ICreatorEmailService
                 <p><strong>User Email:</strong> {userEmail}</p>
                 <p><strong>Submission ID:</strong> {submissionId ?? "N/A"}</p>
                 <p><strong>Error Details:</strong></p>
-                <pre style='background: #f5f5f5; padding: 10px; overflow-x: auto; max-width: 600px;'>{System.Web.HttpUtility.HtmlEncode(errorDetails)}</pre>
+                <pre style='background: #f5f5f5; padding: 10px; overflow-x: auto; max-width: 600px;'>{WebUtility.HtmlEncode(errorDetails)}</pre>
                 <p>Please investigate this error in TaxBandits using the Submission ID above.</p>";
 
             var adminEmailSent = await _emailService.SendEmailAsync(_adminEmail, adminSubject, adminBody);
@@ -130,7 +132,7 @@ public class CreatorEmailService : ICreatorEmailService
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             var reasonText = !string.IsNullOrWhiteSpace(failureReason)
-                ? $"<p><strong>Reason:</strong> {System.Web.HttpUtility.HtmlEncode(failureReason)}</p>"
+                ? $"<p><strong>Reason:</strong> {WebUtility.HtmlEncode(failureReason)}</p>"
                 : "";
 
             var subject = $"{formType} Form Submission Failed";
