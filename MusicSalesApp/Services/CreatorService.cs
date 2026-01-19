@@ -148,7 +148,8 @@ public class CreatorService : ICreatorService
         string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
-        Guid? taxBanditsSubmissionId)
+        Guid? taxBanditsSubmissionId,
+        bool subjectToBackupWithholding = false)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
@@ -175,13 +176,14 @@ public class CreatorService : ICreatorService
         creator.WithholdingRate = withholdingRate;
         creator.TaxFormExpirationDate = taxFormExpirationDate;
         creator.TaxBanditsSubmissionId = taxBanditsSubmissionId;
+        creator.SubjectToBackupWithholding = subjectToBackupWithholding;
         creator.LastVerifiedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Updated tax form status and tax data for creator {CreatorId}: Status={Status}, ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}",
-            creatorId, status, taxResidencyType, taxResidencyCountry, withholdingRate);
+            "Updated tax form status and tax data for creator {CreatorId}: Status={Status}, ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}, BackupWithholding={BackupWithholding}",
+            creatorId, status, taxResidencyType, taxResidencyCountry, withholdingRate, subjectToBackupWithholding);
         return creator;
     }
 

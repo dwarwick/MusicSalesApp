@@ -33,6 +33,9 @@ public class TaxBanditsController : ControllerBase
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
+    
+    // Backup withholding rate for US creators (24% per IRS regulations)
+    private const decimal BackupWithholdingRate = 0.24m;
 
     public TaxBanditsController(
         IDbContextFactory<AppDbContext> dbContextFactory,
@@ -125,7 +128,7 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Handles W-9 form status change webhook for US persons.
-    /// Sets tax residency type to US with no withholding.
+    /// Sets tax residency type to US. Applies 24% backup withholding if indicated on the W-9.
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
@@ -136,6 +139,7 @@ public class TaxBanditsController : ControllerBase
             string? payeeRef = null;
             string? w9Status = null;
             string? recipientId = null;
+            bool subjectToBackupWithholding = false;
 
             if (formW9.TryGetProperty("SubmissionId", out var submissionIdElement))
             {
@@ -157,9 +161,12 @@ public class TaxBanditsController : ControllerBase
                 recipientId = recipientIdElement.GetString();
             }
 
+            // Extract backup withholding flag from FormData or BackupWithholding section
+            subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
+
             _logger.LogInformation(
-                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}",
-                submissionId, payeeRef, w9Status);
+                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, BackupWithholding={BackupWithholding}",
+                submissionId, payeeRef, w9Status, subjectToBackupWithholding);
 
             // Find and update the W9Request record
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -202,8 +209,8 @@ public class TaxBanditsController : ControllerBase
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-9 completed for user {UserId}. Proceeding with creator role assignment.",
-                    w9Request.UserId);
+                    "W-9 completed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                    w9Request.UserId, subjectToBackupWithholding);
 
                 // Parse submission ID as Guid if possible
                 Guid? submissionGuid = null;
@@ -212,17 +219,20 @@ public class TaxBanditsController : ControllerBase
                     submissionGuid = parsedGuid;
                 }
 
+                // Determine withholding rate: 24% if subject to backup withholding, 0% otherwise
+                var withholdingRate = subjectToBackupWithholding ? BackupWithholdingRate : 0m;
+
                 // Complete the creator onboarding with US tax residency
-                // US creators have 0% withholding (unless subject to backup withholding, which is handled separately)
                 await CompleteCreatorOnboardingWithTaxDataAsync(
                     w9Request.UserId,
                     TaxResidencyType.US,
                     taxResidencyCountry: "US",
                     treatyCountry: null,
                     claimedTreatyArticle: null,
-                    withholdingRate: 0m, // No withholding for US creators
+                    withholdingRate: withholdingRate,
                     taxFormExpirationDate: null, // W-9 forms don't expire
-                    taxBanditsSubmissionId: submissionGuid);
+                    taxBanditsSubmissionId: submissionGuid,
+                    subjectToBackupWithholding: subjectToBackupWithholding);
 
                 // Broadcast SignalR update to notify the user's browser
                 await BroadcastWebhookStatusAsync(
@@ -246,8 +256,8 @@ public class TaxBanditsController : ControllerBase
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}",
-                w9Request.UserId, w9Status, w9Request.IsCompleted);
+                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
+                w9Request.UserId, w9Status, w9Request.IsCompleted, subjectToBackupWithholding);
 
             return Ok(new { status = "success" });
         }
@@ -255,6 +265,56 @@ public class TaxBanditsController : ControllerBase
         {
             _logger.LogError(ex, "Error handling W-9 webhook");
             return StatusCode(500, "Error processing webhook");
+        }
+    }
+
+    /// <summary>
+    /// Extracts backup withholding flag from W-9 webhook FormData.
+    /// TaxBandits includes BackupWithholding section with IsSubjectToBackupWithholding field.
+    /// </summary>
+    private bool ExtractBackupWithholdingFromW9(JsonElement formW9)
+    {
+        try
+        {
+            // Try to extract from BackupWithholding section
+            if (formW9.TryGetProperty("BackupWithholding", out var backupWithholding) &&
+                backupWithholding.ValueKind != JsonValueKind.Null)
+            {
+                if (backupWithholding.TryGetProperty("IsSubjectToBackupWithholding", out var isSubject))
+                {
+                    var result = isSubject.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from BackupWithholding section: {Value}", result);
+                    return result;
+                }
+            }
+
+            // Alternative: Check FormData section for SubjectToBackupWithholding
+            if (formW9.TryGetProperty("FormData", out var formData) &&
+                formData.ValueKind != JsonValueKind.Null)
+            {
+                if (formData.TryGetProperty("SubjectToBackupWithholding", out var subjectField))
+                {
+                    var result = subjectField.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.SubjectToBackupWithholding: {Value}", result);
+                    return result;
+                }
+
+                // Check for IsSubjectToBackupWithholding in FormData
+                if (formData.TryGetProperty("IsSubjectToBackupWithholding", out var isSubjectFormData))
+                {
+                    var result = isSubjectFormData.ValueKind == JsonValueKind.True;
+                    _logger.LogInformation("Extracted backup withholding from FormData.IsSubjectToBackupWithholding: {Value}", result);
+                    return result;
+                }
+            }
+
+            _logger.LogInformation("No backup withholding flag found in W-9 webhook, defaulting to false");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting backup withholding from W-9 webhook, defaulting to false");
+            return false;
         }
     }
 
@@ -743,7 +803,8 @@ public class TaxBanditsController : ControllerBase
         string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
-        Guid? taxBanditsSubmissionId)
+        Guid? taxBanditsSubmissionId,
+        bool subjectToBackupWithholding = false)
     {
         try
         {
@@ -765,11 +826,12 @@ public class TaxBanditsController : ControllerBase
                 claimedTreatyArticle,
                 withholdingRate,
                 taxFormExpirationDate,
-                taxBanditsSubmissionId);
+                taxBanditsSubmissionId,
+                subjectToBackupWithholding);
 
             _logger.LogInformation(
-                "Updated creator {CreatorId} tax data: ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}",
-                creator.Id, taxResidencyType, taxResidencyCountry, withholdingRate);
+                "Updated creator {CreatorId} tax data: ResidencyType={ResidencyType}, Country={Country}, WithholdingRate={Rate:P2}, BackupWithholding={BackupWithholding}",
+                creator.Id, taxResidencyType, taxResidencyCountry, withholdingRate, subjectToBackupWithholding);
 
             // Reload creator to get updated status
             creator = await _creatorService.GetCreatorByUserIdAsync(userId);

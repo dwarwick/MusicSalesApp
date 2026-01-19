@@ -49,6 +49,7 @@ public interface ICreatorService
     /// <param name="withholdingRate">The withholding rate as decimal (e.g., 0.30 for 30%)</param>
     /// <param name="taxFormExpirationDate">When the tax form expires (W-8 only)</param>
     /// <param name="taxBanditsSubmissionId">The TaxBandits submission ID for reference</param>
+    /// <param name="subjectToBackupWithholding">Whether US creator is subject to backup withholding (W-9 only)</param>
     /// <returns>The updated creator</returns>
     Task<Creator> UpdateTaxFormStatusWithTaxDataAsync(
         int creatorId,
@@ -59,7 +60,8 @@ public interface ICreatorService
         string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
-        Guid? taxBanditsSubmissionId);
+        Guid? taxBanditsSubmissionId,
+        bool subjectToBackupWithholding = false);
 
     /// <summary>
     /// Updates the creator's TaxBandits PayeeRef (typically the email used for W-9/W-8 requests).

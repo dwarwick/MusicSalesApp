@@ -158,6 +158,13 @@ public class Creator
     public decimal WithholdingRate { get; set; } = 0m;
 
     /// <summary>
+    /// Whether the US creator is subject to backup withholding per their W-9 form.
+    /// When true, WithholdingRate should be 0.24 (24%).
+    /// Always false for foreign creators (they have standard or treaty-based withholding instead).
+    /// </summary>
+    public bool SubjectToBackupWithholding { get; set; } = false;
+
+    /// <summary>
     /// The expiration date of the W-8 tax form.
     /// W-8 forms expire Dec 31 of the 3rd year after signing.
     /// After expiration, treaty benefits are invalid and 30% withholding applies.
