@@ -27,6 +27,7 @@ public class TaxBanditsController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ICreatorService _creatorService;
+    private readonly ICreatorEmailService _creatorEmailService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaxBanditsController> _logger;
     private readonly IHubContext<WebhookStatusHub> _hubContext;
@@ -42,6 +43,7 @@ public class TaxBanditsController : ControllerBase
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         ICreatorService creatorService,
+        ICreatorEmailService creatorEmailService,
         IConfiguration configuration,
         ILogger<TaxBanditsController> logger,
         IHubContext<WebhookStatusHub> hubContext)
@@ -50,6 +52,7 @@ public class TaxBanditsController : ControllerBase
         _userManager = userManager;
         _roleManager = roleManager;
         _creatorService = creatorService;
+        _creatorEmailService = creatorEmailService;
         _configuration = configuration;
         _logger = logger;
         _hubContext = hubContext;
@@ -132,10 +135,13 @@ public class TaxBanditsController : ControllerBase
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
+        string? userEmail = null;
+        string? submissionId = null;
+        var baseUrl = GetBaseUrl();
+
         try
         {
             // Extract key fields
-            string? submissionId = null;
             string? payeeRef = null;
             string? w9Status = null;
             string? recipientId = null;
@@ -149,6 +155,7 @@ public class TaxBanditsController : ControllerBase
             if (formW9.TryGetProperty("PayeeRef", out var payeeRefElement))
             {
                 payeeRef = payeeRefElement.GetString();
+                userEmail = payeeRef; // PayeeRef is typically the email
             }
 
             if (formW9.TryGetProperty("W9Status", out var w9StatusElement))
@@ -167,6 +174,12 @@ public class TaxBanditsController : ControllerBase
             _logger.LogInformation(
                 "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, BackupWithholding={BackupWithholding}",
                 submissionId, payeeRef, w9Status, subjectToBackupWithholding);
+
+            // Send "received and analyzing" email to the user
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormReceivedEmailAsync(userEmail, baseUrl, "W-9");
+            }
 
             // Find and update the W9Request record
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -194,9 +207,20 @@ public class TaxBanditsController : ControllerBase
                 _logger.LogWarning(
                     "Could not find W9Request for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
+
+                // Send processing error email if we have a user email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                        userEmail, baseUrl, submissionId, "W9Request record not found in database.");
+                }
+
                 // Return 200 OK to prevent TaxBandits from retrying
                 return Ok(new { status = "request_not_found" });
             }
+
+            // Update userEmail from w9Request if we didn't have it
+            userEmail ??= w9Request.Email;
 
             // Update the W9Request record
             w9Request.Status = w9Status;
@@ -241,9 +265,21 @@ public class TaxBanditsController : ControllerBase
                     true, 
                     "Your tax form has been completed successfully!",
                     "Completed");
+
+                // Send success/welcome email to user and admin notification
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+                }
             }
             else
             {
+                // Form failed or has non-completed status - send failure email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9", w9Status);
+                }
+
                 // Broadcast failure status if form failed
                 await BroadcastWebhookStatusAsync(
                     w9Request.UserId,
@@ -264,6 +300,14 @@ public class TaxBanditsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling W-9 webhook");
+
+            // Send processing error email if we have a user email
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                    userEmail, baseUrl, submissionId, ex.Message);
+            }
+
             return StatusCode(500, "Error processing webhook");
         }
     }
@@ -332,10 +376,13 @@ public class TaxBanditsController : ControllerBase
     /// </summary>
     private async Task<IActionResult> HandleFormW8WebhookAsync(JsonElement formW8, string rawBody)
     {
+        string? userEmail = null;
+        string? submissionId = null;
+        var baseUrl = GetBaseUrl();
+
         try
         {
             // Extract key fields - W-8BEN uses similar structure
-            string? submissionId = null;
             string? payeeRef = null;
             string? w8Status = null;
 
@@ -347,6 +394,7 @@ public class TaxBanditsController : ControllerBase
             if (formW8.TryGetProperty("PayeeRef", out var payeeRefElement))
             {
                 payeeRef = payeeRefElement.GetString();
+                userEmail = payeeRef; // PayeeRef is typically the email
             }
 
             // W-8BEN uses W8BENStatus instead of W9Status
@@ -358,6 +406,12 @@ public class TaxBanditsController : ControllerBase
             _logger.LogInformation(
                 "Processing W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}",
                 submissionId, payeeRef, w8Status);
+
+            // Send "received and analyzing" email to the user
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormReceivedEmailAsync(userEmail, baseUrl, "W-8");
+            }
 
             // Find and update the W9Request record (we use the same table for both W-9 and W-8)
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -383,8 +437,19 @@ public class TaxBanditsController : ControllerBase
                 _logger.LogWarning(
                     "Could not find W9Request for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
+
+                // Send processing error email if we have a user email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                        userEmail, baseUrl, submissionId, "W9Request record not found in database.");
+                }
+
                 return Ok(new { status = "request_not_found" });
             }
+
+            // Update userEmail from w9Request if we didn't have it
+            userEmail ??= w9Request.Email;
 
             // Update the W9Request record
             w9Request.Status = w8Status;
@@ -428,9 +493,21 @@ public class TaxBanditsController : ControllerBase
                     true,
                     "Your tax form has been completed successfully!",
                     "Completed");
+
+                // Send success/welcome email to user and admin notification (with country code for W-8)
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-8", taxData.TaxResidencyCountry);
+                }
             }
             else
             {
+                // Form failed or has non-completed status - send failure email
+                if (!string.IsNullOrWhiteSpace(userEmail))
+                {
+                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-8", w8Status);
+                }
+
                 // Broadcast failure status if form failed
                 await BroadcastWebhookStatusAsync(
                     w9Request.UserId,
@@ -450,7 +527,15 @@ public class TaxBanditsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling W-8BEN webhook");;
+            _logger.LogError(ex, "Error handling W-8BEN webhook");
+
+            // Send processing error email if we have a user email
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                    userEmail, baseUrl, submissionId, ex.Message);
+            }
+
             return StatusCode(500, "Error processing webhook");
         }
     }
@@ -1000,5 +1085,13 @@ public class TaxBanditsController : ControllerBase
             _logger.LogError(ex, "Error broadcasting webhook status via SignalR for user {UserId}", userId);
             // Don't throw - webhook processing should continue even if SignalR broadcast fails
         }
+    }
+
+    /// <summary>
+    /// Gets the base URL for constructing email links.
+    /// </summary>
+    private string GetBaseUrl()
+    {
+        return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
     }
 }
