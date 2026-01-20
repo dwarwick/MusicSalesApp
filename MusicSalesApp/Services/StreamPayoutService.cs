@@ -57,6 +57,12 @@ public class StreamPayoutService : IStreamPayoutService
                 .Where(s => s.IsActive && s.OnboardingStatus == CreatorOnboardingStatus.Completed)
                 .ToListAsync();
 
+            DateTime TransactionDate = DateTime.UtcNow;
+
+#if DEBUG
+            TransactionDate = new DateTime(2025, 12, 15);
+#endif
+
             foreach (var creator in creators)
             {
                 try
@@ -73,7 +79,7 @@ public class StreamPayoutService : IStreamPayoutService
                             {
                                 PayeeRef = payoutResult.Value.PayeeRef,
                                 SequenceId = payoutResult.Value.PayPalTransactionId,
-                                TransactionDate = DateTime.UtcNow,
+                                TransactionDate = TransactionDate,
                                 GrossAmount = payoutResult.Value.GrossAmount,
                                 WithheldAmount = payoutResult.Value.WithheldAmount
                             });
