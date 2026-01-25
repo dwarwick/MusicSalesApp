@@ -84,7 +84,7 @@ public class AdminSongManagementModel : ComponentBase
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
-            ArtistName = m.GetEffectiveArtistName(),
+            ArtistName = m.GetEffectiveArtistNameFull(),
             RawArtistName = m.ArtistName ?? string.Empty,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
