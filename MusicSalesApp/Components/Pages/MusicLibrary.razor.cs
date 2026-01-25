@@ -343,7 +343,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (songMeta.Creator?.User?.Email != null)
         {
             var email = songMeta.Creator.User.Email;
-            var displayName = email.Length > 17 ? email.Substring(0, 17) + "..." : email;
+            var displayName = email.Length > 17 ? $"{email[..17]}..." : email;
             return new ArtistDisplayInfo
             {
                 DisplayName = displayName,
