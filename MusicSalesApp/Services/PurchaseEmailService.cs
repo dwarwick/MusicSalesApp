@@ -399,6 +399,7 @@ public class PurchaseEmailService : IPurchaseEmailService
 
     /// <summary>
     /// Gets the HTML for displaying an image or a placeholder if no image is available.
+    /// Uses table-based layout for maximum email client compatibility (Outlook, Gmail, etc.)
     /// </summary>
     /// <param name="imageUrl">The image URL, or null if no image.</param>
     /// <param name="width">The width of the image/placeholder in pixels.</param>
@@ -412,12 +413,15 @@ public class PurchaseEmailService : IPurchaseEmailService
             return $"<img src='{imageUrl}' alt='{altText}' style='width: {width}px; height: {height}px; object-fit: cover; border-radius: 4px;' />";
         }
 
-        // Return a styled placeholder with a music note icon for songs without cover art
-        return $@"<div style='width: {width}px; height: {height}px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px; display: flex; align-items: center; justify-content: center;'>
-            <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' style='width: {width * 0.6}px; height: {height * 0.6}px;'>
-                <path d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/>
-            </svg>
-        </div>";
+        // Return a styled placeholder with a music note symbol for songs without cover art
+        // Uses table-based centering for email client compatibility (Outlook doesn't support flexbox)
+        // Uses Unicode music symbol instead of SVG (many email clients strip SVG)
+        var fontSize = Math.Max(16, (int)(width * 0.5));
+        return $@"<table cellpadding='0' cellspacing='0' border='0' style='width: {width}px; height: {height}px; border-radius: 4px; background-color: #667eea;'>
+            <tr>
+                <td align='center' valign='middle' style='width: {width}px; height: {height}px; color: #ffffff; font-size: {fontSize}px; font-family: Arial, sans-serif;'>&#9835;</td>
+            </tr>
+        </table>";
     }
 
     private string GetAlbumCoverUrl(List<CartItemWithMetadata> tracks, string baseUrl)
