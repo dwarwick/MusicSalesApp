@@ -339,7 +339,7 @@ public class UploadFilesModel : BlazorBase
         public long AudioFileSize { get; set; }
         public string CoverArtFileName { get; set; } = string.Empty;
         public long CoverArtFileSize { get; set; }
-        public bool HasCoverArt { get; set; } = true;
+        public bool HasCoverArt { get; set; }
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
         public int Progress { get; set; }

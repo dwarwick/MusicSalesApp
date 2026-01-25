@@ -149,8 +149,9 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have album art placeholder
-        Assert.That(cut.Markup, Does.Contain("card-album-art-placeholder"));
+        // Assert - should have album art animation (lottie) for songs without cover art
+        Assert.That(cut.Markup, Does.Contain("card-album-art-animation"));
+        Assert.That(cut.Markup, Does.Contain("dotlottie-wc"));
     }
 
     [Test]
