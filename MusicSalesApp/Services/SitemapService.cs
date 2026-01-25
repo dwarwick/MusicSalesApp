@@ -5,7 +5,8 @@ namespace MusicSalesApp.Services;
 
 /// <summary>
 /// Service for generating and managing the sitemap.xml file.
-/// Generates URLs for all publicly accessible songs and albums.
+/// Generates URLs for all publicly accessible songs, albums, artists, and genres.
+/// Only includes active songs from active creators.
 /// </summary>
 public class SitemapService : ISitemapService
 {
@@ -36,7 +37,7 @@ public class SitemapService : ISitemapService
 
         try
         {
-            // Get all song metadata
+            // Get all song metadata (already filters by IsActive, IsEnabled, and active creators)
             var allMetadata = await _songMetadataService.GetAllAsync();
 
             // Get base URL from configuration
@@ -52,10 +53,26 @@ public class SitemapService : ISitemapService
                 .Where(m => m.IsAlbumCover && !string.IsNullOrEmpty(m.AlbumName))
                 .ToList();
 
-            _logger.LogInformation("Found {SongCount} standalone songs and {AlbumCount} albums", songs.Count, albums.Count);
+            // Get unique artist names from active songs with MP3 files
+            var artists = allMetadata
+                .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
+                .Select(m => m.GetEffectiveArtistName())
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Distinct()
+                .ToList();
+
+            // Get unique genres from active songs with MP3 files
+            var genres = allMetadata
+                .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) && !string.IsNullOrEmpty(m.Genre))
+                .Select(m => m.Genre)
+                .Distinct()
+                .ToList();
+
+            _logger.LogInformation("Found {SongCount} standalone songs, {AlbumCount} albums, {ArtistCount} artists, and {GenreCount} genres", 
+                songs.Count, albums.Count, artists.Count, genres.Count);
 
             // Generate sitemap XML
-            var sitemapContent = GenerateSitemapXml(baseUrl, songs, albums);
+            var sitemapContent = GenerateSitemapXml(baseUrl, songs, albums, artists, genres);
 
             // Write to wwwroot/sitemap.xml
             var sitemapPath = Path.Combine(_environment.WebRootPath, "sitemap.xml");
@@ -73,7 +90,7 @@ public class SitemapService : ISitemapService
     /// <summary>
     /// Generates the sitemap XML content.
     /// </summary>
-    private string GenerateSitemapXml(string baseUrl, List<Models.SongMetadata> songs, List<Models.SongMetadata> albums)
+    private string GenerateSitemapXml(string baseUrl, List<Models.SongMetadata> songs, List<Models.SongMetadata> albums, List<string> artists, List<string> genres)
     {
         var settings = new XmlWriterSettings
         {
@@ -116,6 +133,20 @@ public class SitemapService : ISitemapService
                 var albumUrl = $"{baseUrl}/album/{Uri.EscapeDataString(album.AlbumName)}";
                 WriteUrlEntry(xmlWriter, albumUrl, album.UpdatedAt, "weekly", "0.8");
             }
+        }
+
+        // Add artist URLs
+        foreach (var artist in artists)
+        {
+            var artistUrl = $"{baseUrl}/artist/{Uri.EscapeDataString(artist)}";
+            WriteUrlEntry(xmlWriter, artistUrl, DateTime.UtcNow, "weekly", "0.7");
+        }
+
+        // Add genre URLs
+        foreach (var genre in genres)
+        {
+            var genreUrl = $"{baseUrl}/genre/{Uri.EscapeDataString(genre)}";
+            WriteUrlEntry(xmlWriter, genreUrl, DateTime.UtcNow, "weekly", "0.7");
         }
 
         xmlWriter.WriteEndElement(); // urlset
