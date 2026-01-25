@@ -372,6 +372,26 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         return _songMetadata?.Id ?? 0;
     }
 
+    /// <summary>
+    /// Gets the genre for the current song. Returns "Unknown Genre" if genre is null or whitespace.
+    /// </summary>
+    protected string GetGenre()
+    {
+        if (_songMetadata != null && !string.IsNullOrWhiteSpace(_songMetadata.Genre))
+        {
+            return _songMetadata.Genre;
+        }
+        return "Unknown Genre";
+    }
+
+    /// <summary>
+    /// Gets the URL for the genre playlist page.
+    /// </summary>
+    protected string GetGenreUrl()
+    {
+        return $"/genre/{Uri.EscapeDataString(GetGenre())}";
+    }
+
     protected string GetShareUrl()
     {
         var baseUrl = NavigationManager.BaseUri.TrimEnd('/');

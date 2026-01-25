@@ -62,6 +62,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to artist info (display name and link URL)
     private Dictionary<string, ArtistDisplayInfo> _artistInfoMap = new Dictionary<string, ArtistDisplayInfo>();
 
+    // Map file names to genre
+    private Dictionary<string, string> _genreMap = new Dictionary<string, string>();
+
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
@@ -297,6 +300,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     }
                     // Store artist info
                     _artistInfoMap[audioFile.Name] = GetArtistDisplayInfo(songMeta);
+                    // Store genre
+                    _genreMap[audioFile.Name] = songMeta.Genre;
                 }
             }
         }
@@ -357,6 +362,26 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected ArtistDisplayInfo GetArtistInfo(string fileName)
     {
         return _artistInfoMap.TryGetValue(fileName, out var info) ? info : new ArtistDisplayInfo();
+    }
+
+    /// <summary>
+    /// Gets the display genre for a song. Returns "Unknown Genre" if genre is null or whitespace.
+    /// </summary>
+    protected string GetSongGenre(string fileName)
+    {
+        if (_genreMap.TryGetValue(fileName, out var genre) && !string.IsNullOrWhiteSpace(genre))
+        {
+            return genre;
+        }
+        return "Unknown Genre";
+    }
+
+    /// <summary>
+    /// Gets the URL for the genre playlist page.
+    /// </summary>
+    protected string GetGenreUrl(string genre)
+    {
+        return $"/genre/{Uri.EscapeDataString(genre)}";
     }
 
     private async Task LoadSubscriptionStatus()

@@ -45,6 +45,11 @@ namespace MusicSalesApp.Services
         Task<List<SongMetadata>> GetByCreatorIdAsync(int creatorId);
 
         /// <summary>
+        /// Get metadata by genre. If genreName is "Unknown Genre", returns songs with null or empty genre.
+        /// </summary>
+        Task<List<SongMetadata>> GetByGenreAsync(string genreName);
+
+        /// <summary>
         /// Create or update song metadata
         /// </summary>
         Task<SongMetadata> UpsertAsync(SongMetadata metadata);
