@@ -132,4 +132,33 @@ public class SongMetadata
     /// </summary>
     [MaxLength(20)]
     public string ArtistName { get; set; }
+
+    /// <summary>
+    /// Gets the effective artist name using the priority:
+    /// 1. SongMetadata.ArtistName
+    /// 2. Creator.DisplayName
+    /// 3. Creator.User.Email
+    /// </summary>
+    public string GetEffectiveArtistName()
+    {
+        // Priority 1: ArtistName from SongMetadata
+        if (!string.IsNullOrWhiteSpace(ArtistName))
+        {
+            return ArtistName;
+        }
+
+        // Priority 2: DisplayName from Creator
+        if (Creator != null && !string.IsNullOrWhiteSpace(Creator.DisplayName))
+        {
+            return Creator.DisplayName;
+        }
+
+        // Priority 3: Email from Creator's User
+        if (Creator?.User?.Email != null)
+        {
+            return Creator.User.Email;
+        }
+
+        return string.Empty;
+    }
 }

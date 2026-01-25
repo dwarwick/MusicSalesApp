@@ -94,7 +94,7 @@ public partial class CreatorSongManagementModel : BlazorBase
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
-            ArtistName = GetEffectiveArtistName(m),
+            ArtistName = m.GetEffectiveArtistName(),
             RawArtistName = m.ArtistName ?? string.Empty,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
@@ -113,35 +113,6 @@ public partial class CreatorSongManagementModel : BlazorBase
                 song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the effective artist name using the priority:
-    /// 1. SongMetadata.ArtistName
-    /// 2. Creator.DisplayName
-    /// 3. Creator.User.Email
-    /// </summary>
-    private static string GetEffectiveArtistName(SongMetadata metadata)
-    {
-        // Priority 1: ArtistName from SongMetadata
-        if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
-        {
-            return metadata.ArtistName;
-        }
-
-        // Priority 2: DisplayName from Creator
-        if (metadata.Creator != null && !string.IsNullOrWhiteSpace(metadata.Creator.DisplayName))
-        {
-            return metadata.Creator.DisplayName;
-        }
-
-        // Priority 3: Email from Creator's User
-        if (metadata.Creator?.User?.Email != null)
-        {
-            return metadata.Creator.User.Email;
-        }
-
-        return string.Empty;
     }
 
     /// <summary>
