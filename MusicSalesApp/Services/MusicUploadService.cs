@@ -256,6 +256,102 @@ namespace MusicSalesApp.Services
         }
 
         /// <inheritdoc />
+        public async Task<string> UploadMusicWithoutAlbumArtAsync(
+            Stream audioStream,
+            string audioFileName,
+            string albumName = null,
+            int? creatorId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (audioStream == null)
+                throw new ArgumentNullException(nameof(audioStream));
+            if (string.IsNullOrWhiteSpace(audioFileName))
+                throw new ArgumentException("Audio file name is required.", nameof(audioFileName));
+
+            // Get the normalized base name for folder and file naming
+            var baseName = GetNormalizedBaseName(audioFileName);
+
+            // Buffer streams if needed
+            if (!audioStream.CanSeek)
+            {
+                var buffered = new MemoryStream();
+                await audioStream.CopyToAsync(buffered, cancellationToken);
+                buffered.Position = 0;
+                audioStream = buffered;
+            }
+
+            // Ensure container exists
+            await _storageService.EnsureContainerExistsAsync();
+
+            // Validate audio file
+            if (!await _musicService.IsValidAudioFileAsync(audioStream, audioFileName))
+            {
+                throw new InvalidDataException($"File {audioFileName} is not a valid audio file.");
+            }
+
+            audioStream.Position = 0;
+
+            Stream uploadAudioStream = audioStream;
+            string mp3FileName = baseName + ".mp3";
+
+            // Convert to MP3 if needed
+            if (!_musicService.IsMp3File(audioFileName))
+            {
+                _logger.LogInformation("Converting {FileName} to MP3", audioFileName);
+                uploadAudioStream = await _musicService.ConvertToMp3Async(audioStream, audioFileName);
+            }
+
+            // Create folder path and file paths
+            string folderPath = baseName;
+            string mp3Path = $"{folderPath}/{mp3FileName}";
+
+            // Get track duration from the MP3 file (after conversion if needed)
+            double? trackDuration = null;
+            try
+            {
+                uploadAudioStream.Position = 0;
+                trackDuration = await _musicService.GetAudioDurationAsync(uploadAudioStream, mp3FileName);
+                uploadAudioStream.Position = 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
+            }
+
+            try
+            {
+                // Upload MP3 file (no tags)
+                _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
+                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg");
+
+                // Save metadata to database - single record with MP3 path only, no image path
+                await _metadataService.UpsertAsync(new Models.SongMetadata
+                {
+                    BlobPath = mp3Path, // Kept for backward compatibility
+                    Mp3BlobPath = mp3Path,
+                    ImageBlobPath = null, // No cover art
+                    FileExtension = ".mp3",
+                    AlbumName = albumName ?? string.Empty,
+                    IsAlbumCover = false,
+                    TrackLength = trackDuration,
+                    CreatorId = creatorId
+                });
+
+                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder}", folderPath);
+            }
+            finally
+            {
+                // Dispose only the converted stream; caller owns the original.
+                if (!ReferenceEquals(uploadAudioStream, audioStream))
+                {
+                    await uploadAudioStream.DisposeAsync();
+                }
+            }
+
+            return folderPath;
+        }
+
+        /// <inheritdoc />
         public async Task<string> UploadAlbumCoverAsync(
             Stream albumArtStream,
             string albumArtFileName,
@@ -367,11 +463,23 @@ namespace MusicSalesApp.Services
         /// <inheritdoc />
         public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames)
         {
-            return ValidateAllFilePairings(fileNames, requireAudioFile: true);
+            return ValidateAllFilePairings(fileNames, requireAudioFile: true, requireCoverArt: false);
         }
 
         /// <inheritdoc />
         public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile = true)
+        {
+            return ValidateAllFilePairings(fileNames, requireAudioFile, requireCoverArt: false);
+        }
+
+        /// <summary>
+        /// Validates file pairings with configurable requirements.
+        /// </summary>
+        /// <param name="fileNames">List of filenames to validate.</param>
+        /// <param name="requireAudioFile">If true, requires at least one audio file.</param>
+        /// <param name="requireCoverArt">If true, requires each audio file to have matching cover art.</param>
+        /// <returns>A result containing unmatched files if validation fails.</returns>
+        public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile, bool requireCoverArt)
         {
             var result = new FilePairingValidationResult { IsValid = true };
 
@@ -402,34 +510,64 @@ namespace MusicSalesApp.Services
                 return result;
             }
 
-            // Check if there are no files of either type
-            if (!audioFiles.Any() || !albumArtFiles.Any())
+            // Audio files are required
+            if (!audioFiles.Any())
             {
                 result.IsValid = false;
-                result.UnmatchedMp3Files.AddRange(audioFiles);
                 result.UnmatchedAlbumArtFiles.AddRange(albumArtFiles);
                 return result;
             }
 
+            // If cover art is not required, audio-only uploads are valid
+            if (!requireCoverArt)
+            {
+                // Get normalized base names for each type
+                var audioBaseNames = audioFiles
+                    .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
+                var albumArtBaseNames = albumArtFiles
+                    .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
+
+                // Find unmatched album art files (album art without audio is invalid)
+                foreach (var art in albumArtBaseNames)
+                {
+                    if (!audioBaseNames.ContainsKey(art.Key))
+                    {
+                        result.UnmatchedAlbumArtFiles.Add(art.Value);
+                    }
+                }
+
+                // Audio files without cover art are valid - don't add to unmatched
+                result.IsValid = !result.UnmatchedAlbumArtFiles.Any();
+                return result;
+            }
+
+            // Cover art is required - check if there are album art files
+            if (!albumArtFiles.Any())
+            {
+                result.IsValid = false;
+                result.UnmatchedMp3Files.AddRange(audioFiles);
+                return result;
+            }
+
             // Get normalized base names for each type
-            var audioBaseNames = audioFiles
+            var audioBaseNamesMap = audioFiles
                 .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
-            var albumArtBaseNames = albumArtFiles
+            var albumArtBaseNamesMap = albumArtFiles
                 .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
 
             // Find unmatched audio files
-            foreach (var audio in audioBaseNames)
+            foreach (var audio in audioBaseNamesMap)
             {
-                if (!albumArtBaseNames.ContainsKey(audio.Key))
+                if (!albumArtBaseNamesMap.ContainsKey(audio.Key))
                 {
                     result.UnmatchedMp3Files.Add(audio.Value);
                 }
             }
 
             // Find unmatched album art files
-            foreach (var art in albumArtBaseNames)
+            foreach (var art in albumArtBaseNamesMap)
             {
-                if (!audioBaseNames.ContainsKey(art.Key))
+                if (!audioBaseNamesMap.ContainsKey(art.Key))
                 {
                     result.UnmatchedAlbumArtFiles.Add(art.Value);
                 }

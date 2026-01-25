@@ -70,7 +70,7 @@ public class UploadFilesModel : BlazorBase
         ClearValidationError();
         _uploadItems.Clear();
 
-        var files = e.GetMultipleFiles(40); // Allow up to 40 files (20 pairs)
+        var files = e.GetMultipleFiles(40); // Allow up to 40 files
 
         // Separate files into audio and cover art
         var audioFiles = new Dictionary<string, IBrowserFile>();
@@ -91,47 +91,127 @@ public class UploadFilesModel : BlazorBase
             }
         }
 
-        // Validate all file pairings
+        // Validate files - cover art is now optional, but orphan cover art files are not allowed
         var fileNames = files.Select(f => f.Name).ToList();
         var validationResult = MusicUploadService.ValidateAllFilePairings(fileNames);
 
         if (!validationResult.IsValid)
         {
-            _validationErrorMessage = "Some files do not have matching pairs. Each audio file must have a corresponding cover art file with the same base name.";
-            _unmatchedMp3Files = validationResult.UnmatchedMp3Files;
-            _unmatchedCoverArtFiles = validationResult.UnmatchedAlbumArtFiles;
-            await InvokeAsync(StateHasChanged);
-            return;
+            // Only show error for unmatched cover art (cover art without matching audio)
+            // Audio files without cover art are now allowed
+            if (validationResult.UnmatchedAlbumArtFiles.Any())
+            {
+                _validationErrorMessage = "Some cover art files do not have matching audio files with the same base name.";
+                _unmatchedCoverArtFiles = validationResult.UnmatchedAlbumArtFiles;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
         }
 
-        // Create upload pairs for matched files
+        // Create upload items for all audio files (with or without cover art)
         foreach (var audioEntry in audioFiles)
         {
-            if (coverArtFiles.TryGetValue(audioEntry.Key, out var coverArtFile))
+            var audioFile = audioEntry.Value;
+            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
+            
+            // Check if there's a matching cover art file
+            coverArtFiles.TryGetValue(audioEntry.Key, out var coverArtFile);
+
+            var uploadItem = new UploadPairItem
             {
-                var audioFile = audioEntry.Value;
-                var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
+                BaseName = baseName,
+                AudioFileName = audioFile.Name,
+                AudioFileSize = audioFile.Size,
+                CoverArtFileName = coverArtFile?.Name ?? "(No cover art)",
+                CoverArtFileSize = coverArtFile?.Size ?? 0,
+                HasCoverArt = coverArtFile != null,
+                Status = UploadStatus.Pending,
+                Progress = 0,
+                StatusMessage = "Pending"
+            };
 
-                var uploadItem = new UploadPairItem
-                {
-                    BaseName = baseName,
-                    AudioFileName = audioFile.Name,
-                    AudioFileSize = audioFile.Size,
-                    CoverArtFileName = coverArtFile.Name,
-                    CoverArtFileSize = coverArtFile.Size,
-                    Status = UploadStatus.Pending,
-                    Progress = 0,
-                    StatusMessage = "Pending"
-                };
+            _uploadItems.Add(uploadItem);
 
-                _uploadItems.Add(uploadItem);
-
-                // Fire-and-forget each upload pair
+            // Fire-and-forget each upload
+            if (coverArtFile != null)
+            {
                 _ = UploadFilePairAsync(audioFile, coverArtFile, uploadItem);
+            }
+            else
+            {
+                _ = UploadAudioOnlyAsync(audioFile, uploadItem);
             }
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem)
+    {
+        const long maxFileSize = 100 * 1024 * 1024; // 100 MB
+        const int bufferSize = 81920; // 80 KB buffer for better performance with large files
+
+        MemoryStream audioMemoryStream = null;
+
+        try
+        {
+            uploadItem.Status = UploadStatus.Uploading;
+            uploadItem.StatusMessage = "Reading audio file...";
+            uploadItem.Progress = 5;
+            await InvokeAsync(StateHasChanged);
+
+            // Buffer the audio file
+            audioMemoryStream = new MemoryStream();
+            await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
+            {
+                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _cancellationToken);
+            }
+            audioMemoryStream.Position = 0;
+
+            uploadItem.StatusMessage = "Uploading...";
+            uploadItem.Progress = 25;
+            await InvokeAsync(StateHasChanged);
+
+            // Upload without cover art
+            var folderPath = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
+                audioMemoryStream,
+                audioFile.Name,
+                null, // No album name
+                _currentCreatorId,
+                _cancellationToken);
+
+            uploadItem.Progress = 100;
+            uploadItem.Status = UploadStatus.Completed;
+            uploadItem.StatusMessage = $"Uploaded to {folderPath}";
+            uploadItem.ErrorMessage = null;
+        }
+        catch (InvalidDataException ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Invalid file";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Validation failed";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            uploadItem.Status = UploadStatus.Failed;
+            uploadItem.Progress = 0;
+            uploadItem.StatusMessage = "Upload failed";
+            uploadItem.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            // Dispose memory streams
+            audioMemoryStream?.Dispose();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, UploadPairItem uploadItem)
@@ -259,6 +339,7 @@ public class UploadFilesModel : BlazorBase
         public long AudioFileSize { get; set; }
         public string CoverArtFileName { get; set; } = string.Empty;
         public long CoverArtFileSize { get; set; }
+        public bool HasCoverArt { get; set; } = true;
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
         public int Progress { get; set; }

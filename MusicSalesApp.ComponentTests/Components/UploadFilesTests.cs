@@ -13,8 +13,8 @@ public class UploadFilesTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<UploadFiles>();
 
-        // Assert - Check for instructions about pairing files
-        Assert.That(cut.Markup, Does.Contain("Upload MP3 files paired with their cover art"));
+        // Assert - Check for instructions about uploading audio files
+        Assert.That(cut.Markup, Does.Contain("Upload audio files"));
     }
 
     [Test]
@@ -47,6 +47,16 @@ public class UploadFilesTests : BUnitTestBase
         // Assert
         Assert.That(cut.Markup, Does.Contain("JPEG"));
         Assert.That(cut.Markup, Does.Contain("PNG"));
+    }
+
+    [Test]
+    public void UploadFiles_IndicatesCoverArtIsOptional()
+    {
+        // Act
+        var cut = TestContext.Render<UploadFiles>();
+
+        // Assert - Cover art is now optional
+        Assert.That(cut.Markup, Does.Contain("optional"));
     }
 
     [Test]

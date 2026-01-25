@@ -142,10 +142,7 @@ public class AdminSongManagementModel : ComponentBase
             // Validate standalone songs (all songs)
             if (hasMP3)
             {
-                if (string.IsNullOrEmpty(_editingSong.JpegFileName) && _songImageFile == null)
-                {
-                    _validationErrors.Add("All songs must have a cover image.");
-                }
+                // Cover art is optional - songs without cover art will display an animation
 
                 if (string.IsNullOrWhiteSpace(_editGenre))
                 {
@@ -211,7 +208,20 @@ public class AdminSongManagementModel : ComponentBase
                 var newFileName = oldFileName;
                 if (string.IsNullOrEmpty(newFileName))
                 {
-                    newFileName = $"{_editingSong.SongTitle}{fileExtension}";
+                    // No existing image - construct path in same folder as MP3
+                    if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
+                    {
+                        var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
+                        var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
+                        newFileName = string.IsNullOrEmpty(mp3Dir) 
+                            ? $"{baseName}{fileExtension}" 
+                            : $"{mp3Dir}/{baseName}{fileExtension}";
+                    }
+                    else
+                    {
+                        // Fallback to song title if no MP3
+                        newFileName = $"{_editingSong.SongTitle}{fileExtension}";
+                    }
                 }
                 else
                 {
@@ -239,6 +249,12 @@ public class AdminSongManagementModel : ComponentBase
                 if (existingMetadata == null && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
                 {
                     existingMetadata = await MetadataService.GetByBlobPathAsync(_editingSong.Mp3FileName);
+                }
+
+                // Also try by song metadata ID
+                if (existingMetadata == null && int.TryParse(_editingSong.Id, out var songId))
+                {
+                    existingMetadata = await MetadataService.GetByIdAsync(songId);
                 }
 
                 if (existingMetadata != null)

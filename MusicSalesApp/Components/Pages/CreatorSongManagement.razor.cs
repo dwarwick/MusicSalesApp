@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -8,6 +9,8 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class CreatorSongManagementModel : BlazorBase
 {
+    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+
     protected bool _loading = true;
     protected string _errorMessage = string.Empty;
     protected string _successMessage = string.Empty;
@@ -26,6 +29,7 @@ public partial class CreatorSongManagementModel : BlazorBase
     protected string _editSongTitle = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
+    protected IBrowserFile _songImageFile = null;
 
     private int? _creatorId;
     private bool _hasLoadedData = false;
@@ -205,6 +209,7 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = song;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
+        _songImageFile = null;
         _validationErrors.Clear();
         _showEditDialog = true;
     }
@@ -214,6 +219,12 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = null;
         _showEditDialog = false;
         _validationErrors.Clear();
+        _songImageFile = null;
+    }
+
+    protected void HandleSongImageUpload(InputFileChangeEventArgs e)
+    {
+        _songImageFile = e.File;
     }
 
     protected async Task SaveEdit()
@@ -250,7 +261,55 @@ public partial class CreatorSongManagementModel : BlazorBase
 
                 if (metadata != null)
                 {
-                    // Always update the title
+                    // Handle image upload if provided
+                    if (_songImageFile != null)
+                    {
+                        using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                        
+                        // Get the file extension from the uploaded file
+                        var fileExtension = System.IO.Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
+                        var contentType = GetImageContentType(fileExtension);
+                        
+                        var oldFileName = metadata.ImageBlobPath;
+                        string newFileName;
+                        
+                        if (string.IsNullOrEmpty(oldFileName))
+                        {
+                            // No existing image - construct path in same folder as MP3
+                            if (!string.IsNullOrEmpty(metadata.Mp3BlobPath))
+                            {
+                                var mp3Dir = System.IO.Path.GetDirectoryName(metadata.Mp3BlobPath)?.Replace("\\", "/");
+                                var baseName = System.IO.Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath);
+                                newFileName = string.IsNullOrEmpty(mp3Dir) 
+                                    ? $"{baseName}{fileExtension}" 
+                                    : $"{mp3Dir}/{baseName}{fileExtension}";
+                            }
+                            else
+                            {
+                                // Fallback to song title if no MP3
+                                newFileName = $"{_editSongTitle}{fileExtension}";
+                            }
+                        }
+                        else
+                        {
+                            // Replace the old extension with the new one
+                            newFileName = System.IO.Path.ChangeExtension(oldFileName, fileExtension);
+                        }
+
+                        // Delete old blob before uploading new one (if it exists)
+                        if (!string.IsNullOrEmpty(oldFileName))
+                        {
+                            await AzureStorageService.DeleteAsync(oldFileName);
+                        }
+
+                        await AzureStorageService.UploadAsync(newFileName, stream, contentType);
+                        
+                        // Update metadata with new image path
+                        metadata.ImageBlobPath = newFileName;
+                        _editingSong.JpegFileName = newFileName;
+                    }
+
+                    // Always update the title and genre
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
 
@@ -260,6 +319,7 @@ public partial class CreatorSongManagementModel : BlazorBase
                     await LoadSongsAsync();
                     _showEditDialog = false;
                     _editingSong = null;
+                    _songImageFile = null;
                 }
                 else
                 {
@@ -276,5 +336,16 @@ public partial class CreatorSongManagementModel : BlazorBase
             _isSaving = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private static string GetImageContentType(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            _ => "image/jpeg" // Default fallback
+        };
     }
 }

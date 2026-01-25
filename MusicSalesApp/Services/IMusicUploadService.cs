@@ -50,6 +50,24 @@ namespace MusicSalesApp.Services
             CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Uploads an MP3 audio file without cover art.
+        /// File is stored in a folder named after the base filename.
+        /// If the filename contains "_mastered", it is removed before storage.
+        /// </summary>
+        /// <param name="audioStream">The audio file stream.</param>
+        /// <param name="audioFileName">Original filename of the audio file.</param>
+        /// <param name="albumName">Optional album name to store as metadata.</param>
+        /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The folder path where the file was stored.</returns>
+        Task<string> UploadMusicWithoutAlbumArtAsync(
+            Stream audioStream,
+            string audioFileName,
+            string albumName = null,
+            int? creatorId = null,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Uploads an album cover image file to storage with metadata indicating it is the album cover.
         /// </summary>
         /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
