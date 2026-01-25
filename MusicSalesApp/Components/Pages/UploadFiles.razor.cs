@@ -33,6 +33,10 @@ public class UploadFilesModel : BlazorBase
     private int? _currentCreatorId = null;
     private bool _hasLoadedCreatorId = false;
 
+    // Configuration for chunked uploads
+    private const int MaxFilesAllowed = 50;
+    private const int ChunkSize = 8;
+
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
 
@@ -70,7 +74,7 @@ public class UploadFilesModel : BlazorBase
         ClearValidationError();
         _uploadItems.Clear();
 
-        var files = e.GetMultipleFiles(40); // Allow up to 40 files
+        var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
         // Separate files into audio and cover art
         var audioFiles = new Dictionary<string, IBrowserFile>();
@@ -108,6 +112,9 @@ public class UploadFilesModel : BlazorBase
             }
         }
 
+        // Build the list of upload items to display
+        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)>();
+
         // Create upload items for all audio files (with or without cover art)
         foreach (var audioEntry in audioFiles)
         {
@@ -131,19 +138,43 @@ public class UploadFilesModel : BlazorBase
             };
 
             _uploadItems.Add(uploadItem);
-
-            // Fire-and-forget each upload
-            if (coverArtFile != null)
-            {
-                _ = UploadFilePairAsync(audioFile, coverArtFile, uploadItem);
-            }
-            else
-            {
-                _ = UploadAudioOnlyAsync(audioFile, uploadItem);
-            }
+            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile));
         }
 
         await InvokeAsync(StateHasChanged);
+
+        // Process uploads in chunks
+        await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+    }
+
+    /// <summary>
+    /// Processes upload items in chunks to avoid overwhelming the system.
+    /// Audio/cover art pairs are kept together within their chunks.
+    /// </summary>
+    private async Task ProcessUploadsInChunksAsync(List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)> uploadItemsWithFiles)
+    {
+        // Process in chunks of ChunkSize (8 by default)
+        for (int i = 0; i < uploadItemsWithFiles.Count; i += ChunkSize)
+        {
+            var chunk = uploadItemsWithFiles.Skip(i).Take(ChunkSize).ToList();
+            
+            // Start all uploads in this chunk concurrently
+            var chunkTasks = new List<Task>();
+            foreach (var (item, audioFile, coverArtFile) in chunk)
+            {
+                if (coverArtFile != null)
+                {
+                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtFile, item));
+                }
+                else
+                {
+                    chunkTasks.Add(UploadAudioOnlyAsync(audioFile, item));
+                }
+            }
+
+            // Wait for all uploads in this chunk to complete before starting the next chunk
+            await Task.WhenAll(chunkTasks);
+        }
     }
 
     private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem)
