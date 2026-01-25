@@ -330,7 +330,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     /// Gets the artist display name using the priority:
     /// 1. SongMetadata.ArtistName
     /// 2. Creator.DisplayName
-    /// 3. Creator.User.Email
+    /// 3. Creator.User.Email (part before @)
     /// </summary>
     protected string GetArtistDisplayName()
     {
@@ -349,10 +349,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             return _songMetadata.Creator.DisplayName;
         }
 
-        // Priority 3: Email from Creator's User
+        // Priority 3: Email from Creator's User - use part before @ symbol
         if (_songMetadata.Creator?.User?.Email != null)
         {
-            return _songMetadata.Creator.User.Email;
+            return _songMetadata.Creator.User.Email.Split('@')[0];
         }
 
         return null;

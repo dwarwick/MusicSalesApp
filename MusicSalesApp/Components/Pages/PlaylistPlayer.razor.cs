@@ -802,10 +802,10 @@ namespace MusicSalesApp.Components.Pages
                 return metadata.Creator.DisplayName;
             }
 
-            // Priority 3: Email from Creator's User
+            // Priority 3: Email from Creator's User - use part before @ symbol
             if (metadata.Creator?.User?.Email != null)
             {
-                return metadata.Creator.User.Email;
+                return metadata.Creator.User.Email.Split('@')[0];
             }
 
             return "Unknown Artist";

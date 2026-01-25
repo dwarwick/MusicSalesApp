@@ -315,7 +315,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// Determines the artist display name and link URL based on priority:
     /// 1. SongMetadata.ArtistName - links to /artist/{artistName}
     /// 2. Creator.DisplayName - links to /creator/{creatorId}
-    /// 3. Creator.User.Email (truncated to 17 chars + "...") - links to /artist/{email}
+    /// 3. Creator.User.Email (part before @) - links to /artist/{emailPrefix}
     /// </summary>
     private ArtistDisplayInfo GetArtistDisplayInfo(SongMetadata songMeta)
     {
@@ -339,15 +339,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             };
         }
 
-        // Priority 3: Email from Creator's User (truncated to 17 chars + "...") - link to /creator/{creatorId} for all songs by this creator
+        // Priority 3: Email from Creator's User - use part before @ symbol for display and filtering
         if (songMeta.Creator?.User?.Email != null)
         {
             var email = songMeta.Creator.User.Email;
-            var displayName = email.Length > 17 ? $"{email[..17]}..." : email;
+            var emailPrefix = email.Split('@')[0];
             return new ArtistDisplayInfo
             {
-                DisplayName = displayName,
-                LinkUrl = $"/creator/{songMeta.Creator.Id}"
+                DisplayName = emailPrefix,
+                LinkUrl = $"/artist/{Uri.EscapeDataString(emailPrefix)}"
             };
         }
 

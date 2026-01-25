@@ -137,7 +137,7 @@ public class SongMetadata
     /// Gets the effective artist name using the priority:
     /// 1. SongMetadata.ArtistName
     /// 2. Creator.DisplayName
-    /// 3. Creator.User.Email
+    /// 3. Creator.User.Email (part before @)
     /// </summary>
     public string GetEffectiveArtistName()
     {
@@ -153,10 +153,10 @@ public class SongMetadata
             return Creator.DisplayName;
         }
 
-        // Priority 3: Email from Creator's User
+        // Priority 3: Email from Creator's User - use part before @ symbol
         if (Creator?.User?.Email != null)
         {
-            return Creator.User.Email;
+            return Creator.User.Email.Split('@')[0];
         }
 
         return string.Empty;

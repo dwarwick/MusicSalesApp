@@ -99,7 +99,12 @@ namespace MusicSalesApp.Services
                     // Match songs where ArtistName field matches
                     s.ArtistName == artistName ||
                     // Or match songs where ArtistName is null/empty and Creator.DisplayName matches
-                    ((s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName))
+                    ((s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName) ||
+                    // Or match songs where both ArtistName and DisplayName are null/empty and email prefix matches
+                    ((s.ArtistName == null || s.ArtistName == "") && 
+                     (s.Creator == null || s.Creator.DisplayName == null || s.Creator.DisplayName == "") && 
+                     s.Creator != null && s.Creator.User != null && s.Creator.User.Email != null &&
+                     s.Creator.User.Email.StartsWith(artistName + "@")))
                 .ToListAsync();
         }
 
