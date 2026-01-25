@@ -24,8 +24,12 @@ public class SongAdminViewModel
     public string StatusReason { get; set; } = string.Empty;
 
     /// <summary>
-    /// The artist name for this song (max 20 characters).
-    /// If set, overrides the creator's display name on song cards.
+    /// The effective artist name for display (derived from ArtistName > DisplayName > Email).
     /// </summary>
     public string ArtistName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The raw artist name from the SongMetadata.ArtistName field for editing purposes.
+    /// </summary>
+    public string RawArtistName { get; set; } = string.Empty;
 }

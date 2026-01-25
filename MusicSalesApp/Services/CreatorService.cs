@@ -378,6 +378,8 @@ public class CreatorService : ICreatorService
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         return await context.SongMetadata
+            .Include(s => s.Creator)
+                .ThenInclude(c => c.User)
             .Where(s => s.CreatorId == creatorId && s.IsActive)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();

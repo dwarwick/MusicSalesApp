@@ -38,6 +38,7 @@ public class AdminSongManagementModel : ComponentBase
     protected bool _showEditModal = false;
     protected SongAdminViewModel _editingSong = null;
     protected string _editGenre = string.Empty;
+    protected string _editArtistName = string.Empty;
     protected bool _editDisplayOnHomePage = false;
     protected IBrowserFile _songImageFile = null;
     protected List<string> _validationErrors = new();
@@ -83,6 +84,8 @@ public class AdminSongManagementModel : ComponentBase
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
+            ArtistName = GetEffectiveArtistName(m),
+            RawArtistName = m.ArtistName ?? string.Empty,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             IsEnabled = m.IsEnabled,
@@ -99,6 +102,35 @@ public class AdminSongManagementModel : ComponentBase
         }
     }
 
+    /// <summary>
+    /// Gets the effective artist name using the priority:
+    /// 1. SongMetadata.ArtistName
+    /// 2. Creator.DisplayName
+    /// 3. Creator.User.Email
+    /// </summary>
+    private static string GetEffectiveArtistName(SongMetadata metadata)
+    {
+        // Priority 1: ArtistName from SongMetadata
+        if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
+        {
+            return metadata.ArtistName;
+        }
+
+        // Priority 2: DisplayName from Creator
+        if (metadata.Creator != null && !string.IsNullOrWhiteSpace(metadata.Creator.DisplayName))
+        {
+            return metadata.Creator.DisplayName;
+        }
+
+        // Priority 3: Email from Creator's User
+        if (metadata.Creator?.User?.Email != null)
+        {
+            return metadata.Creator.User.Email;
+        }
+
+        return string.Empty;
+    }
+
     protected Task OnActionBegin(ActionEventArgs<SongAdminViewModel> args)
     {
         // Let Syncfusion handle paging, sorting, and filtering natively
@@ -110,6 +142,7 @@ public class AdminSongManagementModel : ComponentBase
     {
         _editingSong = song;
         _editGenre = song.Genre;
+        _editArtistName = song.RawArtistName; // Use raw artist name for editing, not the derived display name
         _editDisplayOnHomePage = song.DisplayOnHomePage;
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
@@ -125,6 +158,7 @@ public class AdminSongManagementModel : ComponentBase
         _validationErrors.Clear();
         _songImageFile = null;
         _editStatusReason = string.Empty;
+        _editArtistName = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -316,6 +350,8 @@ public class AdminSongManagementModel : ComponentBase
                         {
                             metadata.Genre = _editGenre;
                         }
+                        // Set artist name (can be empty to clear it)
+                        metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
                     }
 
                     // Each upsert awaited sequentially
@@ -326,6 +362,7 @@ public class AdminSongManagementModel : ComponentBase
             // Update local model
             _editingSong.Genre = _editGenre;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
+            _editingSong.RawArtistName = _editArtistName;
 
             // Close modal and refresh
             _showEditModal = false;
