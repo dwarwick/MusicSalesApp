@@ -184,10 +184,16 @@ public class PurchaseEmailService : IPurchaseEmailService
             sb.Append($@"
                 <tr>
                     <td style='padding: 10px; border-bottom: 1px solid #eee;'>
-                        <div style='display: flex; align-items: center;'>
-                            {(string.IsNullOrEmpty(imageUrl) ? "" : $"<img src='{imageUrl}' alt='Song Art' style='width: 50px; height: 50px; object-fit: cover; border-radius: 4px; margin-right: 10px;' />")}
-                            <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(songTitle)}</span>
-                        </div>
+                        <table style='border-collapse: collapse;'>
+                            <tr>
+                                <td style='width: 50px; vertical-align: middle;'>
+                                    {GetImageHtml(imageUrl, 50, 50, "Song Art")}
+                                </td>
+                                <td style='padding-left: 10px; vertical-align: middle;'>
+                                    <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(songTitle)}</span>
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                     <td style='padding: 10px; text-align: right; border-bottom: 1px solid #eee; color: #333;'>${song.Price:F2}</td>
                 </tr>
@@ -213,12 +219,18 @@ public class PurchaseEmailService : IPurchaseEmailService
 
         sb.Append($@"
             <div style='margin: 20px 0; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;'>
-                <div style='background-color: #1a1a2e; padding: 15px; display: flex; align-items: center;'>
-                    {(string.IsNullOrEmpty(albumCoverUrl) ? "" : $"<img src='{albumCoverUrl}' alt='Album Art' style='width: 80px; height: 80px; object-fit: cover; border-radius: 4px; margin-right: 15px;' />")}
-                    <div>
-                        <h3 style='margin: 0; color: #ffffff; font-size: 18px;'>{System.Web.HttpUtility.HtmlEncode(albumName)}</h3>
-                        <p style='margin: 5px 0 0 0; color: #cccccc;'>Album - ${albumPrice:F2}</p>
-                    </div>
+                <div style='background-color: #1a1a2e; padding: 15px;'>
+                    <table style='width: 100%; border-collapse: collapse;'>
+                        <tr>
+                            <td style='width: 80px; vertical-align: middle;'>
+                                {GetImageHtml(albumCoverUrl, 80, 80, "Album Art")}
+                            </td>
+                            <td style='padding-left: 15px; vertical-align: middle;'>
+                                <h3 style='margin: 0; color: #ffffff; font-size: 18px;'>{System.Web.HttpUtility.HtmlEncode(albumName)}</h3>
+                                <p style='margin: 5px 0 0 0; color: #cccccc;'>Album - ${albumPrice:F2}</p>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
                 <table style='width: 100%; border-collapse: collapse;'>
                     <thead>
@@ -243,10 +255,16 @@ public class PurchaseEmailService : IPurchaseEmailService
                 <tr>
                     <td style='padding: 10px; border-bottom: 1px solid #eee; color: #666; width: 40px;'>{trackNumber}</td>
                     <td style='padding: 10px; border-bottom: 1px solid #eee;'>
-                        <div style='display: flex; align-items: center;'>
-                            {(string.IsNullOrEmpty(trackImageUrl) ? "" : $"<img src='{trackImageUrl}' alt='Track Art' style='width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-right: 10px;' />")}
-                            <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(trackTitle)}</span>
-                        </div>
+                        <table style='border-collapse: collapse;'>
+                            <tr>
+                                <td style='width: 40px; vertical-align: middle;'>
+                                    {GetImageHtml(trackImageUrl, 40, 40, "Track Art")}
+                                </td>
+                                <td style='padding-left: 10px; vertical-align: middle;'>
+                                    <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(trackTitle)}</span>
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                 </tr>
             ");
@@ -377,6 +395,29 @@ public class PurchaseEmailService : IPurchaseEmailService
             _logger.LogWarning(ex, "Failed to generate SAS URL for image {ImagePath}", item.ImageBlobPath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets the HTML for displaying an image or a placeholder if no image is available.
+    /// </summary>
+    /// <param name="imageUrl">The image URL, or null if no image.</param>
+    /// <param name="width">The width of the image/placeholder in pixels.</param>
+    /// <param name="height">The height of the image/placeholder in pixels.</param>
+    /// <param name="altText">Alt text for the image.</param>
+    /// <returns>HTML string for the image or placeholder.</returns>
+    private static string GetImageHtml(string imageUrl, int width, int height, string altText)
+    {
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            return $"<img src='{imageUrl}' alt='{altText}' style='width: {width}px; height: {height}px; object-fit: cover; border-radius: 4px;' />";
+        }
+
+        // Return a styled placeholder with a music note icon for songs without cover art
+        return $@"<div style='width: {width}px; height: {height}px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px; display: flex; align-items: center; justify-content: center;'>
+            <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' style='width: {width * 0.6}px; height: {height * 0.6}px;'>
+                <path d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/>
+            </svg>
+        </div>";
     }
 
     private string GetAlbumCoverUrl(List<CartItemWithMetadata> tracks, string baseUrl)
