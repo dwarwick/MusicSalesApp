@@ -57,6 +57,13 @@ else
                         <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
                     </div>
                 }
+                <!-- Genre (clickable link) -->
+                @{
+                    var songGenre = GetSongGenre(f.Name);
+                }
+                <div class="card-genre">
+                    <a href="@GetGenreUrl(songGenre)" @onclick:stopPropagation="true" title="View all @songGenre songs">@songGenre</a>
+                </div>
                 <!-- Stream Count -->
                 <div class="card-stream-count">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="stream-icon">

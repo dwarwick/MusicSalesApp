@@ -172,6 +172,26 @@
         text-decoration: underline;
     }
 
+    /* Genre on Card */
+    .card-genre {
+        font-size: 11px;
+        color: #a0a0a0;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .card-genre a {
+        color: #9b87f5;
+        text-decoration: none;
+    }
+
+    .card-genre a:hover {
+        color: #b8a8f8;
+        text-decoration: underline;
+    }
+
     /* Stream Count on Card */
     .card-stream-count {
         display: flex;
@@ -310,6 +330,24 @@
         margin-top: 4px;
     }
 
+    /* Genre info on song player */
+    .genre-info {
+        color: #b3b3b3;
+        font-size: 14px;
+        font-weight: 400;
+        margin-top: 4px;
+    }
+
+    .genre-link {
+        color: #9b87f5;
+        text-decoration: none;
+    }
+
+    .genre-link:hover {
+        color: #b8a8f8;
+        text-decoration: underline;
+    }
+
     .stream-icon {
         width: 16px;
         height: 16px;
@@ -363,6 +401,22 @@
         text-align: left;
         font-size: 14px;
         color: #b3b3b3;
+    }
+
+    .track-genre {
+        text-align: left;
+        font-size: 14px;
+        color: #a0a0a0;
+    }
+
+    .track-genre-link {
+        color: #9b87f5;
+        text-decoration: none;
+    }
+
+    .track-genre-link:hover {
+        color: #b8a8f8;
+        text-decoration: underline;
     }
 
     /* Playing Indicator */

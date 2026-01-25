@@ -119,6 +119,30 @@ namespace MusicSalesApp.Services
                 .ToListAsync();
         }
 
+        public async Task<List<SongMetadata>> GetByGenreAsync(string genreName)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            
+            // If genreName is "Unknown Genre", return songs with null or empty genre
+            if (genreName == "Unknown Genre")
+            {
+                return await context.SongMetadata
+                    .Include(s => s.Creator)
+                        .ThenInclude(c => c.User)
+                    .Where(ActiveSongFromActiveCreator)
+                    .Where(s => s.Genre == null || s.Genre == "")
+                    .ToListAsync();
+            }
+            
+            // Otherwise, return songs matching the genre
+            return await context.SongMetadata
+                .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => s.Genre == genreName)
+                .ToListAsync();
+        }
+
         public async Task<SongMetadata> UpsertAsync(SongMetadata metadata)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();

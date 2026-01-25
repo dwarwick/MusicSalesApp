@@ -38,6 +38,9 @@ namespace MusicSalesApp.Components.Pages
         [Parameter]
         public int? CreatorId { get; set; }
 
+        [Parameter]
+        public string GenreName { get; set; }
+
         protected bool _loading = true;
         protected string _error;
         protected PlaylistInfo _playlistInfo;
@@ -45,6 +48,7 @@ namespace MusicSalesApp.Components.Pages
         protected bool _isRecommendedMode;
         protected bool _isArtistMode;
         protected bool _isCreatorMode;
+        protected bool _isGenreMode;
         protected string _streamUrl;
         protected bool _isPlaying;
         protected double _currentTime;
@@ -75,6 +79,7 @@ namespace MusicSalesApp.Components.Pages
         private int? _lastLoadedRecommendedUserId;
         private string _lastLoadedArtistName;
         private int? _lastLoadedCreatorId;
+        private string _lastLoadedGenreName;
         protected bool _hasActiveSubscription;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
@@ -107,10 +112,15 @@ namespace MusicSalesApp.Components.Pages
             _isRecommendedMode = RecommendedUserId.HasValue;
             _isArtistMode = !string.IsNullOrEmpty(ArtistName);
             _isCreatorMode = CreatorId.HasValue;
+            _isGenreMode = !string.IsNullOrEmpty(GenreName);
             
             // Check if parameters have changed and reset the flag if needed
             bool parametersChanged;
-            if (_isArtistMode)
+            if (_isGenreMode)
+            {
+                parametersChanged = GenreName != _lastLoadedGenreName;
+            }
+            else if (_isArtistMode)
             {
                 parametersChanged = ArtistName != _lastLoadedArtistName;
             }
@@ -143,7 +153,12 @@ namespace MusicSalesApp.Components.Pages
                 
                 try
                 {
-                    if (_isArtistMode)
+                    if (_isGenreMode)
+                    {
+                        _lastLoadedGenreName = GenreName;
+                        await LoadGenrePlaylistInfo();
+                    }
+                    else if (_isArtistMode)
                     {
                         _lastLoadedArtistName = ArtistName;
                         await LoadArtistPlaylistInfo();
@@ -782,6 +797,127 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        private async Task LoadGenrePlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            if (string.IsNullOrEmpty(GenreName))
+            {
+                _error = "No genre name provided.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                // Check authentication status
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                // URL decode the genre name
+                var decodedGenreName = Uri.UnescapeDataString(GenreName);
+                _playlistName = decodedGenreName;
+
+                // Get all songs with this genre
+                var genreSongs = await SongMetadataService.GetByGenreAsync(decodedGenreName);
+                if (genreSongs == null || !genreSongs.Any())
+                {
+                    _error = $"No songs found for genre '{decodedGenreName}'.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build list of tracks from genre songs
+                var tracks = new List<StorageFileInfo>();
+                var allMetadata = new List<Models.SongMetadata>();
+                
+                foreach (var songMetadata in genreSongs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)))
+                {
+                    tracks.Add(new StorageFileInfo
+                    {
+                        Name = songMetadata.Mp3BlobPath,
+                        Length = 0,
+                        ContentType = "audio/mpeg",
+                        LastModified = songMetadata.UpdatedAt,
+                        Tags = new Dictionary<string, string>()
+                    });
+                    allMetadata.Add(songMetadata);
+                }
+
+                if (!tracks.Any())
+                {
+                    _error = $"No playable tracks found for genre '{decodedGenreName}'.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+                _metadataLookup = allMetadata
+                    .GroupBy(m => m.Mp3BlobPath)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in allMetadata)
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
+
+                var firstTrackMeta = allMetadata.First();
+                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
+                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
+                    : "";
+
+                _playlistInfo = new PlaylistInfo
+                {
+                    PlaylistName = _playlistName,
+                    CoverArtUrl = coverImageUrl,
+                    CoverArtFileName = coverImagePath,
+                    Tracks = tracks,
+                    MetadataId = firstTrackMeta.Id
+                };
+
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Store track images from metadata
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                        {
+                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                        }
+                    }
+                }
+
+                // Set up the first track
+                _currentTrackIndex = 0;
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+                // Check subscription status to determine if user can play full tracks
+                if (_isAuthenticated)
+                {
+                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                Logger.LogError(ex, "Error loading genre playlist for genre {GenreName}", GenreName);
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
         /// <summary>
         /// Gets the display name for a song's artist using the priority:
         /// 1. SongMetadata.ArtistName
@@ -826,6 +962,30 @@ namespace MusicSalesApp.Components.Pages
             }
 
             return "Unknown Artist";
+        }
+
+        /// <summary>
+        /// Gets the genre for a track at the given index. Returns "Unknown Genre" if genre is null or whitespace.
+        /// </summary>
+        protected string GetTrackGenre(int index)
+        {
+            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return "Unknown Genre";
+            
+            var track = _playlistInfo.Tracks[index];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && !string.IsNullOrWhiteSpace(metadata.Genre))
+            {
+                return metadata.Genre;
+            }
+            
+            return "Unknown Genre";
+        }
+
+        /// <summary>
+        /// Gets the URL for the genre playlist page.
+        /// </summary>
+        protected string GetGenreUrl(string genre)
+        {
+            return $"/genre/{Uri.EscapeDataString(genre)}";
         }
 
         /// <summary>
