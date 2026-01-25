@@ -252,6 +252,54 @@ h1:focus {
     border-radius: 4px;
 }
 
+/* Lottie animation styles for songs without cover art */
+.card-album-art-animation {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 25;
+    overflow: hidden;
+    border: #06acfc 4px solid;
+}
+
+.card-lottie-animation {
+    width: 100%;
+    height: 100%;
+}
+
+.album-art-animation,
+.playlist-art-animation {
+    width: 200px;
+    height: 200px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.player-lottie-animation {
+    width: 100%;
+    height: 100%;
+}
+
+.track-thumbnail-animation {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.track-lottie-animation {
+    width: 100%;
+    height: 100%;
+}
+
 .card-actions {
     display: flex;
     justify-content: space-between !important;    

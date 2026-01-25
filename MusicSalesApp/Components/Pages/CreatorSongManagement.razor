@@ -1,6 +1,7 @@
 @page "/creator/songs"
 @inherits CreatorSongManagementModel
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Models
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
@@ -125,7 +126,9 @@
                             }
                             else
                             {
-                                <span class="text-muted">-</span>
+                                <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                                    <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" style="width: 50px; height: 50px;" autoplay loop></dotlottie-wc>
+                                </div>
                             }
                         }
                     </Template>
@@ -245,6 +248,30 @@
                                       DataSource="@(new List<string> { "Rock", "Country", "Pop", "Jazz", "Classical", "Electronic", "Hip-Hop", "R&B" })"
                                       CssClass="e-outline">
                         </SfDropDownList>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Song Cover Image</label>
+                        @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
+                        {
+                            <div class="mb-2">
+                                <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mb-2">
+                                <span class="text-muted">No cover image - a default animation will be displayed</span>
+                            </div>
+                        }
+                        <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
+                        <small class="text-muted">Upload a song cover image (JPEG or PNG) - optional</small>
+                        @if (_songImageFile != null)
+                        {
+                            <div class="mt-2 text-success">
+                                <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
+                            </div>
+                        }
                     </div>
                 </div>
             }

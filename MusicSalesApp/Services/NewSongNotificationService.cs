@@ -207,7 +207,7 @@ public class NewSongNotificationService : INewSongNotificationService
                         <table style='width: 100%; border-collapse: collapse;'>
                             <tr>
                                 <td style='width: 80px; vertical-align: top;'>
-                                    {(string.IsNullOrEmpty(albumImageUrl) ? "" : $"<img src='{albumImageUrl}' alt='Album Art' style='width: 80px; height: 80px; object-fit: cover; border-radius: 4px;' />")}
+                                    {GetImageHtml(albumImageUrl, 80, 80, "Album Art")}
                                 </td>
                                 <td style='padding-left: 15px; vertical-align: top;'>
                                     <h3 style='margin: 0; color: #ffffff; font-size: 18px;'>{System.Web.HttpUtility.HtmlEncode(album.AlbumName)}</h3>
@@ -266,7 +266,7 @@ public class NewSongNotificationService : INewSongNotificationService
                         <table style='border-collapse: collapse;'>
                             <tr>
                                 <td style='width: 50px; vertical-align: top;'>
-                                    {(string.IsNullOrEmpty(songImageUrl) ? "" : $"<img src='{songImageUrl}' alt='Song Art' style='width: 50px; height: 50px; object-fit: cover; border-radius: 4px;' />")}
+                                    {GetImageHtml(songImageUrl, 50, 50, "Song Art")}
                                 </td>
                                 <td style='padding-left: 10px; vertical-align: middle;'>
                                     <span style='color: #333;'>{System.Web.HttpUtility.HtmlEncode(songTitle)}</span>
@@ -327,5 +327,32 @@ public class NewSongNotificationService : INewSongNotificationService
             _logger.LogWarning(ex, "Failed to generate SAS URL for image {ImagePath}", imageBlobPath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets the HTML for displaying an image or a placeholder if no image is available.
+    /// Uses table-based layout for maximum email client compatibility (Outlook, Gmail, etc.)
+    /// </summary>
+    /// <param name="imageUrl">The image URL, or null if no image.</param>
+    /// <param name="width">The width of the image/placeholder in pixels.</param>
+    /// <param name="height">The height of the image/placeholder in pixels.</param>
+    /// <param name="altText">Alt text for the image.</param>
+    /// <returns>HTML string for the image or placeholder.</returns>
+    private static string GetImageHtml(string imageUrl, int width, int height, string altText)
+    {
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            return $"<img src='{imageUrl}' alt='{altText}' style='width: {width}px; height: {height}px; object-fit: cover; border-radius: 4px;' />";
+        }
+
+        // Return a styled placeholder with a music note symbol for songs without cover art
+        // Uses table-based centering for email client compatibility (Outlook doesn't support flexbox)
+        // Uses Unicode music symbol instead of SVG (many email clients strip SVG)
+        var fontSize = Math.Max(16, (int)(width * 0.5));
+        return $@"<table cellpadding='0' cellspacing='0' border='0' style='width: {width}px; height: {height}px; border-radius: 4px; background-color: #667eea;'>
+            <tr>
+                <td align='center' valign='middle' style='width: {width}px; height: {height}px; color: #ffffff; font-size: {fontSize}px; font-family: Arial, sans-serif;'>&#9835;</td>
+            </tr>
+        </table>";
     }
 }
