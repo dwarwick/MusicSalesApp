@@ -32,11 +32,19 @@ namespace MusicSalesApp.Components.Pages
         [Parameter]
         public int? RecommendedUserId { get; set; }
 
+        [Parameter]
+        public string ArtistName { get; set; }
+
+        [Parameter]
+        public int? CreatorId { get; set; }
+
         protected bool _loading = true;
         protected string _error;
         protected PlaylistInfo _playlistInfo;
         protected string _playlistName;
         protected bool _isRecommendedMode;
+        protected bool _isArtistMode;
+        protected bool _isCreatorMode;
         protected string _streamUrl;
         protected bool _isPlaying;
         protected double _currentTime;
@@ -65,6 +73,8 @@ namespace MusicSalesApp.Components.Pages
         private bool _hasLoadedData = false;
         private int? _lastLoadedPlaylistId;
         private int? _lastLoadedRecommendedUserId;
+        private string _lastLoadedArtistName;
+        private int? _lastLoadedCreatorId;
         protected bool _hasActiveSubscription;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
@@ -93,12 +103,22 @@ namespace MusicSalesApp.Components.Pages
 
         protected override void OnParametersSet()
         {
-            // Only set the mode flags, don't load data here
+            // Set the mode flags based on which parameter is provided
             _isRecommendedMode = RecommendedUserId.HasValue;
+            _isArtistMode = !string.IsNullOrEmpty(ArtistName);
+            _isCreatorMode = CreatorId.HasValue;
             
             // Check if parameters have changed and reset the flag if needed
             bool parametersChanged;
-            if (_isRecommendedMode)
+            if (_isArtistMode)
+            {
+                parametersChanged = ArtistName != _lastLoadedArtistName;
+            }
+            else if (_isCreatorMode)
+            {
+                parametersChanged = CreatorId != _lastLoadedCreatorId;
+            }
+            else if (_isRecommendedMode)
             {
                 parametersChanged = RecommendedUserId != _lastLoadedRecommendedUserId;
             }
@@ -123,7 +143,17 @@ namespace MusicSalesApp.Components.Pages
                 
                 try
                 {
-                    if (_isRecommendedMode)
+                    if (_isArtistMode)
+                    {
+                        _lastLoadedArtistName = ArtistName;
+                        await LoadArtistPlaylistInfo();
+                    }
+                    else if (_isCreatorMode)
+                    {
+                        _lastLoadedCreatorId = CreatorId;
+                        await LoadCreatorPlaylistInfo();
+                    }
+                    else if (_isRecommendedMode)
                     {
                         _lastLoadedRecommendedUserId = RecommendedUserId;
                         await LoadRecommendedPlaylistInfo();
@@ -507,6 +537,295 @@ namespace MusicSalesApp.Components.Pages
             {
                 _loading = false;
             }
+        }
+
+        private async Task LoadArtistPlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            if (string.IsNullOrEmpty(ArtistName))
+            {
+                _error = "No artist name provided.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                // Check authentication status
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                // URL decode the artist name
+                var decodedArtistName = Uri.UnescapeDataString(ArtistName);
+                _playlistName = decodedArtistName;
+
+                // Get all songs with this artist name
+                var artistSongs = await SongMetadataService.GetByArtistNameAsync(decodedArtistName);
+                if (artistSongs == null || !artistSongs.Any())
+                {
+                    _error = $"No songs found for artist '{decodedArtistName}'.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build list of tracks from artist songs
+                var tracks = new List<StorageFileInfo>();
+                var allMetadata = new List<Models.SongMetadata>();
+                
+                foreach (var songMetadata in artistSongs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)))
+                {
+                    tracks.Add(new StorageFileInfo
+                    {
+                        Name = songMetadata.Mp3BlobPath,
+                        Length = 0,
+                        ContentType = "audio/mpeg",
+                        LastModified = songMetadata.UpdatedAt,
+                        Tags = new Dictionary<string, string>()
+                    });
+                    allMetadata.Add(songMetadata);
+                }
+
+                if (!tracks.Any())
+                {
+                    _error = $"No playable tracks found for artist '{decodedArtistName}'.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+                _metadataLookup = allMetadata
+                    .GroupBy(m => m.Mp3BlobPath)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in allMetadata)
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
+
+                var firstTrackMeta = allMetadata.First();
+                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
+                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
+                    : "";
+
+                _playlistInfo = new PlaylistInfo
+                {
+                    PlaylistName = _playlistName,
+                    CoverArtUrl = coverImageUrl,
+                    CoverArtFileName = coverImagePath,
+                    Tracks = tracks,
+                    MetadataId = firstTrackMeta.Id
+                };
+
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Store track images from metadata
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                        {
+                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                        }
+                    }
+                }
+
+                // Set up the first track
+                _currentTrackIndex = 0;
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+                // Check subscription status to determine if user can play full tracks
+                if (_isAuthenticated)
+                {
+                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                Logger.LogError(ex, "Error loading artist playlist for artist {ArtistName}", ArtistName);
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
+        private async Task LoadCreatorPlaylistInfo()
+        {
+            _loading = true;
+            _error = null;
+
+            if (!CreatorId.HasValue)
+            {
+                _error = "No creator ID provided.";
+                _loading = false;
+                return;
+            }
+
+            try
+            {
+                // Check authentication status
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                // Get all songs from this creator
+                var creatorSongs = await SongMetadataService.GetByCreatorIdAsync(CreatorId.Value);
+                if (creatorSongs == null || !creatorSongs.Any())
+                {
+                    _error = "No songs found for this creator.";
+                    _loading = false;
+                    return;
+                }
+
+                // Get the creator's display name for the playlist title
+                var firstSong = creatorSongs.First();
+                var creatorDisplayName = GetArtistDisplayName(firstSong);
+                _playlistName = creatorDisplayName;
+
+                // Build list of tracks from creator songs
+                var tracks = new List<StorageFileInfo>();
+                var allMetadata = new List<Models.SongMetadata>();
+                
+                foreach (var songMetadata in creatorSongs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)))
+                {
+                    tracks.Add(new StorageFileInfo
+                    {
+                        Name = songMetadata.Mp3BlobPath,
+                        Length = 0,
+                        ContentType = "audio/mpeg",
+                        LastModified = songMetadata.UpdatedAt,
+                        Tags = new Dictionary<string, string>()
+                    });
+                    allMetadata.Add(songMetadata);
+                }
+
+                if (!tracks.Any())
+                {
+                    _error = "No playable tracks found for this creator.";
+                    _loading = false;
+                    return;
+                }
+
+                // Build metadata lookup for track info (handle potential duplicates by using first occurrence)
+                _metadataLookup = allMetadata
+                    .GroupBy(m => m.Mp3BlobPath)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Initialize stream counts from metadata
+                _trackStreamCounts.Clear();
+                foreach (var meta in allMetadata)
+                {
+                    _trackStreamCounts[meta.Id] = meta.NumberOfStreams;
+                }
+
+                var firstTrackMeta = allMetadata.First();
+                var coverImagePath = firstTrackMeta.ImageBlobPath ?? "";
+                var coverImageUrl = !string.IsNullOrEmpty(coverImagePath) 
+                    ? $"api/music/{SafeEncodePath(coverImagePath)}" 
+                    : "";
+
+                _playlistInfo = new PlaylistInfo
+                {
+                    PlaylistName = _playlistName,
+                    CoverArtUrl = coverImageUrl,
+                    CoverArtFileName = coverImagePath,
+                    Tracks = tracks,
+                    MetadataId = firstTrackMeta.Id
+                };
+
+                // Pre-fetch all track SAS URLs in parallel for better performance
+                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
+                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+
+                // Store track images from metadata
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var track = tracks[i];
+                    if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
+                        {
+                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                        }
+                    }
+                }
+
+                // Set up the first track
+                _currentTrackIndex = 0;
+                _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
+
+                // Check subscription status to determine if user can play full tracks
+                if (_isAuthenticated)
+                {
+                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
+                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+                Logger.LogError(ex, "Error loading creator playlist for creator {CreatorId}", CreatorId);
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
+        /// <summary>
+        /// Gets the display name for a song's artist using the priority:
+        /// 1. SongMetadata.ArtistName
+        /// 2. Creator.DisplayName
+        /// 3. Creator.User.Email
+        /// </summary>
+        protected string GetArtistDisplayName(Models.SongMetadata metadata)
+        {
+            // Priority 1: ArtistName from SongMetadata
+            if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
+            {
+                return metadata.ArtistName;
+            }
+
+            // Priority 2: DisplayName from Creator
+            if (metadata.Creator != null && !string.IsNullOrWhiteSpace(metadata.Creator.DisplayName))
+            {
+                return metadata.Creator.DisplayName;
+            }
+
+            // Priority 3: Email from Creator's User
+            if (metadata.Creator?.User?.Email != null)
+            {
+                return metadata.Creator.User.Email;
+            }
+
+            return "Unknown Artist";
+        }
+
+        /// <summary>
+        /// Gets the artist display name for a track at the specified index.
+        /// </summary>
+        protected string GetTrackArtistName(int trackIndex)
+        {
+            if (trackIndex < 0 || trackIndex >= _playlistInfo?.Tracks?.Count)
+                return "Unknown Artist";
+
+            var track = _playlistInfo.Tracks[trackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                return GetArtistDisplayName(metadata);
+            }
+
+            return "Unknown Artist";
         }
 
         /// <summary>

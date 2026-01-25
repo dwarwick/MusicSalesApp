@@ -87,8 +87,9 @@ public class Creator
 
     /// <summary>
     /// Display name for the creator (can be different from username).
+    /// Maximum 20 characters for display on song cards.
     /// </summary>
-    [MaxLength(200)]
+    [MaxLength(20)]
     public string? DisplayName { get; set; }
 
     /// <summary>

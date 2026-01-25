@@ -1,5 +1,7 @@
 @page "/playlist/{PlaylistId:int}"
 @page "/recommended-playlist/{RecommendedUserId:int}"
+@page "/artist/{ArtistName}"
+@page "/creator/{CreatorId:int}"
 @inherits PlaylistPlayerModel
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
@@ -106,6 +108,7 @@
                         <th class="track-number">#</th>
                         <th class="track-image"></th>
                         <th class="track-title">Title</th>
+                        <th class="track-artist">Artist Name</th>
                         <th class="track-streams">Streams</th>
                         <th class="track-duration">Duration</th>
                         <th class="track-actions"></th>
@@ -160,6 +163,7 @@
                                     }
                                 </div>
                             </td>
+                            <td class="track-artist">@GetTrackArtistName(index)</td>
                             <td class="track-streams">@GetTrackStreamCount(index).ToString("N0")</td>
                             <td class="track-duration">@GetTrackDuration(index)</td>
                             <td class="track-actions">

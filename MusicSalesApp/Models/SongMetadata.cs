@@ -125,4 +125,11 @@ public class SongMetadata
     /// </summary>
     [MaxLength(1000)]
     public string StatusReason { get; set; }
+
+    /// <summary>
+    /// The artist name for this song. If set, overrides the creator's display name.
+    /// Priority for display: ArtistName > Creator.DisplayName > Creator.User.Email
+    /// </summary>
+    [MaxLength(20)]
+    public string ArtistName { get; set; }
 }

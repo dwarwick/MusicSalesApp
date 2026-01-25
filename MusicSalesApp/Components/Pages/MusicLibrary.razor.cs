@@ -59,6 +59,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to stored song titles
     private Dictionary<string, string> _songTitles = new Dictionary<string, string>();
 
+    // Map file names to artist info (display name and link URL)
+    private Dictionary<string, ArtistDisplayInfo> _artistInfoMap = new Dictionary<string, ArtistDisplayInfo>();
+
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
@@ -66,6 +69,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected bool _hasActiveSubscription;
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
+
+    /// <summary>
+    /// Represents the artist display information for a song card.
+    /// </summary>
+    protected class ArtistDisplayInfo
+    {
+        public string DisplayName { get; set; }
+        public string LinkUrl { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -283,6 +295,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     {
                         _songTitles[audioFile.Name] = songMeta.SongTitle;
                     }
+                    // Store artist info
+                    _artistInfoMap[audioFile.Name] = GetArtistDisplayInfo(songMeta);
                 }
             }
         }
@@ -295,6 +309,54 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// Determines the artist display name and link URL based on priority:
+    /// 1. SongMetadata.ArtistName - links to /artist/{artistName}
+    /// 2. Creator.DisplayName - links to /creator/{creatorId}
+    /// 3. Creator.User.Email (truncated to 17 chars + "...") - links to /creator/{creatorId}
+    /// </summary>
+    private ArtistDisplayInfo GetArtistDisplayInfo(SongMetadata songMeta)
+    {
+        // Priority 1: ArtistName from SongMetadata
+        if (!string.IsNullOrWhiteSpace(songMeta.ArtistName))
+        {
+            return new ArtistDisplayInfo
+            {
+                DisplayName = songMeta.ArtistName,
+                LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.ArtistName)}"
+            };
+        }
+
+        // Priority 2: DisplayName from Creator
+        if (songMeta.Creator != null && !string.IsNullOrWhiteSpace(songMeta.Creator.DisplayName))
+        {
+            return new ArtistDisplayInfo
+            {
+                DisplayName = songMeta.Creator.DisplayName,
+                LinkUrl = $"/creator/{songMeta.Creator.Id}"
+            };
+        }
+
+        // Priority 3: Email from Creator's User (truncated to 17 chars + "...")
+        if (songMeta.Creator?.User?.Email != null)
+        {
+            var email = songMeta.Creator.User.Email;
+            var displayName = email.Length > 17 ? email.Substring(0, 17) + "..." : email;
+            return new ArtistDisplayInfo
+            {
+                DisplayName = displayName,
+                LinkUrl = $"/creator/{songMeta.Creator.Id}"
+            };
+        }
+
+        return new ArtistDisplayInfo { DisplayName = null, LinkUrl = null };
+    }
+
+    protected ArtistDisplayInfo GetArtistInfo(string fileName)
+    {
+        return _artistInfoMap.TryGetValue(fileName, out var info) ? info : new ArtistDisplayInfo();
     }
 
     private async Task LoadSubscriptionStatus()

@@ -35,6 +35,10 @@
                         </div>
                     }
                     <h1 class="song-title">@GetDisplayTitle()</h1>
+                    @if (!string.IsNullOrEmpty(GetArtistDisplayName()))
+                    {
+                        <span class="artist-name-info"><strong>Artist Name:</strong> @GetArtistDisplayName()</span>
+                    }
                 </div>
             </div>
             <div class="song-info">

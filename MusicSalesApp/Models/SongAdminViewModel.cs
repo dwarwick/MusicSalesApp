@@ -22,4 +22,10 @@ public class SongAdminViewModel
     // Enable/Disable properties
     public bool IsEnabled { get; set; } = true;
     public string StatusReason { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The artist name for this song (max 20 characters).
+    /// If set, overrides the creator's display name on song cards.
+    /// </summary>
+    public string ArtistName { get; set; } = string.Empty;
 }

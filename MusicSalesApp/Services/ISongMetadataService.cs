@@ -35,6 +35,16 @@ namespace MusicSalesApp.Services
         Task<List<SongMetadata>> GetByAlbumNameAsync(string albumName);
 
         /// <summary>
+        /// Get metadata by artist name (from SongMetadata.ArtistName field)
+        /// </summary>
+        Task<List<SongMetadata>> GetByArtistNameAsync(string artistName);
+
+        /// <summary>
+        /// Get metadata by creator ID (all songs from a specific creator)
+        /// </summary>
+        Task<List<SongMetadata>> GetByCreatorIdAsync(int creatorId);
+
+        /// <summary>
         /// Create or update song metadata
         /// </summary>
         Task<SongMetadata> UpsertAsync(SongMetadata metadata);
