@@ -71,6 +71,13 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string _stopSellingConfirmEmail = string.Empty;
     protected bool _resendingTaxForm = false;
     
+    // Creator profile editing
+    protected string _editCreatorDisplayName = string.Empty;
+    protected string _editCreatorBio = string.Empty;
+    protected bool _savingCreatorProfile = false;
+    protected string _creatorProfileMessage = string.Empty;
+    protected bool _creatorProfileSuccess = false;
+    
     /// <summary>
     /// Returns true if the user can start the creator onboarding process.
     /// </summary>
@@ -722,6 +729,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
+                
+                // Initialize edit fields
+                _editCreatorDisplayName = _creatorDisplayName;
+                _editCreatorBio = _creatorBio;
             }
             else
             {
@@ -734,6 +745,51 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading creator status");
+        }
+    }
+
+    protected async Task SaveCreatorProfile()
+    {
+        _creatorProfileMessage = string.Empty;
+        _savingCreatorProfile = true;
+        
+        try
+        {
+            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
+            if (creator == null)
+            {
+                _creatorProfileMessage = "Creator profile not found.";
+                _creatorProfileSuccess = false;
+                return;
+            }
+            
+            // Validate display name length
+            if (!string.IsNullOrEmpty(_editCreatorDisplayName) && _editCreatorDisplayName.Length > 20)
+            {
+                _creatorProfileMessage = "Display name must be 20 characters or less.";
+                _creatorProfileSuccess = false;
+                return;
+            }
+            
+            await CreatorService.UpdateCreatorProfileAsync(creator.Id, _editCreatorDisplayName, _editCreatorBio);
+            
+            // Update local state
+            _creatorDisplayName = _editCreatorDisplayName;
+            _creatorBio = _editCreatorBio;
+            
+            _creatorProfileMessage = "Profile saved successfully!";
+            _creatorProfileSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving creator profile");
+            _creatorProfileMessage = $"Error saving profile: {ex.Message}";
+            _creatorProfileSuccess = false;
+        }
+        finally
+        {
+            _savingCreatorProfile = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 

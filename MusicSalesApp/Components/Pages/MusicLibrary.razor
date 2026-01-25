@@ -47,6 +47,16 @@ else
 
                 <!-- Song Title -->
                 <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>
+                <!-- Artist Name (clickable link) -->
+                @{
+                    var artistInfo = GetArtistInfo(f.Name);
+                }
+                @if (!string.IsNullOrEmpty(artistInfo.DisplayName))
+                {
+                    <div class="card-artist-name">
+                        <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
+                    </div>
+                }
                 <!-- Stream Count -->
                 <div class="card-stream-count">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="stream-icon">

@@ -22,4 +22,14 @@ public class SongAdminViewModel
     // Enable/Disable properties
     public bool IsEnabled { get; set; } = true;
     public string StatusReason { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The effective artist name for display (derived from ArtistName > DisplayName > Email).
+    /// </summary>
+    public string ArtistName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The raw artist name from the SongMetadata.ArtistName field for editing purposes.
+    /// </summary>
+    public string RawArtistName { get; set; } = string.Empty;
 }

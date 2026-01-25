@@ -38,6 +38,7 @@ public class AdminSongManagementModel : ComponentBase
     protected bool _showEditModal = false;
     protected SongAdminViewModel _editingSong = null;
     protected string _editGenre = string.Empty;
+    protected string _editArtistName = string.Empty;
     protected bool _editDisplayOnHomePage = false;
     protected IBrowserFile _songImageFile = null;
     protected List<string> _validationErrors = new();
@@ -83,6 +84,8 @@ public class AdminSongManagementModel : ComponentBase
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
+            ArtistName = m.GetEffectiveArtistNameFull(),
+            RawArtistName = m.ArtistName ?? string.Empty,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             IsEnabled = m.IsEnabled,
@@ -110,6 +113,8 @@ public class AdminSongManagementModel : ComponentBase
     {
         _editingSong = song;
         _editGenre = song.Genre;
+        // If RawArtistName is empty, default to the effective artist name shown in the grid
+        _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
@@ -125,6 +130,7 @@ public class AdminSongManagementModel : ComponentBase
         _validationErrors.Clear();
         _songImageFile = null;
         _editStatusReason = string.Empty;
+        _editArtistName = string.Empty;
     }
 
     protected async Task SaveEdit()
@@ -316,6 +322,8 @@ public class AdminSongManagementModel : ComponentBase
                         {
                             metadata.Genre = _editGenre;
                         }
+                        // Set artist name (can be empty to clear it)
+                        metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
                     }
 
                     // Each upsert awaited sequentially
@@ -326,6 +334,7 @@ public class AdminSongManagementModel : ComponentBase
             // Update local model
             _editingSong.Genre = _editGenre;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
+            _editingSong.RawArtistName = _editArtistName;
 
             // Close modal and refresh
             _showEditModal = false;

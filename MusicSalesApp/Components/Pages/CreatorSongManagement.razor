@@ -134,6 +134,7 @@
                     </Template>
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.SongTitle)" HeaderText="Title" Width="200"></GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.ArtistName)" HeaderText="Artist Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.Genre)" HeaderText="Genre" Width="100"></GridColumn>
                 <GridColumn HeaderText="Duration" Width="100">
                     <Template>
@@ -240,6 +241,12 @@
                     <div class="mb-3">
                         <label class="form-label">Song Title <span class="text-danger">*</span></label>
                         <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Artist Name</label>
+                        <SfTextBox @bind-Value="_editArtistName" CssClass="e-outline" Placeholder="Enter artist name (max 20 characters)" MaxLength="20" />
+                        <small class="text-muted">Optional. If set, this will override your display name on song cards.</small>
                     </div>
 
                     <div class="mb-3">

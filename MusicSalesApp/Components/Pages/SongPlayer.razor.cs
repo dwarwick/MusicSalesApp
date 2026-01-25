@@ -326,6 +326,38 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         return Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
     }
 
+    /// <summary>
+    /// Gets the artist display name using the priority:
+    /// 1. SongMetadata.ArtistName
+    /// 2. Creator.DisplayName
+    /// 3. Creator.User.Email (part before @)
+    /// </summary>
+    protected string GetArtistDisplayName()
+    {
+        if (_songMetadata == null)
+            return null;
+
+        // Priority 1: ArtistName from SongMetadata
+        if (!string.IsNullOrWhiteSpace(_songMetadata.ArtistName))
+        {
+            return _songMetadata.ArtistName;
+        }
+
+        // Priority 2: DisplayName from Creator
+        if (_songMetadata.Creator != null && !string.IsNullOrWhiteSpace(_songMetadata.Creator.DisplayName))
+        {
+            return _songMetadata.Creator.DisplayName;
+        }
+
+        // Priority 3: Email from Creator's User - use part before @ symbol
+        if (_songMetadata.Creator?.User?.Email != null)
+        {
+            return _songMetadata.Creator.User.Email.Split('@')[0];
+        }
+
+        return null;
+    }
+
     protected double? GetTrackLengthSeconds()
     {
         if (_songMetadata != null && _songMetadata.TrackLength.HasValue)

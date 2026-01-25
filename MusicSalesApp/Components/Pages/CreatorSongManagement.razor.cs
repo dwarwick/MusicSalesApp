@@ -27,6 +27,7 @@ public partial class CreatorSongManagementModel : BlazorBase
     protected SongAdminViewModel _editingSong;
     protected string _editGenre = string.Empty;
     protected string _editSongTitle = string.Empty;
+    protected string _editArtistName = string.Empty;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     protected IBrowserFile _songImageFile = null;
@@ -93,6 +94,8 @@ public partial class CreatorSongManagementModel : BlazorBase
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
             Genre = m.Genre ?? string.Empty,
+            ArtistName = m.GetEffectiveArtistNameFull(),
+            RawArtistName = m.ArtistName ?? string.Empty,
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             CreatorId = m.CreatorId,
@@ -209,6 +212,8 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = song;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
+        // If RawArtistName is empty, default to the effective artist name shown in the grid
+        _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _songImageFile = null;
         _validationErrors.Clear();
         _showEditDialog = true;
@@ -220,6 +225,7 @@ public partial class CreatorSongManagementModel : BlazorBase
         _showEditDialog = false;
         _validationErrors.Clear();
         _songImageFile = null;
+        _editArtistName = string.Empty;
     }
 
     protected void HandleSongImageUpload(InputFileChangeEventArgs e)
@@ -309,9 +315,10 @@ public partial class CreatorSongManagementModel : BlazorBase
                         _editingSong.JpegFileName = newFileName;
                     }
 
-                    // Always update the title and genre
+                    // Always update the title, genre, and artist name
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
+                    metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
 
                     await SongMetadataService.UpsertAsync(metadata);
                     
@@ -320,6 +327,7 @@ public partial class CreatorSongManagementModel : BlazorBase
                     _showEditDialog = false;
                     _editingSong = null;
                     _songImageFile = null;
+                    _editArtistName = string.Empty;
                 }
                 else
                 {

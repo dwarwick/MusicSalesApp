@@ -44,6 +44,7 @@ namespace MusicSalesApp.Services
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.SongMetadata
                 .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
                 .Where(ActiveSongFromActiveCreator)
                 .ToListAsync();
         }
@@ -53,6 +54,7 @@ namespace MusicSalesApp.Services
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.SongMetadata
                 .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
                 .Where(ActiveSongFromActiveCreatorIncludingDisabled)
                 .ToListAsync();
         }
@@ -80,8 +82,40 @@ namespace MusicSalesApp.Services
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.SongMetadata
                 .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => s.AlbumName == albumName)
+                .ToListAsync();
+        }
+
+        public async Task<List<SongMetadata>> GetByArtistNameAsync(string artistName)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata
+                .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => 
+                    // Match songs where ArtistName field matches
+                    s.ArtistName == artistName ||
+                    // Or match songs where ArtistName is null/empty and Creator.DisplayName matches
+                    ((s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName) ||
+                    // Or match songs where both ArtistName and DisplayName are null/empty and email prefix matches
+                    ((s.ArtistName == null || s.ArtistName == "") && 
+                     (s.Creator == null || s.Creator.DisplayName == null || s.Creator.DisplayName == "") && 
+                     s.Creator != null && s.Creator.User != null && s.Creator.User.Email != null &&
+                     s.Creator.User.Email.StartsWith(artistName + "@")))
+                .ToListAsync();
+        }
+
+        public async Task<List<SongMetadata>> GetByCreatorIdAsync(int creatorId)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.SongMetadata
+                .Include(s => s.Creator)
+                    .ThenInclude(c => c.User)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => s.CreatorId == creatorId)
                 .ToListAsync();
         }
 
@@ -106,6 +140,7 @@ namespace MusicSalesApp.Services
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
                 existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
+                existing.ArtistName = metadata.ArtistName;
                 existing.UpdatedAt = DateTime.UtcNow;
                 
                 context.SongMetadata.Update(existing);
