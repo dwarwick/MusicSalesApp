@@ -95,7 +95,11 @@ namespace MusicSalesApp.Services
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Where(ActiveSongFromActiveCreator)
-                .Where(s => s.ArtistName == artistName)
+                .Where(s => 
+                    // Match songs where ArtistName field matches
+                    s.ArtistName == artistName ||
+                    // Or match songs where ArtistName is null/empty and Creator.DisplayName matches
+                    ((s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName))
                 .ToListAsync();
         }
 
