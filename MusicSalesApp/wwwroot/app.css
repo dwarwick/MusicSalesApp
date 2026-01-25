@@ -259,8 +259,9 @@ h1:focus {
     display: flex;
     justify-content: center;
     align-items: center;
-    border-radius: 4px;
+    border-radius: 25;
     overflow: hidden;
+    border: #06acfc 4px solid;
 }
 
 .card-lottie-animation {
