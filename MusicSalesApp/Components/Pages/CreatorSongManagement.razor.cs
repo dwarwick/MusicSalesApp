@@ -212,7 +212,8 @@ public partial class CreatorSongManagementModel : BlazorBase
         _editingSong = song;
         _editGenre = song.Genre;
         _editSongTitle = song.SongTitle;
-        _editArtistName = song.RawArtistName; // Use raw artist name for editing, not the derived display name
+        // If RawArtistName is empty, default to the effective artist name shown in the grid
+        _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _songImageFile = null;
         _validationErrors.Clear();
         _showEditDialog = true;
