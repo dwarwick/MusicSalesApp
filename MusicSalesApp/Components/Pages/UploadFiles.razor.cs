@@ -151,12 +151,13 @@ public class UploadFilesModel : BlazorBase
     /// Processes upload items in chunks to avoid overwhelming the system.
     /// Audio/cover art pairs are kept together within their chunks.
     /// </summary>
-    private async Task ProcessUploadsInChunksAsync(List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)> uploadItemsWithFiles)
+    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)> uploadItemsWithFiles)
     {
-        // Process in chunks of ChunkSize (8 by default)
-        for (int i = 0; i < uploadItemsWithFiles.Count; i += ChunkSize)
+        var itemsList = uploadItemsWithFiles.ToList();
+        // Process in chunks of ChunkSize
+        for (int i = 0; i < itemsList.Count; i += ChunkSize)
         {
-            var chunk = uploadItemsWithFiles.Skip(i).Take(ChunkSize).ToList();
+            var chunk = itemsList.Skip(i).Take(ChunkSize).ToList();
             
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
