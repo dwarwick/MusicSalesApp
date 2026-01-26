@@ -1,4 +1,6 @@
-﻿namespace MusicSalesApp.Services
+﻿using MusicSalesApp.Models;
+
+namespace MusicSalesApp.Services
 {
     /// <summary>
     /// Service for sending emails to users.
@@ -15,6 +17,15 @@
         bool SendEmailVerificationMessage(string email, string tokenUrl, string baseUrl);
 
         /// <summary>
+        /// Sends an email verification message with detailed result information.
+        /// </summary>
+        /// <param name="email">The recipient's email address.</param>
+        /// <param name="tokenUrl">The complete verification URL including the token.</param>
+        /// <param name="baseUrl">The base URL for constructing the logo image URL.</param>
+        /// <returns>An EmailResult with detailed success/failure information.</returns>
+        EmailResult SendEmailVerificationWithResult(string email, string tokenUrl, string baseUrl);
+
+        /// <summary>
         /// Sends a password reset email with a link to reset the user's password.
         /// </summary>
         /// <param name="email">The recipient's email address.</param>
@@ -24,6 +35,15 @@
         bool SendPasswordResetEmail(string email, string tokenUrl, string baseUrl);
 
         /// <summary>
+        /// Sends a password reset email with detailed result information.
+        /// </summary>
+        /// <param name="email">The recipient's email address.</param>
+        /// <param name="tokenUrl">The complete password reset URL including the token.</param>
+        /// <param name="baseUrl">The base URL for constructing the logo image URL.</param>
+        /// <returns>An EmailResult with detailed success/failure information.</returns>
+        EmailResult SendPasswordResetWithResult(string email, string tokenUrl, string baseUrl);
+
+        /// <summary>
         /// Sends an email asynchronously with the specified subject and body.
         /// </summary>
         /// <param name="toEmail">The recipient's email address.</param>
@@ -31,6 +51,15 @@
         /// <param name="body">The HTML body content of the email.</param>
         /// <returns>True if the email was sent successfully, false otherwise.</returns>
         Task<bool> SendEmailAsync(string toEmail, string subject, string body);
+
+        /// <summary>
+        /// Sends an email asynchronously with detailed result information.
+        /// </summary>
+        /// <param name="toEmail">The recipient's email address.</param>
+        /// <param name="subject">The subject of the email.</param>
+        /// <param name="body">The HTML body content of the email.</param>
+        /// <returns>An EmailResult with detailed success/failure information.</returns>
+        Task<EmailResult> SendEmailWithResultAsync(string toEmail, string subject, string body);
 
         /// <summary>
         /// Gets the application base URL from configuration, defaulting to https://streamtunes.net.

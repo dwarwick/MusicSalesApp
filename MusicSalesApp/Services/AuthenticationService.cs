@@ -148,11 +148,18 @@ public class AuthenticationService : IAuthenticationService
             var encodedToken = HttpUtility.UrlEncode(token);
             var verificationUrl = $"{baseUrl.TrimEnd('/')}/verify-email?userId={user.Id}&token={encodedToken}";
 
-            // Send verification email
-            var emailSent = _emailService.SendEmailVerificationMessage(email, verificationUrl, baseUrl);
-            if (!emailSent)
+            // Send verification email with detailed result
+            var emailResult = _emailService.SendEmailVerificationWithResult(email, verificationUrl, baseUrl);
+            if (!emailResult.Success)
             {
-                return (false, "Failed to send verification email. Please try again later.");
+                var errorMessage = emailResult.ErrorType switch
+                {
+                    EmailErrorType.SpamFilterRejected => "The email was rejected by a spam filter. Please contact support if this persists.",
+                    EmailErrorType.MissingConfiguration => "Email service is not properly configured. Please contact support.",
+                    EmailErrorType.SmtpError => "Failed to send verification email. Please try again later.",
+                    _ => "Failed to send verification email. Please try again later."
+                };
+                return (false, errorMessage);
             }
 
             // Update last verification email sent timestamp
@@ -393,11 +400,20 @@ public class AuthenticationService : IAuthenticationService
             var encodedToken = HttpUtility.UrlEncode(token);
             var resetUrl = $"{baseUrl.TrimEnd('/')}/reset-password?userId={user.Id}&token={encodedToken}";
 
-            // Send password reset email
-            var emailSent = _emailService.SendPasswordResetEmail(email, resetUrl, baseUrl);
-            if (!emailSent)
+            // Send password reset email with detailed result
+            var emailResult = _emailService.SendPasswordResetWithResult(email, resetUrl, baseUrl);
+            if (!emailResult.Success)
             {
-                _logger.LogError("Failed to send password reset email to {Email}", email);
+                // Log detailed error for troubleshooting
+                if (emailResult.ErrorType == EmailErrorType.SpamFilterRejected)
+                {
+                    _logger.LogWarning("Password reset email for {Email} was rejected by spam filter", email);
+                }
+                else
+                {
+                    _logger.LogError("Failed to send password reset email to {Email}: {ErrorType} - {ErrorMessage}", 
+                        email, emailResult.ErrorType, emailResult.ErrorMessage);
+                }
                 // Still return success to not reveal if account exists
                 return (true, string.Empty);
             }
