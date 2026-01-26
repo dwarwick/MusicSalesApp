@@ -20,15 +20,16 @@ namespace MusicSalesApp.Services
         private readonly string _header;
         private readonly string _footer;
 
-        // Common spam filter error message patterns
+        // Spam filter error message patterns - more specific to avoid false positives
+        // These patterns match common SMTP server responses for spam-related rejections
         private static readonly string[] SpamFilterPatterns = new[]
         {
             "spam filter",
-            "spam",
-            "blocked",
-            "rejected",
+            "due to spam",
+            "blocked for spam",
+            "rejected for spam",
             "blacklist",
-            "not accepted"
+            "not accepted due to"
         };
 
         public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
@@ -50,15 +51,18 @@ namespace MusicSalesApp.Services
 
         /// <summary>
         /// Checks if an SMTP exception message indicates a spam filter rejection.
+        /// Uses specific patterns to avoid false positives from generic SMTP error messages.
         /// </summary>
         private static bool IsSpamFilterError(SmtpException ex)
         {
-            if (ex.StatusCode == SmtpStatusCode.TransactionFailed)
+            // Only check TransactionFailed status which is commonly used for spam rejections
+            if (ex.StatusCode != SmtpStatusCode.TransactionFailed)
             {
-                var message = ex.Message.ToLowerInvariant();
-                return SpamFilterPatterns.Any(pattern => message.Contains(pattern));
+                return false;
             }
-            return false;
+
+            var message = ex.Message.ToLowerInvariant();
+            return SpamFilterPatterns.Any(pattern => message.Contains(pattern));
         }
 
         /// <inheritdoc />
