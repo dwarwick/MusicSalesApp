@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Publish with davidTest profile",
+            "type": "shell",
+            "command": "dotnet msbuild ${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj /t:Build`,Publish /p:Configuration=Release '/p:PublishProfile=davidtest - Web Deploy' /p:UserName=bgmsd1-001 /p:Password=${input:davidTestPassword} /p:EnableMsDeployAppOffline=true /p:SkipExtraFilesOnServer=true; if ($LASTEXITCODE -le 1) { exit 0 }",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Publish with streamtunes profile",
+            "type": "shell",
+            "command": "dotnet msbuild ${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj /t:Build`,Publish /p:Configuration=Release '/p:PublishProfile=streamtunes - Web Deploy' /p:UserName=bgmsd1-001 /p:Password=${input:streamtunesPassword} /p:EnableMsDeployAppOffline=true /p:SkipExtraFilesOnServer=true; if ($LASTEXITCODE -le 1) { exit 0 }",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "davidTestPassword",
+            "type": "promptString",
+            "description": "Enter the Web Deploy password for davidTest profile",
+            "password": true
+        },
+        {
+            "id": "streamtunesPassword",
+            "type": "promptString",
+            "description": "Enter the Web Deploy password for streamtunes profile",
+            "password": true
+        }
+    ]
+}
