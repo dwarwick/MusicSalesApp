@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services
 {
@@ -19,6 +20,17 @@ namespace MusicSalesApp.Services
         private readonly string _header;
         private readonly string _footer;
 
+        // Common spam filter error message patterns
+        private static readonly string[] SpamFilterPatterns = new[]
+        {
+            "spam filter",
+            "spam",
+            "blocked",
+            "rejected",
+            "blacklist",
+            "not accepted"
+        };
+
         public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
             _configuration = configuration;
@@ -36,8 +48,27 @@ namespace MusicSalesApp.Services
             _logger.LogInformation("EmailService initialized with domain: {Domain}", _domain);
         }
 
+        /// <summary>
+        /// Checks if an SMTP exception message indicates a spam filter rejection.
+        /// </summary>
+        private static bool IsSpamFilterError(SmtpException ex)
+        {
+            if (ex.StatusCode == SmtpStatusCode.TransactionFailed)
+            {
+                var message = ex.Message.ToLowerInvariant();
+                return SpamFilterPatterns.Any(pattern => message.Contains(pattern));
+            }
+            return false;
+        }
+
         /// <inheritdoc />
         public bool SendEmailVerificationMessage(string email, string tokenUrl, string baseUrl)
+        {
+            return SendEmailVerificationWithResult(email, tokenUrl, baseUrl).Success;
+        }
+
+        /// <inheritdoc />
+        public EmailResult SendEmailVerificationWithResult(string email, string tokenUrl, string baseUrl)
         {
             _logger.LogInformation("Sending email verification to: {Email}", email);
 
@@ -46,7 +77,7 @@ namespace MusicSalesApp.Services
                 if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for verification email to {Email}", email);
-                    return false;
+                    return EmailResult.MissingConfiguration();
                 }
 
                 var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
@@ -62,22 +93,33 @@ namespace MusicSalesApp.Services
                 <p>If you didn't request this verification, please ignore this email.</p>
                 ";
 
-                return SendEmail(email, subject, body);
+                return SendEmailWithResult(email, subject, body);
             }
             catch (SmtpException ex)
             {
+                if (IsSpamFilterError(ex))
+                {
+                    _logger.LogError(ex, "Verification email rejected by spam filter for {Email}: {Message}", email, ex.Message);
+                    return EmailResult.SpamFilterRejected();
+                }
                 _logger.LogError(ex, "SMTP error sending verification email to {Email}: {Message}", email, ex.Message);
-                return false;
+                return EmailResult.SmtpError(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending email verification message to {Email}: {Message}", email, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
         }
 
         /// <inheritdoc />
         public bool SendPasswordResetEmail(string email, string tokenUrl, string baseUrl)
+        {
+            return SendPasswordResetWithResult(email, tokenUrl, baseUrl).Success;
+        }
+
+        /// <inheritdoc />
+        public EmailResult SendPasswordResetWithResult(string email, string tokenUrl, string baseUrl)
         {
             _logger.LogInformation("Sending password reset email to: {Email}", email);
 
@@ -86,7 +128,7 @@ namespace MusicSalesApp.Services
                 if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for password reset email to {Email}", email);
-                    return false;
+                    return EmailResult.MissingConfiguration();
                 }
 
                 var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
@@ -102,28 +144,40 @@ namespace MusicSalesApp.Services
                 <p>If you didn't request a password reset, please ignore this email.</p>
                 ";
 
-                return SendEmail(email, subject, body);
+                return SendEmailWithResult(email, subject, body);
             }
             catch (SmtpException ex)
             {
+                if (IsSpamFilterError(ex))
+                {
+                    _logger.LogError(ex, "Password reset email rejected by spam filter for {Email}: {Message}", email, ex.Message);
+                    return EmailResult.SpamFilterRejected();
+                }
                 _logger.LogError(ex, "SMTP error sending password reset email to {Email}: {Message}", email, ex.Message);
-                return false;
+                return EmailResult.SmtpError(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending password reset email to {Email}: {Message}", email, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
         }
 
         /// <inheritdoc />
         public async Task<bool> SendEmailAsync(string toEmail, string subject, string body)
         {
+            var result = await SendEmailWithResultAsync(toEmail, subject, body);
+            return result.Success;
+        }
+
+        /// <inheritdoc />
+        public async Task<EmailResult> SendEmailWithResultAsync(string toEmail, string subject, string body)
+        {
             // Bypass email sending for demo/anonymous users
             if (toEmail.StartsWith("DemoUser_", StringComparison.OrdinalIgnoreCase) || toEmail.StartsWith("anonymous_", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogInformation("Bypassing email send for demo/anonymous user: {Email}", toEmail);
-                return true;
+                return EmailResult.Succeeded();
             }
 
             _logger.LogInformation("Sending async email to: {Email} with subject: {Subject}", toEmail, subject);
@@ -133,29 +187,39 @@ namespace MusicSalesApp.Services
                 if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for async email to {Email}", toEmail);
-                    return false;
+                    return EmailResult.MissingConfiguration();
                 }
 
-                return await Task.Run(() => SendEmail(toEmail, subject, body));
+                return await Task.Run(() => SendEmailWithResult(toEmail, subject, body));
             }
             catch (SmtpException ex)
             {
+                if (IsSpamFilterError(ex))
+                {
+                    _logger.LogError(ex, "Async email rejected by spam filter for {Email}: {Message}", toEmail, ex.Message);
+                    return EmailResult.SpamFilterRejected();
+                }
                 _logger.LogError(ex, "SMTP error sending async email to {Email}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.SmtpError(ex.Message);
             }
             catch (TaskCanceledException ex)
             {
                 _logger.LogError(ex, "Task canceled while sending async email to {Email}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError("Email operation was canceled.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error sending email asynchronously to {Email}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
         }
 
         private bool SendEmail(string toEmail, string subject, string body)
+        {
+            return SendEmailWithResult(toEmail, subject, body).Success;
+        }
+
+        private EmailResult SendEmailWithResult(string toEmail, string subject, string body)
         {
             _logger.LogDebug("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", _fromEmail, toEmail, _server);
 
@@ -176,28 +240,35 @@ namespace MusicSalesApp.Services
 
                 client.Send(message);
                 _logger.LogInformation("Email successfully sent to {ToEmail}", toEmail);
-                return true;
+                return EmailResult.Succeeded();
             }
             catch (SmtpException ex)
             {
+                if (IsSpamFilterError(ex))
+                {
+                    _logger.LogError(ex, "Email rejected by spam filter for {ToEmail}: {StatusCode} - {Message}",
+                        toEmail, ex.StatusCode, ex.Message);
+                    return EmailResult.SpamFilterRejected();
+                }
+
                 _logger.LogError(ex, "SMTP error sending email to {ToEmail}: {StatusCode} - {Message}",
                     toEmail, ex.StatusCode, ex.Message);
-                return false;
+                return EmailResult.SmtpError(ex.Message);
             }
             catch (FormatException ex)
             {
                 _logger.LogError(ex, "Format error in email to {ToEmail}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
                 _logger.LogError(ex, "Invalid operation in email to {ToEmail}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error sending email to {ToEmail}: {Message}", toEmail, ex.Message);
-                return false;
+                return EmailResult.UnexpectedError(ex.Message);
             }
         }
 

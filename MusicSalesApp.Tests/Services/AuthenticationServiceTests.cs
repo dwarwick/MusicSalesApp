@@ -158,6 +158,85 @@ public class AuthenticationServiceTests
         Assert.That(result, Is.True);
     }
 
+    [Test]
+    public async Task SendVerificationEmailAsync_WhenSpamFilterRejects_ReturnsAppropriateError()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var user = new ApplicationUser { Email = email, Id = 1, EmailConfirmed = false };
+        _mockUserManager.Setup(um => um.FindByEmailAsync(email)).ReturnsAsync(user);
+        _mockUserManager.Setup(um => um.GenerateEmailConfirmationTokenAsync(user)).ReturnsAsync("test-token");
+        _mockUserManager.Setup(um => um.UpdateAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(IdentityResult.Success);
+        _mockEmailService.Setup(es => es.SendEmailVerificationWithResult(email, It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(EmailResult.SpamFilterRejected());
+
+        // Act
+        var (success, error) = await _service.SendVerificationEmailAsync(email, "https://example.com");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Does.Contain("spam filter"));
+        Assert.That(error, Does.Contain("contact support"));
+    }
+
+    [Test]
+    public async Task SendVerificationEmailAsync_WhenMissingConfiguration_ReturnsAppropriateError()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var user = new ApplicationUser { Email = email, Id = 1, EmailConfirmed = false };
+        _mockUserManager.Setup(um => um.FindByEmailAsync(email)).ReturnsAsync(user);
+        _mockUserManager.Setup(um => um.GenerateEmailConfirmationTokenAsync(user)).ReturnsAsync("test-token");
+        _mockEmailService.Setup(es => es.SendEmailVerificationWithResult(email, It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(EmailResult.MissingConfiguration());
+
+        // Act
+        var (success, error) = await _service.SendVerificationEmailAsync(email, "https://example.com");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Does.Contain("configured"));
+    }
+
+    [Test]
+    public async Task SendVerificationEmailAsync_WhenSmtpError_ReturnsGenericError()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var user = new ApplicationUser { Email = email, Id = 1, EmailConfirmed = false };
+        _mockUserManager.Setup(um => um.FindByEmailAsync(email)).ReturnsAsync(user);
+        _mockUserManager.Setup(um => um.GenerateEmailConfirmationTokenAsync(user)).ReturnsAsync("test-token");
+        _mockEmailService.Setup(es => es.SendEmailVerificationWithResult(email, It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(EmailResult.SmtpError("Connection refused"));
+
+        // Act
+        var (success, error) = await _service.SendVerificationEmailAsync(email, "https://example.com");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Does.Contain("try again later"));
+    }
+
+    [Test]
+    public async Task SendVerificationEmailAsync_WhenSuccessful_ReturnsSuccess()
+    {
+        // Arrange
+        var email = "test@example.com";
+        var user = new ApplicationUser { Email = email, Id = 1, EmailConfirmed = false };
+        _mockUserManager.Setup(um => um.FindByEmailAsync(email)).ReturnsAsync(user);
+        _mockUserManager.Setup(um => um.GenerateEmailConfirmationTokenAsync(user)).ReturnsAsync("test-token");
+        _mockUserManager.Setup(um => um.UpdateAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(IdentityResult.Success);
+        _mockEmailService.Setup(es => es.SendEmailVerificationWithResult(email, It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(EmailResult.Succeeded());
+
+        // Act
+        var (success, error) = await _service.SendVerificationEmailAsync(email, "https://example.com");
+
+        // Assert
+        Assert.That(success, Is.True);
+        Assert.That(error, Is.Empty);
+    }
+
     private class StubHttpMessageHandler : HttpMessageHandler
     {
         public HttpResponseMessage Response { get; set; } = new HttpResponseMessage(HttpStatusCode.OK);
