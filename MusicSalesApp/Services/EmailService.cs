@@ -225,7 +225,7 @@ namespace MusicSalesApp.Services
 
         private EmailResult SendEmailWithResult(string toEmail, string subject, string body)
         {
-            _logger.LogDebug("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", _fromEmail, toEmail, _server);
+            _logger.LogInformation("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", _fromEmail, toEmail, _server);
 
             try
             {
