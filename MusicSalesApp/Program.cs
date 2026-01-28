@@ -16,6 +16,7 @@ using MusicSalesApp;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components;
 using MusicSalesApp.Data;
+using MusicSalesApp.Middleware;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor;
@@ -334,6 +335,9 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
+    // Handle antiforgery token decryption errors gracefully (e.g., after key rotation)
+    // This must be before UseAntiforgery() to catch and handle the exceptions
+    app.UseAntiforgeryTokenErrorHandling();
     app.UseAntiforgery();
 
     // Configure Hangfire Dashboard with custom authorization

@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services
@@ -14,11 +15,9 @@ namespace MusicSalesApp.Services
 
         private readonly string _domain;
         private readonly string _fromEmail;
+        private readonly string _displayName;
         private readonly string _password;
         private readonly string _server;
-
-        private readonly string _header;
-        private readonly string _footer;
 
         // Spam filter error message patterns - more specific to avoid false positives
         // These patterns match common SMTP server responses for spam-related rejections
@@ -40,11 +39,9 @@ namespace MusicSalesApp.Services
             var emailSettings = configuration.GetSection("EmailSettings");
             _domain = emailSettings["Domain"] ?? string.Empty;
             _fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
+            _displayName = emailSettings["DisplayName"] ?? "StreamTunes";
             _password = emailSettings["Password"] ?? string.Empty;
             _server = emailSettings["Server"] ?? string.Empty;
-            
-            _header = $"<html xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"en\" xml:lang=\"en\"><head></head><body><div align=\"center\"></div><h3 style=\"text-align: center;\">{_domain}</h3>";
-            _footer = $"<div style=\"text-align:center;margin-top:20px;\">&#169; {DateTime.Now.Year} {_domain}</div></body></html>";
 
             _logger.LogInformation("EmailService initialized with domain: {Domain}", _domain);
         }
@@ -230,16 +227,36 @@ namespace MusicSalesApp.Services
             try
             {
                 using var message = new MailMessage();
-                message.From = new MailAddress(_fromEmail);
+                message.From = new MailAddress(_fromEmail, _displayName);
                 message.Subject = subject;
-                message.Body = _header + body + _footer;
-                message.IsBodyHtml = true;
                 message.To.Add(new MailAddress(toEmail));
+                
+                // Generate a unique Message-ID to improve deliverability
+                var messageId = $"<{Guid.NewGuid():N}@{_domain}>";
+                message.Headers.Add("Message-ID", messageId);
+                
+                // Add standard headers to reduce spam score
+                message.Headers.Add("X-Mailer", "StreamTunes");
+                message.Headers.Add("X-Priority", "3");
+                
+                // Build proper HTML with DOCTYPE
+                var fullHtmlBody = BuildHtmlEmail(body);
+                
+                // Create plain text version for multipart MIME
+                var plainTextBody = ConvertHtmlToPlainText(body);
+                
+                // Add both plain text and HTML views (multipart/alternative)
+                var plainView = AlternateView.CreateAlternateViewFromString(plainTextBody, System.Text.Encoding.UTF8, "text/plain");
+                var htmlView = AlternateView.CreateAlternateViewFromString(fullHtmlBody, System.Text.Encoding.UTF8, "text/html");
+                
+                message.AlternateViews.Add(plainView);
+                message.AlternateViews.Add(htmlView);
 
                 using var client = new SmtpClient(_server);
                 client.Port = 587;
                 client.Credentials = new NetworkCredential(_fromEmail, _password);
                 client.EnableSsl = true;
+                client.DeliveryMethod = SmtpDeliveryMethod.Network;
                 client.Timeout = 30000; // 30 seconds timeout
 
                 client.Send(message);
@@ -274,6 +291,71 @@ namespace MusicSalesApp.Services
                 _logger.LogError(ex, "Unexpected error sending email to {ToEmail}: {Message}", toEmail, ex.Message);
                 return EmailResult.UnexpectedError(ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Builds a complete HTML email with proper DOCTYPE and structure
+        /// </summary>
+        private string BuildHtmlEmail(string bodyContent)
+        {
+            return $@"<!DOCTYPE html>
+<html xmlns=""http://www.w3.org/1999/xhtml"" lang=""en"">
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <meta http-equiv=""Content-Type"" content=""text/html; charset=UTF-8"">
+    <title>{_displayName}</title>
+</head>
+<body style=""font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #333333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;"">
+    <div style=""background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
+        {bodyContent}
+        <hr style=""border: none; border-top: 1px solid #eeeeee; margin: 30px 0;"" />
+        <p style=""text-align: center; color: #999999; font-size: 12px; margin: 0;"">
+            &copy; {DateTime.Now.Year} {_displayName}. All rights reserved.
+        </p>
+    </div>
+</body>
+</html>";
+        }
+
+        /// <summary>
+        /// Converts HTML to plain text for multipart email alternative
+        /// </summary>
+        private static string ConvertHtmlToPlainText(string html)
+        {
+            if (string.IsNullOrEmpty(html))
+                return string.Empty;
+
+            var text = html;
+            
+            // Convert links to text with URL
+            text = Regex.Replace(text, @"<a[^>]+href=[""']([^""']+)[""'][^>]*>([^<]+)</a>", "$2: $1", RegexOptions.IgnoreCase);
+            
+            // Convert headers to plain text with newlines
+            text = Regex.Replace(text, @"<h[1-6][^>]*>([^<]*)</h[1-6]>", "\n$1\n", RegexOptions.IgnoreCase);
+            
+            // Convert paragraphs and divs to newlines
+            text = Regex.Replace(text, @"<(p|div)[^>]*>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</(p|div)>", "\n", RegexOptions.IgnoreCase);
+            
+            // Convert line breaks
+            text = Regex.Replace(text, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+            
+            // Remove style and script blocks
+            text = Regex.Replace(text, @"<style[^>]*>.*?</style>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<script[^>]*>.*?</script>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            
+            // Remove remaining HTML tags
+            text = Regex.Replace(text, @"<[^>]+>", "");
+            
+            // Decode HTML entities
+            text = WebUtility.HtmlDecode(text);
+            
+            // Normalize whitespace - collapse multiple spaces but preserve newlines
+            text = Regex.Replace(text, @"[ \t]+", " ");
+            text = Regex.Replace(text, @"\n\s*\n\s*\n", "\n\n");
+            
+            return text.Trim();
         }
 
         /// <inheritdoc />
