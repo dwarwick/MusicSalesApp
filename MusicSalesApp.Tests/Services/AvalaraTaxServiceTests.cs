@@ -316,4 +316,243 @@ public class AvalaraTaxServiceTests
         Assert.That(result.RawResponse, Is.Not.Null);
         Assert.That(result.RawResponse, Does.Contain("access_token"));
     }
+
+    [Test]
+    public async Task CreateFormRequestAsync_ReturnsSuccess_WhenApiCallSucceeds()
+    {
+        // Arrange
+        var formType = "W-9";
+        var referenceId = "test@example.com";
+        
+        // Setup configuration
+        _mockConfiguration.Setup(c => c["Avalara:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["Avalara:ClientSecret"]).Returns("test-client-secret");
+        _mockConfiguration.Setup(c => c["Avalara:TeamApiId"]).Returns("test-team-api-id");
+        _mockConfiguration.Setup(c => c["Avalara:CompanyId"]).Returns("128085214");
+        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://track1099-sbx.avlr.sh");
+        
+        var useSandboxSection = new Mock<IConfigurationSection>();
+        useSandboxSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("Avalara:UseSandbox")).Returns(useSandboxSection.Object);
+        
+        // Mock token response
+        var tokenResponse = new
+        {
+            access_token = "test-access-token",
+            token_type = "Bearer",
+            expires_in = 3600
+        };
+        
+        // Mock form request response
+        var formRequestResponse = new
+        {
+            data = new
+            {
+                id = "test-form-request-id",
+                type = "form_request",
+                attributes = new
+                {
+                    form_type = "W-9",
+                    company_id = 128085214,
+                    company_name = "Test Company",
+                    company_email = "test@company.com",
+                    reference_id = referenceId,
+                    expires_at = DateTime.UtcNow.AddHours(1).ToString("o")
+                },
+                links = new
+                {
+                    action_validate = "/api/v1/public/form_requests/test-form-request-id/validate",
+                    action_complete = "/api/v1/public/form_requests/test-form-request-id/complete"
+                }
+            }
+        };
+        
+        var requestCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
+            {
+                requestCount++;
+                if (requestCount == 1) // First request is for token
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(tokenResponse), System.Text.Encoding.UTF8, "application/json")
+                    };
+                }
+                else // Second request is for form request
+                {
+                    return new HttpResponseMessage(HttpStatusCode.Created)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(formRequestResponse), System.Text.Encoding.UTF8, "application/vnd.api+json")
+                    };
+                }
+            });
+
+        // Act
+        var result = await _service.CreateFormRequestAsync(formType, referenceId);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.FormRequestId, Is.EqualTo("test-form-request-id"));
+        Assert.That(result.FormType, Is.EqualTo("W-9"));
+        Assert.That(result.FormRequestJson, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task CreateFormRequestAsync_ReturnsError_WhenTeamApiIdMissing()
+    {
+        // Arrange
+        var formType = "W-9";
+        var referenceId = "test@example.com";
+        
+        // Setup configuration without TeamApiId
+        _mockConfiguration.Setup(c => c["Avalara:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["Avalara:ClientSecret"]).Returns("test-client-secret");
+        _mockConfiguration.Setup(c => c["Avalara:TeamApiId"]).Returns((string?)null);
+        _mockConfiguration.Setup(c => c["Avalara:CompanyId"]).Returns("128085214");
+        
+        var useSandboxSection = new Mock<IConfigurationSection>();
+        useSandboxSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("Avalara:UseSandbox")).Returns(useSandboxSection.Object);
+        
+        // Mock token response
+        var tokenResponse = new
+        {
+            access_token = "test-access-token",
+            token_type = "Bearer",
+            expires_in = 3600
+        };
+        
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(tokenResponse), System.Text.Encoding.UTF8, "application/json")
+            });
+
+        // Act
+        var result = await _service.CreateFormRequestAsync(formType, referenceId);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("TeamApiId"));
+    }
+
+    [Test]
+    public void CreateFormRequestAsync_ThrowsArgumentException_WhenFormTypeInvalid()
+    {
+        // Arrange
+        var formType = "invalid-form-type";
+        var referenceId = "test@example.com";
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.CreateFormRequestAsync(formType, referenceId));
+    }
+
+    [Test]
+    public void CreateFormRequestAsync_ThrowsArgumentException_WhenReferenceIdEmpty()
+    {
+        // Arrange
+        var formType = "W-9";
+        var referenceId = "";
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.CreateFormRequestAsync(formType, referenceId));
+    }
+
+    [Test]
+    public async Task CreateFormRequestAsync_SupportsW8BEN()
+    {
+        // Arrange
+        var formType = "W-8BEN";
+        var referenceId = "test@example.com";
+        
+        // Setup configuration
+        _mockConfiguration.Setup(c => c["Avalara:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["Avalara:ClientSecret"]).Returns("test-client-secret");
+        _mockConfiguration.Setup(c => c["Avalara:TeamApiId"]).Returns("test-team-api-id");
+        _mockConfiguration.Setup(c => c["Avalara:CompanyId"]).Returns("128085214");
+        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://track1099-sbx.avlr.sh");
+        
+        var useSandboxSection = new Mock<IConfigurationSection>();
+        useSandboxSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("Avalara:UseSandbox")).Returns(useSandboxSection.Object);
+        
+        // Mock token response
+        var tokenResponse = new
+        {
+            access_token = "test-access-token",
+            token_type = "Bearer",
+            expires_in = 3600
+        };
+        
+        // Mock form request response
+        var formRequestResponse = new
+        {
+            data = new
+            {
+                id = "test-form-request-id",
+                type = "form_request",
+                attributes = new
+                {
+                    form_type = "W-8BEN",
+                    company_id = 128085214,
+                    reference_id = referenceId,
+                    expires_at = DateTime.UtcNow.AddHours(1).ToString("o")
+                },
+                links = new
+                {
+                    action_validate = "/api/v1/public/form_requests/test-form-request-id/validate",
+                    action_complete = "/api/v1/public/form_requests/test-form-request-id/complete"
+                }
+            }
+        };
+        
+        var requestCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
+            {
+                requestCount++;
+                if (requestCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(tokenResponse), System.Text.Encoding.UTF8, "application/json")
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.Created)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(formRequestResponse), System.Text.Encoding.UTF8, "application/vnd.api+json")
+                    };
+                }
+            });
+
+        // Act
+        var result = await _service.CreateFormRequestAsync(formType, referenceId);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.FormType, Is.EqualTo("W-8BEN"));
+    }
 }

@@ -307,7 +307,7 @@
                             
                             <!-- Tax Form Status -->
                             <div class="onboarding-section mb-4">
-                                <h5>2. Tax Form (W-9/W-8)</h5>
+                                <h5>2. Tax Form (W-9/W-8BEN)</h5>
                                 @if (_creatorTaxFormStatus == "Completed")
                                 {
                                     <p class="text-success"><strong>Status: Completed ✓</strong></p>
@@ -321,20 +321,34 @@
                                         <p>Activating your account...</p>
                                     }
                                 }
-                                else if (_creatorTaxFormStatus == "Pending")
+                                else if (_creatorTaxFormStatus == "Pending" || _creatorTaxFormStatus == "NotStarted" || string.IsNullOrEmpty(_creatorTaxFormStatus))
                                 {
-                                    <p class="text-warning"><strong>Status: Pending</strong></p>
-                                    <p>Please complete your tax form to activate your creator account.</p>
-                                    <p>Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
-                                    <p>If you didn't receive the email or need a new one:</p>
-                                    @if (!_resendingTaxForm)
+                                    @if (_creatorTaxFormStatus == "Pending")
                                     {
-                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
+                                        <p class="text-warning"><strong>Status: Pending</strong></p>
+                                        <p>You have started your tax form. Complete it to activate your creator account.</p>
                                     }
                                     else
                                     {
-                                        <p>Sending new email...</p>
+                                        <p class="text-muted"><strong>Status: Not Started</strong></p>
                                     }
+                                    
+                                    <div class="tax-form-options mt-3">
+                                        <p><strong>Complete your tax form to activate your creator account:</strong></p>
+                                        <p>If you are a <strong>USA Taxpayer</strong>, create a W-9. If you are a <strong>non-USA Taxpayer</strong>, create a W-8BEN.</p>
+                                        
+                                        <div class="tax-form-buttons mt-3">
+                                            @if (!_requestingTaxForm)
+                                            {
+                                                <SfButton IsPrimary="true" Content="Create W-9 (USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-9"))" CssClass="me-2" />
+                                                <SfButton IsPrimary="true" Content="Create W-8BEN (Non-USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-8BEN"))" />
+                                            }
+                                            else
+                                            {
+                                                <p>Preparing your tax form...</p>
+                                            }
+                                        </div>
+                                    </div>
                                 }
                                 else if (_creatorTaxFormStatus == "TinMatchInProgress")
                                 {
@@ -346,20 +360,19 @@
                                 else if (_creatorTaxFormStatus == "Failed")
                                 {
                                     <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
-                                }
-                                else
-                                {
-                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
-                                    <p>Your tax form request will be sent automatically as part of the onboarding process.</p>
+                                    <p>There was an issue with your tax form submission. Please complete a new form:</p>
+                                    
+                                    <div class="tax-form-buttons mt-3">
+                                        @if (!_requestingTaxForm)
+                                        {
+                                            <SfButton IsPrimary="true" Content="Create W-9 (USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-9"))" CssClass="me-2" />
+                                            <SfButton IsPrimary="true" Content="Create W-8BEN (Non-USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-8BEN"))" />
+                                        }
+                                        else
+                                        {
+                                            <p>Preparing your tax form...</p>
+                                        }
+                                    </div>
                                 }
                             </div>
                         </div>
