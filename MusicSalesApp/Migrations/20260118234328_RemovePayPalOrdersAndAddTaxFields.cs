@@ -14,49 +14,6 @@ namespace MusicSalesApp.Migrations
             migrationBuilder.DropTable(
                 name: "PayPalOrders");
 
-            // First, add the new columns to StreamPayouts
-            migrationBuilder.AddColumn<decimal>(
-                name: "GrossAmount",
-                table: "StreamPayouts",
-                type: "decimal(18,2)",
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "NetAmount",
-                table: "StreamPayouts",
-                type: "decimal(18,2)",
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "WithholdingRate",
-                table: "StreamPayouts",
-                type: "decimal(5,4)",
-                nullable: false,
-                defaultValue: 0m);
-
-            migrationBuilder.AddColumn<decimal>(
-                name: "WithheldAmount",
-                table: "StreamPayouts",
-                type: "decimal(18,2)",
-                nullable: false,
-                defaultValue: 0m);
-
-            // Migrate existing data: AmountPaid becomes GrossAmount, NetAmount = AmountPaid (no withholding on historical payouts)
-            migrationBuilder.Sql(@"
-                UPDATE StreamPayouts 
-                SET GrossAmount = AmountPaid, 
-                    NetAmount = AmountPaid, 
-                    WithholdingRate = 0, 
-                    WithheldAmount = 0
-            ");
-
-            // Now drop the old AmountPaid column
-            migrationBuilder.DropColumn(
-                name: "AmountPaid",
-                table: "StreamPayouts");
-
             // Add tax fields to Creators table
             migrationBuilder.AddColumn<string>(
                 name: "ClaimedTreatyArticle",
@@ -115,36 +72,6 @@ namespace MusicSalesApp.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Add back AmountPaid column
-            migrationBuilder.AddColumn<decimal>(
-                name: "AmountPaid",
-                table: "StreamPayouts",
-                type: "decimal(18,2)",
-                nullable: false,
-                defaultValue: 0m);
-
-            // Restore data from GrossAmount
-            migrationBuilder.Sql(@"
-                UPDATE StreamPayouts 
-                SET AmountPaid = GrossAmount
-            ");
-
-            migrationBuilder.DropColumn(
-                name: "GrossAmount",
-                table: "StreamPayouts");
-
-            migrationBuilder.DropColumn(
-                name: "NetAmount",
-                table: "StreamPayouts");
-
-            migrationBuilder.DropColumn(
-                name: "WithholdingRate",
-                table: "StreamPayouts");
-
-            migrationBuilder.DropColumn(
-                name: "WithheldAmount",
-                table: "StreamPayouts");
-
             migrationBuilder.DropColumn(
                 name: "ClaimedTreatyArticle",
                 table: "Creators");

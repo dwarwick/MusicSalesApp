@@ -772,11 +772,14 @@ namespace MusicSalesApp.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("AmountPaid")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("NumberOfStreams")
                         .HasColumnType("int");
@@ -796,6 +799,12 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<int>("SongMetadataId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("WithheldAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("WithholdingRate")
+                        .HasColumnType("decimal(5,4)");
 
                     b.HasKey("Id");
 

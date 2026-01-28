@@ -36,7 +36,10 @@ namespace MusicSalesApp.Migrations
                     PaymentDate = table.Column<DateTime>(type: "datetime2", nullable: false),
                     NumberOfStreams = table.Column<int>(type: "int", nullable: false),
                     RatePerStream = table.Column<decimal>(type: "decimal(10,6)", nullable: false),
-                    AmountPaid = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    GrossAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    WithholdingRate = table.Column<decimal>(type: "decimal(5,4)", nullable: false, defaultValue: 0m),
+                    WithheldAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false, defaultValue: 0m),
+                    NetAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     PayPalTransactionId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },

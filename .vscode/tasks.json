@@ -4,7 +4,7 @@
         {
             "label": "Publish with davidTest profile",
             "type": "shell",
-            "command": "dotnet msbuild ${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj /t:Build`,Publish /p:Configuration=Release '/p:PublishProfile=davidtest - Web Deploy' /p:UserName=bgmsd1-001 /p:Password=${input:davidTestPassword} /p:EnableMsDeployAppOffline=true /p:SkipExtraFilesOnServer=true; if ($LASTEXITCODE -le 1) { exit 0 }",
+            "command": "Write-Host '=== Step 1: Applying EF Migrations ===' -ForegroundColor Cyan; dotnet ef database update --project ${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj --connection 'Server=SQL8011.site4now.net;Database=db_a9f0e0_davidtest;User Id=db_a9f0e0_davidtest_admin;Password=${input:davidTestPassword};TrustServerCertificate=True'; if ($LASTEXITCODE -ne 0) { Write-Host 'Migration failed!' -ForegroundColor Red; exit 1 }; Write-Host '=== Step 2: Publishing to Web Server ===' -ForegroundColor Cyan; dotnet msbuild ${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj /t:Build`,Publish /p:Configuration=Release '/p:PublishProfile=davidtest - Web Deploy' /p:UserName=bgmsd1-001 /p:Password=${input:davidTestPassword} /p:EnableMsDeployAppOffline=true /p:SkipExtraFilesOnServer=true; if ($LASTEXITCODE -le 1) { exit 0 }",
             "group": "build",
             "presentation": {
                 "reveal": "always",
