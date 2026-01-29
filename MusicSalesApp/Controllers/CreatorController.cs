@@ -152,38 +152,13 @@ public class CreatorController : ControllerBase
             await context.SaveChangesAsync();
         }
 
-        // Request W-9/W-8 tax form from TaxBandits
-        // The user will receive an email from our system and then from TaxBandits with a link to complete the form
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        try
-        {
-            // Store the PayeeRef (email) used for the W-9 request
-            // Note: user.Email is already validated as non-empty at the start of this method
-            if (!string.IsNullOrWhiteSpace(user.Email))
-            {
-                await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
-            }
-            
-            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
-            if (w9Result.Success)
-            {
-                _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
-                // Update the tax form status to Pending since the request was sent successfully
-                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
-            }
-            else
-            {
-                // Log the error but don't fail the onboarding - admin will be notified via email
-                _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
-                // Update the tax form status to Failed since the request failed
-                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Failed);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Log the error but don't fail the onboarding - the W-9 can be requested again later
-            _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
-        }
+        // Tax form collection is now handled via the Avalara embedded form flow.
+        // Users will click the W-9 or W-8BEN button in the UI to open the form directly,
+        // rather than receiving an email from TaxBandits.
+        // The TaxBandits service is no longer called during onboarding.
+        
+        // Set initial tax form status to NotStarted - user will complete it via Avalara UI
+        await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.NotStarted);
 
         // Reload to get the latest state including tax form status
         var updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
