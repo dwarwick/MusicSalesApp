@@ -38,8 +38,8 @@
     @{
         var useSandbox = Configuration.GetValue<bool>("Avalara:UseSandbox", true);
         var avalaraSdkUrl = useSandbox 
-            ? Configuration["Avalara:SandboxSdkUrl"] ?? "https://sbx.track1099.com/sdk/request_form.js"
-            : Configuration["Avalara:ProductionSdkUrl"] ?? "https://www.track1099.com/sdk/request_form.js";
+            ? Configuration["Avalara:SandboxSdkUrl"] ?? "https://sbx.track1099.com/api/request_form.js"
+            : Configuration["Avalara:ProductionSdkUrl"] ?? "https://www.track1099.com/api/request_form.js";
     }
     <script src="@avalaraSdkUrl" type="module" crossorigin="anonymous"></script>
     
