@@ -178,8 +178,8 @@ public sealed class AvalaraTaxService : IAvalaraTaxService
             // Get configuration values
             var useSandbox = _configuration.GetValue<bool>("Avalara:UseSandbox", true);
             var apiBaseUrl = useSandbox
-                ? _configuration["Avalara:SandboxApiUrl"] ?? "https://track1099-sbx.avlr.sh"
-                : _configuration["Avalara:ProductionApiUrl"] ?? "https://track1099.com";
+                ? _configuration["Avalara:SandboxApiUrl"] ?? "https://sbx.track1099.com"
+                : _configuration["Avalara:ProductionApiUrl"] ?? "https://www.track1099.com";
             var teamApiId = _configuration["Avalara:TeamApiId"];
             var companyId = _configuration["Avalara:CompanyId"];
 

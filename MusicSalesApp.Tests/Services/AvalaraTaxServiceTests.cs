@@ -329,7 +329,7 @@ public class AvalaraTaxServiceTests
         _mockConfiguration.Setup(c => c["Avalara:ClientSecret"]).Returns("test-client-secret");
         _mockConfiguration.Setup(c => c["Avalara:TeamApiId"]).Returns("test-team-api-id");
         _mockConfiguration.Setup(c => c["Avalara:CompanyId"]).Returns("128085214");
-        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://track1099-sbx.avlr.sh");
+        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://sbx.track1099.com");
         
         var useSandboxSection = new Mock<IConfigurationSection>();
         useSandboxSection.Setup(s => s.Value).Returns("true");
@@ -485,7 +485,7 @@ public class AvalaraTaxServiceTests
         _mockConfiguration.Setup(c => c["Avalara:ClientSecret"]).Returns("test-client-secret");
         _mockConfiguration.Setup(c => c["Avalara:TeamApiId"]).Returns("test-team-api-id");
         _mockConfiguration.Setup(c => c["Avalara:CompanyId"]).Returns("128085214");
-        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://track1099-sbx.avlr.sh");
+        _mockConfiguration.Setup(c => c["Avalara:SandboxApiUrl"]).Returns("https://sbx.track1099.com");
         
         var useSandboxSection = new Mock<IConfigurationSection>();
         useSandboxSection.Setup(s => s.Value).Returns("true");
