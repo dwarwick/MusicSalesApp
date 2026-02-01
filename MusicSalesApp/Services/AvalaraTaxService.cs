@@ -229,6 +229,10 @@ public sealed class AvalaraTaxService : IAvalaraTaxService
             using var httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             var body = await httpResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
+#if DEBUG
+            _logger.LogInformation("Avalara form request response body: {Body}", body);
+#endif
+
             response.RawResponse = body;
 
             if (!httpResponse.IsSuccessStatusCode)
