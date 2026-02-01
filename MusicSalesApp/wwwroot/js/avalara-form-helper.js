@@ -4,6 +4,12 @@
  * This helper works with the Avalara Track1099 API to open embedded W-9/W-8BEN forms
  * within a modal dialog.
  */
+
+// Form type constants
+const FORM_TYPE_W9 = 'W-9';
+const FORM_TYPE_W8BEN = 'W-8BEN';
+const FORM_TYPE_W8BEN_E = 'W-8BEN-E';
+
 window.avalaraFormHelper = {
     /**
      * Opens the Avalara embedded form request modal.
@@ -29,14 +35,28 @@ window.avalaraFormHelper = {
                 throw new Error('Avalara1099 SDK is not loaded. Please refresh the page and try again.');
             }
 
-            // Call the Avalara SDK to open the form modal
+            // Determine the form type from the response to call the appropriate SDK method
+            const formType = data.attributes?.form_type;
+            if (!formType) {
+                console.warn('Form type not specified in response, defaulting to W-9');
+            }
+            const isW8Form = formType === FORM_TYPE_W8BEN || formType === FORM_TYPE_W8BEN_E;
+            
+            // Call the appropriate Avalara SDK method based on form type
             // The SDK will display a modal dialog where the user can complete and sign their form
-            Avalara1099.requestW9(formRequest, {
+            const sdkOptions = {
                 // Optional prefill values can be added here if needed
                 prefill: {},
                 // Uncomment to disable "Are you sure?" dialog when closing
                 // skipCloseConfirmation: true
-            })
+            };
+            
+            // Use requestW8 for W-8BEN and W-8BEN-E forms, requestW9 for W-9 forms
+            const sdkPromise = isW8Form 
+                ? Avalara1099.requestW8(formRequest, sdkOptions)
+                : Avalara1099.requestW9(formRequest, sdkOptions);
+            
+            sdkPromise
             .then(async newRequest => {
                 // Form was completed and signed successfully
                 const attributes = (newRequest.data || newRequest).attributes;
