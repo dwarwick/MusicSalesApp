@@ -549,8 +549,8 @@ public class CreatorController : ControllerBase
 
         try
         {
-            // Use user email as the reference_id to correlate the form with this user
-            var referenceId = user.Email;
+            // Use user ID as the reference_id to correlate the form with this user
+            var referenceId = user.Id.ToString();
             
             var result = await _avalaraTaxService.CreateFormRequestAsync(
                 request.FormType,

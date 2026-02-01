@@ -165,11 +165,17 @@ public class AvalaraController : ControllerBase
 
             var baseUrl = GetBaseUrl();
 
-            // Find the user by email (reference_id)
-            var user = await _userManager.FindByEmailAsync(referenceId);
+            // Find the user by ID (reference_id is the user's ID)
+            if (!int.TryParse(referenceId, out var userId))
+            {
+                _logger.LogWarning("Could not parse reference_id as user ID. ReferenceId={ReferenceId}", referenceId);
+                return Ok(new { status = "invalid_reference_id" });
+            }
+
+            var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null)
             {
-                _logger.LogWarning("Could not find user for Avalara webhook. ReferenceId={ReferenceId}", referenceId);
+                _logger.LogWarning("Could not find user for Avalara webhook. UserId={UserId}", userId);
                 return Ok(new { status = "user_not_found" });
             }
 
@@ -208,17 +214,17 @@ public class AvalaraController : ControllerBase
                     break;
 
                 case TinMatchStatusRejected:
-                    await HandleTinRejectedAsync(user, creator, referenceId, baseUrl);
+                    await HandleTinRejectedAsync(user, creator, user.Email!, baseUrl);
                     break;
 
                 case TinMatchStatusPending:
                 case TinMatchStatusUnknown:
-                    await HandleTinPendingAsync(user, creator, referenceId, submissionId, baseUrl);
+                    await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
                     break;
 
                 default:
                     _logger.LogWarning("Unknown tin_match_status: {Status}", tinMatchStatus);
-                    await HandleTinPendingAsync(user, creator, referenceId, submissionId, baseUrl);
+                    await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
                     break;
             }
 
