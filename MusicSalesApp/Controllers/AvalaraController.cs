@@ -84,11 +84,25 @@ public class AvalaraController : ControllerBase
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
 
-            // Extract the data object
-            if (!root.TryGetProperty("data", out var data))
+            // The Avalara SDK response can come in two formats:
+            // 1. Wrapped in a "data" object: {"data":{"id":"...","attributes":{...}}}
+            // 2. Directly at root level: {"id":"...","attributes":{...}}
+            // We need to handle both formats.
+            JsonElement data;
+            if (root.TryGetProperty("data", out var dataElement))
             {
-                _logger.LogWarning("Avalara webhook missing data property");
-                return BadRequest("Missing data property");
+                // Format 1: wrapped in "data"
+                data = dataElement;
+            }
+            else if (root.TryGetProperty("id", out _) && root.TryGetProperty("attributes", out _))
+            {
+                // Format 2: data is at root level
+                data = root;
+            }
+            else
+            {
+                _logger.LogWarning("Avalara webhook missing expected properties (no data wrapper and no id/attributes at root)");
+                return BadRequest("Missing expected properties");
             }
 
             // Extract the id (W9 submission ID)
