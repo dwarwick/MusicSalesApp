@@ -62,6 +62,16 @@ namespace MusicSalesApp.Services
         Task<EmailResult> SendEmailWithResultAsync(string toEmail, string subject, string body);
 
         /// <summary>
+        /// Sends an email asynchronously from a specific "from" address.
+        /// </summary>
+        /// <param name="fromEmail">The sender's email address (must be configured in EmailSettings).</param>
+        /// <param name="toEmail">The recipient's email address.</param>
+        /// <param name="subject">The subject of the email.</param>
+        /// <param name="body">The HTML body content of the email.</param>
+        /// <returns>True if the email was sent successfully, false otherwise.</returns>
+        Task<bool> SendEmailFromAsync(string fromEmail, string toEmail, string subject, string body);
+
+        /// <summary>
         /// Gets the application base URL from configuration, defaulting to https://streamtunes.net.
         /// Use this method when constructing URLs for email content (e.g., logo images, links).
         /// </summary>

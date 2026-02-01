@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+using MusicSalesApp.Common.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Syncfusion.Blazor.Grids;
 
@@ -18,6 +20,12 @@ public class AdminUserManagementModel : BlazorBase
 
     [Microsoft.AspNetCore.Components.Inject]
     protected RoleManager<IdentityRole<int>> RoleManager { get; set; } = default!;
+
+    [Microsoft.AspNetCore.Components.Inject]
+    protected ICreatorEmailService CreatorEmailService { get; set; } = default!;
+
+    [Microsoft.AspNetCore.Components.Inject]
+    protected IEmailService EmailService { get; set; } = default!;
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -46,6 +54,7 @@ public class AdminUserManagementModel : BlazorBase
     // Creator status edit fields
     protected CreatorOnboardingStatus? _editPayPalOnboardingStatus;
     protected TaxFormStatus? _editTaxFormStatus;
+    protected TaxFormStatus? _originalTaxFormStatus;
     protected bool _editCreatorIsActive;
     protected List<string> _payPalOnboardingStatusOptions = Enum.GetNames<CreatorOnboardingStatus>().ToList();
     protected List<string> _taxFormStatusOptions = Enum.GetNames<TaxFormStatus>().ToList();
@@ -141,6 +150,7 @@ public class AdminUserManagementModel : BlazorBase
         // Creator status fields
         _editPayPalOnboardingStatus = user.PayPalOnboardingStatus;
         _editTaxFormStatus = user.TaxFormStatus;
+        _originalTaxFormStatus = user.TaxFormStatus; // Store the original status to detect changes
         _editCreatorIsActive = user.CreatorIsActive;
 
         _showEditModal = true;
@@ -235,6 +245,11 @@ public class AdminUserManagementModel : BlazorBase
                 }
             }
 
+            // Track if tax status changed for email notification
+            var taxStatusChanged = false;
+            var previousTaxStatus = _originalTaxFormStatus?.ToString() ?? "NotStarted";
+            var newTaxStatus = _editTaxFormStatus?.ToString() ?? "NotStarted";
+
             // Update creator status if user is a creator
             if (_editingUser.IsCreator && _editingUser.CreatorId.HasValue)
             {
@@ -251,12 +266,44 @@ public class AdminUserManagementModel : BlazorBase
                     
                     if (_editTaxFormStatus.HasValue && creator.TaxFormStatus != _editTaxFormStatus.Value)
                     {
+                        taxStatusChanged = true;
                         creator.TaxFormStatus = _editTaxFormStatus.Value;
                         statusChanged = true;
-                        // Set TaxFormCompletedAt when status changes to Completed
+                        
+                        // Handle status change to Completed - run onboarding workflow
                         if (_editTaxFormStatus.Value == TaxFormStatus.Completed)
                         {
                             creator.TaxFormCompletedAt ??= DateTime.UtcNow;
+                            
+                            // If PayPal onboarding is also complete, activate the creator
+                            if (creator.OnboardingStatus == CreatorOnboardingStatus.Completed)
+                            {
+                                creator.IsActive = true;
+                                creator.OnboardedAt ??= DateTime.UtcNow;
+                                _editCreatorIsActive = true;
+                                
+                                // Add Creator role if not present
+                                var creatorRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == Roles.Creator);
+                                if (creatorRole != null)
+                                {
+                                    var hasCreatorRole = await context.UserRoles
+                                        .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == creatorRole.Id);
+                                    if (!hasCreatorRole)
+                                    {
+                                        context.UserRoles.Add(new IdentityUserRole<int>
+                                        {
+                                            UserId = user.Id,
+                                            RoleId = creatorRole.Id
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        // Handle status change from Completed to another status - deactivate creator
+                        else if (_originalTaxFormStatus == TaxFormStatus.Completed)
+                        {
+                            creator.IsActive = false;
+                            _editCreatorIsActive = false;
                         }
                     }
                     
@@ -274,6 +321,17 @@ public class AdminUserManagementModel : BlazorBase
             }
 
             await context.SaveChangesAsync();
+
+            // Send email notification if tax status changed
+            if (taxStatusChanged && !string.IsNullOrWhiteSpace(_editEmail))
+            {
+                var baseUrl = EmailService.GetAppBaseUrl();
+                await CreatorEmailService.SendTaxStatusChangedEmailAsync(
+                    _editEmail, 
+                    baseUrl, 
+                    previousTaxStatus, 
+                    newTaxStatus);
+            }
 
             // Update local model
             _editingUser.Email = _editEmail;

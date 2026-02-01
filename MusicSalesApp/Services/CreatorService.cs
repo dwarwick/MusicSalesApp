@@ -148,7 +148,7 @@ public class CreatorService : ICreatorService
         string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
-        Guid? taxBanditsSubmissionId,
+        Guid? w9SubmissionId,
         bool subjectToBackupWithholding = false)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -175,7 +175,7 @@ public class CreatorService : ICreatorService
         creator.ClaimedTreatyArticle = claimedTreatyArticle;
         creator.WithholdingRate = withholdingRate;
         creator.TaxFormExpirationDate = taxFormExpirationDate;
-        creator.TaxBanditsSubmissionId = taxBanditsSubmissionId;
+        creator.W9SubmissionId = w9SubmissionId;
         creator.SubjectToBackupWithholding = subjectToBackupWithholding;
         creator.LastVerifiedAt = DateTime.UtcNow;
 

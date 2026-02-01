@@ -468,4 +468,142 @@ public class CreatorEmailService : ICreatorEmailService
         // Return the code if we don't have a mapping
         return iso2Code;
     }
+
+    /// <inheritdoc />
+    public async Task<bool> SendTinRejectedEmailAsync(string userEmail, string baseUrl)
+    {
+        _logger.LogInformation("Sending TIN rejected email to {Email}", userEmail);
+
+        try
+        {
+            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+
+            var subject = "Tax Form Verification Failed - Action Required";
+            var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>Tax Form Verification Failed</h2>
+                <p>We were unable to verify the tax information you provided on your W-9 form.</p>
+                <p><strong>What to do next:</strong></p>
+                <ol>
+                    <li>Go to <a href='{manageAccountUrl}'>Account Management</a></li>
+                    <li>Make sure you are entering your <strong>legal name</strong> exactly as it appears on your tax documents</li>
+                    <li>Double-check that your <strong>SSN or EIN</strong> is entered correctly</li>
+                    <li>Request a new tax form and try again</li>
+                </ol>
+                <p>If you continue to experience issues, please contact us at 
+                   <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
+                <p style='color: #999; font-size: 12px;'>
+                    <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+                </p>";
+
+            return await _emailService.SendEmailAsync(userEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending TIN rejected email to {Email}", userEmail);
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SendTinPendingEmailAsync(string userEmail, string? submissionId, string baseUrl)
+    {
+        _logger.LogInformation("Sending TIN pending email to {Email}", userEmail);
+
+        try
+        {
+            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+
+            // Email to the user
+            var userSubject = "Tax Form Under Review";
+            var userBody = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>Tax Form Under Review</h2>
+                <p>Thank you for completing your tax form!</p>
+                <p>There is a slight delay in verifying your tax information. This verification process 
+                   may take up to 24 hours to complete.</p>
+                <p>We will send you another email once the verification process is complete.</p>
+                <p>You don't need to take any action at this time. If you have any questions, 
+                   please contact us at <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
+                <p style='color: #999; font-size: 12px;'>
+                    <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+                </p>";
+
+            var userEmailSent = await _emailService.SendEmailAsync(userEmail, userSubject, userBody);
+
+            // Email to admin
+            var adminSubject = "TIN Match Status Pending - Manual Review Required";
+            var adminBody = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>TIN Match Status Pending</h2>
+                <p>A creator's tax form verification is pending and may require manual review.</p>
+                <p><strong>User Email:</strong> {userEmail}</p>
+                <p><strong>Submission ID:</strong> {submissionId ?? "N/A"}</p>
+                <p>The TIN matching status is pending. This may occur if:</p>
+                <ul>
+                    <li>There were issues performing the TIN matching</li>
+                    <li>The user attempted to enter too many TINs during their session</li>
+                </ul>
+                <p>The background verification process will typically complete within 24 hours. 
+                   Please check the status on the Avalara/Track1099 website if needed.</p>
+                <p>If the verification completes successfully, you can update the user's tax form status 
+                   to 'Completed' in the admin user management page to activate their creator account.</p>";
+
+            var adminEmailSent = await _emailService.SendEmailAsync(_adminEmail, adminSubject, adminBody);
+
+            return userEmailSent && adminEmailSent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending TIN pending email to {Email}", userEmail);
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SendTaxStatusChangedEmailAsync(string userEmail, string baseUrl, string previousStatus, string newStatus)
+    {
+        _logger.LogInformation("Sending tax status changed email to {Email}: {PreviousStatus} -> {NewStatus}", 
+            userEmail, previousStatus, newStatus);
+
+        try
+        {
+            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+
+            var subject = "Your Creator Tax Status Has Been Updated";
+            var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>Tax Status Update</h2>
+                <p>Your creator tax form status has been updated by our team.</p>
+                <p><strong>Previous Status:</strong> {previousStatus}</p>
+                <p><strong>New Status:</strong> {newStatus}</p>
+                {(newStatus == "Completed" ? "<p>Congratulations! Your tax information has been verified and you are now ready to start creating!</p>" : "")}
+                {(newStatus != "Completed" ? "<p>Please note that your creator account may be temporarily inactive until your tax status is updated to Completed.</p>" : "")}
+                <p>You can view your current status on the <a href='{manageAccountUrl}'>Account Management</a> page.</p>
+                <p>If you have any questions about this change, please contact us at 
+                   <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
+                <p style='color: #999; font-size: 12px;'>
+                    <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+                </p>";
+
+            // Send from customer service email
+            return await _emailService.SendEmailFromAsync(_customerServiceEmail, userEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending tax status changed email to {Email}", userEmail);
+            return false;
+        }
+    }
 }
