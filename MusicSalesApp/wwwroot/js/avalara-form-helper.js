@@ -37,14 +37,32 @@ window.avalaraFormHelper = {
                 // Uncomment to disable "Are you sure?" dialog when closing
                 // skipCloseConfirmation: true
             })
-            .then(newRequest => {
+            .then(async newRequest => {
                 // Form was completed and signed successfully
                 const attributes = (newRequest.data || newRequest).attributes;
                 const signedAt = attributes.signed_at;
                 
                 if (signedAt) {
-                    // The form was signed - show success message and reload the page
-                    alert('Your tax form has been submitted successfully! The page will reload to update your status.');
+                    // The form was signed - notify our backend
+                    try {
+                        const response = await fetch('/api/avalara/w9-complete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(newRequest)
+                        });
+                        
+                        if (response.ok) {
+                            alert('Your tax form has been submitted successfully! The page will reload to update your status.');
+                        } else {
+                            console.error('Failed to notify backend of form completion:', response.status);
+                            alert('Your tax form has been submitted. Please wait a few moments and refresh the page to see your updated status.');
+                        }
+                    } catch (err) {
+                        console.error('Error notifying backend:', err);
+                        alert('Your tax form has been submitted. Please wait a few moments and refresh the page to see your updated status.');
+                    }
                     window.location.reload();
                 } else {
                     // The form was not completed (possibly saved as draft)

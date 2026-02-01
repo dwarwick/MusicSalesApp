@@ -38,7 +38,7 @@ public interface ICreatorService
 
     /// <summary>
     /// Updates the creator's tax form status along with full tax residency data.
-    /// Called when W-9 or W-8BEN form is completed via TaxBandits webhook.
+    /// Called when W-9 or W-8BEN form is completed via webhook.
     /// </summary>
     /// <param name="creatorId">The creator ID</param>
     /// <param name="status">The new tax form status</param>
@@ -48,7 +48,7 @@ public interface ICreatorService
     /// <param name="claimedTreatyArticle">The treaty article being claimed</param>
     /// <param name="withholdingRate">The withholding rate as decimal (e.g., 0.30 for 30%)</param>
     /// <param name="taxFormExpirationDate">When the tax form expires (W-8 only)</param>
-    /// <param name="taxBanditsSubmissionId">The TaxBandits submission ID for reference</param>
+    /// <param name="w9SubmissionId">The W9 submission ID from Avalara/Track1099 for reference</param>
     /// <param name="subjectToBackupWithholding">Whether US creator is subject to backup withholding (W-9 only)</param>
     /// <returns>The updated creator</returns>
     Task<Creator> UpdateTaxFormStatusWithTaxDataAsync(
@@ -60,7 +60,7 @@ public interface ICreatorService
         string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
-        Guid? taxBanditsSubmissionId,
+        Guid? w9SubmissionId,
         bool subjectToBackupWithholding = false);
 
     /// <summary>

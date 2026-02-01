@@ -36,7 +36,7 @@ public interface IAvalaraTaxService
     /// to display the form in a modal dialog.
     /// </summary>
     /// <param name="formType">The type of form to request: "W-9" or "W-8BEN".</param>
-    /// <param name="referenceId">Your internal identifier for the vendor (typically the user's email).</param>
+    /// <param name="referenceId">Your internal identifier for the vendor (typically the user's ID).</param>
     /// <param name="ttl">Seconds until this form request should expire (default: 3600, max: 86400).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The form request response containing the form request data for the JavaScript SDK.</returns>

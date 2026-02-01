@@ -363,5 +363,93 @@ namespace MusicSalesApp.Services
         {
             return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
         }
+
+        /// <inheritdoc />
+        public async Task<bool> SendEmailFromAsync(string fromEmail, string toEmail, string subject, string body)
+        {
+            _logger.LogInformation("Attempting to send email from {FromEmail} to {ToEmail}", fromEmail, toEmail);
+
+            try
+            {
+                if (string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
+                {
+                    _logger.LogError("Email configuration is missing required values for email from {FromEmail} to {ToEmail}", fromEmail, toEmail);
+                    return false;
+                }
+
+                return await Task.Run(() => SendEmailWithResultFrom(fromEmail, toEmail, subject, body).Success);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending email from {FromEmail} to {ToEmail}", fromEmail, toEmail);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Sends an email with a specific "from" address.
+        /// </summary>
+        private EmailResult SendEmailWithResultFrom(string fromEmail, string toEmail, string subject, string body)
+        {
+            _logger.LogInformation("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", fromEmail, toEmail, _server);
+
+            try
+            {
+                using var message = new MailMessage();
+                message.From = new MailAddress(fromEmail, _displayName);
+                message.Subject = subject;
+                message.To.Add(new MailAddress(toEmail));
+                
+                // Generate a unique Message-ID to improve deliverability
+                var messageId = $"<{Guid.NewGuid():N}@{_domain}>";
+                message.Headers.Add("Message-ID", messageId);
+                
+                // Add standard headers to reduce spam score
+                message.Headers.Add("X-Mailer", "StreamTunes");
+                message.Headers.Add("X-Priority", "3");
+                
+                // Build proper HTML with DOCTYPE
+                var fullHtmlBody = BuildHtmlEmail(body);
+                
+                // Create plain text version for multipart MIME
+                var plainTextBody = ConvertHtmlToPlainText(body);
+                
+                // Add both plain text and HTML views (multipart/alternative)
+                var plainView = AlternateView.CreateAlternateViewFromString(plainTextBody, System.Text.Encoding.UTF8, "text/plain");
+                var htmlView = AlternateView.CreateAlternateViewFromString(fullHtmlBody, System.Text.Encoding.UTF8, "text/html");
+                
+                message.AlternateViews.Add(plainView);
+                message.AlternateViews.Add(htmlView);
+
+                using var client = new SmtpClient(_server);
+                client.Port = 587;
+                client.Credentials = new NetworkCredential(_fromEmail, _password); // Use the configured credential even when sending from a different address
+                client.EnableSsl = true;
+                client.DeliveryMethod = SmtpDeliveryMethod.Network;
+                client.Timeout = 30000; // 30 seconds timeout
+
+                client.Send(message);
+                _logger.LogInformation("Email successfully sent from {FromEmail} to {ToEmail}", fromEmail, toEmail);
+                return EmailResult.Succeeded();
+            }
+            catch (SmtpException ex)
+            {
+                if (IsSpamFilterError(ex))
+                {
+                    _logger.LogError(ex, "Email rejected by spam filter from {FromEmail} to {ToEmail}: {StatusCode} - {Message}",
+                        fromEmail, toEmail, ex.StatusCode, ex.Message);
+                    return EmailResult.SpamFilterRejected();
+                }
+
+                _logger.LogError(ex, "SMTP error sending email from {FromEmail} to {ToEmail}: {StatusCode} - {Message}",
+                    fromEmail, toEmail, ex.StatusCode, ex.Message);
+                return EmailResult.SmtpError(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error sending email from {FromEmail} to {ToEmail}: {Message}", fromEmail, toEmail, ex.Message);
+                return EmailResult.UnexpectedError(ex.Message);
+            }
+        }
     }
 }
