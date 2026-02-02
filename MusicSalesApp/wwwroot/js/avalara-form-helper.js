@@ -29,15 +29,33 @@ window.avalaraFormHelper = {
                 throw new Error('Avalara1099 SDK is not loaded. Please refresh the page and try again.');
             }
 
-            // Call the Avalara SDK to open the form modal
-            // The SDK's requestW9 method handles all form types (W-9, W-8BEN, W-8BEN-E)
-            // The form_type in the formRequest data determines which form is displayed
-            Avalara1099.requestW9(formRequest, {
+            // Determine the form type from the response to call the appropriate SDK method
+            const formType = data.attributes?.form_type;
+            
+            // SDK options for all form types
+            const sdkOptions = {
                 // Optional prefill values can be added here if needed
                 prefill: {},
                 // Uncomment to disable "Are you sure?" dialog when closing
                 // skipCloseConfirmation: true
-            })
+            };
+            
+            // Call the appropriate Avalara SDK method based on form type
+            // The SDK has separate methods: requestW9, requestW8BEN, requestW8BENE
+            let sdkPromise;
+            if (formType === 'W-8BEN') {
+                sdkPromise = Avalara1099.requestW8BEN(formRequest, sdkOptions);
+            } else if (formType === 'W-8BEN-E') {
+                sdkPromise = Avalara1099.requestW8BENE(formRequest, sdkOptions);
+            } else if (formType === 'W-9') {
+                sdkPromise = Avalara1099.requestW9(formRequest, sdkOptions);
+            } else {
+                // Log warning for missing or unexpected form type
+                console.warn('Unexpected or missing form_type:', formType, '- defaulting to W-9');
+                sdkPromise = Avalara1099.requestW9(formRequest, sdkOptions);
+            }
+            
+            sdkPromise
             .then(async newRequest => {
                 // Form was completed and signed successfully
                 const attributes = (newRequest.data || newRequest).attributes;
