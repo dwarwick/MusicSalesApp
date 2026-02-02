@@ -220,6 +220,10 @@ public sealed class AvalaraTaxService : IAvalaraTaxService
 
             var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
 
+#if DEBUG
+            _logger.LogInformation("Avalara form request body: {Body}", jsonContent);
+#endif
+
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = new StringContent(jsonContent, Encoding.UTF8, "application/vnd.api+json")
