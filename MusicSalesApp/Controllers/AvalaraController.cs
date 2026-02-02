@@ -36,6 +36,10 @@ public class AvalaraController : ControllerBase
     private const string TinMatchStatusPending = "pending";
     private const string TinMatchStatusUnknown = "unknown";
 
+    // W-8 form type values (these forms don't require TIN matching)
+    private const string FormTypeW8BEN = "W-8BEN";
+    private const string FormTypeW8BENE = "W-8BEN-E";
+
     // Backup withholding rate for US creators (24% per IRS regulations)
     private const decimal BackupWithholdingRate = 0.24m;
 
@@ -204,28 +208,44 @@ public class AvalaraController : ControllerBase
                 await context.SaveChangesAsync();
             }
 
-            // Handle based on tin_match_status
-            var normalizedStatus = tinMatchStatus?.ToLowerInvariant() ?? TinMatchStatusUnknown;
+            // Check if this is a W-8BEN or W-8BEN-E form (non-US taxpayers)
+            // TIN matching only applies to W-9 forms (US taxpayers)
+            // For W-8 forms, as long as the form is signed, we can complete the onboarding
+            var isW8Form = string.Equals(formType, FormTypeW8BEN, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(formType, FormTypeW8BENE, StringComparison.OrdinalIgnoreCase);
 
-            switch (normalizedStatus)
+            if (isW8Form)
             {
-                case TinMatchStatusMatched:
-                    await HandleTinMatchedAsync(user, creator, submissionGuid, formType, baseUrl);
-                    break;
+                // W-8BEN/W-8BEN-E forms don't require TIN matching
+                // The form is already signed (we checked above), so proceed with onboarding
+                _logger.LogInformation("W-8 form ({FormType}) signed for user {UserId}. Proceeding with creator onboarding (no TIN match required).", formType, user.Id);
+                await HandleTinMatchedAsync(user, creator, submissionGuid, formType, baseUrl);
+            }
+            else
+            {
+                // W-9 forms require TIN matching - handle based on tin_match_status
+                var normalizedStatus = tinMatchStatus?.ToLowerInvariant() ?? TinMatchStatusUnknown;
 
-                case TinMatchStatusRejected:
-                    await HandleTinRejectedAsync(user, creator, user.Email!, baseUrl);
-                    break;
+                switch (normalizedStatus)
+                {
+                    case TinMatchStatusMatched:
+                        await HandleTinMatchedAsync(user, creator, submissionGuid, formType, baseUrl);
+                        break;
 
-                case TinMatchStatusPending:
-                case TinMatchStatusUnknown:
-                    await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
-                    break;
+                    case TinMatchStatusRejected:
+                        await HandleTinRejectedAsync(user, creator, user.Email!, baseUrl);
+                        break;
 
-                default:
-                    _logger.LogWarning("Unknown tin_match_status: {Status}", tinMatchStatus);
-                    await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
-                    break;
+                    case TinMatchStatusPending:
+                    case TinMatchStatusUnknown:
+                        await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
+                        break;
+
+                    default:
+                        _logger.LogWarning("Unknown tin_match_status: {Status}", tinMatchStatus);
+                        await HandleTinPendingAsync(user, creator, user.Email!, submissionId, baseUrl);
+                        break;
+                }
             }
 
             return Ok(new { status = "success" });
