@@ -175,7 +175,7 @@ public class CreatorService : ICreatorService
         creator.ClaimedTreatyArticle = claimedTreatyArticle;
         creator.WithholdingRate = withholdingRate;
         creator.TaxFormExpirationDate = taxFormExpirationDate;
-        creator.W9SubmissionId = w9SubmissionId;
+        creator.TaxBanditsSubmissionId = w9SubmissionId;
         creator.SubjectToBackupWithholding = subjectToBackupWithholding;
         creator.LastVerifiedAt = DateTime.UtcNow;
 
