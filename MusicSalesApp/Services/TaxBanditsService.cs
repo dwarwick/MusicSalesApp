@@ -506,23 +506,15 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 return response;
             }
 
-            // Build the API request
+            // Build the API request with query parameters (not a request body)
             var apiUrl = useSandbox
                 ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
                 : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
 
-            var requestBody = new
-            {
-                BusinessId = businessId,
-                PayeeRef = payeeRef
-            };
+            var deleteUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Delete?PayeeRef={Uri.EscapeDataString(payeeRef)}";
 
-            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
-            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            using var req = new HttpRequestMessage(HttpMethod.Delete, $"{apiUrl.TrimEnd('/')}/WhCertificate/Delete");
+            using var req = new HttpRequestMessage(HttpMethod.Delete, deleteUrl);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
-            req.Content = content;
 
             using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
             var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
