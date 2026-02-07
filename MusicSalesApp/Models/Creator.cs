@@ -174,10 +174,10 @@ public class Creator
     public DateTime? TaxFormExpirationDate { get; set; }
 
     /// <summary>
-    /// The TaxBandits submission ID for the completed tax form.
+    /// The W9 submission ID from Avalara/Track1099 for the completed tax form.
     /// Used for reference and audit purposes.
     /// </summary>
-    public Guid? TaxBanditsSubmissionId { get; set; }
+    public Guid? W9SubmissionId { get; set; }
 
     /// <summary>
     /// When the creator's tax information was last verified.

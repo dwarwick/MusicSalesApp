@@ -24,6 +24,7 @@ public class CreatorController : ControllerBase
     private readonly ILogger<CreatorController> _logger;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ITaxBanditsService _taxBanditsService;
+    private readonly IAvalaraTaxService _avalaraTaxService;
     private readonly IConfiguration _configuration;
 
     public CreatorController(
@@ -33,6 +34,7 @@ public class CreatorController : ControllerBase
         ILogger<CreatorController> logger,
         IDbContextFactory<AppDbContext> dbContextFactory,
         ITaxBanditsService taxBanditsService,
+        IAvalaraTaxService avalaraTaxService,
         IConfiguration configuration)
     {
         _creatorService = creatorService;
@@ -41,6 +43,7 @@ public class CreatorController : ControllerBase
         _logger = logger;
         _dbContextFactory = dbContextFactory;
         _taxBanditsService = taxBanditsService;
+        _avalaraTaxService = avalaraTaxService;
         _configuration = configuration;
     }
 
@@ -512,6 +515,94 @@ public class CreatorController : ControllerBase
             CreatedAt = s.CreatedAt
         }));
     }
+
+    /// <summary>
+    /// Creates an Avalara form request for W-9 or W-8BEN tax forms.
+    /// Returns the form request data that can be used with the Avalara JavaScript SDK
+    /// to display an embedded form for the user to complete.
+    /// </summary>
+    /// <param name="request">The form request parameters.</param>
+    [HttpPost("avalara-form-request")]
+    public async Task<IActionResult> CreateAvalaraFormRequest([FromBody] AvalaraFormRequestRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            return BadRequest("User must have a verified email address.");
+        }
+
+        // Validate form type
+        var validFormTypes = new[] { "W-9", "W-8BEN" };
+        if (string.IsNullOrWhiteSpace(request.FormType) || !validFormTypes.Contains(request.FormType))
+        {
+            return BadRequest($"FormType must be one of: {string.Join(", ", validFormTypes)}");
+        }
+
+        // Check if user already has a creator record and if tax form is already completed
+        var existingCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (existingCreator != null && existingCreator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            return BadRequest("You have already completed your tax form.");
+        }
+
+        try
+        {
+            // Use user ID as the reference_id to correlate the form with this user
+            var referenceId = user.Id.ToString();
+            
+            var result = await _avalaraTaxService.CreateFormRequestAsync(
+                request.FormType,
+                referenceId,
+                request.Ttl ?? 3600);
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Avalara form request created for user {UserId}, FormType: {FormType}, FormRequestId: {FormRequestId}",
+                    user.Id, request.FormType, result.FormRequestId);
+
+                // Update the creator's tax form status to Pending if they have a creator record
+                if (existingCreator != null)
+                {
+                    await _creatorService.UpdateTaxFormStatusAsync(existingCreator.Id, TaxFormStatus.Pending);
+                    
+                    // Store the PayeeRef (email) used for the form request
+                    if (!string.IsNullOrWhiteSpace(user.Email))
+                    {
+                        await _creatorService.UpdateTaxBanditsPayeeRefAsync(existingCreator.Id, user.Email);
+                    }
+                }
+
+                return Ok(new AvalaraFormRequestResponse
+                {
+                    Success = true,
+                    FormRequestJson = result.FormRequestJson,
+                    FormRequestId = result.FormRequestId,
+                    FormType = result.FormType,
+                    ExpiresAt = result.ExpiresAt
+                });
+            }
+            else
+            {
+                _logger.LogError("Avalara form request failed for user {UserId}: {Error}", user.Id, result.ErrorMessage);
+                return StatusCode(500, new AvalaraFormRequestResponse
+                {
+                    Success = false,
+                    ErrorMessage = result.ErrorMessage
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while creating Avalara form request for user {UserId}", user.Id);
+            return StatusCode(500, new AvalaraFormRequestResponse
+            {
+                Success = false,
+                ErrorMessage = "An error occurred while creating the form request."
+            });
+        }
+    }
 }
 
 #region Request/Response Models
@@ -605,6 +696,52 @@ public class CreatorSongItem
     public double? TrackLength { get; set; }
     public int NumberOfStreams { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class AvalaraFormRequestRequest
+{
+    /// <summary>
+    /// The type of form to request: "W-9" for US taxpayers or "W-8BEN" for non-US taxpayers.
+    /// </summary>
+    public string? FormType { get; set; }
+
+    /// <summary>
+    /// Optional: Time to live in seconds for the form request (default: 3600, max: 86400).
+    /// </summary>
+    public int? Ttl { get; set; }
+}
+
+public class AvalaraFormRequestResponse
+{
+    /// <summary>
+    /// Indicates whether the form request was successful.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// The complete JSON response from Avalara API to be passed to the JavaScript SDK.
+    /// </summary>
+    public string? FormRequestJson { get; set; }
+
+    /// <summary>
+    /// The unique ID of the form request.
+    /// </summary>
+    public string? FormRequestId { get; set; }
+
+    /// <summary>
+    /// The form type (W-9 or W-8BEN).
+    /// </summary>
+    public string? FormType { get; set; }
+
+    /// <summary>
+    /// When the form request expires.
+    /// </summary>
+    public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>
+    /// Error message if the request failed.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
 }
 
 #endregion

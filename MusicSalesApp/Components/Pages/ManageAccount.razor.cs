@@ -1014,6 +1014,59 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Requests an Avalara tax form (W-9 or W-8BEN) and opens the embedded form modal.
+    /// </summary>
+    /// <param name="formType">The type of form to request: "W-9" or "W-8BEN".</param>
+    protected async Task RequestAvalaraTaxForm(string formType)
+    {
+        _requestingTaxForm = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/creator/avalara-form-request", new
+            {
+                FormType = formType,
+                Ttl = 3600
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<AvalaraFormRequestResult>();
+                if (result != null && result.Success && !string.IsNullOrEmpty(result.FormRequestJson))
+                {
+                    // Call JavaScript to open the Avalara form modal
+                    await JS.InvokeVoidAsync("avalaraFormHelper.openFormRequest", result.FormRequestJson);
+                    
+                    // Reload creator status to reflect any changes
+                    await LoadCreatorStatus();
+                }
+                else
+                {
+                    _errorMessage = result?.ErrorMessage ?? "Failed to create tax form request.";
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to create tax form request: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error requesting Avalara tax form");
+            _errorMessage = $"Error requesting tax form: {ex.Message}";
+        }
+        finally
+        {
+            _requestingTaxForm = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     protected void NavigateToUpload()
     {
         NavigationManager.NavigateTo("/upload-files");
@@ -1181,4 +1234,14 @@ public class ResendTaxFormResponse
 {
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
+}
+
+public class AvalaraFormRequestResult
+{
+    public bool Success { get; set; }
+    public string FormRequestJson { get; set; } = string.Empty;
+    public string FormRequestId { get; set; } = string.Empty;
+    public string FormType { get; set; } = string.Empty;
+    public DateTime? ExpiresAt { get; set; }
+    public string ErrorMessage { get; set; } = string.Empty;
 }
