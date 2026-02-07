@@ -166,6 +166,12 @@ namespace MusicSalesApp.Services
                 existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
                 existing.ArtistName = metadata.ArtistName;
                 existing.UpdatedAt = DateTime.UtcNow;
+
+                // Re-uploading to a previously used path should always reactivate the song.
+                // This is critical when a creator re-signs up and re-uploads songs whose
+                // SongMetadata rows were marked inactive (IsActive=false) during deactivation.
+                existing.IsActive = true;
+                existing.IsEnabled = true;
                 
                 context.SongMetadata.Update(existing);
             }

@@ -273,7 +273,13 @@ namespace MusicSalesApp.Services
                 
                 try
                 {
-                    await client.SendMailAsync(message, cts.Token);
+                    // ConfigureAwait(false) is critical here: this method can be called
+                    // synchronously via .GetAwaiter().GetResult() from SendEmailWithResult.
+                    // In Blazor Server, the RendererSynchronizationContext is active during
+                    // component event handlers. Without ConfigureAwait(false), the await
+                    // captures that context and tries to resume on it — but the sync context
+                    // thread is blocked by GetResult(), causing a deadlock.
+                    await client.SendMailAsync(message, cts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cts.IsCancellationRequested)
                 {

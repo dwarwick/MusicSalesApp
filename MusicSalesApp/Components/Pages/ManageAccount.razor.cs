@@ -901,7 +901,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error starting creator onboarding");
-            _errorMessage = $"Error starting creator onboarding: {ex.Message}";
+            _errorMessage = $"Error starting creator onboarding. Please refresh the page to see your current status.";
+            // The server may have partially completed the onboarding before the error
+            // (e.g. client timeout while server continued). Refresh the UI state.
+            await LoadCreatorStatus();
         }
         finally
         {

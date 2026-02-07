@@ -176,22 +176,17 @@ public class CreatorEmailService : ICreatorEmailService
             var logoUrl = _emailService.GetLogoUrl();
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
-            // Email to user - use transactional language to avoid spam filters
-            var userSubject = $"Your {formType} Tax Form Has Been Approved";
+            // Email to user - keep it short, transactional, and avoid promotional language
+            var userSubject = $"StreamTunes - {formType} Form Processed";
             var userBody = $@"
                 <div style='text-align: center; margin-bottom: 20px;'>
                     <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
                 </div>
-                <h2>Tax Form Status Update</h2>
-                <p>Your {formType} tax form has been successfully processed and approved.</p>
-                <p>Your creator account setup is now complete. You can begin uploading music to StreamTunes.</p>
-                <h3>Next Steps:</h3>
-                <ol>
-                    <li>Go to <a href='{manageAccountUrl}'>Account Management</a></li>
-                    <li>Upload your music files and album art</li>
-                    <li>Set pricing for your content</li>
-                </ol>
-                <p>If you have any questions, please contact us at 
+                <h2>{formType} Form Status</h2>
+                <p>Your {formType} tax form has been processed. No further action is needed for this step.</p>
+                <p>You can view your account status and next steps on your 
+                   <a href='{manageAccountUrl}'>Account Management</a> page.</p>
+                <p>If you have any questions, contact us at 
                    <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
                 <p style='color: #999; font-size: 12px;'>
                     <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>

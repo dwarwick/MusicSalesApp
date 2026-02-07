@@ -2,9 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
-using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -22,7 +20,6 @@ public class CreatorController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ILogger<CreatorController> _logger;
-    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ITaxBanditsService _taxBanditsService;
     private readonly IConfiguration _configuration;
 
@@ -31,7 +28,6 @@ public class CreatorController : ControllerBase
         UserManager<ApplicationUser> userManager,
         RoleManager<IdentityRole<int>> roleManager,
         ILogger<CreatorController> logger,
-        IDbContextFactory<AppDbContext> dbContextFactory,
         ITaxBanditsService taxBanditsService,
         IConfiguration configuration)
     {
@@ -39,7 +35,6 @@ public class CreatorController : ControllerBase
         _userManager = userManager;
         _roleManager = roleManager;
         _logger = logger;
-        _dbContextFactory = dbContextFactory;
         _taxBanditsService = taxBanditsService;
         _configuration = configuration;
     }
@@ -131,23 +126,11 @@ public class CreatorController : ControllerBase
             }
         }
 
-        // Update creator with PayPal email and affirmation
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-        var creatorToUpdate = await context.Creators.FindAsync(creator.Id);
-        if (creatorToUpdate != null)
-        {
-            creatorToUpdate.PayPalEmail = request.PayPalEmail;
-            creatorToUpdate.PayPalAccountAffirmed = request.PayPalAccountAffirmed;
-            creatorToUpdate.OnboardingStatus = CreatorOnboardingStatus.Completed;
-            // PaymentsReceivable and PrimaryEmailConfirmed are set to true based on user affirmation
-            // rather than PayPal verification. The business account onboarding flow has been removed.
-            // These fields are kept for backward compatibility with existing queries.
-            creatorToUpdate.PaymentsReceivable = true;
-            creatorToUpdate.PrimaryEmailConfirmed = true;
-            creatorToUpdate.OnboardedAt = DateTime.UtcNow;
-            creatorToUpdate.UpdatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
-        }
+        // Update creator with PayPal email, affirmation, and set OnboardingStatus to Completed.
+        // Uses the service method to ensure an atomic, logged state transition.
+        // Previously this was done via direct DbContext manipulation which could silently fail
+        // for returning creators whose OnboardingStatus was Suspended.
+        await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
 
         // Request W-9/W-8 tax form from TaxBandits
         // First check if the creator already has a valid certificate on file
@@ -159,7 +142,11 @@ public class CreatorController : ControllerBase
         {
             if (!string.IsNullOrWhiteSpace(payeeRef))
             {
-                var certStatus = await _taxBanditsService.GetWhCertificateStatusAsync(payeeRef!);
+                // Use a short timeout for this non-critical check. The TaxBandits API can
+                // occasionally hang, and the default HttpClient timeout of 100s would cause
+                // the entire onboarding request to time out on the client side.
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                var certStatus = await _taxBanditsService.GetWhCertificateStatusAsync(payeeRef!, cts.Token);
                 if (certStatus.Success && certStatus.HasValidCertificate)
                 {
                     _logger.LogInformation(
@@ -169,6 +156,11 @@ public class CreatorController : ControllerBase
                     await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // WhCertificate status check timed out - fall through and request a new form
+            _logger.LogWarning("WhCertificate status check timed out for user {UserId} (PayeeRef: {PayeeRef}). Will request a new form.", user.Id, payeeRef);
         }
         catch (Exception ex)
         {

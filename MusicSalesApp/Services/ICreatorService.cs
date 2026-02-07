@@ -152,4 +152,17 @@ public interface ICreatorService
     /// <param name="creatorId">The creator ID</param>
     /// <returns>True if successful</returns>
     Task<bool> RevokeCreatorConsentAsync(int creatorId);
+
+    /// <summary>
+    /// Resets a returning creator's onboarding fields when they re-sign up.
+    /// Sets OnboardingStatus to Completed, stores PayPal email and affirmation,
+    /// and marks PaymentsReceivable/PrimaryEmailConfirmed as true.
+    /// This is used instead of direct DbContext manipulation in the controller
+    /// to ensure an atomic, testable state transition.
+    /// </summary>
+    /// <param name="creatorId">The creator ID</param>
+    /// <param name="payPalEmail">The creator's PayPal email for payouts</param>
+    /// <param name="payPalAccountAffirmed">Whether the creator affirmed their PayPal account</param>
+    /// <returns>The updated creator</returns>
+    Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string payPalEmail, bool payPalAccountAffirmed);
 }

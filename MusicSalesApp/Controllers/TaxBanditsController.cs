@@ -1040,13 +1040,27 @@ public class TaxBanditsController : ControllerBase
                 return;
             }
 
-            // Check if PayPal onboarding is also complete
+            // Check if PayPal onboarding is also complete.
+            // For returning creators who re-signed up, OnboardingStatus should be Completed.
+            // However, if it's Suspended/ConsentRevoked but PayPalAccountAffirmed is true,
+            // it means the creator completed the re-signup form but OnboardingStatus wasn't
+            // properly reset — fix it defensively and proceed with activation.
             if (creator.OnboardingStatus != CreatorOnboardingStatus.Completed)
             {
-                _logger.LogInformation(
-                    "User {UserId} completed tax form but PayPal onboarding is not complete. PayPal Status: {PayPalStatus}, Tax Form Status: {TaxFormStatus}",
-                    userId, creator.OnboardingStatus, creator.TaxFormStatus);
-                return;
+                if (creator.PayPalAccountAffirmed)
+                {
+                    _logger.LogWarning(
+                        "User {UserId} completed tax form and has PayPalAccountAffirmed=true but OnboardingStatus={Status}. Resetting to Completed.",
+                        userId, creator.OnboardingStatus);
+                    await _creatorService.UpdateOnboardingStatusAsync(creator.Id, CreatorOnboardingStatus.Completed);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "User {UserId} completed tax form but PayPal onboarding is not complete. PayPal Status: {PayPalStatus}, Tax Form Status: {TaxFormStatus}",
+                        userId, creator.OnboardingStatus, creator.TaxFormStatus);
+                    return;
+                }
             }
 
             // Both onboarding processes are complete - add Creator role

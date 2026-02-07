@@ -456,6 +456,38 @@ public class CreatorService : ICreatorService
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string payPalEmail, bool payPalAccountAffirmed)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        // Reset all onboarding-related fields for re-signup.
+        // This is critical for returning creators whose status was set to Suspended
+        // when they stopped selling — previously the controller set these via direct
+        // DbContext manipulation which could silently fail.
+        creator.PayPalEmail = payPalEmail;
+        creator.PayPalAccountAffirmed = payPalAccountAffirmed;
+        creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
+        creator.PaymentsReceivable = true;
+        creator.PrimaryEmailConfirmed = true;
+        creator.OnboardedAt = DateTime.UtcNow;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Reset onboarding for creator {CreatorId}: OnboardingStatus={Status}, PayPalEmail={PayPalEmail}",
+            creatorId, creator.OnboardingStatus, payPalEmail);
+
+        return creator;
+    }
+
     /// <summary>
     /// Deletes a song's files from Azure storage.
     /// </summary>
