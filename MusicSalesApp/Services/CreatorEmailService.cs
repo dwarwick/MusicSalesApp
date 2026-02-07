@@ -176,24 +176,23 @@ public class CreatorEmailService : ICreatorEmailService
             var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
-            // Email to user
-            var userSubject = "Welcome to StreamTunes - Tax Form Approved!";
+            // Email to user - use transactional language to avoid spam filters
+            var userSubject = $"Your {formType} Tax Form Has Been Approved";
             var userBody = $@"
                 <div style='text-align: center; margin-bottom: 20px;'>
                     <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
                 </div>
-                <h2>Welcome to StreamTunes!</h2>
-                <p>Congratulations! Your {formType} tax form has been successfully processed and approved.</p>
-                <p>You are now ready to start sharing your music with the world!</p>
+                <h2>Tax Form Status Update</h2>
+                <p>Your {formType} tax form has been successfully processed and approved.</p>
+                <p>Your creator account setup is now complete. You can begin uploading music to StreamTunes.</p>
                 <h3>Next Steps:</h3>
                 <ol>
                     <li>Go to <a href='{manageAccountUrl}'>Account Management</a></li>
                     <li>Upload your music files and album art</li>
-                    <li>Start earning from your creations!</li>
+                    <li>Set pricing for your content</li>
                 </ol>
-                <p>If you have any questions or need help getting started, please don't hesitate to contact us at 
+                <p>If you have any questions, please contact us at 
                    <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
-                <p>We're excited to have you as part of the StreamTunes creator community!</p>
                 <p style='color: #999; font-size: 12px;'>
                     <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
                 </p>";

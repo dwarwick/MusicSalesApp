@@ -191,7 +191,8 @@ namespace MusicSalesApp.Services
                     return EmailResult.MissingConfiguration();
                 }
 
-                return await Task.Run(() => SendEmailWithResult(toEmail, subject, body));
+                // Use the internal async method directly for proper async handling
+                return await SendEmailWithResultInternalAsync(toEmail, subject, body);
             }
             catch (SmtpException ex)
             {
@@ -222,10 +223,18 @@ namespace MusicSalesApp.Services
 
         private EmailResult SendEmailWithResult(string toEmail, string subject, string body)
         {
+            // For synchronous calls, use the async version with a blocking wait
+            return SendEmailWithResultInternalAsync(toEmail, subject, body).GetAwaiter().GetResult();
+        }
+
+        private async Task<EmailResult> SendEmailWithResultInternalAsync(string toEmail, string subject, string body)
+        {
             _logger.LogInformation("Attempting to send email from {FromEmail} to {ToEmail} via {Server}", _fromEmail, toEmail, _server);
 
             try
             {
+                _logger.LogDebug("Building email message for {ToEmail}", toEmail);
+                
                 using var message = new MailMessage();
                 message.From = new MailAddress(_fromEmail, _displayName);
                 message.Subject = subject;
@@ -252,6 +261,8 @@ namespace MusicSalesApp.Services
                 message.AlternateViews.Add(plainView);
                 message.AlternateViews.Add(htmlView);
 
+                _logger.LogDebug("Connecting to SMTP server {Server}:587 for {ToEmail}", _server, toEmail);
+
                 using var client = new SmtpClient(_server);
                 client.Port = 587;
                 client.Credentials = new NetworkCredential(_fromEmail, _password);
@@ -259,7 +270,21 @@ namespace MusicSalesApp.Services
                 client.DeliveryMethod = SmtpDeliveryMethod.Network;
                 client.Timeout = 30000; // 30 seconds timeout
 
-                client.Send(message);
+                // Use SendMailAsync with a cancellation token for reliable timeout handling
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                
+                _logger.LogDebug("Sending email via SendMailAsync to {ToEmail}", toEmail);
+                
+                try
+                {
+                    await client.SendMailAsync(message, cts.Token);
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                {
+                    _logger.LogError("Email send timed out after 30 seconds for {ToEmail}", toEmail);
+                    return EmailResult.UnexpectedError("Email send operation timed out after 30 seconds.");
+                }
+                
                 _logger.LogInformation("Email successfully sent to {ToEmail}", toEmail);
                 return EmailResult.Succeeded();
             }

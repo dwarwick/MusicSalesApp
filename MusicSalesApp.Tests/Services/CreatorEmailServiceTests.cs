@@ -297,7 +297,7 @@ public class CreatorEmailServiceTests
         // Verify user email was sent
         _mockEmailService.Verify(e => e.SendEmailAsync(
             TestUserEmail,
-            "Welcome to StreamTunes - Tax Form Approved!",
+            "Your W-9 Tax Form Has Been Approved",
             It.IsAny<string>()),
             Times.Once);
 
@@ -310,7 +310,7 @@ public class CreatorEmailServiceTests
     }
 
     [Test]
-    public async Task SendTaxFormSuccessEmailAsync_UserEmailIsWelcomeMessage()
+    public async Task SendTaxFormSuccessEmailAsync_UserEmailIsStatusUpdate()
     {
         // Act
         await _service.SendTaxFormSuccessEmailAsync(TestUserEmail, TestBaseUrl, "W-9");
@@ -319,7 +319,7 @@ public class CreatorEmailServiceTests
         _mockEmailService.Verify(e => e.SendEmailAsync(
             TestUserEmail,
             It.IsAny<string>(),
-            It.Is<string>(body => body.Contains("Welcome to StreamTunes"))),
+            It.Is<string>(body => body.Contains("Tax Form Status Update"))),
             Times.Once);
     }
 
