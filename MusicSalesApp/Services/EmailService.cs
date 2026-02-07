@@ -81,12 +81,10 @@ namespace MusicSalesApp.Services
                     return EmailResult.MissingConfiguration();
                 }
 
-                var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+                var logoHtml = GetEmailLogoHtml();
                 var subject = "Email Verification";
                 var body = $@"
-                <div style='text-align: center; margin-bottom: 20px;'>
-                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-                </div>
+                {logoHtml}
                 <h2>Verify Your Email</h2>
                 <p>Thank you for registering with StreamTunes. Please click the link below to verify your email address:</p>
                 <p><a href='{tokenUrl}' style='display: inline-block; padding: 10px 20px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px;'>Verify Email</a></p>
@@ -132,12 +130,10 @@ namespace MusicSalesApp.Services
                     return EmailResult.MissingConfiguration();
                 }
 
-                var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+                var logoHtml = GetEmailLogoHtml();
                 var subject = "Password Reset Request";
                 var body = $@"
-                <div style='text-align: center; margin-bottom: 20px;'>
-                    <img src='{logoUrl}' alt='Logo' style='max-width: 150px; height: auto;' />
-                </div>
+                {logoHtml}
                 <h2>Reset Your Password</h2>
                 <p>You requested a password reset. Please click the link below to reset your password:</p>
                 <p><a href='{tokenUrl}' style='display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
@@ -387,6 +383,22 @@ namespace MusicSalesApp.Services
         public string GetAppBaseUrl()
         {
             return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
+        }
+
+        /// <inheritdoc />
+        public string GetLogoUrl()
+        {
+            return $"{GetAppBaseUrl().TrimEnd('/')}/images/logo-light-small.png";
+        }
+
+        /// <inheritdoc />
+        public string GetEmailLogoHtml()
+        {
+            var logoUrl = GetLogoUrl();
+            return $@"
+            <div style='text-align: center; margin-bottom: 20px;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+            </div>";
         }
     }
 }

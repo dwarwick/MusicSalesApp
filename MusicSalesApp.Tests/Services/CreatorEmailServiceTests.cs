@@ -30,6 +30,8 @@ public class CreatorEmailServiceTests
         // Setup email service to return true by default
         _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        _mockEmailService.Setup(e => e.GetLogoUrl())
+            .Returns("https://streamtunes.net/images/logo-light-small.png");
 
         _service = new CreatorEmailService(
             _mockEmailService.Object,

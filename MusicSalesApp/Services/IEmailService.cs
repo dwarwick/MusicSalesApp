@@ -67,5 +67,19 @@ namespace MusicSalesApp.Services
         /// </summary>
         /// <returns>The application base URL.</returns>
         string GetAppBaseUrl();
+
+        /// <summary>
+        /// Gets the absolute URL for the StreamTunes logo image, using the canonical app base URL.
+        /// Use this in all email templates instead of constructing the logo URL manually.
+        /// </summary>
+        /// <returns>The full logo image URL (e.g., https://streamtunes.net/images/logo-light-small.png).</returns>
+        string GetLogoUrl();
+
+        /// <summary>
+        /// Gets the standard HTML block for the StreamTunes logo to embed at the top of emails.
+        /// Uses the canonical app base URL to ensure the logo always loads correctly.
+        /// </summary>
+        /// <returns>An HTML string containing a centered logo image block.</returns>
+        string GetEmailLogoHtml();
     }
 }

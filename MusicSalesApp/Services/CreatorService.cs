@@ -394,15 +394,36 @@ public class CreatorService : ICreatorService
             .Where(s => s.CreatorId == creatorId && s.IsActive)
             .ToListAsync();
 
+        if (songs.Count == 0)
+            return 0;
+
+        var songIds = songs.Select(s => s.Id).ToList();
+
         foreach (var song in songs)
         {
             // Delete from Azure storage
             await DeleteSongFromStorageAsync(song);
 
-            // Mark as inactive
+            // Mark as inactive (retain row for StreamPayout/SongStatusHistory/tax records)
             song.IsActive = false;
             song.UpdatedAt = DateTime.UtcNow;
         }
+
+        // Remove related records that should not persist after creator leaves
+        var userPlaylists = await context.UserPlaylists
+            .Where(up => songIds.Contains(up.SongMetadataId))
+            .ToListAsync();
+        context.UserPlaylists.RemoveRange(userPlaylists);
+
+        var songLikes = await context.SongLikes
+            .Where(sl => songIds.Contains(sl.SongMetadataId))
+            .ToListAsync();
+        context.SongLikes.RemoveRange(songLikes);
+
+        var recommendedPlaylists = await context.RecommendedPlaylists
+            .Where(rp => songIds.Contains(rp.SongMetadataId))
+            .ToListAsync();
+        context.RecommendedPlaylists.RemoveRange(recommendedPlaylists);
 
         await context.SaveChangesAsync();
         return songs.Count;

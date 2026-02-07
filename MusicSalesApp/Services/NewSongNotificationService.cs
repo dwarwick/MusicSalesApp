@@ -158,7 +158,7 @@ public class NewSongNotificationService : INewSongNotificationService
 
     private string BuildEmailBody(List<SongMetadata> newSongs, string baseUrl)
     {
-        var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+        var logoUrl = _emailService.GetLogoUrl();
         var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
         // Group into albums and standalone songs

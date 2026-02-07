@@ -554,7 +554,7 @@ public class StreamPayoutService : IStreamPayoutService
                 .ToDictionaryAsync(sm => sm.Id);
 
             var baseUrl = _emailService.GetAppBaseUrl();
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = BuildPayoutReceiptEmail(
                 creator,

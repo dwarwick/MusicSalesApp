@@ -309,6 +309,9 @@ public abstract class BUnitTestBase
         // Add Syncfusion Blazor services for component testing
         TestContext.Services.AddSyncfusionBlazor();
 
+        // Set JSInterop to Loose mode to handle Syncfusion component JS calls
+        TestContext.JSInterop.Mode = JSRuntimeMode.Loose;
+
         // Provide a default HttpClient for components
         var handler = new StubHttpMessageHandler();
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") };

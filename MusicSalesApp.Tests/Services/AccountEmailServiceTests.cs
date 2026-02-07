@@ -19,6 +19,8 @@ public class AccountEmailServiceTests
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        _mockEmailService.Setup(x => x.GetLogoUrl())
+            .Returns("https://streamtunes.net/images/logo-light-small.png");
 
         _service = new AccountEmailService(
             _mockEmailService.Object,

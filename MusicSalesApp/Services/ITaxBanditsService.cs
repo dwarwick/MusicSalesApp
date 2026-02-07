@@ -62,6 +62,17 @@ public interface ITaxBanditsService
     Task<Form1099TransactionResponse> ReportForm1099TransactionsBatchAsync(
         List<Form1099Transaction> transactions,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the status of all W-9/W-8 certificate requests for a specific recipient (payee).
+    /// Used to check if a returning creator already has a valid tax form on file.
+    /// </summary>
+    /// <param name="payeeRef">The PayeeRef (email) used in the original W-9/W-8 request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The status response from TaxBandits API.</returns>
+    Task<WhCertificateStatusResponse> GetWhCertificateStatusAsync(
+        string payeeRef,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -153,4 +164,45 @@ public sealed class Form1099TransactionResponse
     
     public string? ErrorMessage { get; set; }
     public string? RawResponse { get; set; }
+}
+
+/// <summary>
+/// Response from TaxBandits WhCertificate/Status endpoint.
+/// </summary>
+public sealed class WhCertificateStatusResponse
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? RawResponse { get; set; }
+    
+    /// <summary>
+    /// Total number of certificate records for this payee.
+    /// </summary>
+    public int TotalRecords { get; set; }
+    
+    /// <summary>
+    /// List of certificate statuses (most recent first).
+    /// </summary>
+    public List<WhCertificateRecord> Records { get; set; } = new();
+    
+    /// <summary>
+    /// Whether the payee has at least one valid (COMPLETED) W-9 or W-8 certificate.
+    /// </summary>
+    public bool HasValidCertificate => Records.Any(r =>
+        r.FormStatus == "COMPLETED" ||
+        r.FormStatus == "COMPLETED_AND_TIN_MATCH_INPROGRESS" ||
+        r.FormStatus == "ORDER_NOT_CREATED" /* TIN type not applicable for matching */);
+}
+
+/// <summary>
+/// Represents a single W-9/W-8 certificate record from TaxBandits.
+/// </summary>
+public sealed class WhCertificateRecord
+{
+    public string? SubmissionId { get; set; }
+    public string? FormType { get; set; }
+    public string? FormStatus { get; set; }
+    public string? StatusTimestamp { get; set; }
+    public string? TinMatchingStatus { get; set; }
+    public string? TinMatchingStatusTimestamp { get; set; }
 }

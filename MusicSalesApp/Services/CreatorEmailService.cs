@@ -34,7 +34,7 @@ public class CreatorEmailService : ICreatorEmailService
 
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             var subject = "Tax Form Received - Under Review";
@@ -69,7 +69,7 @@ public class CreatorEmailService : ICreatorEmailService
 
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             // Email to the user
@@ -128,7 +128,7 @@ public class CreatorEmailService : ICreatorEmailService
 
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             var reasonText = !string.IsNullOrWhiteSpace(failureReason)
@@ -173,7 +173,7 @@ public class CreatorEmailService : ICreatorEmailService
 
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             // Email to user - use transactional language to avoid spam filters

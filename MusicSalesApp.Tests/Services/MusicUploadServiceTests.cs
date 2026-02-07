@@ -278,7 +278,7 @@ public class MusicUploadServiceTests
         };
 
         // Act
-        var result = _service.ValidateAllFilePairings(fileNames);
+        var result = _service.ValidateAllFilePairings(fileNames, requireAudioFile: true, requireCoverArt: true);
 
         // Assert
         Assert.That(result.IsValid, Is.False);
@@ -317,7 +317,7 @@ public class MusicUploadServiceTests
         };
 
         // Act
-        var result = _service.ValidateAllFilePairings(fileNames);
+        var result = _service.ValidateAllFilePairings(fileNames, requireAudioFile: true, requireCoverArt: true);
 
         // Assert
         Assert.That(result.IsValid, Is.False);

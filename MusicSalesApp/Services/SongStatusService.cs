@@ -196,7 +196,7 @@ public class SongStatusService : ISongStatusService
                 ? song.SongTitle 
                 : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? song.BlobPath);
 
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             
             // Get song image URL if available
             string songImageHtml = "";
@@ -263,7 +263,7 @@ public class SongStatusService : ISongStatusService
                 ? song.SongTitle 
                 : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? song.BlobPath);
 
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             
             // Get song image URL if available
             string songImageHtml = "";

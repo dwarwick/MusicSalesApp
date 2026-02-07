@@ -25,6 +25,8 @@ public class PurchaseEmailServiceTests
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        _mockEmailService.Setup(x => x.GetLogoUrl())
+            .Returns("https://streamtunes.net/images/logo-light-small.png");
 
         _mockAzureStorageService.Setup(x => x.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
             .Returns(new Uri("https://storage.blob.core.windows.net/container/image.jpg?sv=2021-06-08"));

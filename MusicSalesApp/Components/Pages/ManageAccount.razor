@@ -220,7 +220,7 @@
             <SfCard CssClass="mb-4">
                 <CardHeader Title="Become a Creator" />
                 <CardContent>
-                    @if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null)
+                    @if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null || _creatorOnboardingStatus == "Suspended" || _creatorOnboardingStatus == "ConsentRevoked")
                     {
                         <div class="creator-description">
                             <h4>Share Your Music on StreamTunes!</h4>

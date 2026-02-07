@@ -133,8 +133,11 @@ public interface ICreatorService
     Task<List<SongMetadata>> GetCreatorSongsAsync(int creatorId);
 
     /// <summary>
-    /// Deactivates all songs for a creator (marks them inactive and removes from Azure storage).
+    /// Deactivates all songs for a creator and cleans up related data.
     /// Used when a creator closes their account or stops being a creator.
+    /// Removes blobs from Azure storage, marks SongMetadata as inactive (retained for financial/tax records),
+    /// and deletes UserPlaylist, SongLike, and RecommendedPlaylist entries.
+    /// StreamPayout and SongStatusHistory records are preserved.
     /// </summary>
     /// <param name="creatorId">The creator ID</param>
     /// <returns>Number of songs deactivated</returns>

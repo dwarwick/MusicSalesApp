@@ -309,12 +309,10 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
     private async Task SendW9NotificationEmailAsync(string email, string baseUrl)
     {
-        var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+        var logoHtml = _emailService.GetEmailLogoHtml();
         var subject = "Action Required: Complete Your Tax Form";
         var body = $@"
-            <div style='text-align: center; margin-bottom: 20px;'>
-                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-            </div>
+            {logoHtml}
             <h2>Tax Form Required</h2>
             <p>Thank you for joining StreamTunes as a creator!</p>
             <p>As part of the onboarding process, you need to complete your W-9 or W-8 tax form. 
@@ -334,7 +332,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
     private async Task SendErrorEmailsAsync(string userEmail, string baseUrl, string errorMessage, string? rawResponse)
     {
-        var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+        var logoHtml = _emailService.GetEmailLogoHtml();
 
         // Truncate raw response to avoid exposing too much sensitive information in emails
         var truncatedResponse = rawResponse != null && rawResponse.Length > 500 
@@ -344,9 +342,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
         // Email to admin
         var adminSubject = "W-9 Request Failed - Action Required";
         var adminBody = $@"
-            <div style='text-align: center; margin-bottom: 20px;'>
-                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-            </div>
+            {logoHtml}
             <h2>W-9 Request Failed</h2>
             <p>A W-9 request failed for the following user:</p>
             <p><strong>User Email:</strong> {userEmail}</p>
@@ -360,9 +356,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
         // Email to user
         var userSubject = "Issue with Your Tax Form Request";
         var userBody = $@"
-            <div style='text-align: center; margin-bottom: 20px;'>
-                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-            </div>
+            {logoHtml}
             <h2>Issue with Your Tax Form Request</h2>
             <p>We encountered an issue while processing your tax form request.</p>
             <p>Our team at <a href='mailto:{_adminEmail}'>{_adminEmail}</a> has been notified and is looking into this issue.</p>
@@ -845,8 +839,10 @@ public sealed class TaxBanditsService : ITaxBanditsService
     {
         try
         {
+            var logoHtml = _emailService.GetEmailLogoHtml();
             var subject = "Form 1099 Transaction Submission Failed - Action Required";
             var body = $@"
+                {logoHtml}
                 <h2>Form 1099 Transaction Submission Failed</h2>
                 <p>A Form 1099 transaction submission to TaxBandits has failed.</p>
                 <p><strong>Endpoint:</strong> {System.Net.WebUtility.HtmlEncode(endpoint)}</p>
@@ -863,5 +859,135 @@ public sealed class TaxBanditsService : ITaxBanditsService
             // Log but don't throw - email failure shouldn't affect the main flow
             _logger.LogError(ex, "Failed to send Form 1099 failure notification email to admin");
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<WhCertificateStatusResponse> GetWhCertificateStatusAsync(
+        string payeeRef,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(payeeRef)) throw new ArgumentException("PayeeRef is required.", nameof(payeeRef));
+
+        _logger.LogInformation("Getting WhCertificate status for PayeeRef {PayeeRef}", payeeRef);
+
+        var response = new WhCertificateStatusResponse();
+
+        try
+        {
+            var clientId = _configuration["TaxBandits:ClientId"];
+            var clientSecret = _configuration["TaxBandits:ClientSecret"];
+            var userToken = _configuration["TaxBandits:UserToken"];
+            var businessId = _configuration["TaxBandits:BusinessId"];
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
+            {
+                response.Success = false;
+                response.ErrorMessage = "TaxBandits configuration is incomplete.";
+                return response;
+            }
+
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+            if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
+            {
+                response.Success = false;
+                response.ErrorMessage = "Failed to obtain TaxBandits access token.";
+                return response;
+            }
+
+            var apiUrl = useSandbox
+                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
+                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+
+            var statusUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Status?PayeeRef={Uri.EscapeDataString(payeeRef)}&BusinessId={Uri.EscapeDataString(businessId)}";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, statusUrl);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
+
+            using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            response.RawResponse = responseBody;
+
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(responseBody);
+                var root = doc.RootElement;
+
+                // Check for errors
+                if (root.TryGetProperty("Errors", out var errors) &&
+                    errors.ValueKind == JsonValueKind.Array &&
+                    errors.GetArrayLength() > 0)
+                {
+                    var firstError = errors[0];
+                    response.Success = false;
+                    response.ErrorMessage = firstError.TryGetProperty("Message", out var msgEl)
+                        ? msgEl.GetString() ?? "Unknown error"
+                        : "Unknown error";
+                    _logger.LogWarning("WhCertificate status check returned errors for PayeeRef {PayeeRef}: {Error}", payeeRef, response.ErrorMessage);
+                    return response;
+                }
+
+                response.TotalRecords = root.TryGetProperty("TotalRecords", out var totalEl) ? totalEl.GetInt32() : 0;
+
+                if (root.TryGetProperty("Status", out var statusArray) &&
+                    statusArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var record in statusArray.EnumerateArray())
+                    {
+                        var certRecord = new WhCertificateRecord
+                        {
+                            SubmissionId = record.TryGetProperty("SubmissionId", out var subEl) ? subEl.GetString() : null,
+                            FormType = record.TryGetProperty("FormType", out var ftEl) ? ftEl.GetString() : null,
+                            FormStatus = record.TryGetProperty("FormStatus", out var fsEl) ? fsEl.GetString() : null,
+                            StatusTimestamp = record.TryGetProperty("StatusTs", out var stsEl) ? stsEl.GetString() : null
+                        };
+
+                        if (record.TryGetProperty("TINMatching", out var tinMatch) &&
+                            tinMatch.ValueKind == JsonValueKind.Object)
+                        {
+                            certRecord.TinMatchingStatus = tinMatch.TryGetProperty("Status", out var tmStatusEl) ? tmStatusEl.GetString() : null;
+                            certRecord.TinMatchingStatusTimestamp = tinMatch.TryGetProperty("StatusTs", out var tmTsEl) ? tmTsEl.GetString() : null;
+                        }
+
+                        response.Records.Add(certRecord);
+                    }
+                }
+
+                response.Success = true;
+                _logger.LogInformation(
+                    "WhCertificate status for PayeeRef {PayeeRef}: {TotalRecords} records, HasValidCertificate={HasValid}",
+                    payeeRef, response.TotalRecords, response.HasValidCertificate);
+            }
+            else
+            {
+                var errorMsg = $"TaxBandits API returned HTTP {(int)resp.StatusCode}";
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("Errors", out var errs) &&
+                        errs.ValueKind == JsonValueKind.Array &&
+                        errs.GetArrayLength() > 0 &&
+                        errs[0].TryGetProperty("Message", out var msgEl))
+                    {
+                        errorMsg = msgEl.GetString() ?? errorMsg;
+                    }
+                }
+                catch (JsonException) { }
+
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                _logger.LogError("WhCertificate status check failed for PayeeRef {PayeeRef}: {Error}", payeeRef, errorMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while checking WhCertificate status for PayeeRef {PayeeRef}", payeeRef);
+            response.Success = false;
+            response.ErrorMessage = ex.Message;
+        }
+
+        return response;
     }
 }

@@ -47,6 +47,8 @@ public class NewSongNotificationServiceTests
             .ReturnsAsync(true);
         _mockEmailService.Setup(x => x.GetAppBaseUrl())
             .Returns("https://streamtunes.net");
+        _mockEmailService.Setup(x => x.GetLogoUrl())
+            .Returns("https://streamtunes.net/images/logo-light-small.png");
 
         // Default Azure storage setup
         _mockAzureStorageService.Setup(x => x.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))

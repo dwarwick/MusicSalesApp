@@ -38,7 +38,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         try
         {
             var itemsList = purchasedItems.ToList();
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             // Group items by album
             var albumGroups = itemsList
@@ -94,7 +94,7 @@ public class PurchaseEmailService : IPurchaseEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Subscription Confirmation"));

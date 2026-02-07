@@ -23,7 +23,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Welcome to StreamTunes!"));
@@ -55,7 +55,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Account Suspended"));
@@ -88,7 +88,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Password Changed"));
@@ -120,7 +120,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Account Deleted"));
@@ -155,7 +155,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
             var endDateDisplay = endDate?.ToString("MMMM dd, yyyy 'at' h:mm tt") ?? "the end of your billing period";
 
             var body = new StringBuilder();
@@ -193,7 +193,7 @@ public class AccountEmailService : IAccountEmailService
     {
         try
         {
-            var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
+            var logoUrl = _emailService.GetLogoUrl();
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Account Reactivated"));
