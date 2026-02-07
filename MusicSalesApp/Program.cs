@@ -240,9 +240,6 @@ try
     // Register TaxBanditsService with HttpClient
     builder.Services.AddHttpClient<ITaxBanditsService, TaxBanditsService>();
 
-    // Register AvalaraTaxService with HttpClient
-    builder.Services.AddHttpClient<IAvalaraTaxService, AvalaraTaxService>();
-
     // Configure Fido2 for passkey support
     builder.Services.AddSingleton<IFido2>(sp =>
     {

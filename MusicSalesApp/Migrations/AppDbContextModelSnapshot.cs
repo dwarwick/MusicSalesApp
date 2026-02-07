@@ -480,6 +480,9 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<Guid?>("TaxBanditsSubmissionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime?>("TaxFormCompletedAt")
                         .HasColumnType("datetime2");
 
@@ -495,9 +498,6 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<int>("TaxResidencyType")
                         .HasColumnType("int");
-
-                    b.Property<Guid?>("W9SubmissionId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("TreatyCountry")
                         .HasMaxLength(2)

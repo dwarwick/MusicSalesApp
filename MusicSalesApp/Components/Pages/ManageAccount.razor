@@ -335,19 +335,7 @@
                                     
                                     <div class="tax-form-options mt-3">
                                         <p><strong>Complete your tax form to activate your creator account:</strong></p>
-                                        <p>If you are a <strong>USA Taxpayer</strong>, create a W-9. If you are a <strong>non-USA Taxpayer</strong>, create a W-8BEN.</p>
-                                        
-                                        <div class="tax-form-buttons mt-3">
-                                            @if (!_requestingTaxForm)
-                                            {
-                                                <SfButton IsPrimary="true" Content="Create W-9 (USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-9"))" CssClass="me-2" />
-                                                <SfButton IsPrimary="true" Content="Create W-8BEN (Non-USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-8BEN"))" />
-                                            }
-                                            else
-                                            {
-                                                <p>Preparing your tax form...</p>
-                                            }
-                                        </div>
+                                        <p>You will receive an email with a link to complete your W-9 or W-8BEN tax form.</p>
                                     </div>
                                 }
                                 else if (_creatorTaxFormStatus == "TinMatchInProgress")
@@ -360,19 +348,7 @@
                                 else if (_creatorTaxFormStatus == "Failed")
                                 {
                                     <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please complete a new form:</p>
-                                    
-                                    <div class="tax-form-buttons mt-3">
-                                        @if (!_requestingTaxForm)
-                                        {
-                                            <SfButton IsPrimary="true" Content="Create W-9 (USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-9"))" CssClass="me-2" />
-                                            <SfButton IsPrimary="true" Content="Create W-8BEN (Non-USA Taxpayer)" OnClick="@(() => RequestAvalaraTaxForm("W-8BEN"))" />
-                                        }
-                                        else
-                                        {
-                                            <p>Preparing your tax form...</p>
-                                        }
-                                    </div>
+                                    <p>There was an issue with your tax form submission. Please check your email for instructions to complete a new form.</p>
                                 }
                             </div>
                         </div>
