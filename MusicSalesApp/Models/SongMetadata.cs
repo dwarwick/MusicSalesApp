@@ -144,6 +144,16 @@ public class SongMetadata
     public int? ImageHeight { get; set; }
 
     /// <summary>
+    /// Returns true if the image is a perfect square, false if not square,
+    /// or null if dimensions are unknown.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool? IsImageSquare =>
+        (ImageWidth.HasValue && ImageHeight.HasValue)
+            ? ImageWidth.Value == ImageHeight.Value
+            : null;
+
+    /// <summary>
     /// Gets the effective artist name using the priority:
     /// 1. SongMetadata.ArtistName
     /// 2. Creator.DisplayName

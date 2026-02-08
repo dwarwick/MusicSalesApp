@@ -1143,13 +1143,10 @@ namespace MusicSalesApp.Components.Pages
             if (_playlistInfo != null && index < _playlistInfo.Tracks.Count)
             {
                 var track = _playlistInfo.Tracks[index];
-                if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata)
+                    && metadata.IsImageSquare == false)
                 {
-                    if (metadata.ImageWidth.HasValue && metadata.ImageHeight.HasValue
-                        && metadata.ImageWidth.Value != metadata.ImageHeight.Value)
-                    {
-                        return null; // Non-square image - don't display
-                    }
+                    return null; // Non-square image - don't display
                 }
             }
 

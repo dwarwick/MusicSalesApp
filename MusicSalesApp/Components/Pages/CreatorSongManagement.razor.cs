@@ -11,6 +11,7 @@ namespace MusicSalesApp.Components.Pages;
 public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
     protected bool _loading = true;
     protected string _errorMessage = string.Empty;
@@ -110,7 +111,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             IsEnabled = m.IsEnabled,
             StatusReason = m.StatusReason ?? string.Empty,
             NumberOfStreams = m.NumberOfStreams,
-            IsImageSquare = (m.ImageWidth.HasValue && m.ImageHeight.HasValue) ? (bool?)(m.ImageWidth.Value == m.ImageHeight.Value) : null
+            IsImageSquare = m.IsImageSquare
         }).ToList();
 
         // Generate SAS URLs for images
@@ -319,9 +320,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         
                         metadata.ImageBlobPath = newFileName;
                         _editingSong.JpegFileName = newFileName;
-                        // Cropped images are always square (800x800)
-                        metadata.ImageWidth = 800;
-                        metadata.ImageHeight = 800;
+                        metadata.ImageWidth = CropOutputSize;
+                        metadata.ImageHeight = CropOutputSize;
                         
                         _croppedImageBase64 = null;
                         _showCropTool = false;

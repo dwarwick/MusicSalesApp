@@ -20,6 +20,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
     private const string PriceFormat = "F2";
+    private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
     [Inject] protected ISongAdminService SongAdminService { get; set; }
@@ -102,7 +103,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     DisplayOnHomePage = m.DisplayOnHomePage,
                     IsEnabled = m.IsEnabled,
                     StatusReason = m.StatusReason ?? string.Empty,
-                    IsImageSquare = (m.ImageWidth.HasValue && m.ImageHeight.HasValue) ? (bool?)(m.ImageWidth.Value == m.ImageHeight.Value) : null
+                    IsImageSquare = m.IsImageSquare
                 };
             }).ToList();
         
@@ -165,7 +166,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // All songs are now standalone songs - validate accordingly
             var hasMP3 = !string.IsNullOrEmpty(_editingSong.Mp3FileName);
 
-            // Genre is optional on admin page - no validation required
+            // Genre is optional on admin page
 
             // Check if enabled/disabled status is changing
             var wasEnabled = _editingSong.IsEnabled;
@@ -270,9 +271,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.IsAlbumCover = false;
                     existingMetadata.Genre = _editGenre;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
-                    // Cropped images are always square (800x800)
-                    existingMetadata.ImageWidth = 800;
-                    existingMetadata.ImageHeight = 800;
+                    existingMetadata.ImageWidth = CropOutputSize;
+                    existingMetadata.ImageHeight = CropOutputSize;
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
 

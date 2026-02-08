@@ -277,9 +277,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         !string.IsNullOrEmpty(m.ImageBlobPath) &&
                         m.ImageBlobPath.Equals(artFile.Name, StringComparison.OrdinalIgnoreCase));
                     
-                    var isSquare = artMetadata == null || !artMetadata.ImageWidth.HasValue || !artMetadata.ImageHeight.HasValue
-                        ? true // Unknown dimensions - show image (graceful degradation)
-                        : artMetadata.ImageWidth.Value == artMetadata.ImageHeight.Value;
+                    // Unknown dimensions (null) - show image (graceful degradation)
+                    var isSquare = artMetadata?.IsImageSquare ?? true;
                     
                     if (isSquare)
                     {
