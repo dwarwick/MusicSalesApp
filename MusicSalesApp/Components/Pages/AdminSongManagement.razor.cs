@@ -391,7 +391,13 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                             metadata.Genre = _editGenre;
                         }
                         // Set artist name (can be empty to clear it)
-                        metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
+                        // Strip email domain if artist name contains @ to avoid persisting email addresses
+                        var artistNameToSave = _editArtistName;
+                        if (!string.IsNullOrWhiteSpace(artistNameToSave) && artistNameToSave.Contains('@'))
+                        {
+                            artistNameToSave = artistNameToSave.Split('@')[0];
+                        }
+                        metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
                     }
 
                     // Each upsert awaited sequentially

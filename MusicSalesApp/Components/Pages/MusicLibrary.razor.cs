@@ -338,10 +338,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(songMeta.ArtistName))
         {
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            var displayName = songMeta.ArtistName.Contains('@') ? songMeta.ArtistName.Split('@')[0] : songMeta.ArtistName;
             return new ArtistDisplayInfo
             {
-                DisplayName = songMeta.ArtistName,
-                LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.ArtistName)}"
+                DisplayName = displayName,
+                LinkUrl = $"/artist/{Uri.EscapeDataString(displayName)}"
             };
         }
 

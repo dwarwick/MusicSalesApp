@@ -929,7 +929,8 @@ namespace MusicSalesApp.Components.Pages
             // Priority 1: ArtistName from SongMetadata
             if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
             {
-                return metadata.ArtistName;
+                // Strip email domain if it contains @ to avoid exposing email addresses
+                return metadata.ArtistName.Contains('@') ? metadata.ArtistName.Split('@')[0] : metadata.ArtistName;
             }
 
             // Priority 2: DisplayName from Creator

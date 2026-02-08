@@ -342,7 +342,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(_songMetadata.ArtistName))
         {
-            return _songMetadata.ArtistName;
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            return _songMetadata.ArtistName.Contains('@') ? _songMetadata.ArtistName.Split('@')[0] : _songMetadata.ArtistName;
         }
 
         // Priority 2: DisplayName from Creator

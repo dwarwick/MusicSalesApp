@@ -164,7 +164,8 @@ public class SongMetadata
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(ArtistName))
         {
-            return ArtistName;
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            return ArtistName.Contains('@') ? ArtistName.Split('@')[0] : ArtistName;
         }
 
         // Priority 2: DisplayName from Creator

@@ -363,7 +363,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     // Always update the title, genre, and artist name
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
-                    metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
+                    // Strip email domain if artist name contains @ to avoid persisting email addresses
+                    var artistNameToSave = _editArtistName;
+                    if (!string.IsNullOrWhiteSpace(artistNameToSave) && artistNameToSave.Contains('@'))
+                    {
+                        artistNameToSave = artistNameToSave.Split('@')[0];
+                    }
+                    metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
 
                     await SongMetadataService.UpsertAsync(metadata);
                     
