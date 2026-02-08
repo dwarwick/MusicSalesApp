@@ -272,7 +272,19 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 var artFile = imageFilesLookup[(baseName, folder)].FirstOrDefault()?.File;
                 if (artFile != null)
                 {
-                    _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                    // Check metadata for image dimensions - only show square images
+                    var artMetadata = allMetadata.FirstOrDefault(m =>
+                        !string.IsNullOrEmpty(m.ImageBlobPath) &&
+                        m.ImageBlobPath.Equals(artFile.Name, StringComparison.OrdinalIgnoreCase));
+                    
+                    var isSquare = artMetadata == null || !artMetadata.ImageWidth.HasValue || !artMetadata.ImageHeight.HasValue
+                        ? true // Unknown dimensions - show image (graceful degradation)
+                        : artMetadata.ImageWidth.Value == artMetadata.ImageHeight.Value;
+                    
+                    if (isSquare)
+                    {
+                        _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                    }
                 }
                 
                 // Read song metadata from database

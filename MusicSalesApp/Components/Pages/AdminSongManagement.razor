@@ -58,7 +58,13 @@ else
                             var song = (context as SongAdminViewModel);
                             if (!string.IsNullOrEmpty(song.SongImageUrl))
                             {
-                                <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                <div style="position: relative; display: inline-block;">
+                                    <img src="@song.SongImageUrl" alt="Song cover" class="img-thumbnail" style="max-width: 80px; max-height: 80px;" />
+                                    @if (song.IsImageSquare == false)
+                                    {
+                                        <span class="badge bg-warning text-dark" style="position: absolute; top: -5px; right: -5px; font-size: 0.6rem;" title="Image is not square - needs cropping">⚠️</span>
+                                    }
+                                </div>
                             }
                             else
                             {
@@ -230,7 +236,7 @@ else
 
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <label class="e-label">Genre <span class="text-danger">*</span></label>
+                            <label class="e-label">Genre</label>
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
                                           DataSource="@(new List<string> { "Rock", "Country", "Pop" })" 
                                           Placeholder="-- Select Genre --"
@@ -262,10 +268,51 @@ else
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Song Cover Image</label>
-                            @if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
+                            @if (_editingSong.IsImageSquare == false)
+                            {
+                                <div class="alert alert-warning py-1 px-2 mb-2">
+                                    <small><i class="bi bi-exclamation-triangle"></i> Image is not square. Please crop the image to display it correctly on the site.</small>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(_croppedImageBase64))
+                            {
+                                <div class="mb-2">
+                                    <img src="data:image/png;base64,@_croppedImageBase64" alt="Cropped preview" class="img-thumbnail" style="max-width: 200px;" />
+                                    <div class="mt-1">
+                                        <span class="text-success"><i class="bi bi-check-circle"></i> Image cropped to square</span>
+                                    </div>
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(_editingSong.SongImageUrl))
                             {
                                 <div class="mb-2">
                                     <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
+                                </div>
+                                @if (!_showCropTool)
+                                {
+                                    <SfButton OnClick="OpenCropTool" CssClass="e-btn e-small e-outline mb-2">
+                                        <i class="bi bi-crop"></i> Crop to Square
+                                    </SfButton>
+                                }
+                            }
+                            @if (_showCropTool)
+                            {
+                                <div class="crop-tool-container mb-3 p-3 border rounded">
+                                    <h6>Crop Image to Square</h6>
+                                    <p class="text-muted small">Drag to position. Use the slider to zoom. The green border shows the crop area.</p>
+                                    <canvas id="admin-crop-canvas" width="300" height="300" style="border: 1px solid #ccc; cursor: grab; display: block; margin-bottom: 10px;"></canvas>
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="small">Zoom:</span>
+                                        <input type="range" min="0" max="100" value="@_cropZoom" @oninput="@(async (e) => await OnCropZoomChanged(int.Parse(e.Value.ToString())))" class="form-range" style="max-width: 200px;" />
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <SfButton OnClick="ApplyCrop" IsPrimary="true" CssClass="e-btn e-small e-success">
+                                            <i class="bi bi-check"></i> Apply Crop
+                                        </SfButton>
+                                        <SfButton OnClick="CancelCrop" CssClass="e-btn e-small">
+                                            Cancel
+                                        </SfButton>
+                                    </div>
                                 </div>
                             }
                             <InputFile OnChange="HandleSongImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />

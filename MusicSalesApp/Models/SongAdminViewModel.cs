@@ -32,4 +32,10 @@ public class SongAdminViewModel
     /// The raw artist name from the SongMetadata.ArtistName field for editing purposes.
     /// </summary>
     public string RawArtistName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether the song's cover image is a perfect square.
+    /// Null means dimensions are unknown.
+    /// </summary>
+    public bool? IsImageSquare { get; set; }
 }

@@ -1136,7 +1136,24 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetTrackImageUrl(int index)
         {
-            return _trackImageUrls.TryGetValue(index, out var url) ? url : null;
+            if (!_trackImageUrls.TryGetValue(index, out var url) || string.IsNullOrEmpty(url))
+                return null;
+
+            // Check if image dimensions are known and non-square
+            if (_playlistInfo != null && index < _playlistInfo.Tracks.Count)
+            {
+                var track = _playlistInfo.Tracks[index];
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                {
+                    if (metadata.ImageWidth.HasValue && metadata.ImageHeight.HasValue
+                        && metadata.ImageWidth.Value != metadata.ImageHeight.Value)
+                    {
+                        return null; // Non-square image - don't display
+                    }
+                }
+            }
+
+            return url;
         }
 
         protected double? GetTrackLengthSeconds(int index)

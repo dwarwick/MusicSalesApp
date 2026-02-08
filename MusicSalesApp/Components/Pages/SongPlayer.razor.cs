@@ -175,7 +175,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
             if (artMetadata != null)
             {
-                _albumArtUrl = $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}";
+                // Only show image if it's square (or dimensions are unknown)
+                var isSquare = !artMetadata.ImageWidth.HasValue || !artMetadata.ImageHeight.HasValue
+                    || artMetadata.ImageWidth.Value == artMetadata.ImageHeight.Value;
+                _albumArtUrl = isSquare ? $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}" : null;
             }
             else
             {

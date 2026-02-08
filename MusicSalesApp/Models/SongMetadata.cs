@@ -134,6 +134,16 @@ public class SongMetadata
     public string ArtistName { get; set; }
 
     /// <summary>
+    /// The width of the image in pixels. Populated during upload or crop operations.
+    /// </summary>
+    public int? ImageWidth { get; set; }
+
+    /// <summary>
+    /// The height of the image in pixels. Populated during upload or crop operations.
+    /// </summary>
+    public int? ImageHeight { get; set; }
+
+    /// <summary>
     /// Gets the effective artist name using the priority:
     /// 1. SongMetadata.ArtistName
     /// 2. Creator.DisplayName

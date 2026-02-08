@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -7,7 +8,7 @@ using Syncfusion.Blazor.Grids;
 
 namespace MusicSalesApp.Components.Pages;
 
-public partial class CreatorSongManagementModel : BlazorBase
+public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
 
@@ -31,6 +32,12 @@ public partial class CreatorSongManagementModel : BlazorBase
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     protected IBrowserFile _songImageFile = null;
+
+    // Crop tool fields
+    protected bool _showCropTool = false;
+    protected string _croppedImageBase64 = null;
+    protected int _cropZoom = 50;
+    private IJSObjectReference _cropModule;
 
     private int? _creatorId;
     private bool _hasLoadedData = false;
@@ -102,7 +109,8 @@ public partial class CreatorSongManagementModel : BlazorBase
             IsActive = m.IsActive,
             IsEnabled = m.IsEnabled,
             StatusReason = m.StatusReason ?? string.Empty,
-            NumberOfStreams = m.NumberOfStreams
+            NumberOfStreams = m.NumberOfStreams,
+            IsImageSquare = (m.ImageWidth.HasValue && m.ImageHeight.HasValue) ? (bool?)(m.ImageWidth.Value == m.ImageHeight.Value) : null
         }).ToList();
 
         // Generate SAS URLs for images
@@ -215,17 +223,23 @@ public partial class CreatorSongManagementModel : BlazorBase
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _songImageFile = null;
+        _croppedImageBase64 = null;
+        _showCropTool = false;
+        _cropZoom = 50;
         _validationErrors.Clear();
         _showEditDialog = true;
     }
 
-    protected void CancelEdit()
+    protected async Task CancelEdit()
     {
         _editingSong = null;
         _showEditDialog = false;
         _validationErrors.Clear();
         _songImageFile = null;
+        _croppedImageBase64 = null;
+        _showCropTool = false;
         _editArtistName = string.Empty;
+        await DisposeCropTool();
     }
 
     protected void HandleSongImageUpload(InputFileChangeEventArgs e)
@@ -267,8 +281,53 @@ public partial class CreatorSongManagementModel : BlazorBase
 
                 if (metadata != null)
                 {
+                    // Handle cropped image upload
+                    if (!string.IsNullOrEmpty(_croppedImageBase64))
+                    {
+                        var imageBytes = Convert.FromBase64String(_croppedImageBase64);
+                        using var stream = new MemoryStream(imageBytes);
+                        
+                        var oldFileName = metadata.ImageBlobPath;
+                        string newFileName;
+                        
+                        if (string.IsNullOrEmpty(oldFileName))
+                        {
+                            if (!string.IsNullOrEmpty(metadata.Mp3BlobPath))
+                            {
+                                var mp3Dir = System.IO.Path.GetDirectoryName(metadata.Mp3BlobPath)?.Replace("\\", "/");
+                                var baseName = System.IO.Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath);
+                                newFileName = string.IsNullOrEmpty(mp3Dir) 
+                                    ? $"{baseName}.png" 
+                                    : $"{mp3Dir}/{baseName}.png";
+                            }
+                            else
+                            {
+                                newFileName = $"{_editSongTitle}.png";
+                            }
+                        }
+                        else
+                        {
+                            newFileName = System.IO.Path.ChangeExtension(oldFileName, ".png");
+                        }
+
+                        if (!string.IsNullOrEmpty(oldFileName))
+                        {
+                            await AzureStorageService.DeleteAsync(oldFileName);
+                        }
+
+                        await AzureStorageService.UploadAsync(newFileName, stream, "image/png");
+                        
+                        metadata.ImageBlobPath = newFileName;
+                        _editingSong.JpegFileName = newFileName;
+                        // Cropped images are always square (800x800)
+                        metadata.ImageWidth = 800;
+                        metadata.ImageHeight = 800;
+                        
+                        _croppedImageBase64 = null;
+                        _showCropTool = false;
+                    }
                     // Handle image upload if provided
-                    if (_songImageFile != null)
+                    else if (_songImageFile != null)
                     {
                         using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                         
@@ -355,5 +414,76 @@ public partial class CreatorSongManagementModel : BlazorBase
             ".png" => "image/png",
             _ => "image/jpeg" // Default fallback
         };
+    }
+
+    protected async Task OpenCropTool()
+    {
+        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.SongImageUrl)) return;
+
+        _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+        _showCropTool = true;
+        _cropZoom = 50;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(100);
+        await _cropModule.InvokeVoidAsync("initCropTool", "creator-crop-canvas", _editingSong.SongImageUrl, null);
+    }
+
+    protected async Task OnCropZoomChanged(int value)
+    {
+        _cropZoom = value;
+        if (_cropModule != null)
+        {
+            await _cropModule.InvokeVoidAsync("setZoom", value);
+        }
+    }
+
+    protected async Task ApplyCrop()
+    {
+        if (_cropModule == null) return;
+
+        _croppedImageBase64 = await _cropModule.InvokeAsync<string>("getCroppedImage");
+        _showCropTool = false;
+        await _cropModule.InvokeVoidAsync("disposeCropTool");
+    }
+
+    protected async Task CancelCrop()
+    {
+        _showCropTool = false;
+        _croppedImageBase64 = null;
+        if (_cropModule != null)
+        {
+            await _cropModule.InvokeVoidAsync("disposeCropTool");
+        }
+    }
+
+    private async Task DisposeCropTool()
+    {
+        if (_cropModule != null)
+        {
+            try
+            {
+                await _cropModule.InvokeVoidAsync("disposeCropTool");
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeCropTool();
+        if (_cropModule != null)
+        {
+            try
+            {
+                await _cropModule.DisposeAsync();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
     }
 }
