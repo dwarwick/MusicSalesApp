@@ -235,6 +235,14 @@ else
                     </div>
 
                     <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="e-label">Artist Name</label>
+                            <SfTextBox @bind-Value="_editArtistName" CssClass="e-outline" Placeholder="Enter artist name (max 20 characters)" MaxLength="20" />
+                            <small class="text-muted">Optional. Overrides creator's display name on song cards.</small>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="e-label">Genre</label>
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
@@ -242,11 +250,6 @@ else
                                           Placeholder="-- Select Genre --"
                                           CssClass="e-outline">
                             </SfDropDownList>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="e-label">Artist Name</label>
-                            <SfTextBox @bind-Value="_editArtistName" CssClass="e-outline" Placeholder="Enter artist name (max 20 characters)" MaxLength="20" />
-                            <small class="text-muted">Optional. Overrides creator's display name on song cards.</small>
                         </div>
                     </div>
 
