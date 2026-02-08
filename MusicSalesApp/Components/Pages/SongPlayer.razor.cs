@@ -390,6 +390,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Gets the URL for the genre playlist page.
     /// </summary>
+    protected string GetArtistUrl()
+    {
+        return $"/artist/{Uri.EscapeDataString(GetArtistDisplayName())}";
+    }
+
     protected string GetGenreUrl()
     {
         return $"/genre/{Uri.EscapeDataString(GetGenre())}";

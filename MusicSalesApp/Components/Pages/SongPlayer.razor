@@ -38,7 +38,9 @@
                         <h1 class="song-title">@GetDisplayTitle()</h1>
                         @if (!string.IsNullOrEmpty(GetArtistDisplayName()))
                         {
-                            <span class="artist-name-info">@GetArtistDisplayName()</span>
+                            <span class="artist-name-info">
+                                <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
+                            </span>
                         }
                         <span class="genre-info">
                             <a href="@GetGenreUrl()" class="genre-link" title="View all @GetGenre() songs">@GetGenre()</a>

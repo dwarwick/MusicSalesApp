@@ -341,6 +341,16 @@
         margin-top: 4px;
     }
 
+    .artist-link {
+        color: #1db954;
+        text-decoration: none;
+    }
+
+    .artist-link:hover {
+        color: #1ed760;
+        text-decoration: underline;
+    }
+
     /* Genre info on song player */
     .genre-info {
         color: #b3b3b3;
