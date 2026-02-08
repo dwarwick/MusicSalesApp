@@ -128,7 +128,13 @@ namespace MusicSalesApp.Controllers
             if (Request.ContentLength > 10 * 1024 * 1024)
                 return BadRequest(new { error = "Image too large" });
 
-            await _storageService.UploadAsync(blobPath, Request.Body, "image/png");
+            // Buffer into a MemoryStream because Request.Body is non-seekable and
+            // does not support .Length (AzureStorageService logs data.Length after upload).
+            using var ms = new MemoryStream();
+            await Request.Body.CopyToAsync(ms);
+            ms.Position = 0;
+
+            await _storageService.UploadAsync(blobPath, ms, "image/png");
             return Ok(new { blobPath });
         }
 
