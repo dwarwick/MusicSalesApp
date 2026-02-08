@@ -271,12 +271,11 @@
                                 <small><i class="bi bi-exclamation-triangle"></i> Image is not square. Please crop the image to display it correctly on the site.</small>
                             </div>
                         }
-                        @if (!string.IsNullOrEmpty(_croppedImageBase64))
+                        @if (_cropApplied)
                         {
                             <div class="mb-2">
-                                <img src="data:image/png;base64,@_croppedImageBase64" alt="Cropped preview" class="img-thumbnail" style="max-width: 200px;" />
                                 <div class="mt-1">
-                                    <span class="text-success"><i class="bi bi-check-circle"></i> Image cropped to square</span>
+                                    <span class="text-success"><i class="bi bi-check-circle"></i> Image cropped to square — will be saved when you click Save Changes</span>
                                 </div>
                             </div>
                         }

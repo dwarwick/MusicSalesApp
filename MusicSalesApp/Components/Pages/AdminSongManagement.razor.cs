@@ -53,7 +53,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
     // Crop tool fields
     protected bool _showCropTool = false;
-    protected string _croppedImageBase64 = null;
+    protected bool _cropApplied = false;
+    protected string _cropTargetBlobPath = null;
     protected int _cropZoom = 50;
     private IJSObjectReference _cropModule;
     private Dictionary<string, SongMetadata> _metadataById = new();
@@ -142,7 +143,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
-        _croppedImageBase64 = null;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
         _showCropTool = false;
         _cropZoom = 50;
         _validationErrors.Clear();
@@ -155,7 +157,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         _editingSong = null;
         _validationErrors.Clear();
         _songImageFile = null;
-        _croppedImageBase64 = null;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
         _showCropTool = false;
         _editStatusReason = string.Empty;
         _editArtistName = string.Empty;
@@ -221,49 +224,18 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 }
             }
 
-            // Handle cropped image upload
-            if (!string.IsNullOrEmpty(_croppedImageBase64))
+            // Handle cropped image (already uploaded to blob storage by JS)
+            if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
             {
-                // Validate base64 size (MaxFileSize limit applies to cropped images too)
-                if (_croppedImageBase64.Length > MaxFileSize * 4 / 3)
-                {
-                    _validationErrors.Add("Cropped image is too large.");
-                    StateHasChanged();
-                    return;
-                }
-
-                var imageBytes = Convert.FromBase64String(_croppedImageBase64);
-                using var stream = new MemoryStream(imageBytes);
-                
                 var oldFileName = _editingSong.JpegFileName;
-                var newFileName = oldFileName;
-                if (string.IsNullOrEmpty(newFileName))
-                {
-                    if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
-                    {
-                        var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
-                        var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
-                        newFileName = string.IsNullOrEmpty(mp3Dir) 
-                            ? $"{baseName}.png" 
-                            : $"{mp3Dir}/{baseName}.png";
-                    }
-                    else
-                    {
-                        var sanitizedTitle = SanitizeFileName(_editingSong.SongTitle);
-                        newFileName = $"{sanitizedTitle}.png";
-                    }
-                }
-                else
-                {
-                    newFileName = Path.ChangeExtension(newFileName, ".png");
-                }
+                var newFileName = _cropTargetBlobPath;
 
-                if (!string.IsNullOrEmpty(oldFileName))
+                // Delete old blob if it differs from the new one
+                if (!string.IsNullOrEmpty(oldFileName) && oldFileName != newFileName)
                 {
                     await StorageService.DeleteAsync(oldFileName);
                 }
 
-                await StorageService.UploadAsync(newFileName, stream, "image/png");
                 _editingSong.JpegFileName = newFileName;
 
                 // Update metadata
@@ -293,7 +265,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
 
-                _croppedImageBase64 = null;
+                _cropApplied = false;
+                _cropTargetBlobPath = null;
                 _showCropTool = false;
             }
             // Upload new images if provided
@@ -492,17 +465,54 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
     protected async Task ApplyCrop()
     {
-        if (_cropModule == null) return;
+        if (_cropModule == null || _editingSong == null) return;
 
-        _croppedImageBase64 = await _cropModule.InvokeAsync<string>("getCroppedImage");
+        // Compute the target blob path for the cropped image
+        var targetPath = _editingSong.JpegFileName;
+        if (string.IsNullOrEmpty(targetPath))
+        {
+            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
+            {
+                var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
+                var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
+                targetPath = string.IsNullOrEmpty(mp3Dir)
+                    ? $"{baseName}.png"
+                    : $"{mp3Dir}/{baseName}.png";
+            }
+            else
+            {
+                targetPath = $"{SanitizeFileName(_editingSong.SongTitle)}.png";
+            }
+        }
+        else
+        {
+            targetPath = Path.ChangeExtension(targetPath, ".png");
+        }
+
+        // Build the upload URL for the JS fetch call
+        var uploadUrl = $"api/music/upload-cropped-image?blobPath={Uri.EscapeDataString(targetPath)}";
+
+        var success = await _cropModule.InvokeAsync<bool>("getCroppedImageAndUpload", uploadUrl);
+        if (success)
+        {
+            _cropApplied = true;
+            _cropTargetBlobPath = targetPath;
+        }
+        else
+        {
+            _validationErrors.Add("Failed to upload cropped image. Please try again.");
+        }
+
         _showCropTool = false;
         await _cropModule.InvokeVoidAsync("disposeCropTool");
+        StateHasChanged();
     }
 
     protected async Task CancelCrop()
     {
         _showCropTool = false;
-        _croppedImageBase64 = null;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
         if (_cropModule != null)
         {
             await _cropModule.InvokeVoidAsync("disposeCropTool");

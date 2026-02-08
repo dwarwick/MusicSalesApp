@@ -187,36 +187,49 @@ export function setZoom(zoomValue) {
 }
 
 /**
- * Get the cropped image as a base64-encoded PNG string
- * @returns {string} Base64-encoded image data (without data URL prefix)
+ * Get the cropped image as a Blob, upload it directly to the server,
+ * and return a small success indicator (avoids SignalR message-size limit).
+ * @param {string} uploadUrl - Server URL to POST the cropped image to
+ * @returns {Promise<boolean>} true if upload succeeded
  */
-export function getCroppedImage() {
-    if (!cropState) return null;
+export function getCroppedImageAndUpload(uploadUrl) {
+    return new Promise((resolve) => {
+        if (!cropState) { resolve(false); return; }
 
-    const { img, scale, offsetX, offsetY, canvasSize } = cropState;
+        const { img, scale, offsetX, offsetY, canvasSize } = cropState;
 
-    // Create a temporary canvas for the cropped output at a good resolution
-    const outputSize = Math.min(800, canvasSize);
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = outputSize;
-    tempCanvas.height = outputSize;
-    const tempCtx = tempCanvas.getContext('2d');
+        // Output at 800x800 regardless of display canvas size
+        const outputSize = 800;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = outputSize;
+        tempCanvas.height = outputSize;
+        const tempCtx = tempCanvas.getContext('2d');
 
-    // Calculate the source rectangle in image coordinates
-    const scaleFactor = outputSize / canvasSize;
+        const scaleFactor = outputSize / canvasSize;
 
-    // Draw the image at the same position/scale but onto the output canvas
-    tempCtx.drawImage(
-        img,
-        offsetX * scaleFactor,
-        offsetY * scaleFactor,
-        img.naturalWidth * scale * scaleFactor,
-        img.naturalHeight * scale * scaleFactor
-    );
+        tempCtx.drawImage(
+            img,
+            offsetX * scaleFactor,
+            offsetY * scaleFactor,
+            img.naturalWidth * scale * scaleFactor,
+            img.naturalHeight * scale * scaleFactor
+        );
 
-    // Get base64 PNG data (remove the data:image/png;base64, prefix)
-    const dataUrl = tempCanvas.toDataURL('image/png');
-    return dataUrl.split(',')[1];
+        tempCanvas.toBlob(async (blob) => {
+            if (!blob) { resolve(false); return; }
+            try {
+                const resp = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: blob
+                });
+                resolve(resp.ok);
+            } catch (e) {
+                console.error('Crop upload failed', e);
+                resolve(false);
+            }
+        }, 'image/png');
+    });
 }
 
 /**

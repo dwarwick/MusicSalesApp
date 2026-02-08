@@ -106,6 +106,32 @@ namespace MusicSalesApp.Controllers
             return Ok(new { songMetadataId, streamCount = count });
         }
 
+        /// <summary>
+        /// Accepts a cropped image upload (as a binary blob from canvas) and stores it in Azure Blob Storage.
+        /// The target blob path is supplied via query string. Only authenticated users may call this.
+        /// </summary>
+        [HttpPost("upload-cropped-image")]
+        [Microsoft.AspNetCore.Authorization.Authorize]
+        public async Task<IActionResult> UploadCroppedImage([FromQuery] string blobPath)
+        {
+            if (string.IsNullOrWhiteSpace(blobPath))
+                return BadRequest(new { error = "blobPath is required" });
+
+            // Reject path traversal
+            if (blobPath.Contains("..") || blobPath.Contains("~"))
+                return BadRequest(new { error = "Invalid blobPath" });
+
+            if (Request.ContentLength == null || Request.ContentLength == 0)
+                return BadRequest(new { error = "No image data provided" });
+
+            // Max 10 MB
+            if (Request.ContentLength > 10 * 1024 * 1024)
+                return BadRequest(new { error = "Image too large" });
+
+            await _storageService.UploadAsync(blobPath, Request.Body, "image/png");
+            return Ok(new { blobPath });
+        }
+
         private static string NormalizeContentType(string original, string fileName)
         {
             if (!string.IsNullOrWhiteSpace(original) && original != "application/octet-stream")
