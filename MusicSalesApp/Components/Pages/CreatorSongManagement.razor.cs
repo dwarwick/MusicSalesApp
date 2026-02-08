@@ -285,6 +285,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     // Handle cropped image upload
                     if (!string.IsNullOrEmpty(_croppedImageBase64))
                     {
+                        // Validate base64 size (MaxFileSize limit applies to cropped images too)
+                        if (_croppedImageBase64.Length > MaxFileSize * 4 / 3)
+                        {
+                            _validationErrors.Add("Cropped image is too large.");
+                            return;
+                        }
+
                         var imageBytes = Convert.FromBase64String(_croppedImageBase64);
                         using var stream = new MemoryStream(imageBytes);
                         
@@ -303,7 +310,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                             }
                             else
                             {
-                                newFileName = $"{_editSongTitle}.png";
+                                var sanitizedTitle = SanitizeFileName(_editSongTitle);
+                                newFileName = $"{sanitizedTitle}.png";
                             }
                         }
                         else
@@ -485,5 +493,19 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                 // Ignore disposal errors
             }
         }
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return "image";
+        var sanitized = fileName
+            .Replace("..", "_")
+            .Replace("/", "_")
+            .Replace("\\", "_");
+        foreach (var c in System.IO.Path.GetInvalidFileNameChars())
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
     }
 }

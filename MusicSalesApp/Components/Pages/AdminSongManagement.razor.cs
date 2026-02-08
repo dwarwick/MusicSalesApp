@@ -216,6 +216,14 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // Handle cropped image upload
             if (!string.IsNullOrEmpty(_croppedImageBase64))
             {
+                // Validate base64 size (MaxFileSize limit applies to cropped images too)
+                if (_croppedImageBase64.Length > MaxFileSize * 4 / 3)
+                {
+                    _validationErrors.Add("Cropped image is too large.");
+                    StateHasChanged();
+                    return;
+                }
+
                 var imageBytes = Convert.FromBase64String(_croppedImageBase64);
                 using var stream = new MemoryStream(imageBytes);
                 
@@ -233,7 +241,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     }
                     else
                     {
-                        newFileName = $"{_editingSong.SongTitle}.png";
+                        var sanitizedTitle = SanitizeFileName(_editingSong.SongTitle);
+                        newFileName = $"{sanitizedTitle}.png";
                     }
                 }
                 else
@@ -554,4 +563,19 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     }
 
     protected record ImageDimensions(int Width, int Height);
+
+    private static string SanitizeFileName(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return "image";
+        // Remove path traversal sequences and invalid filename characters
+        var sanitized = fileName
+            .Replace("..", "_")
+            .Replace("/", "_")
+            .Replace("\\", "_");
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
+    }
 }

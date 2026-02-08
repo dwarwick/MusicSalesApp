@@ -303,7 +303,7 @@ else
                                     <canvas id="admin-crop-canvas" width="300" height="300" style="border: 1px solid #ccc; cursor: grab; display: block; margin-bottom: 10px;"></canvas>
                                     <div class="d-flex align-items-center gap-2 mb-2">
                                         <span class="small">Zoom:</span>
-                                        <input type="range" min="0" max="100" value="@_cropZoom" @oninput="@(async (e) => await OnCropZoomChanged(int.Parse(e.Value.ToString())))" class="form-range" style="max-width: 200px;" />
+                                        <input type="range" min="0" max="100" value="@_cropZoom" @oninput="@(async (e) => await OnCropZoomChanged(int.Parse(e.Value?.ToString() ?? "50")))" class="form-range" style="max-width: 200px;" />
                                     </div>
                                     <div class="d-flex gap-2">
                                         <SfButton OnClick="ApplyCrop" IsPrimary="true" CssClass="e-btn e-small e-success">
