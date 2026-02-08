@@ -2,14 +2,14 @@
 // Provides image dimension checking and square crop functionality
 
 /**
- * Check image dimensions by loading the image from a URL
+ * Check image dimensions by loading the image from a URL.
+ * Does not use crossOrigin so the image loads regardless of CORS.
  * @param {string} imageUrl - URL of the image to check
  * @returns {Promise<{width: number, height: number}>} Image dimensions
  */
 export function checkImageDimensions(imageUrl) {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "anonymous";
         img.onload = () => {
             resolve({ width: img.naturalWidth, height: img.naturalHeight });
         };
@@ -24,9 +24,10 @@ export function checkImageDimensions(imageUrl) {
 let cropState = null;
 
 /**
- * Initialize the crop tool with an image
+ * Initialize the crop tool with an image.
+ * Uses a same-origin proxy URL so the canvas is not tainted by CORS.
  * @param {string} canvasId - ID of the canvas element
- * @param {string} imageUrl - URL of the image to crop
+ * @param {string} imageUrl - Same-origin URL of the image to crop
  * @param {DotNetObjectReference} dotNetRef - Reference to call back into C#
  */
 export function initCropTool(canvasId, imageUrl, dotNetRef) {
@@ -35,7 +36,6 @@ export function initCropTool(canvasId, imageUrl, dotNetRef) {
 
     const ctx = canvas.getContext('2d');
     const img = new Image();
-    img.crossOrigin = "anonymous";
 
     img.onload = () => {
         // Calculate initial scale to fit the image in the canvas with the crop area visible

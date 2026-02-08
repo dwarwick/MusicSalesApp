@@ -285,7 +285,7 @@
                             <div class="mb-2">
                                 <img src="@_editingSong.SongImageUrl" alt="Current song cover" class="img-thumbnail" style="max-width: 200px;" />
                             </div>
-                            @if (!_showCropTool)
+                            @if (!_showCropTool && !string.IsNullOrEmpty(_editingSong.JpegFileName))
                             {
                                 <SfButton OnClick="OpenCropTool" CssClass="e-btn e-small e-outline mb-2">
                                     <i class="bi bi-crop"></i> Crop to Square

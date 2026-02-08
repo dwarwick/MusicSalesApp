@@ -80,6 +80,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             {
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
+
+                // Check image dimensions after initial render is complete
+                if (_songs.Count > 0)
+                {
+                    await CheckAllImageDimensions();
+                }
             }
         }
     }
@@ -426,14 +432,16 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     protected async Task OpenCropTool()
     {
-        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.SongImageUrl)) return;
+        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.JpegFileName)) return;
 
         _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
         _showCropTool = true;
         _cropZoom = 50;
         await InvokeAsync(StateHasChanged);
         await Task.Delay(100);
-        await _cropModule.InvokeVoidAsync("initCropTool", "creator-crop-canvas", _editingSong.SongImageUrl, null);
+        // Use same-origin proxy URL to avoid CORS/tainted-canvas issues
+        var proxyUrl = $"api/music/{SafeEncodePath(_editingSong.JpegFileName)}";
+        await _cropModule.InvokeVoidAsync("initCropTool", "creator-crop-canvas", proxyUrl, null);
     }
 
     protected async Task OnCropZoomChanged(int value)
@@ -463,6 +471,65 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             await _cropModule.InvokeVoidAsync("disposeCropTool");
         }
     }
+
+    /// <summary>
+    /// Check image dimensions for all songs with unknown dimensions.
+    /// Updates the DB and local view model, then re-renders.
+    /// </summary>
+    private async Task CheckAllImageDimensions()
+    {
+        try
+        {
+            _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+
+            var songsToCheck = _songs
+                .Where(s => !string.IsNullOrEmpty(s.SongImageUrl) && s.IsImageSquare == null)
+                .ToList();
+
+            if (songsToCheck.Count == 0) return;
+
+            bool anyUpdated = false;
+            foreach (var song in songsToCheck)
+            {
+                try
+                {
+                    var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", song.SongImageUrl);
+                    if (dimensions != null)
+                    {
+                        song.IsImageSquare = dimensions.Width == dimensions.Height;
+                        anyUpdated = true;
+
+                        // Persist to DB
+                        if (int.TryParse(song.Id, out var metadataId))
+                        {
+                            var metadata = await SongMetadataService.GetByIdAsync(metadataId);
+                            if (metadata != null)
+                            {
+                                metadata.ImageWidth = dimensions.Width;
+                                metadata.ImageHeight = dimensions.Height;
+                                await SongMetadataService.UpsertAsync(metadata);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Best-effort per image
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            // Best-effort overall
+        }
+    }
+
+    protected record ImageDimensions(int Width, int Height);
 
     private async Task DisposeCropTool()
     {
@@ -507,5 +574,16 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             sanitized = sanitized.Replace(c, '_');
         }
         return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
+    }
+
+    private static string SafeEncodePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+        if (filePath.Contains("..") || filePath.Contains("~"))
+            return string.Empty;
+        var segments = filePath.Split('/');
+        var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
+        return string.Join("/", encodedSegments);
     }
 }

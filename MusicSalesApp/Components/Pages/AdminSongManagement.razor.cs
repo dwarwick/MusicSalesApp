@@ -80,6 +80,14 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _allSongs.Count > 0)
+        {
+            await CheckAllImageDimensions();
+        }
+    }
+
     protected async Task LoadSongsAsync()
     {
         // Load all metadata from database for validation purposes
@@ -460,7 +468,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
     protected async Task OpenCropTool()
     {
-        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.SongImageUrl)) return;
+        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.JpegFileName)) return;
 
         _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
         _showCropTool = true;
@@ -468,7 +476,9 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         StateHasChanged();
         // Wait for DOM to update before initializing the canvas
         await Task.Delay(100);
-        await _cropModule.InvokeVoidAsync("initCropTool", "admin-crop-canvas", _editingSong.SongImageUrl, null);
+        // Use same-origin proxy URL to avoid CORS/tainted-canvas issues
+        var proxyUrl = $"api/music/{SafeEncodePath(_editingSong.JpegFileName)}";
+        await _cropModule.InvokeVoidAsync("initCropTool", "admin-crop-canvas", proxyUrl, null);
     }
 
     protected async Task OnCropZoomChanged(int value)
@@ -499,35 +509,56 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         }
     }
 
-    protected async Task CheckImageDimensions(string songId, string imageUrl)
+    /// <summary>
+    /// Check image dimensions for all songs with unknown dimensions.
+    /// Updates the DB and local view model, then re-renders.
+    /// </summary>
+    private async Task CheckAllImageDimensions()
     {
-        if (string.IsNullOrEmpty(imageUrl) || !_metadataById.ContainsKey(songId)) return;
-
         try
         {
             _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
-            var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", imageUrl);
-            if (dimensions != null)
-            {
-                var metadata = _metadataById[songId];
-                if (!metadata.ImageWidth.HasValue || !metadata.ImageHeight.HasValue)
-                {
-                    metadata.ImageWidth = dimensions.Width;
-                    metadata.ImageHeight = dimensions.Height;
-                    await MetadataService.UpsertAsync(metadata);
-                }
 
-                // Update the local view model
-                var song = _allSongs.FirstOrDefault(s => s.Id == songId);
-                if (song != null)
+            var songsToCheck = _allSongs
+                .Where(s => !string.IsNullOrEmpty(s.SongImageUrl) && s.IsImageSquare == null)
+                .ToList();
+
+            if (songsToCheck.Count == 0) return;
+
+            bool anyUpdated = false;
+            foreach (var song in songsToCheck)
+            {
+                try
                 {
-                    song.IsImageSquare = dimensions.Width == dimensions.Height;
+                    var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", song.SongImageUrl);
+                    if (dimensions != null)
+                    {
+                        song.IsImageSquare = dimensions.Width == dimensions.Height;
+                        anyUpdated = true;
+
+                        // Persist to DB
+                        if (_metadataById.TryGetValue(song.Id, out var metadata))
+                        {
+                            metadata.ImageWidth = dimensions.Width;
+                            metadata.ImageHeight = dimensions.Height;
+                            await MetadataService.UpsertAsync(metadata);
+                        }
+                    }
                 }
+                catch
+                {
+                    // Best-effort per image
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await InvokeAsync(StateHasChanged);
             }
         }
         catch
         {
-            // Dimension check is best-effort
+            // Best-effort overall
         }
     }
 
@@ -577,5 +608,16 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             sanitized = sanitized.Replace(c, '_');
         }
         return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
+    }
+
+    private static string SafeEncodePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+        if (filePath.Contains("..") || filePath.Contains("~"))
+            return string.Empty;
+        var segments = filePath.Split('/');
+        var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
+        return string.Join("/", encodedSegments);
     }
 }
