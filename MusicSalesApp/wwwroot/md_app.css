@@ -107,6 +107,13 @@
         align-items: center;
     }
 
+    .song-text-details {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        margin-left: 15px;
+    }
+
     .playlist-art {
         width: 225px;
         object-fit: cover;

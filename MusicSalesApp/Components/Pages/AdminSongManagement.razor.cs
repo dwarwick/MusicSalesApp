@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.JSInterop;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
@@ -15,10 +16,11 @@ using System.Threading.Tasks;
 
 namespace MusicSalesApp.Components.Pages;
 
-public class AdminSongManagementModel : ComponentBase
+public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 {
     private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
     private const string PriceFormat = "F2";
+    private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
     [Inject] protected ISongAdminService SongAdminService { get; set; }
@@ -27,6 +29,7 @@ public class AdminSongManagementModel : ComponentBase
     [Inject] protected ISongStatusService SongStatusService { get; set; }
     [Inject] protected AuthenticationStateProvider AuthenticationStateProvider { get; set; }
     [Inject] protected UserManager<ApplicationUser> UserManager { get; set; }
+    [Inject] protected IJSRuntime JS { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -47,6 +50,14 @@ public class AdminSongManagementModel : ComponentBase
     // Enable/Disable fields
     protected bool _editIsDisabled = false;
     protected string _editStatusReason = string.Empty;
+
+    // Crop tool fields
+    protected bool _showCropTool = false;
+    protected bool _cropApplied = false;
+    protected string _cropTargetBlobPath = null;
+    protected int _cropZoom = 50;
+    private IJSObjectReference _cropModule;
+    private Dictionary<string, SongMetadata> _metadataById = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -70,27 +81,40 @@ public class AdminSongManagementModel : ComponentBase
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _allSongs.Count > 0)
+        {
+            await CheckAllImageDimensions();
+        }
+    }
+
     protected async Task LoadSongsAsync()
     {
         // Load all metadata from database for validation purposes
         // For admin view, we need to include disabled songs as well
         var allMetadata = await MetadataService.GetAllIncludingDisabledAsync();
+        _metadataById.Clear();
         _allSongs = allMetadata
             .Where(m => !m.IsAlbumCover) // Filter out album covers since we no longer use albums
-            .Select(m => new SongAdminViewModel
-        {
-            Id = m.Id.ToString(),
-            SongTitle = !string.IsNullOrEmpty(m.SongTitle) ? m.SongTitle : System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
-            Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
-            JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
-            Genre = m.Genre ?? string.Empty,
-            ArtistName = m.GetEffectiveArtistNameFull(),
-            RawArtistName = m.ArtistName ?? string.Empty,
-            TrackLength = m.TrackLength,
-            DisplayOnHomePage = m.DisplayOnHomePage,
-            IsEnabled = m.IsEnabled,
-            StatusReason = m.StatusReason ?? string.Empty
-        }).ToList();
+            .Select(m => {
+                _metadataById[m.Id.ToString()] = m;
+                return new SongAdminViewModel
+                {
+                    Id = m.Id.ToString(),
+                    SongTitle = !string.IsNullOrEmpty(m.SongTitle) ? m.SongTitle : System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+                    Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
+                    JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
+                    Genre = m.Genre ?? string.Empty,
+                    ArtistName = m.GetEffectiveArtistNameFull(),
+                    RawArtistName = m.ArtistName ?? string.Empty,
+                    TrackLength = m.TrackLength,
+                    DisplayOnHomePage = m.DisplayOnHomePage,
+                    IsEnabled = m.IsEnabled,
+                    StatusReason = m.StatusReason ?? string.Empty,
+                    IsImageSquare = m.IsImageSquare
+                };
+            }).ToList();
         
         // Generate SAS URLs for images
         foreach (var song in _allSongs)
@@ -119,18 +143,26 @@ public class AdminSongManagementModel : ComponentBase
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
+        _showCropTool = false;
+        _cropZoom = 50;
         _validationErrors.Clear();
         _showEditModal = true;
     }
 
-    protected void CancelEdit()
+    protected async Task CancelEdit()
     {
         _showEditModal = false;
         _editingSong = null;
         _validationErrors.Clear();
         _songImageFile = null;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
+        _showCropTool = false;
         _editStatusReason = string.Empty;
         _editArtistName = string.Empty;
+        await DisposeCropTool();
     }
 
     protected async Task SaveEdit()
@@ -145,16 +177,7 @@ public class AdminSongManagementModel : ComponentBase
             // All songs are now standalone songs - validate accordingly
             var hasMP3 = !string.IsNullOrEmpty(_editingSong.Mp3FileName);
 
-            // Validate standalone songs (all songs)
-            if (hasMP3)
-            {
-                // Cover art is optional - songs without cover art will display an animation
-
-                if (string.IsNullOrWhiteSpace(_editGenre))
-                {
-                    _validationErrors.Add("All songs must have a genre.");
-                }
-            }
+            // Genre is optional on admin page
 
             // Check if enabled/disabled status is changing
             var wasEnabled = _editingSong.IsEnabled;
@@ -201,8 +224,53 @@ public class AdminSongManagementModel : ComponentBase
                 }
             }
 
+            // Handle cropped image (already uploaded to blob storage by JS)
+            if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
+            {
+                var oldFileName = _editingSong.JpegFileName;
+                var newFileName = _cropTargetBlobPath;
+
+                // Delete old blob if it differs from the new one
+                if (!string.IsNullOrEmpty(oldFileName) && oldFileName != newFileName)
+                {
+                    await StorageService.DeleteAsync(oldFileName);
+                }
+
+                _editingSong.JpegFileName = newFileName;
+
+                // Update metadata
+                SongMetadata existingMetadata = null;
+                if (int.TryParse(_editingSong.Id, out var cropSongId))
+                {
+                    existingMetadata = await MetadataService.GetByIdAsync(cropSongId);
+                }
+                if (existingMetadata == null && !string.IsNullOrEmpty(oldFileName))
+                {
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(oldFileName);
+                }
+                if (existingMetadata == null && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
+                {
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(_editingSong.Mp3FileName);
+                }
+
+                if (existingMetadata != null)
+                {
+                    existingMetadata.ImageBlobPath = newFileName;
+                    existingMetadata.FileExtension = ".png";
+                    existingMetadata.IsAlbumCover = false;
+                    existingMetadata.Genre = _editGenre;
+                    existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    existingMetadata.ImageWidth = CropOutputSize;
+                    existingMetadata.ImageHeight = CropOutputSize;
+                    await MetadataService.UpsertAsync(existingMetadata);
+                }
+
+                _cropApplied = false;
+                _cropTargetBlobPath = null;
+                _showCropTool = false;
+            }
             // Upload new images if provided
-            if (_songImageFile != null)
+            else if (_songImageFile != null)
             {
                 using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
                 
@@ -323,7 +391,13 @@ public class AdminSongManagementModel : ComponentBase
                             metadata.Genre = _editGenre;
                         }
                         // Set artist name (can be empty to clear it)
-                        metadata.ArtistName = string.IsNullOrWhiteSpace(_editArtistName) ? null : _editArtistName;
+                        // Strip email domain if artist name contains @ to avoid persisting email addresses
+                        var artistNameToSave = _editArtistName;
+                        if (!string.IsNullOrWhiteSpace(artistNameToSave) && artistNameToSave.Contains('@'))
+                        {
+                            artistNameToSave = artistNameToSave.Split('@')[0];
+                        }
+                        metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
                     }
 
                     // Each upsert awaited sequentially
@@ -369,5 +443,197 @@ public class AdminSongManagementModel : ComponentBase
             ".png" => "image/png",
             _ => "image/jpeg" // Default fallback
         };
+    }
+
+    protected async Task OpenCropTool()
+    {
+        if (_editingSong == null || string.IsNullOrEmpty(_editingSong.JpegFileName)) return;
+
+        _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+        _showCropTool = true;
+        _cropZoom = 50;
+        StateHasChanged();
+        // Wait for DOM to update before initializing the canvas
+        await Task.Delay(100);
+        // Use same-origin proxy URL to avoid CORS/tainted-canvas issues
+        var proxyUrl = $"api/music/{SafeEncodePath(_editingSong.JpegFileName)}";
+        await _cropModule.InvokeVoidAsync("initCropTool", "admin-crop-canvas", proxyUrl, null);
+    }
+
+    protected async Task OnCropZoomChanged(int value)
+    {
+        _cropZoom = value;
+        if (_cropModule != null)
+        {
+            await _cropModule.InvokeVoidAsync("setZoom", value);
+        }
+    }
+
+    protected async Task ApplyCrop()
+    {
+        if (_cropModule == null || _editingSong == null) return;
+
+        // Compute the target blob path for the cropped image
+        var targetPath = _editingSong.JpegFileName;
+        if (string.IsNullOrEmpty(targetPath))
+        {
+            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
+            {
+                var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
+                var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
+                targetPath = string.IsNullOrEmpty(mp3Dir)
+                    ? $"{baseName}.png"
+                    : $"{mp3Dir}/{baseName}.png";
+            }
+            else
+            {
+                targetPath = $"{SanitizeFileName(_editingSong.SongTitle)}.png";
+            }
+        }
+        else
+        {
+            targetPath = Path.ChangeExtension(targetPath, ".png");
+        }
+
+        // Build the upload URL for the JS fetch call
+        var uploadUrl = $"api/music/upload-cropped-image?blobPath={Uri.EscapeDataString(targetPath)}";
+
+        var success = await _cropModule.InvokeAsync<bool>("getCroppedImageAndUpload", uploadUrl);
+        if (success)
+        {
+            _cropApplied = true;
+            _cropTargetBlobPath = targetPath;
+        }
+        else
+        {
+            _validationErrors.Add("Failed to upload cropped image. Please try again.");
+        }
+
+        _showCropTool = false;
+        await _cropModule.InvokeVoidAsync("disposeCropTool");
+        StateHasChanged();
+    }
+
+    protected async Task CancelCrop()
+    {
+        _showCropTool = false;
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
+        if (_cropModule != null)
+        {
+            await _cropModule.InvokeVoidAsync("disposeCropTool");
+        }
+    }
+
+    /// <summary>
+    /// Check image dimensions for all songs with unknown dimensions.
+    /// Updates the DB and local view model, then re-renders.
+    /// </summary>
+    private async Task CheckAllImageDimensions()
+    {
+        try
+        {
+            _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+
+            var songsToCheck = _allSongs
+                .Where(s => !string.IsNullOrEmpty(s.SongImageUrl) && s.IsImageSquare == null)
+                .ToList();
+
+            if (songsToCheck.Count == 0) return;
+
+            bool anyUpdated = false;
+            foreach (var song in songsToCheck)
+            {
+                try
+                {
+                    var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", song.SongImageUrl);
+                    if (dimensions != null)
+                    {
+                        song.IsImageSquare = dimensions.Width == dimensions.Height;
+                        anyUpdated = true;
+
+                        // Persist to DB
+                        if (_metadataById.TryGetValue(song.Id, out var metadata))
+                        {
+                            metadata.ImageWidth = dimensions.Width;
+                            metadata.ImageHeight = dimensions.Height;
+                            await MetadataService.UpsertAsync(metadata);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Best-effort per image
+                }
+            }
+
+            if (anyUpdated)
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            // Best-effort overall
+        }
+    }
+
+    private async Task DisposeCropTool()
+    {
+        if (_cropModule != null)
+        {
+            try
+            {
+                await _cropModule.InvokeVoidAsync("disposeCropTool");
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeCropTool();
+        if (_cropModule != null)
+        {
+            try
+            {
+                await _cropModule.DisposeAsync();
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+    }
+
+    protected record ImageDimensions(int Width, int Height);
+
+    private static string SanitizeFileName(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return "image";
+        // Remove path traversal sequences and invalid filename characters
+        var sanitized = fileName
+            .Replace("..", "_")
+            .Replace("/", "_")
+            .Replace("\\", "_");
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return string.IsNullOrWhiteSpace(sanitized) ? "image" : sanitized;
+    }
+
+    private static string SafeEncodePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+        if (filePath.Contains("..") || filePath.Contains("~"))
+            return string.Empty;
+        var segments = filePath.Split('/');
+        var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
+        return string.Join("/", encodedSegments);
     }
 }

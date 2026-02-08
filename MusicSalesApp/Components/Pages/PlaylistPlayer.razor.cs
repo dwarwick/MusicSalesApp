@@ -929,7 +929,8 @@ namespace MusicSalesApp.Components.Pages
             // Priority 1: ArtistName from SongMetadata
             if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
             {
-                return metadata.ArtistName;
+                // Strip email domain if it contains @ to avoid exposing email addresses
+                return metadata.ArtistName.Contains('@') ? metadata.ArtistName.Split('@')[0] : metadata.ArtistName;
             }
 
             // Priority 2: DisplayName from Creator
@@ -1136,7 +1137,21 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetTrackImageUrl(int index)
         {
-            return _trackImageUrls.TryGetValue(index, out var url) ? url : null;
+            if (!_trackImageUrls.TryGetValue(index, out var url) || string.IsNullOrEmpty(url))
+                return null;
+
+            // Check if image dimensions are known and non-square
+            if (_playlistInfo != null && index < _playlistInfo.Tracks.Count)
+            {
+                var track = _playlistInfo.Tracks[index];
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata)
+                    && metadata.IsImageSquare == false)
+                {
+                    return null; // Non-square image - don't display
+                }
+            }
+
+            return url;
         }
 
         protected double? GetTrackLengthSeconds(int index)

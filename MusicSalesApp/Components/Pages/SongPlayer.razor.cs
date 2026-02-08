@@ -175,7 +175,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
             if (artMetadata != null)
             {
-                _albumArtUrl = $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}";
+                // Only show image if it's square (or dimensions are unknown)
+                var isSquare = artMetadata.IsImageSquare ?? true;
+                _albumArtUrl = isSquare ? $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}" : null;
             }
             else
             {
@@ -340,7 +342,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(_songMetadata.ArtistName))
         {
-            return _songMetadata.ArtistName;
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            return _songMetadata.ArtistName.Contains('@') ? _songMetadata.ArtistName.Split('@')[0] : _songMetadata.ArtistName;
         }
 
         // Priority 2: DisplayName from Creator
@@ -387,6 +390,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Gets the URL for the genre playlist page.
     /// </summary>
+    protected string GetArtistUrl()
+    {
+        return $"/artist/{Uri.EscapeDataString(GetArtistDisplayName())}";
+    }
+
     protected string GetGenreUrl()
     {
         return $"/genre/{Uri.EscapeDataString(GetGenre())}";

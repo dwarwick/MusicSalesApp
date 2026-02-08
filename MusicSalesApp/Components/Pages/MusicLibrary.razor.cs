@@ -272,7 +272,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 var artFile = imageFilesLookup[(baseName, folder)].FirstOrDefault()?.File;
                 if (artFile != null)
                 {
-                    _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                    // Check metadata for image dimensions - only show square images
+                    var artMetadata = allMetadata.FirstOrDefault(m =>
+                        !string.IsNullOrEmpty(m.ImageBlobPath) &&
+                        m.ImageBlobPath.Equals(artFile.Name, StringComparison.OrdinalIgnoreCase));
+                    
+                    // Unknown dimensions (null) - show image (graceful degradation)
+                    var isSquare = artMetadata?.IsImageSquare ?? true;
+                    
+                    if (isSquare)
+                    {
+                        _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                    }
                 }
                 
                 // Read song metadata from database
@@ -327,10 +338,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(songMeta.ArtistName))
         {
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            var displayName = songMeta.ArtistName.Contains('@') ? songMeta.ArtistName.Split('@')[0] : songMeta.ArtistName;
             return new ArtistDisplayInfo
             {
-                DisplayName = songMeta.ArtistName,
-                LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.ArtistName)}"
+                DisplayName = displayName,
+                LinkUrl = $"/artist/{Uri.EscapeDataString(displayName)}"
             };
         }
 

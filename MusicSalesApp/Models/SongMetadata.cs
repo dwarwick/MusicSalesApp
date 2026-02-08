@@ -134,6 +134,26 @@ public class SongMetadata
     public string ArtistName { get; set; }
 
     /// <summary>
+    /// The width of the image in pixels. Populated during upload or crop operations.
+    /// </summary>
+    public int? ImageWidth { get; set; }
+
+    /// <summary>
+    /// The height of the image in pixels. Populated during upload or crop operations.
+    /// </summary>
+    public int? ImageHeight { get; set; }
+
+    /// <summary>
+    /// Returns true if the image is a perfect square, false if not square,
+    /// or null if dimensions are unknown.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool? IsImageSquare =>
+        (ImageWidth.HasValue && ImageHeight.HasValue)
+            ? ImageWidth.Value == ImageHeight.Value
+            : null;
+
+    /// <summary>
     /// Gets the effective artist name using the priority:
     /// 1. SongMetadata.ArtistName
     /// 2. Creator.DisplayName
@@ -144,7 +164,8 @@ public class SongMetadata
         // Priority 1: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(ArtistName))
         {
-            return ArtistName;
+            // Strip email domain if it contains @ to avoid exposing email addresses
+            return ArtistName.Contains('@') ? ArtistName.Split('@')[0] : ArtistName;
         }
 
         // Priority 2: DisplayName from Creator
