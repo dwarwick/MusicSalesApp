@@ -202,6 +202,26 @@ namespace MusicSalesApp.Services
             return false;
         }
 
+        public async Task<bool> DeactivateByBlobPathAsync(string blobPath, string reason = null)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var metadata = await context.SongMetadata
+                .FirstOrDefaultAsync(s => s.BlobPath == blobPath ||
+                                         s.Mp3BlobPath == blobPath ||
+                                         s.ImageBlobPath == blobPath);
+            if (metadata != null)
+            {
+                metadata.IsActive = false;
+                metadata.IsEnabled = false;
+                metadata.StatusReason = reason;
+                metadata.UpdatedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync();
+                return true;
+            }
+
+            return false;
+        }
+
         public async Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();

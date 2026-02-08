@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
 using System;
@@ -14,7 +16,7 @@ namespace MusicSalesApp.Components.Pages;
 
 
 
-public class UploadFilesModel : BlazorBase
+public class UploadFilesModel : BlazorBase, IAsyncDisposable
 {
     private sealed class AntiforgeryTokenResponse
     {
@@ -22,7 +24,7 @@ public class UploadFilesModel : BlazorBase
         public string FieldName { get; set; }
     }
 
-    private readonly CancellationToken _cancellationToken = CancellationToken.None;
+    private CancellationTokenSource _uploadCts = new CancellationTokenSource();
 
     protected List<UploadPairItem> _uploadItems = new List<UploadPairItem>();
     protected string _validationErrorMessage = string.Empty;
@@ -32,6 +34,12 @@ public class UploadFilesModel : BlazorBase
     // Creator ID - will be populated if the current user is a creator
     private int? _currentCreatorId = null;
     private bool _hasLoadedCreatorId = false;
+
+    // Track upload state for navigation/close warnings and cleanup
+    protected bool _isUploading = false;
+    private readonly List<string> _uploadedBlobPaths = new();
+    private readonly object _blobPathsLock = new();
+    private bool _disposed = false;
 
     // Configuration for chunked uploads
     private const int MaxFilesAllowed = 50;
@@ -73,6 +81,13 @@ public class UploadFilesModel : BlazorBase
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
+        
+        // Reset upload tracking for this batch
+        _uploadCts = new CancellationTokenSource();
+        lock (_blobPathsLock)
+        {
+            _uploadedBlobPaths.Clear();
+        }
 
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
@@ -143,8 +158,29 @@ public class UploadFilesModel : BlazorBase
 
         await InvokeAsync(StateHasChanged);
 
-        // Process uploads in chunks
-        await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+        // Enable upload-in-progress state and browser warning
+        _isUploading = true;
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.enableBeforeUnload");
+        }
+        catch (JSDisconnectedException) { }
+
+        try
+        {
+            // Process uploads in chunks
+            await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+        }
+        finally
+        {
+            // Uploads finished (completed or failed) — disable warnings
+            _isUploading = false;
+            try
+            {
+                await JS.InvokeVoidAsync("uploadFilesHelper.disableBeforeUnload");
+            }
+            catch (JSDisconnectedException) { }
+        }
     }
 
     /// <summary>
@@ -218,7 +254,7 @@ public class UploadFilesModel : BlazorBase
             audioMemoryStream = new MemoryStream();
             await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
             {
-                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _cancellationToken);
+                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
             }
             audioMemoryStream.Position = 0;
 
@@ -232,7 +268,15 @@ public class UploadFilesModel : BlazorBase
                 audioFile.Name,
                 null, // No album name
                 _currentCreatorId,
-                _cancellationToken);
+                _uploadCts.Token);
+
+            // Track the uploaded blob path for cleanup if user leaves
+            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
+            var mp3Path = $"{baseName}/{baseName}.mp3";
+            lock (_blobPathsLock)
+            {
+                _uploadedBlobPaths.Add(mp3Path);
+            }
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
@@ -289,7 +333,7 @@ public class UploadFilesModel : BlazorBase
             audioMemoryStream = new MemoryStream();
             await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
             {
-                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _cancellationToken);
+                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
             }
             audioMemoryStream.Position = 0;
 
@@ -301,7 +345,7 @@ public class UploadFilesModel : BlazorBase
             coverArtMemoryStream = new MemoryStream();
             await using (var coverArtStream = coverArtFile.OpenReadStream(maxFileSize))
             {
-                await coverArtStream.CopyToAsync(coverArtMemoryStream, bufferSize, _cancellationToken);
+                await coverArtStream.CopyToAsync(coverArtMemoryStream, bufferSize, _uploadCts.Token);
             }
             coverArtMemoryStream.Position = 0;
 
@@ -317,7 +361,18 @@ public class UploadFilesModel : BlazorBase
                 coverArtFile.Name,
                 null, // No album name
                 _currentCreatorId,
-                _cancellationToken);
+                _uploadCts.Token);
+
+            // Track the uploaded blob paths for cleanup if user leaves
+            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
+            var mp3Path = $"{baseName}/{baseName}.mp3";
+            var coverArtExtension = Path.GetExtension(coverArtFile.Name).ToLowerInvariant();
+            var imagePath = $"{baseName}/{baseName}{coverArtExtension}";
+            lock (_blobPathsLock)
+            {
+                _uploadedBlobPaths.Add(mp3Path);
+                _uploadedBlobPaths.Add(imagePath);
+            }
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
@@ -407,5 +462,81 @@ public class UploadFilesModel : BlazorBase
         Converting,
         Completed,
         Failed
+    }
+
+    /// <summary>
+    /// Intercepts in-app navigation while uploads are in progress.
+    /// Shows a confirmation dialog — if the user confirms leaving,
+    /// cancels pending uploads and cleans up already-uploaded files.
+    /// </summary>
+    protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
+    {
+        if (!_isUploading)
+            return;
+
+        var isConfirmed = await JS.InvokeAsync<bool>("confirm",
+            "Uploads are in progress. If you leave now, all uploads will be cancelled and any files already uploaded in this session will be removed. Are you sure you want to leave?");
+
+        if (isConfirmed)
+        {
+            // User chose to leave — cancel pending uploads and clean up
+            _uploadCts.Cancel();
+            await CleanupUploadedFilesAsync();
+        }
+        else
+        {
+            // User chose to stay — prevent navigation
+            context.PreventNavigation();
+        }
+    }
+
+    /// <summary>
+    /// Deletes all blobs uploaded during this session from Azure Blob Storage
+    /// and sets their SongMetadata records to inactive and not enabled.
+    /// </summary>
+    private async Task CleanupUploadedFilesAsync()
+    {
+        List<string> pathsToCleanup;
+        lock (_blobPathsLock)
+        {
+            pathsToCleanup = new List<string>(_uploadedBlobPaths);
+            _uploadedBlobPaths.Clear();
+        }
+
+        foreach (var blobPath in pathsToCleanup)
+        {
+            try
+            {
+                // Delete the blob from Azure Storage
+                await AzureStorageService.DeleteAsync(blobPath);
+
+                // Set the SongMetadata record to inactive and not enabled
+                await SongMetadataService.DeactivateByBlobPathAsync(blobPath,
+                    "Upload cancelled — user left before uploads completed.");
+            }
+            catch
+            {
+                // Best-effort cleanup — don't throw if a single file fails
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles circuit disconnection (e.g., browser tab closed during upload).
+    /// Cancels pending uploads and removes already-uploaded files.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+
+        if (_isUploading)
+        {
+            _uploadCts.Cancel();
+            await CleanupUploadedFilesAsync();
+        }
+
+        _uploadCts.Dispose();
     }
 }

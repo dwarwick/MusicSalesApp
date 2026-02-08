@@ -7,6 +7,8 @@
 
 <PageTitle>Upload Music Files</PageTitle>
 
+<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="_isUploading" />
+
 <h3>Upload Music Files</h3>
 
 <div class="container-fluid">
@@ -184,4 +186,22 @@
             }
         });
     })();
+
+    // Warn user before closing tab/browser during uploads
+    window.uploadFilesHelper = {
+        enableBeforeUnload: function () {
+            window._uploadBeforeUnloadHandler = function (e) {
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            };
+            window.addEventListener('beforeunload', window._uploadBeforeUnloadHandler);
+        },
+        disableBeforeUnload: function () {
+            if (window._uploadBeforeUnloadHandler) {
+                window.removeEventListener('beforeunload', window._uploadBeforeUnloadHandler);
+                window._uploadBeforeUnloadHandler = null;
+            }
+        }
+    };
 </script>

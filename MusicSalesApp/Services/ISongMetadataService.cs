@@ -60,6 +60,12 @@ namespace MusicSalesApp.Services
         Task<bool> DeleteAsync(string blobPath);
 
         /// <summary>
+        /// Deactivate a song by blob path. Sets IsActive=false and IsEnabled=false
+        /// with an optional reason. Used when uploads are cancelled mid-session.
+        /// </summary>
+        Task<bool> DeactivateByBlobPathAsync(string blobPath, string reason = null);
+
+        /// <summary>
         /// Get paginated song metadata with filtering and sorting
         /// </summary>
         Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters);
