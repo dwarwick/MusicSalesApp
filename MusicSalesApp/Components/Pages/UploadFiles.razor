@@ -168,3 +168,20 @@
         border-color: #888;
     }
 </style>
+
+<script suppress-error="BL9992">
+    (function () {
+        // Prevent file drops anywhere outside the designated drop zone
+        document.addEventListener('dragover', function (e) {
+            if (!e.target.closest('.dropzone')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'none';
+            }
+        });
+        document.addEventListener('drop', function (e) {
+            if (!e.target.closest('.dropzone')) {
+                e.preventDefault();
+            }
+        });
+    })();
+</script>
