@@ -144,8 +144,6 @@ public class CreatorService : ICreatorService
         TaxFormStatus status,
         TaxResidencyType taxResidencyType,
         string? taxResidencyCountry,
-        string? treatyCountry,
-        string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
         Guid? taxBanditsSubmissionId,
@@ -171,8 +169,6 @@ public class CreatorService : ICreatorService
         // Update tax residency data
         creator.TaxResidencyType = taxResidencyType;
         creator.TaxResidencyCountry = taxResidencyCountry;
-        creator.TreatyCountry = treatyCountry;
-        creator.ClaimedTreatyArticle = claimedTreatyArticle;
         creator.WithholdingRate = withholdingRate;
         creator.TaxFormExpirationDate = taxFormExpirationDate;
         creator.TaxBanditsSubmissionId = taxBanditsSubmissionId;

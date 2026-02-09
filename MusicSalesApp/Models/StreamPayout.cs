@@ -8,7 +8,7 @@ namespace MusicSalesApp.Models;
 /// Represents a payout to a creator for streams of their music.
 /// Creators are paid $5 per 1000 streams. Minimum payout threshold is $5.
 /// For US creators, no withholding is applied (unless subject to backup withholding at 24%).
-/// For foreign creators, withholding is applied based on tax treaty rates or default 30%.
+/// For foreign creators, no withholding is applied.
 /// </summary>
 public class StreamPayout
 {
@@ -63,7 +63,7 @@ public class StreamPayout
     /// <summary>
     /// The withholding rate applied to this payout as a decimal (e.g., 0.30 for 30%).
     /// For US creators: 0 (or 0.24 if subject to backup withholding).
-    /// For foreign creators: treaty rate or default 0.30.
+    /// For foreign creators: 0.
     /// Snapshot from Creator.EffectiveWithholdingRate at payout time.
     /// </summary>
     [Column(TypeName = "decimal(5,4)")]

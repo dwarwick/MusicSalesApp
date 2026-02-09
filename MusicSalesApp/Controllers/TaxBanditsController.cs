@@ -279,8 +279,6 @@ public class TaxBanditsController : ControllerBase
                     w9Request.UserId,
                     TaxResidencyType.US,
                     taxResidencyCountry: "US",
-                    treatyCountry: null,
-                    claimedTreatyArticle: null,
                     withholdingRate: withholdingRate,
                     taxFormExpirationDate: null, // W-9 forms don't expire
                     taxBanditsSubmissionId: submissionGuid,
@@ -469,7 +467,7 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Handles W-8BEN form status change webhook (for non-US persons).
-    /// Extracts tax residency data including treaty benefits and withholding rates.
+    /// Extracts tax residency data. No withholding is applied for W-8 creators.
     /// Only sends emails for terminal states: COMPLETED (success) or INVALID/BOUNCED/ORDER_NOT_CREATED (failure).
     /// W-8 forms do not require TIN matching.
     /// </summary>
@@ -577,8 +575,6 @@ public class TaxBanditsController : ControllerBase
                     w9Request.UserId,
                     TaxResidencyType.Foreign,
                     taxData.TaxResidencyCountry,
-                    taxData.TreatyCountry,
-                    taxData.ClaimedTreatyArticle,
                     taxData.WithholdingRate,
                     taxData.ExpirationDate,
                     submissionGuid);
@@ -648,13 +644,12 @@ public class TaxBanditsController : ControllerBase
 
     /// <summary>
     /// Extracts tax residency data from W-8BEN FormData.
+    /// No withholding is applied for W-8 creators.
     /// </summary>
-    private (string? TaxResidencyCountry, string? TreatyCountry, string? ClaimedTreatyArticle, decimal WithholdingRate, DateTime? ExpirationDate) ExtractW8BenTaxData(JsonElement formW8)
+    private (string? TaxResidencyCountry, decimal WithholdingRate, DateTime? ExpirationDate) ExtractW8BenTaxData(JsonElement formW8)
     {
         string? taxResidencyCountry = null;
-        string? treatyCountry = null;
-        string? claimedTreatyArticle = null;
-        decimal withholdingRate = 0.30m; // Default 30% if no treaty
+        decimal withholdingRate = 0m; // No withholding for W-8 creators
         DateTime? expirationDate = null;
 
         try
@@ -679,53 +674,6 @@ public class TaxBanditsController : ControllerBase
                         _logger.LogInformation("Extracted tax form expiration date: {Date}", expirationDate);
                     }
                 }
-
-                // Extract Tax Treaty Benefits if claimed
-                if (formData.TryGetProperty("TaxTreatyBenefits", out var taxTreatyBenefits) && 
-                    taxTreatyBenefits.ValueKind != JsonValueKind.Null)
-                {
-                    // Extract treaty country
-                    if (taxTreatyBenefits.TryGetProperty("BeneficiaryCountry", out var beneficiaryCountry))
-                    {
-                        var treatyCountryName = beneficiaryCountry.GetString();
-                        treatyCountry = ConvertCountryNameToIso2(treatyCountryName);
-                        _logger.LogInformation("Extracted treaty country: {Country} -> {Iso2}", treatyCountryName, treatyCountry);
-                    }
-
-                    // Extract claimed article
-                    if (taxTreatyBenefits.TryGetProperty("ClaimingProvArticlePara", out var articleElement))
-                    {
-                        var article = articleElement.GetString();
-                        if (taxTreatyBenefits.TryGetProperty("TypeOfIncome", out var incomeTypeElement))
-                        {
-                            var incomeType = incomeTypeElement.GetString();
-                            claimedTreatyArticle = !string.IsNullOrWhiteSpace(incomeType) 
-                                ? $"Article {article} – {incomeType}" 
-                                : $"Article {article}";
-                        }
-                        else
-                        {
-                            claimedTreatyArticle = $"Article {article}";
-                        }
-                        _logger.LogInformation("Extracted claimed treaty article: {Article}", claimedTreatyArticle);
-                    }
-
-                    // Extract withholding rate from treaty
-                    if (taxTreatyBenefits.TryGetProperty("RateOfWH", out var rateElement))
-                    {
-                        // RateOfWH is typically a percentage (e.g., 10 for 10%)
-                        if (rateElement.TryGetDecimal(out var ratePercent))
-                        {
-                            withholdingRate = ratePercent / 100m; // Convert to decimal (10 -> 0.10)
-                            _logger.LogInformation("Extracted treaty withholding rate: {Percent}% -> {Decimal}", ratePercent, withholdingRate);
-                        }
-                    }
-                }
-                else
-                {
-                    // No treaty benefits claimed - use default 30%
-                    _logger.LogInformation("No tax treaty benefits claimed, using default 30% withholding rate");
-                }
             }
         }
         catch (Exception ex)
@@ -733,7 +681,7 @@ public class TaxBanditsController : ControllerBase
             _logger.LogError(ex, "Error extracting W-8BEN tax data, using defaults");
         }
 
-        return (taxResidencyCountry, treatyCountry, claimedTreatyArticle, withholdingRate, expirationDate);
+        return (taxResidencyCountry, withholdingRate, expirationDate);
     }
 
     /// <summary>
@@ -752,8 +700,7 @@ public class TaxBanditsController : ControllerBase
         if (countryName.Equals("Other Country", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        // Comprehensive country mappings for tax treaty countries
-        // This list includes all countries that may have tax treaties with the US
+        // Comprehensive country name to ISO-2 code mappings
         var countryMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // A
@@ -998,8 +945,6 @@ public class TaxBanditsController : ControllerBase
         int userId,
         TaxResidencyType taxResidencyType,
         string? taxResidencyCountry,
-        string? treatyCountry,
-        string? claimedTreatyArticle,
         decimal withholdingRate,
         DateTime? taxFormExpirationDate,
         Guid? taxBanditsSubmissionId,
@@ -1021,8 +966,6 @@ public class TaxBanditsController : ControllerBase
                 TaxFormStatus.Completed,
                 taxResidencyType,
                 taxResidencyCountry,
-                treatyCountry,
-                claimedTreatyArticle,
                 withholdingRate,
                 taxFormExpirationDate,
                 taxBanditsSubmissionId,
