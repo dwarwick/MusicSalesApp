@@ -134,25 +134,9 @@ public class Creator
     public string? TaxResidencyCountry { get; set; }
 
     /// <summary>
-    /// The ISO-2 country code of the treaty country if claiming tax treaty benefits.
-    /// Derived from TaxTreatyBenefits.BeneficiaryCountry in W-8BEN.
-    /// Null if no treaty benefits are claimed.
-    /// </summary>
-    [MaxLength(2)]
-    public string? TreatyCountry { get; set; }
-
-    /// <summary>
-    /// The treaty article being claimed for reduced withholding (e.g., "Article A").
-    /// Derived from TaxTreatyBenefits.ClaimingProvArticlePara in W-8BEN.
-    /// Null if no treaty benefits are claimed.
-    /// </summary>
-    [MaxLength(50)]
-    public string? ClaimedTreatyArticle { get; set; }
-
-    /// <summary>
-    /// The withholding rate as a decimal (e.g., 0.10 for 10%, 0.30 for 30%).
+    /// The withholding rate as a decimal (e.g., 0.24 for 24%).
     /// For US creators: 0 (unless subject to backup withholding, then 0.24).
-    /// For foreign creators: derived from treaty rate or default 0.30.
+    /// For foreign creators: 0 (no withholding applied).
     /// Snapshot at tax form completion time - never recomputed.
     /// </summary>
     [Column(TypeName = "decimal(5,4)")]
@@ -161,14 +145,13 @@ public class Creator
     /// <summary>
     /// Whether the US creator is subject to backup withholding per their W-9 form.
     /// When true, WithholdingRate should be 0.24 (24%).
-    /// Always false for foreign creators (they have standard or treaty-based withholding instead).
+    /// Always false for foreign creators.
     /// </summary>
     public bool SubjectToBackupWithholding { get; set; } = false;
 
     /// <summary>
     /// The expiration date of the W-8 tax form.
     /// W-8 forms expire Dec 31 of the 3rd year after signing.
-    /// After expiration, treaty benefits are invalid and 30% withholding applies.
     /// Null for W-9 forms (no expiration).
     /// </summary>
     public DateTime? TaxFormExpirationDate { get; set; }
@@ -208,18 +191,12 @@ public class Creator
                                     && TaxFormStatus == TaxFormStatus.Completed;
 
     /// <summary>
-    /// Checks if the creator's tax form has expired (for W-8 forms).
-    /// Returns false for US creators (W-9 has no expiration).
+    /// Gets the effective withholding rate.
+    /// For US creators: 0 or 0.24 (backup withholding).
+    /// For foreign creators: 0 (no withholding).
     /// </summary>
     [NotMapped]
-    public bool IsTaxFormExpired => TaxFormExpirationDate.HasValue && TaxFormExpirationDate.Value < DateTime.UtcNow;
-
-    /// <summary>
-    /// Gets the effective withholding rate, considering tax form expiration.
-    /// If W-8 form is expired, returns 30% regardless of treaty rate.
-    /// </summary>
-    [NotMapped]
-    public decimal EffectiveWithholdingRate => IsTaxFormExpired ? 0.30m : WithholdingRate;
+    public decimal EffectiveWithholdingRate => WithholdingRate;
 }
 
 /// <summary>

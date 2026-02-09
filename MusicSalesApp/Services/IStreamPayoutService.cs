@@ -4,14 +4,14 @@ namespace MusicSalesApp.Services;
 /// Service for processing stream payouts to creators.
 /// Creators are paid based on the number of streams their songs receive.
 /// For US creators, no withholding is applied (unless subject to backup withholding).
-/// For foreign creators, withholding is applied based on tax treaty rates or default 30%.
+/// For foreign creators, no withholding is applied.
 /// </summary>
 public interface IStreamPayoutService
 {
     /// <summary>
     /// Calculates pending payouts for all creators and processes payments via PayPal.
     /// Minimum payout threshold is $5.00. Rate is $5 per 1000 streams (0.005 per stream).
-    /// Applies withholding for foreign creators based on their tax treaty status.
+    /// Applies withholding for US creators subject to backup withholding.
     /// </summary>
     /// <returns>The number of creators that received payouts.</returns>
     Task<int> ProcessPendingPayoutsAsync();
