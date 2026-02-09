@@ -470,6 +470,7 @@ public class CreatorService : ICreatorService
         creator.PayPalEmail = payPalEmail;
         creator.PayPalAccountAffirmed = payPalAccountAffirmed;
         creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
+        creator.TaxFormStatus = TaxFormStatus.NotStarted;
         creator.PaymentsReceivable = true;
         creator.PrimaryEmailConfirmed = true;
         creator.OnboardedAt = DateTime.UtcNow;

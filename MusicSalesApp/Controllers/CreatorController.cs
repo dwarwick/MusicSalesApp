@@ -165,99 +165,45 @@ public class CreatorController : ControllerBase
         // for returning creators whose OnboardingStatus was Suspended.
         await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
 
-        // Request W-9/W-8 tax form from TaxBandits
-        // First check if the creator already has a valid certificate on file
+        // Request W-9/W-8 tax form from TaxBandits via email.
+        // The creator must complete the form through the TaxBandits email link,
+        // and the TaxBandits webhook will set the creator status to Complete.
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        var payeeRef = creator.TaxBanditsPayeeRef ?? user.Email;
-        var hasValidTaxForm = false;
 
         try
         {
-            if (!string.IsNullOrWhiteSpace(payeeRef))
+            // Store the PayeeRef (email) used for the W-9 request
+            // Note: user.Email is already validated as non-empty at the start of this method
+            if (!string.IsNullOrWhiteSpace(user.Email))
             {
-                // Use a short timeout for this non-critical check. The TaxBandits API can
-                // occasionally hang, and the default HttpClient timeout of 100s would cause
-                // the entire onboarding request to time out on the client side.
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                var certStatus = await _taxBanditsService.GetWhCertificateStatusAsync(payeeRef!, cts.Token);
-                if (certStatus.Success && certStatus.HasValidCertificate)
-                {
-                    _logger.LogInformation(
-                        "User {UserId} already has a valid W-9/W-8 on file with TaxBandits (PayeeRef: {PayeeRef}). Skipping new request.",
-                        user.Id, payeeRef);
-                    hasValidTaxForm = true;
-                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
-                }
+                await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // WhCertificate status check timed out - fall through and request a new form
-            _logger.LogWarning("WhCertificate status check timed out for user {UserId} (PayeeRef: {PayeeRef}). Will request a new form.", user.Id, payeeRef);
+            
+            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
+            if (w9Result.Success)
+            {
+                _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
+                // Update the tax form status to Pending since the request was sent successfully
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
+            }
+            else
+            {
+                // Log the error but don't fail the onboarding - admin will be notified via email
+                _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
+                // Update the tax form status to Failed since the request failed
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Failed);
+            }
         }
         catch (Exception ex)
         {
-            // If the status check fails, fall through and request a new form
-            _logger.LogWarning(ex, "Failed to check existing W-9/W-8 status for user {UserId}. Will request a new form.", user.Id);
+            // Log the error but don't fail the onboarding - the W-9 can be requested again later
+            _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
         }
 
-        if (!hasValidTaxForm)
-        {
-            try
-            {
-                // Store the PayeeRef (email) used for the W-9 request
-                // Note: user.Email is already validated as non-empty at the start of this method
-                if (!string.IsNullOrWhiteSpace(user.Email))
-                {
-                    await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
-                }
-                
-                var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
-                if (w9Result.Success)
-                {
-                    _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
-                    // Update the tax form status to Pending since the request was sent successfully
-                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
-                }
-                else
-                {
-                    // Log the error but don't fail the onboarding - admin will be notified via email
-                    _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
-                    // Update the tax form status to Failed since the request failed
-                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Failed);
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log the error but don't fail the onboarding - the W-9 can be requested again later
-                _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
-            }
-        }
-
-        // Reload to get the latest state including tax form status
+        // Reload to get the latest state including tax form status.
+        // The creator will NOT be activated here — activation happens only when the
+        // TaxBandits webhook confirms the tax form is complete.
         var updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-
-        // Check if both PayPal affirmation and tax form are complete to activate
-        if (updatedCreator != null && updatedCreator.TaxFormStatus == TaxFormStatus.Completed)
-        {
-            // Activate the creator
-            await _creatorService.ActivateCreatorAsync(updatedCreator.Id);
-            
-            // Ensure the Creator role exists
-            if (!await _roleManager.RoleExistsAsync(Roles.Creator))
-            {
-                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
-            }
-
-            // Add Creator role if user doesn't already have it
-            if (!await _userManager.IsInRoleAsync(user, Roles.Creator))
-            {
-                await _userManager.AddToRoleAsync(user, Roles.Creator);
-                _logger.LogInformation("Added Creator role to user {UserId}", user.Id);
-            }
-
-            updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-        }
 
         _logger.LogInformation("Started creator onboarding for user {UserId}, PayPal email: {PayPalEmail}, PayPal affirmed: {PayPalAffirmed}", 
             user.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
