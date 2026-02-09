@@ -186,6 +186,21 @@ public class Creator
     public DateTime? LastVerifiedAt { get; set; }
 
     /// <summary>
+    /// The creator's location certification selection for tax eligibility purposes.
+    /// </summary>
+    public CreatorLocationCertification LocationCertification { get; set; } = CreatorLocationCertification.None;
+
+    /// <summary>
+    /// Whether the creator has accepted the acknowledgment certifying the accuracy of their location certification.
+    /// </summary>
+    public bool AcknowledgmentAccepted { get; set; } = false;
+
+    /// <summary>
+    /// The UTC date and time when the creator accepted the acknowledgment.
+    /// </summary>
+    public DateTime? AcknowledgmentDateTimeUtc { get; set; }
+
+    /// <summary>
     /// Checks if both PayPal and tax form onboarding are complete.
     /// </summary>
     [NotMapped]
@@ -246,7 +261,12 @@ public enum CreatorOnboardingStatus
     /// Creator has revoked their consent to the platform via PayPal.
     /// This typically happens when the creator removes the platform's permissions in their PayPal account.
     /// </summary>
-    ConsentRevoked = 6
+    ConsentRevoked = 6,
+
+    /// <summary>
+    /// Creator is not eligible for payouts (e.g., non-U.S. person performing creator activities in the U.S.).
+    /// </summary>
+    Ineligible = 7
 }
 
 /// <summary>
@@ -300,4 +320,31 @@ public enum TaxResidencyType
     /// Foreign (non-US) tax resident - completed W-8BEN or W-8BEN-E form.
     /// </summary>
     Foreign = 2
+}
+
+/// <summary>
+/// Represents the creator's location certification for tax eligibility purposes.
+/// </summary>
+public enum CreatorLocationCertification
+{
+    /// <summary>
+    /// No selection has been made yet.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// The creator is a U.S. person for tax purposes.
+    /// </summary>
+    USPerson = 1,
+
+    /// <summary>
+    /// The creator is not a U.S. person and will perform all creator activities entirely outside the United States.
+    /// </summary>
+    NonUSPersonOutsideUS = 2,
+
+    /// <summary>
+    /// The creator is not a U.S. person and will perform some creator activities while physically present in the United States.
+    /// This makes the creator ineligible for payouts.
+    /// </summary>
+    NonUSPersonInsideUS = 3
 }

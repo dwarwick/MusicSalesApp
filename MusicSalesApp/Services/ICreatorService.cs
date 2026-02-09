@@ -165,4 +165,14 @@ public interface ICreatorService
     /// <param name="payPalAccountAffirmed">Whether the creator affirmed their PayPal account</param>
     /// <returns>The updated creator</returns>
     Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string payPalEmail, bool payPalAccountAffirmed);
+
+    /// <summary>
+    /// Updates the creator's location certification and acknowledgment.
+    /// Stores the certification selection, acknowledgment acceptance, and the UTC timestamp.
+    /// </summary>
+    /// <param name="creatorId">The creator ID</param>
+    /// <param name="locationCertification">The location certification selection</param>
+    /// <param name="acknowledgmentAccepted">Whether the acknowledgment was accepted</param>
+    /// <returns>The updated creator</returns>
+    Task<Creator> UpdateLocationCertificationAsync(int creatorId, CreatorLocationCertification locationCertification, bool acknowledgmentAccepted);
 }

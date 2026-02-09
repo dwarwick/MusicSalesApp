@@ -220,7 +220,13 @@
             <SfCard CssClass="mb-4">
                 <CardHeader Title="Become a Creator" />
                 <CardContent>
-                    @if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null || _creatorOnboardingStatus == "Suspended" || _creatorOnboardingStatus == "ConsentRevoked")
+                    @if (_creatorOnboardingStatus == "Ineligible")
+                    {
+                        <div class="creator-ineligible">
+                            <p>At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.</p>
+                        </div>
+                    }
+                    else if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null || _creatorOnboardingStatus == "Suspended" || _creatorOnboardingStatus == "ConsentRevoked")
                     {
                         <div class="creator-description">
                             <h4>Share Your Music on StreamTunes!</h4>
@@ -278,12 +284,46 @@
                                     <strong>Important:</strong> You only need a personal PayPal account to receive royalty payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your royalty payments may fail and StreamTunes is not responsible for recovering failed payments.
                                 </div>
 
+                                <div class="creator-eligibility mt-4">
+                                    <h5>Creator Eligibility Requirement</h5>
+                                    <p>At this time, Streamtunes supports paid creator participation only if:</p>
+                                    <ul>
+                                        <li>You are a U.S. person, or</li>
+                                        <li>You perform all creator activities for Streamtunes entirely outside the United States.</li>
+                                    </ul>
+                                    <p>If you perform any creator activities while physically present in the United States and are not a U.S. person, you are not currently eligible to receive payouts through the platform.</p>
+                                </div>
+
+                                <div class="creator-location-certification mt-4">
+                                    <h5>Creator Location and Tax Certification</h5>
+                                    <p>Please select the statement below that reflects your status (required):</p>
+                                    <p class="text-muted"><small>For U.S. tax purposes, a &ldquo;U.S. person&rdquo; has the meaning defined by the Internal Revenue Service. Creator activities means uploading, managing, or otherwise monetized participation related to your music on the platform.</small></p>
+
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am a U.S. person." Name="locationCertification" Value="USPerson" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am not a U.S. person and will perform all creator activities for Streamtunes entirely outside the United States." Name="locationCertification" Value="NonUSPersonOutsideUS" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am not a U.S. person and will perform some creator activities for Streamtunes while physically present in the United States." Name="locationCertification" Value="NonUSPersonInsideUS" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                </div>
+
+                                <div class="creator-acknowledgment mt-4">
+                                    <h5>Acknowledgment (required)</h5>
+                                    <div class="mb-3">
+                                        <SfCheckBox @bind-Checked="_acknowledgmentAccepted" TChecked="bool" />
+                                        <span class="ms-2">I certify that the information above is accurate and understand that Streamtunes relies on this certification to determine my eligibility for payouts and applicable tax withholding and reporting. I agree to promptly update this information if my circumstances change.</span>
+                                    </div>
+                                </div>
+
                                 @if (!_startingOnboarding)
                                 {
                                     <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" />
                                     @if (!CanStartOnboarding)
                                     {
-                                        <p class="text-danger mt-2">Please enter your PayPal email address and confirm you have a valid PayPal account.</p>
+                                        <p class="text-danger mt-2">Please complete all required fields including your PayPal email, PayPal account confirmation, location certification, and acknowledgment.</p>
                                     }
                                 }
                                 else
