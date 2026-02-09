@@ -37,7 +37,7 @@ public class CreatorAgreementTests : BUnitTestBase
 
         // Assert - Verify platform description section
         Assert.That(cut.Markup, Does.Contain("Platform Description"));
-        Assert.That(cut.Markup, Does.Contain("subscription-based music streaming service"));
+        Assert.That(cut.Markup, Does.Contain("subscription-based digital music streaming service"));
     }
 
     [Test]
@@ -70,9 +70,9 @@ public class CreatorAgreementTests : BUnitTestBase
         var cut = TestContext.Render<CreatorAgreement>();
 
         // Assert - Verify royalties section
-        Assert.That(cut.Markup, Does.Contain("Royalties and Payouts"));
+        Assert.That(cut.Markup, Does.Contain("Creator Compensation and Payouts"));
         Assert.That(cut.Markup, Does.Contain("30 seconds"));
-        Assert.That(cut.Markup, Does.Contain("weekly basis"));
+        Assert.That(cut.Markup, Does.Contain("weekly"));
     }
 
     [Test]
@@ -173,7 +173,7 @@ public class CreatorAgreementTests : BUnitTestBase
 
         // Assert - Verify privacy note section
         Assert.That(cut.Markup, Does.Contain("Privacy Note"));
-        Assert.That(cut.Markup, Does.Contain("payment processor"));
+        Assert.That(cut.Markup, Does.Contain("payment and tax service providers"));
     }
 
     [Test]
