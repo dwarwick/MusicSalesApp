@@ -102,6 +102,18 @@ public class CreatorController : ControllerBase
             return BadRequest("You must affirm that you have a valid PayPal account in good standing to receive royalty payments.");
         }
 
+        // Validate location certification
+        if (request.LocationCertification == CreatorLocationCertification.None)
+        {
+            return BadRequest("You must select a creator location and tax certification option.");
+        }
+
+        // Validate acknowledgment
+        if (!request.AcknowledgmentAccepted)
+        {
+            return BadRequest("You must accept the acknowledgment to proceed.");
+        }
+
         // Check if user already has a creator record
         var existingCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
         if (existingCreator != null && existingCreator.IsActive)
@@ -124,6 +136,27 @@ public class CreatorController : ControllerBase
                 creator.DisplayName = request.DisplayName;
                 creator.Bio = request.Bio;
             }
+        }
+
+        // Store attestation data
+        await _creatorService.UpdateLocationCertificationAsync(
+            creator.Id, 
+            request.LocationCertification, 
+            request.AcknowledgmentAccepted);
+
+        // Handle ineligible case: non-U.S. person performing activities in the U.S.
+        if (request.LocationCertification == CreatorLocationCertification.NonUSPersonInsideUS)
+        {
+            await _creatorService.UpdateOnboardingStatusAsync(creator.Id, CreatorOnboardingStatus.Ineligible);
+            _logger.LogInformation("Creator {CreatorId} for user {UserId} marked as Ineligible - non-U.S. person performing activities in the U.S.", 
+                creator.Id, user.Id);
+            return Ok(new StartOnboardingResponse
+            {
+                Success = true,
+                IsActive = false,
+                TaxFormPending = false,
+                IsIneligible = true
+            });
         }
 
         // Update creator with PayPal email, affirmation, and set OnboardingStatus to Completed.
@@ -583,6 +616,14 @@ public class StartOnboardingRequest
     /// Whether the user affirms they have a valid PayPal account in good standing.
     /// </summary>
     public bool PayPalAccountAffirmed { get; set; }
+    /// <summary>
+    /// The creator's location certification selection for tax eligibility purposes.
+    /// </summary>
+    public CreatorLocationCertification LocationCertification { get; set; }
+    /// <summary>
+    /// Whether the creator has accepted the acknowledgment checkbox.
+    /// </summary>
+    public bool AcknowledgmentAccepted { get; set; }
 }
 
 public class StartOnboardingResponse
@@ -590,6 +631,7 @@ public class StartOnboardingResponse
     public bool Success { get; set; }
     public bool IsActive { get; set; }
     public bool TaxFormPending { get; set; }
+    public bool IsIneligible { get; set; }
 }
 
 public class CompleteOnboardingRequest

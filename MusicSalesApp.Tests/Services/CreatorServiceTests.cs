@@ -235,6 +235,78 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region UpdateLocationCertificationAsync Tests
+
+    [Test]
+    public async Task UpdateLocationCertificationAsync_StoresAttestationData()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "attest@test.com", Email = "attest@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.NotStarted,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.UpdateLocationCertificationAsync(
+            creator.Id, CreatorLocationCertification.USPerson, true);
+
+        // Assert
+        Assert.That(result.LocationCertification, Is.EqualTo(CreatorLocationCertification.USPerson));
+        Assert.That(result.AcknowledgmentAccepted, Is.True);
+        Assert.That(result.AcknowledgmentDateTimeUtc, Is.Not.Null);
+
+        // Verify persistence
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.LocationCertification, Is.EqualTo(CreatorLocationCertification.USPerson));
+        Assert.That(saved.AcknowledgmentAccepted, Is.True);
+        Assert.That(saved.AcknowledgmentDateTimeUtc, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task UpdateLocationCertificationAsync_NonUSPersonInsideUS_StoresCorrectly()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "nonus@test.com", Email = "nonus@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.NotStarted,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.UpdateLocationCertificationAsync(
+            creator.Id, CreatorLocationCertification.NonUSPersonInsideUS, true);
+
+        // Assert
+        Assert.That(result.LocationCertification, Is.EqualTo(CreatorLocationCertification.NonUSPersonInsideUS));
+        Assert.That(result.AcknowledgmentAccepted, Is.True);
+    }
+
+    [Test]
+    public void UpdateLocationCertificationAsync_ThrowsForInvalidCreatorId()
+    {
+        // Act & Assert
+        Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.UpdateLocationCertificationAsync(9999, CreatorLocationCertification.USPerson, true));
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

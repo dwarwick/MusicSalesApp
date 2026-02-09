@@ -524,4 +524,28 @@ public class CreatorService : ICreatorService
             // Don't throw - we still want to mark the song as inactive even if storage deletion fails
         }
     }
+
+    /// <inheritdoc />
+    public async Task<Creator> UpdateLocationCertificationAsync(int creatorId, CreatorLocationCertification locationCertification, bool acknowledgmentAccepted)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        creator.LocationCertification = locationCertification;
+        creator.AcknowledgmentAccepted = acknowledgmentAccepted;
+        creator.AcknowledgmentDateTimeUtc = DateTime.UtcNow;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated location certification for creator {CreatorId}: {Certification}, Acknowledgment: {Acknowledged}",
+            creatorId, locationCertification, acknowledgmentAccepted);
+
+        return creator;
+    }
 }

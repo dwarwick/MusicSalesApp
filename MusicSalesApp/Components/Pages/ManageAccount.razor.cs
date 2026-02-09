@@ -71,6 +71,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string _stopSellingConfirmEmail = string.Empty;
     protected bool _resendingTaxForm = false;
     
+    // Creator attestation fields
+    protected string _locationCertification = "None";
+    protected bool _acknowledgmentAccepted = false;
+    
     // Creator profile editing
     protected string _editCreatorDisplayName = string.Empty;
     protected string _editCreatorBio = string.Empty;
@@ -81,7 +85,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     /// <summary>
     /// Returns true if the user can start the creator onboarding process.
     /// </summary>
-    protected bool CanStartOnboarding => !string.IsNullOrWhiteSpace(_creatorPayPalEmail) && _paypalAccountAffirmed;
+    protected bool CanStartOnboarding => !string.IsNullOrWhiteSpace(_creatorPayPalEmail) 
+        && _paypalAccountAffirmed 
+        && _locationCertification != "None"
+        && _acknowledgmentAccepted;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
@@ -860,12 +867,33 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 return;
             }
 
+            // Validate location certification
+            if (_locationCertification == "None")
+            {
+                _errorMessage = "Please select a creator location and tax certification option.";
+                _startingOnboarding = false;
+                return;
+            }
+
+            // Validate acknowledgment
+            if (!_acknowledgmentAccepted)
+            {
+                _errorMessage = "Please accept the acknowledgment to proceed.";
+                _startingOnboarding = false;
+                return;
+            }
+
+            // Parse the location certification enum value
+            var locationCertEnum = Enum.Parse<CreatorLocationCertification>(_locationCertification);
+
             var response = await Http.PostAsJsonAsync("api/creator/start-onboarding", new
             {
                 DisplayName = _creatorDisplayName,
                 Bio = _creatorBio,
                 PayPalEmail = _creatorPayPalEmail,
-                PayPalAccountAffirmed = _paypalAccountAffirmed
+                PayPalAccountAffirmed = _paypalAccountAffirmed,
+                LocationCertification = (int)locationCertEnum,
+                AcknowledgmentAccepted = _acknowledgmentAccepted
             });
 
             if (response.IsSuccessStatusCode)
@@ -873,19 +901,26 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 var result = await response.Content.ReadFromJsonAsync<StartCreatorOnboardingResponse>();
                 if (result != null && result.Success)
                 {
-                    if (result.IsActive)
+                    if (result.IsIneligible)
+                    {
+                        _errorMessage = "At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.";
+                        await LoadCreatorStatus();
+                    }
+                    else if (result.IsActive)
                     {
                         _successMessage = "Congratulations! Your creator account is now active. You can start uploading music!";
+                        await LoadCreatorStatus();
                     }
                     else if (result.TaxFormPending)
                     {
                         _successMessage = "Your PayPal email has been confirmed! Please complete your tax form to activate your creator account. Check your email for a link from TaxBandits.";
+                        await LoadCreatorStatus();
                     }
                     else
                     {
                         _successMessage = "Your creator signup is being processed. Please check back soon.";
+                        await LoadCreatorStatus();
                     }
-                    await LoadCreatorStatus();
                 }
                 else
                 {
@@ -1169,6 +1204,7 @@ public class StartCreatorOnboardingResponse
     public bool Success { get; set; }
     public bool IsActive { get; set; }
     public bool TaxFormPending { get; set; }
+    public bool IsIneligible { get; set; }
 }
 
 public class CompleteCreatorOnboardingResponse
