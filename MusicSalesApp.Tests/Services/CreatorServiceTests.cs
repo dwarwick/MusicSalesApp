@@ -84,6 +84,7 @@ public class CreatorServiceTests
 
         // Assert
         Assert.That(result.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.NotStarted));
         Assert.That(result.PayPalEmail, Is.EqualTo("new@paypal.com"));
         Assert.That(result.PayPalAccountAffirmed, Is.True);
         Assert.That(result.PaymentsReceivable, Is.True);
@@ -95,6 +96,42 @@ public class CreatorServiceTests
         var saved = await verifyContext.Creators.FindAsync(creator.Id);
         Assert.That(saved!.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed),
             "OnboardingStatus should be Completed in the database after reset");
+        Assert.That(saved.TaxFormStatus, Is.EqualTo(TaxFormStatus.NotStarted),
+            "TaxFormStatus should be reset to NotStarted after re-signup");
+    }
+
+    [Test]
+    public async Task ResetCreatorOnboardingAsync_ResetsTaxFormStatusFromCompleted()
+    {
+        // Arrange — returning creator who previously completed tax form
+        var user = new ApplicationUser { UserName = "returning@test.com", Email = "returning@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = false,
+            PayPalEmail = "old@paypal.com",
+            PayPalAccountAffirmed = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ResetCreatorOnboardingAsync(creator.Id, "new@paypal.com", true);
+
+        // Assert — TaxFormStatus must be reset so creator goes through TaxBandits email flow again
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.NotStarted),
+            "TaxFormStatus must be reset to NotStarted so the TaxBandits email is sent again");
+        Assert.That(result.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+
+        // Verify persistence
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.TaxFormStatus, Is.EqualTo(TaxFormStatus.NotStarted));
     }
 
     [Test]
