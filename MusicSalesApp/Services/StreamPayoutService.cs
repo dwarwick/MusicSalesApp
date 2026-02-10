@@ -420,13 +420,8 @@ public class StreamPayoutService : IStreamPayoutService
             using var httpClient = new HttpClient();
             httpClient.BaseAddress = new Uri(baseUrl);
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            httpClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
+            httpClient.DefaultRequestHeaders.Add("Prefer", "return=representation");            
             
-            if (!string.IsNullOrWhiteSpace(bnCode))
-            {
-                httpClient.DefaultRequestHeaders.Add("PayPal-Partner-Attribution-Id", bnCode);
-            }
-
             var jsonContent = System.Text.Json.JsonSerializer.Serialize(payoutRequest);
             var content = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
 
