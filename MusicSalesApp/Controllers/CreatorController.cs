@@ -99,7 +99,7 @@ public class CreatorController : ControllerBase
         // Validate that the user has affirmed they have a valid PayPal account
         if (!request.PayPalAccountAffirmed)
         {
-            return BadRequest("You must affirm that you have a valid PayPal account in good standing to receive royalty payments.");
+            return BadRequest("You must affirm that you have a valid PayPal account in good standing to receive payments for streams.");
         }
 
         // Validate location certification

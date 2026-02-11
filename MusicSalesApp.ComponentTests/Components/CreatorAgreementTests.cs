@@ -64,12 +64,12 @@ public class CreatorAgreementTests : BUnitTestBase
     }
 
     [Test]
-    public void CreatorAgreement_ContainsRoyaltiesAndPayouts()
+    public void CreatorAgreement_ContainsCompensationAndPayouts()
     {
         // Act
         var cut = TestContext.Render<CreatorAgreement>();
 
-        // Assert - Verify royalties section
+        // Assert - Verify compensation section
         Assert.That(cut.Markup, Does.Contain("Creator Compensation and Payouts"));
         Assert.That(cut.Markup, Does.Contain("30 seconds"));
         Assert.That(cut.Markup, Does.Contain("weekly"));

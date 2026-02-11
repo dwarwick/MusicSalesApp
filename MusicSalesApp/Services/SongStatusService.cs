@@ -228,7 +228,7 @@ public class SongStatusService : ISongStatusService
                     <li>Your song will no longer appear in the media library</li>
                     <li>Your song has been removed from all user playlists</li>
                     <li>Your song cannot be played on the platform</li>
-                    <li>You will not earn royalties for streams while the song is disabled</li>
+                    <li>You will not earn compensation for streams while the song is disabled</li>
                 </ul>
                 <h3>Questions or Concerns?</h3>
                 <p>If you believe this action was taken in error, or if you would like to discuss this decision, please contact our customer service team:</p>
@@ -295,7 +295,7 @@ public class SongStatusService : ISongStatusService
                     <li>Your song is now visible in the media library</li>
                     <li>Users can add your song to their playlists</li>
                     <li>Your song can be played on the platform</li>
-                    <li>You will earn royalties for streams of this song</li>
+                    <li>You will earn compensation for streams of this song</li>
                 </ul>
                 <h3>Questions or Concerns?</h3>
                 <p>If you have any questions, please contact our customer service team:</p>

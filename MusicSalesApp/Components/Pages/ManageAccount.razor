@@ -83,11 +83,11 @@
             <SfCard CssClass="mb-4">
                 <CardHeader Title="Payout Email Address" />
                 <CardContent>
-                    <p class="mb-3">This email will be used to send stream royalty payouts and other creator payments. It may be different from your login email.</p>
+                    <p class="mb-3">This email will be used to send stream payouts. It may be different from your login email.</p>
                     <div class="mb-3">
                         <label for="paypalEmail" class="e-label">Payout Email Address</label>
                         <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
-                        <small class="form-text">Enter the email address where you want to receive royalty payments.</small>
+                        <small class="form-text">Enter the email address where you want to receive payments.</small>
                     </div>
                     <SfButton IsPrimary="true" Content="Save Payout Email" OnClick="SavePayPalEmail" />
                 </CardContent>
@@ -230,14 +230,14 @@
                     {
                         <div class="creator-description">
                             <h4>Share Your Music on StreamTunes!</h4>
-                            <p>Join our community of artists and start earning royalties from your music streams.</p>
+                            <p>Join our community of artists and start earning compensation from your music streams.</p>
                             
                             <div class="creator-benefits mt-3">
                                 <h5>Benefits of becoming a creator:</h5>
                                 <ul>
                                     <li>Upload your original music to our streaming platform</li>
                                     <li>Reach a global audience of music lovers</li>
-                                    <li>Earn royalties for every stream of your music</li>
+                                    <li>Earn compensation for every stream of your music</li>
                                     <li>Get paid directly to your PayPal account</li>
                                 </ul>
                             </div>
@@ -245,7 +245,7 @@
                             <div class="creator-requirements mt-3">
                                 <h5>Requirements:</h5>
                                 <ul>
-                                    <li>A valid PayPal account in good standing to receive royalty payments</li>
+                                    <li>A valid PayPal account in good standing to receive stream payments</li>
                                     <li>Complete tax form (W-9/W-8) for tax reporting</li>
                                     <li>Original music that you have the rights to distribute</li>
                                     <li>Agreement to our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a></li>
@@ -253,7 +253,7 @@
                             </div>
 
                             <div class="mt-3">
-                                <p><strong>How You Earn:</strong> You earn royalties based on the number of qualifying streams (30+ seconds of continuous playback). Your royalty rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
+                                <p><strong>How You Earn:</strong> You earn based on the number of qualifying streams (30+ seconds of continuous playback). Your pay rate is set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
                             </div>
 
                             <div class="creator-signup-form mt-4">                               
@@ -272,16 +272,16 @@
                                 <div class="mb-3">
                                     <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
                                     <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive royalty payments.</small>
+                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive payments.</small>
                                 </div>
 
                                 <div class="mb-3">
                                     <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
-                                    <span class="ms-2">I affirm that I have a valid PayPal account in good standing that can receive payments. I understand that if my PayPal account is not valid or cannot receive payments, I will not receive royalty payouts. StreamTunes is not responsible for ensuring my PayPal account can receive payments.</span>
+                                    <span class="ms-2">I affirm that I have a valid PayPal account in good standing that can receive payments. I understand that if my PayPal account is not valid or cannot receive payments, I will not receive payouts. StreamTunes is not responsible for ensuring my PayPal account can receive payments.</span>
                                 </div>
 
                                 <div class="alert alert-warning mt-3">
-                                    <strong>Important:</strong> You only need a personal PayPal account to receive royalty payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your royalty payments may fail and StreamTunes is not responsible for recovering failed payments.
+                                    <strong>Important:</strong> You only need a personal PayPal account to receive payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your payments may fail and StreamTunes is not responsible for recovering failed payments.
                                 </div>
 
                                 <div class="creator-eligibility mt-4">
@@ -342,7 +342,7 @@
                             <div class="onboarding-section mb-4">
                                 <h5>1. PayPal Account</h5>
                                 <p class="text-success"><strong>Status: Confirmed ✓</strong></p>
-                                <p>You have confirmed that you have a valid PayPal account to receive royalty payments.</p>
+                                <p>You have confirmed that you have a valid PayPal account to receive payments.</p>
                             </div>
                             
                             <!-- Tax Form Status -->
@@ -432,7 +432,7 @@
                 <CardContent>
                     <div class="creator-active-info">
                         <p class="text-success"><strong>✓ You are an active creator!</strong></p>
-                        <p>You can upload music to StreamTunes and earn royalties from streams.</p>
+                        <p>You can upload music to StreamTunes and earn compensation from streams.</p>
                         
                         <div class="mt-3">
                             <div class="mb-3">

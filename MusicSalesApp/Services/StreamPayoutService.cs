@@ -62,6 +62,13 @@ public class StreamPayoutService : IStreamPayoutService
 #if DEBUG
             TransactionDate = new DateTime(2025, 12, 15);
 #endif
+            // check if the domain is davidtest.xyz and if so, set the TransactionDate to a fixed date for testing purposes
+            var baseUrl = _configuration["BaseUrl"] ?? _configuration["BaseUrl"] ?? "";
+            if (baseUrl.Contains("davidtest.xyz", StringComparison.OrdinalIgnoreCase))
+            {
+                TransactionDate = new DateTime(2025, 12, 15);
+            }
+
 
             foreach (var creator in creators)
             {
