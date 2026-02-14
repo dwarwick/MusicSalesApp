@@ -115,9 +115,9 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) || 
-                string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
+                string.IsNullOrWhiteSpace(userToken))
             {
-                var errorMsg = "TaxBandits configuration is incomplete. Please check ClientId, ClientSecret, UserToken, and BusinessId.";
+                var errorMsg = "TaxBandits configuration is incomplete. Please check ClientId, ClientSecret, UserToken.";
                 _logger.LogError(errorMsg);
                 response.Success = false;
                 response.ErrorMessage = errorMsg;
