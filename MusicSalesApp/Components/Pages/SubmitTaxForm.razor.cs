@@ -30,15 +30,20 @@ public partial class SubmitTaxFormModel : BlazorBase
                 }
 
                 // Get the transient token and configuration from the server
+                Logger.LogInformation("Fetching tax form token from API");
                 var response = await Http.GetFromJsonAsync<TaxFormTokenResponse>("api/creator/tax-form-token");
 
                 if (response == null || !response.Success)
                 {
+                    Logger.LogWarning("Tax form token request failed: {Error}", response?.ErrorMessage ?? "null response");
                     _errorMessage = response?.ErrorMessage ?? "Failed to load tax form. Please return to your account page and try again.";
                     _loading = false;
                     await InvokeAsync(StateHasChanged);
                     return;
                 }
+
+                Logger.LogInformation("Tax form token received successfully. PayeeRef: {PayeeRef}, BusinessId: {BusinessId}, UseSandbox: {UseSandbox}",
+                    response.PayeeRef, response.BusinessId, response.UseSandbox);
 
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
@@ -47,6 +52,7 @@ public partial class SubmitTaxFormModel : BlazorBase
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SubmitTaxForm.razor.js");
                 
                 var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+                Logger.LogInformation("Initializing TaxBandits Drop-in UI with return URL: {ReturnUrl}", $"{baseUrl}/manage-account");
                 await _jsModule.InvokeVoidAsync("initTaxForm",
                     response.TransientToken,
                     response.PayeeRef,

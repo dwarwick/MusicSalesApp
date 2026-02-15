@@ -1,6 +1,7 @@
 /**
  * TaxBandits Drop-in UI integration for embedded W-9/W-8 tax form.
- * Loads the TaxBandits script dynamically and initializes the form.
+ * Loads the TaxBandits dropinWhCertificate.js script dynamically and initializes the form.
+ * See: https://developer.taxbandits.com/docs/WhCertificate/Authentication_Setup
  */
 
 let dotNetRef = null;
@@ -12,23 +13,32 @@ let dotNetRef = null;
  */
 function loadTaxBanditsScript(useSandbox) {
     return new Promise((resolve, reject) => {
-        // Check if already loaded
-        if (typeof LoadFormWhCertificate === 'function') {
+        // Check if loadFormWH is already available from a previous load
+        if (typeof loadFormWH === 'function') {
+            console.log('[TaxForm] TaxBandits script already loaded');
             resolve();
             return;
         }
-        const script = document.createElement('script');
-        script.src = useSandbox
+        const scriptUrl = useSandbox
             ? 'https://js.taxbandits.io/SB/Web/Dropin/v1.0.0/dropinWhCertificate.js'
             : 'https://js.taxbandits.io/Web/Dropin/v1.0.0/dropinWhCertificate.js';
-        script.onload = resolve;
-        script.onerror = () => reject(new Error('Failed to load TaxBandits script'));
+        console.log('[TaxForm] Loading TaxBandits script from:', scriptUrl);
+        const script = document.createElement('script');
+        script.src = scriptUrl;
+        script.onload = () => {
+            console.log('[TaxForm] TaxBandits script loaded successfully');
+            resolve();
+        };
+        script.onerror = () => {
+            console.error('[TaxForm] Failed to load TaxBandits script from:', scriptUrl);
+            reject(new Error('Failed to load TaxBandits script'));
+        };
         document.head.appendChild(script);
     });
 }
 
 /**
- * Initializes the TaxBandits Drop-in UI tax form.
+ * Initializes the TaxBandits Drop-in UI tax form using loadFormWH().
  * @param {string} transientToken - The transient token from the server.
  * @param {string} payeeRef - The PayeeRef (email) for the recipient.
  * @param {string} businessId - The TaxBandits BusinessId.
@@ -39,25 +49,42 @@ function loadTaxBanditsScript(useSandbox) {
 export async function initTaxForm(transientToken, payeeRef, businessId, useSandbox, returnUrl, dotNetObjRef) {
     dotNetRef = dotNetObjRef;
 
+    console.log('[TaxForm] Initializing tax form with:',
+        'payeeRef:', payeeRef,
+        'businessId:', businessId,
+        'useSandbox:', useSandbox,
+        'returnUrl:', returnUrl,
+        'tokenLength:', transientToken ? transientToken.length : 0);
+
     try {
         await loadTaxBanditsScript(useSandbox);
 
         // Listen for messages from the TaxBandits iframe
         window.addEventListener('message', handleTaxBanditsMessage);
 
-        // Call the TaxBandits LoadFormWhCertificate function
-        LoadFormWhCertificate({
-            TransientToken: transientToken,
+        // Build the payload per TaxBandits API documentation
+        const payLoad = {
             Requester: {
                 BusinessId: businessId
             },
-            PayeeRef: payeeRef,
-            IsTINMatching: true,
-            ReturnUrl: returnUrl,
-            CancelUrl: returnUrl
-        }, 'taxFormContainer');
+            Recipient: {
+                PayeeRef: payeeRef,
+                IsTINMatching: true
+            },
+            RedirectUrls: {
+                ReturnUrl: returnUrl,
+                CancelUrl: returnUrl
+            }
+        };
+
+        console.log('[TaxForm] Calling loadFormWH with payload:', JSON.stringify(payLoad));
+
+        // loadFormWH(transientToken, payLoad) is the API from dropinWhCertificate.js
+        await loadFormWH(transientToken, payLoad);
+
+        console.log('[TaxForm] loadFormWH completed successfully');
     } catch (error) {
-        console.error('Error initializing TaxBandits form:', error);
+        console.error('[TaxForm] Error initializing TaxBandits form:', error);
     }
 }
 
@@ -69,6 +96,7 @@ function handleTaxBanditsMessage(event) {
     if (event.data && dotNetRef) {
         try {
             const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            console.log('[TaxForm] Received message from iframe:', JSON.stringify(data));
             if (data.status === 'completed' || data.status === 'cancelled') {
                 dotNetRef.invokeMethodAsync('OnTaxFormComplete', data.status);
             }
