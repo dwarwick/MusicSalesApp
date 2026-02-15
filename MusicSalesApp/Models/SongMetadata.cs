@@ -79,7 +79,7 @@ public class SongMetadata
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// The number of times this song has been streamed (played for at least 30 seconds)
+    /// The number of times this song has been streamed (played for at least the creator's configured continuous seconds)
     /// </summary>
     public int NumberOfStreams { get; set; }
 

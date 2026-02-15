@@ -1,5 +1,5 @@
 // Stream tracking state
-const STREAM_THRESHOLD_SECONDS = 30;
+let STREAM_THRESHOLD_SECONDS = 30;
 const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
 let streamTracker = {
     songMetadataId: 0,
@@ -9,8 +9,11 @@ let streamTracker = {
     isSeeking: false
 };
 
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
     if (!audioElement) return;
+
+    // Update stream threshold from server-provided value
+    STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
 
     // Reset stream tracking for new song
     streamTracker = {

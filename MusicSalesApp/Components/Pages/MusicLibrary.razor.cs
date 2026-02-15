@@ -70,6 +70,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private bool _needsJsInit;
     private bool _isAuthenticated;
     protected bool _hasActiveSubscription;
+    private int _defaultStreamQualifyingSeconds = 30;
+    private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
 
@@ -102,6 +104,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             await LoadSubscriptionStatus();
         }
         
+        // Load default stream qualifying seconds for songs without a creator
+        _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+
         // Then load files - this will set _loading to false
         await LoadFiles();
     }
@@ -130,7 +135,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
             var isRestricted = IsCurrentPlayingTrackRestricted();
             var songMetadataId = GetCurrentPlayingSongMetadataId();
-            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS, songMetadataId);
+            var streamQualifyingSeconds = GetCurrentPlayingStreamQualifyingSeconds();
+            await _jsModule.InvokeVoidAsync("initCardAudioPlayer", _activeAudioElement, _playingCardId, _dotNetRef, isRestricted, PREVIEW_DURATION_SECONDS, songMetadataId, streamQualifyingSeconds);
             await _jsModule.InvokeVoidAsync("setupCardProgressBarDrag", _activeProgressBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
             await _jsModule.InvokeVoidAsync("setupCardVolumeBarDrag", _activeVolumeBarElement, _activeAudioElement, _playingCardId, _dotNetRef);
 
@@ -313,6 +319,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _artistInfoMap[audioFile.Name] = GetArtistDisplayInfo(songMeta);
                     // Store genre
                     _genreMap[audioFile.Name] = songMeta.Genre;
+                    // Store stream qualifying seconds from creator
+                    _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
                 }
             }
         }
@@ -605,6 +613,19 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Gets the stream qualifying seconds for the currently playing track's creator.
+    /// </summary>
+    protected int GetCurrentPlayingStreamQualifyingSeconds()
+    {
+        if (!string.IsNullOrEmpty(_playingFileName) && _streamQualifyingSecondsMap.TryGetValue(_playingFileName, out var seconds))
+        {
+            return seconds;
+        }
+
+        return _defaultStreamQualifyingSeconds;
     }
 
     protected async Task PlayCard(string fileName)

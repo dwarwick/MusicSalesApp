@@ -81,6 +81,7 @@ namespace MusicSalesApp.Components.Pages
         private int? _lastLoadedCreatorId;
         private string _lastLoadedGenreName;
         protected bool _hasActiveSubscription;
+        private int _defaultStreamQualifyingSeconds = 30;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
 
@@ -153,6 +154,9 @@ namespace MusicSalesApp.Components.Pages
                 
                 try
                 {
+                    // Load default stream qualifying seconds for songs without a creator
+                    _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+
                     if (_isGenreMode)
                     {
                         _lastLoadedGenreName = GenreName;
@@ -192,7 +196,7 @@ namespace MusicSalesApp.Components.Pages
                 _dotNetRef = DotNetObjectReference.Create(this);
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/PlaylistPlayer.razor.js");
 
-                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId());
+                await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
                 await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
@@ -1197,6 +1201,19 @@ namespace MusicSalesApp.Components.Pages
             return 0;
         }
 
+        protected int GetCurrentTrackStreamQualifyingSeconds()
+        {
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return _defaultStreamQualifyingSeconds;
+            
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.Creator != null)
+            {
+                return metadata.Creator.StreamQualifyingSeconds;
+            }
+            
+            return _defaultStreamQualifyingSeconds;
+        }
+
         /// <summary>
         /// Gets a track stream URL by index. Uses pre-fetched URLs if available.
         /// </summary>
@@ -1293,7 +1310,7 @@ namespace MusicSalesApp.Components.Pages
 
             if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
             {
-                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId());
+                await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
                 _isPlaying = true;
             }
 
@@ -1382,7 +1399,7 @@ namespace MusicSalesApp.Components.Pages
 
                 if (_jsModule != null && !string.IsNullOrWhiteSpace(_streamUrl))
                 {
-                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId());
+                    await _jsModule.InvokeVoidAsync("changeTrack", _audioElement, _streamUrl, IsCurrentTrackRestricted(), GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
                     _isPlaying = true; // Set to true since changeTrack auto-plays the next song
                 }
                 await InvokeAsync(StateHasChanged);

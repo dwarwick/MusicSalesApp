@@ -627,8 +627,13 @@ public class StreamPayoutService : IStreamPayoutService
             <p><strong>Tax Withheld:</strong> <span style='color: #dc3545;'>-${totalWithheldAmount:F2}</span></p>");
         }
 
+        var payRatePer1000 = creator.StreamPayRate * 1000;
+
         body.Append($@"
             <p><strong>Net Amount Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalNetAmount:F2}</span></p>
+            <hr style='border: none; border-top: 1px solid #dee2e6; margin: 15px 0;' />
+            <p><strong>Stream Definition:</strong> {creator.StreamQualifyingSeconds} seconds of continuous playback</p>
+            <p><strong>Pay Rate:</strong> ${payRatePer1000:F2} USD per 1,000 streams</p>
         </div>
         ");
 

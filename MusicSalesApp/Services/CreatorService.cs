@@ -69,12 +69,16 @@ public class CreatorService : ICreatorService
         // Get the stream pay rate from settings (default $5 per 1000 streams)
         var streamPayRate = await _appSettingsService.GetStreamPayRateAsync();
 
+        // Get the stream qualifying seconds from settings (default 30 seconds)
+        var streamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+
         var creator = new Creator
         {
             UserId = userId,
             DisplayName = displayName,
             Bio = bio,
             StreamPayRate = streamPayRate, // Set from app settings
+            StreamQualifyingSeconds = streamQualifyingSeconds, // Set from app settings
             OnboardingStatus = CreatorOnboardingStatus.NotStarted,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -83,8 +87,8 @@ public class CreatorService : ICreatorService
         context.Creators.Add(creator);
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Created creator record for user {UserId} with stream pay rate ${StreamRate:F6} per stream", 
-            userId, streamPayRate);
+        _logger.LogInformation("Created creator record for user {UserId} with stream pay rate ${StreamRate:F6} per stream, qualifying seconds: {Seconds}", 
+            userId, streamPayRate, streamQualifyingSeconds);
         return creator;
     }
 

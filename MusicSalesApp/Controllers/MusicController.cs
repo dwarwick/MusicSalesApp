@@ -75,7 +75,7 @@ namespace MusicSalesApp.Controllers
         }
 
         /// <summary>
-        /// Records a stream for a song. Called when a song has been played for at least 30 continuous seconds.
+        /// Records a stream for a song. Called when a song has been played for at least the creator's configured continuous seconds.
         /// </summary>
         /// <param name="songMetadataId">The ID of the song metadata record.</param>
         /// <returns>The updated stream count.</returns>

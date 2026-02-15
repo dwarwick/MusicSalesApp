@@ -5,7 +5,7 @@ let playerState = {
 };
 
 // Stream tracking state for album player
-const STREAM_THRESHOLD_SECONDS = 30;
+let STREAM_THRESHOLD_SECONDS = 30;
 const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
 let streamTracker = {
     songMetadataId: 0,
@@ -15,12 +15,15 @@ let streamTracker = {
     isSeeking: false
 };
 
-export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
+export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
     if (!audioElement) return;
 
     // Store initial state
     playerState.isRestricted = isRestricted;
     playerState.maxDuration = maxDuration;
+
+    // Update stream threshold from server-provided value
+    STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
 
     // Reset stream tracking for new song
     streamTracker = {
@@ -159,11 +162,16 @@ export function setTrackSource(audioElement, src) {
 // Change the track source for album playback (used when transitioning to next/previous track)
 // isRestricted parameter updates the player state for the new track
 // songMetadataId updates the stream tracking for the new track
-export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0) {
+export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0, streamThresholdSeconds = null) {
     if (audioElement) {
         // Update restriction state if provided
         if (isRestricted !== null) {
             playerState.isRestricted = isRestricted;
+        }
+
+        // Update stream threshold if provided
+        if (streamThresholdSeconds !== null) {
+            STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
         }
 
         // Reset stream tracking for the new track

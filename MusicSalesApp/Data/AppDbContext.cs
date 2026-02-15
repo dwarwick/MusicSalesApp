@@ -259,6 +259,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 Value = "3.99",
                 Description = "Monthly subscription price in USD",
                 UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new AppSettings
+            {
+                Id = 2,
+                Key = "StreamQualifyingSeconds",
+                Value = "30",
+                Description = "Number of continuous seconds of playback that qualifies as a stream",
+                UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
 

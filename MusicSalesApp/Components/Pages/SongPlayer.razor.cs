@@ -35,6 +35,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _isAuthenticated;
     protected int _streamCount;
     private Models.SongMetadata _songMetadata;
+    private int _defaultStreamQualifyingSeconds = 30;
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
@@ -75,7 +76,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
             _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayer.razor.js");
-            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId());
+            await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), GetStreamQualifyingSeconds());
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
         }
@@ -123,6 +124,9 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
         try
         {
+            // Load default stream qualifying seconds for songs without a creator
+            _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+
             // Check authentication status
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
@@ -373,6 +377,11 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected int GetSongMetadataId()
     {
         return _songMetadata?.Id ?? 0;
+    }
+
+    protected int GetStreamQualifyingSeconds()
+    {
+        return _songMetadata?.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
     }
 
     /// <summary>

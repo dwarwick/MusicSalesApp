@@ -45,4 +45,16 @@ public interface IAppSettingsService
     /// </summary>
     /// <param name="rate">The stream pay rate as a decimal (0.005 = $5 per 1000 streams).</param>
     Task SetStreamPayRateAsync(decimal rate);
+
+    /// <summary>
+    /// Gets the number of continuous seconds of playback that qualifies as a stream.
+    /// </summary>
+    /// <returns>The stream qualifying seconds, or the default value (30) if not set.</returns>
+    Task<int> GetStreamQualifyingSecondsAsync();
+
+    /// <summary>
+    /// Sets the number of continuous seconds of playback that qualifies as a stream.
+    /// </summary>
+    /// <param name="seconds">The number of seconds.</param>
+    Task SetStreamQualifyingSecondsAsync(int seconds);
 }

@@ -4,11 +4,14 @@
 const cardPlayers = new Map();
 
 // Stream tracking state (per card)
-const STREAM_THRESHOLD_SECONDS = 30;
+let STREAM_THRESHOLD_SECONDS = 30;
 const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
 
-export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0) {
+export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
     if (!audioElement) return;
+
+    // Update stream threshold from server-provided value
+    STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
 
     // Store reference with restriction state and stream tracking
     cardPlayers.set(cardId, { 
