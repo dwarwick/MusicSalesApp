@@ -829,10 +829,10 @@ public class TaxBanditsServiceTests
     #region GetTransientTokenAsync Tests
 
     [Test]
-    public void GetTransientTokenAsync_ThrowsArgumentException_WhenOriginsIsNull()
+    public void GetTransientTokenAsync_ThrowsArgumentNullException_WhenOriginsIsNull()
     {
         // Act & Assert
-        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+        var ex = Assert.ThrowsAsync<ArgumentNullException>(async () =>
             await _service.GetTransientTokenAsync(null!));
 
         Assert.That(ex.ParamName, Is.EqualTo("origins"));

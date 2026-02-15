@@ -996,7 +996,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
         List<string> origins,
         CancellationToken cancellationToken = default)
     {
-        if (origins == null || origins.Count == 0) throw new ArgumentException("At least one origin is required.", nameof(origins));
+        if (origins == null) throw new ArgumentNullException(nameof(origins));
+        if (origins.Count == 0) throw new ArgumentException("At least one origin is required.", nameof(origins));
 
         _logger.LogInformation("Requesting TaxBandits transient token for Drop-in UI");
 
