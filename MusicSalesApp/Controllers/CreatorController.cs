@@ -424,10 +424,31 @@ public class CreatorController : ControllerBase
         try
         {
             // Get allowed origins from Fido2:Origins configuration
+            // Supports: 
+            //   1. JSON array in appsettings.json: "Origins": ["https://example.com", "https://www.example.com"]
+            //   2. Indexed environment variables: Fido2:Origins:0, Fido2:Origins:1
+            //   3. Comma-separated string fallback: Fido2:Origins = "https://example.com,https://www.example.com"
             var origins = _configuration.GetSection("Fido2:Origins").Get<List<string>>() ?? new List<string>();
+            
+            // Fallback: check if origins is empty but a comma-separated string was provided
             if (origins.Count == 0)
             {
-                _logger.LogError("No origins configured in Fido2:Origins for TaxBandits Drop-in UI");
+                var originsString = _configuration["Fido2:Origins"];
+                if (!string.IsNullOrWhiteSpace(originsString))
+                {
+                    origins = originsString
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToList();
+                    _logger.LogInformation("Parsed {Count} origins from comma-separated string", origins.Count);
+                }
+            }
+            
+            _logger.LogInformation("Configured origins for TaxBandits: {Origins}", string.Join(", ", origins));
+            
+            if (origins.Count == 0)
+            {
+                _logger.LogError("No origins configured in Fido2:Origins for TaxBandits Drop-in UI. " +
+                    "Set as indexed env vars (Fido2:Origins:0, Fido2:Origins:1) or comma-separated (Fido2:Origins=url1,url2)");
                 return StatusCode(500, new TaxFormTokenResponse
                 {
                     Success = false,
