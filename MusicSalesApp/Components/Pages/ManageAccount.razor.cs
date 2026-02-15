@@ -69,7 +69,6 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
     protected string _stopSellingConfirmEmail = string.Empty;
-    protected bool _resendingTaxForm = false;
     
     // Creator attestation fields
     protected string _locationCertification = "None";
@@ -926,8 +925,9 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                     }
                     else if (result.TaxFormPending)
                     {
-                        _successMessage = "Your PayPal email has been confirmed! Please complete your tax form to activate your creator account. Check your email for a link from TaxBandits.";
-                        await LoadCreatorStatus();
+                        // Navigate to the embedded tax form page
+                        NavigationManager.NavigateTo("/submittaxform");
+                        return;
                     }
                     else
                     {
@@ -1021,47 +1021,9 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         }
     }
 
-    protected async Task ResendTaxForm()
+    protected void NavigateToTaxForm()
     {
-        _resendingTaxForm = true;
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            var response = await Http.PostAsync("api/creator/resend-tax-form", null);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<ResendTaxFormResponse>();
-                if (result != null && result.Success)
-                {
-                    _successMessage = result.Message;
-                }
-                else
-                {
-                    _errorMessage = result?.Message ?? "Failed to resend tax form email.";
-                }
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to resend tax form email: {error}";
-            }
-
-            await LoadCreatorStatus();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error resending tax form");
-            _errorMessage = $"Error resending tax form: {ex.Message}";
-        }
-        finally
-        {
-            _resendingTaxForm = false;
-            await InvokeAsync(StateHasChanged);
-        }
+        NavigationManager.NavigateTo("/submittaxform");
     }
 
     protected void NavigateToUpload()
@@ -1226,10 +1188,4 @@ public class CompleteCreatorOnboardingResponse
     public bool IsActive { get; set; }
     public bool PaymentsReceivable { get; set; }
     public bool PrimaryEmailConfirmed { get; set; }
-}
-
-public class ResendTaxFormResponse
-{
-    public bool Success { get; set; }
-    public string Message { get; set; } = string.Empty;
 }

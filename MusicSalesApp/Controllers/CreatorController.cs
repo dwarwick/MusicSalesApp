@@ -165,40 +165,16 @@ public class CreatorController : ControllerBase
         // for returning creators whose OnboardingStatus was Suspended.
         await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
 
-        // Request W-9/W-8 tax form from TaxBandits via email.
-        // The creator must complete the form through the TaxBandits email link,
+        // Store the PayeeRef (email) used for the W-9/W-8 request.
+        // The creator will complete the tax form via the embedded Drop-in UI on the /submittaxform page,
         // and the TaxBandits webhook will set the creator status to Complete.
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
+        }
 
-        try
-        {
-            // Store the PayeeRef (email) used for the W-9 request
-            // Note: user.Email is already validated as non-empty at the start of this method
-            if (!string.IsNullOrWhiteSpace(user.Email))
-            {
-                await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
-            }
-            
-            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, user.Email, baseUrl);
-            if (w9Result.Success)
-            {
-                _logger.LogInformation("W-9/W-8 request initiated for user {UserId}", user.Id);
-                // Update the tax form status to Pending since the request was sent successfully
-                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
-            }
-            else
-            {
-                // Log the error but don't fail the onboarding - admin will be notified via email
-                _logger.LogWarning("W-9/W-8 request failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
-                // Update the tax form status to Failed since the request failed
-                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Failed);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Log the error but don't fail the onboarding - the W-9 can be requested again later
-            _logger.LogError(ex, "Exception while requesting W-9/W-8 for user {UserId}", user.Id);
-        }
+        // Set tax form status to Pending — the user will be redirected to the embedded form page
+        await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
 
         // Reload to get the latest state including tax form status.
         // The creator will NOT be activated here — activation happens only when the
@@ -417,11 +393,11 @@ public class CreatorController : ControllerBase
     }
 
     /// <summary>
-    /// Resends the W-9/W-8 tax form email by deleting the existing incomplete form and requesting a new one.
-    /// This is used when a user abandons the initial form and needs a new email invitation.
+    /// Gets a transient token and configuration for the TaxBandits Drop-in UI embedded tax form.
+    /// The token is valid for 15 minutes and used to load the W-9/W-8 form on the /submittaxform page.
     /// </summary>
-    [HttpPost("resend-tax-form")]
-    public async Task<IActionResult> ResendTaxForm()
+    [HttpGet("tax-form-token")]
+    public async Task<IActionResult> GetTaxFormToken()
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
@@ -445,62 +421,54 @@ public class CreatorController : ControllerBase
             return BadRequest("No email address found for tax form request.");
         }
 
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-
         try
         {
-            // First, delete the incomplete W-9/W-8 form
-            _logger.LogInformation("Deleting incomplete W-9/W-8 for user {UserId}, PayeeRef {PayeeRef}", user.Id, payeeRef);
-            var deleteResult = await _taxBanditsService.DeleteW9Async(payeeRef);
-
-            if (!deleteResult.Success)
+            // Get allowed origins from Fido2:Origins configuration
+            var origins = _configuration.GetSection("Fido2:Origins").Get<List<string>>() ?? new List<string>();
+            if (origins.Count == 0)
             {
-                // Business Logic: We continue with the resend even if delete fails because:
-                // 1. The form might not exist in TaxBandits (user never started it)
-                // 2. The form was already deleted previously
-                // 3. TaxBandits had a transient error
-                // In all cases, requesting a new form is the desired outcome for the user.
-                _logger.LogWarning("W-9/W-8 delete returned error for user {UserId}: {Error}. Proceeding with resend anyway.", 
-                    user.Id, deleteResult.ErrorMessage);
-            }
-            else
-            {
-                _logger.LogInformation("Successfully deleted incomplete W-9/W-8 for user {UserId}", user.Id);
-            }
-
-            // Now request a new W-9/W-8 form
-            var w9Result = await _taxBanditsService.RequestW9ByEmailAsync(user.Id, payeeRef, baseUrl);
-
-            if (w9Result.Success)
-            {
-                _logger.LogInformation("W-9/W-8 resend successful for user {UserId}", user.Id);
-
-                // Update the creator's tax form status to Pending
-                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
-
-                return Ok(new ResendTaxFormResponse
-                {
-                    Success = true,
-                    Message = "A new tax form email has been sent. Please check your inbox."
-                });
-            }
-            else
-            {
-                _logger.LogError("W-9/W-8 resend failed for user {UserId}: {Error}", user.Id, w9Result.ErrorMessage);
-                return StatusCode(500, new ResendTaxFormResponse
+                _logger.LogError("No origins configured in Fido2:Origins for TaxBandits Drop-in UI");
+                return StatusCode(500, new TaxFormTokenResponse
                 {
                     Success = false,
-                    Message = $"Failed to send new tax form email: {w9Result.ErrorMessage}"
+                    ErrorMessage = "Server configuration error: no allowed origins configured."
                 });
             }
+
+            var tokenResult = await _taxBanditsService.GetTransientTokenAsync(origins);
+
+            if (!tokenResult.Success)
+            {
+                _logger.LogError("Failed to get transient token for user {UserId}: {Error}", user.Id, tokenResult.ErrorMessage);
+                return StatusCode(500, new TaxFormTokenResponse
+                {
+                    Success = false,
+                    ErrorMessage = $"Failed to initialize tax form: {tokenResult.ErrorMessage}"
+                });
+            }
+
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+            var businessId = _configuration["TaxBandits:BusinessId"];
+
+            _logger.LogInformation("Tax form token generated for user {UserId}. BusinessId: {BusinessId}, UseSandbox: {UseSandbox}, TokenLength: {TokenLength}",
+                user.Id, businessId, useSandbox, tokenResult.TransientToken?.Length ?? 0);
+
+            return Ok(new TaxFormTokenResponse
+            {
+                Success = true,
+                TransientToken = tokenResult.TransientToken,
+                PayeeRef = payeeRef,
+                BusinessId = businessId,
+                UseSandbox = useSandbox
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception while resending W-9/W-8 for user {UserId}", user.Id);
-            return StatusCode(500, new ResendTaxFormResponse
+            _logger.LogError(ex, "Exception while getting tax form token for user {UserId}", user.Id);
+            return StatusCode(500, new TaxFormTokenResponse
             {
                 Success = false,
-                Message = "An error occurred while resending the tax form email."
+                ErrorMessage = "An error occurred while preparing the tax form."
             });
         }
     }
@@ -619,10 +587,14 @@ public class CreatorListItem
     public DateTime? OnboardedAt { get; set; }
 }
 
-public class ResendTaxFormResponse
+public class TaxFormTokenResponse
 {
     public bool Success { get; set; }
-    public string Message { get; set; } = string.Empty;
+    public string? TransientToken { get; set; }
+    public string? PayeeRef { get; set; }
+    public string? BusinessId { get; set; }
+    public bool UseSandbox { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 public class CreatorSongItem

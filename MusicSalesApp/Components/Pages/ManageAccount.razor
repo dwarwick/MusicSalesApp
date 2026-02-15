@@ -365,16 +365,7 @@
                                 {
                                     <p class="text-warning"><strong>Status: Pending</strong></p>
                                     <p>Please complete your tax form to activate your creator account.</p>
-                                    <p>Check your email for a link from <strong>support.streamtunes@apptaxbandits.com</strong>.</p>
-                                    <p>If you didn't receive the email or need a new one:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Resend Tax Form Email" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
+                                    <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
                                 }
                                 else if (_creatorTaxFormStatus == "TinMatchInProgress")
                                 {
@@ -386,15 +377,8 @@
                                 else if (_creatorTaxFormStatus == "Failed")
                                 {
                                     <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please request a new form:</p>
-                                    @if (!_resendingTaxForm)
-                                    {
-                                        <SfButton Content="Request New Tax Form" OnClick="ResendTaxForm" />
-                                    }
-                                    else
-                                    {
-                                        <p>Sending new email...</p>
-                                    }
+                                    <p>There was an issue with your tax form submission. Please try again:</p>
+                                    <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
                                 }
                                 else
                                 {
