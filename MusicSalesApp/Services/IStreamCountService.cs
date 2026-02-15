@@ -2,8 +2,8 @@ namespace MusicSalesApp.Services;
 
 /// <summary>
 /// Service for tracking and managing song stream counts.
-/// A song counts as streamed when it has been played for at least 30 continuous seconds
-/// without seeking.
+/// A song counts as streamed when it has been played for at least the creator's configured
+/// continuous seconds without seeking.
 /// </summary>
 public interface IStreamCountService
 {

@@ -165,6 +165,14 @@ public abstract class BUnitTestBase
             .Returns(Task.CompletedTask);
         MockAppSettingsService.Setup(x => x.SetSettingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Returns(Task.CompletedTask);
+        MockAppSettingsService.Setup(x => x.GetStreamPayRateAsync())
+            .ReturnsAsync(0.005m);
+        MockAppSettingsService.Setup(x => x.SetStreamPayRateAsync(It.IsAny<decimal>()))
+            .Returns(Task.CompletedTask);
+        MockAppSettingsService.Setup(x => x.GetStreamQualifyingSecondsAsync())
+            .ReturnsAsync(30);
+        MockAppSettingsService.Setup(x => x.SetStreamQualifyingSecondsAsync(It.IsAny<int>()))
+            .Returns(Task.CompletedTask);
 
         // Setup default returns for IPasskeyService methods
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))

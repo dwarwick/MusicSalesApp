@@ -29,6 +29,7 @@ public class CreatorServiceTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockAppSettingsService = new Mock<IAppSettingsService>();
         _mockAppSettingsService.Setup(x => x.GetStreamPayRateAsync()).ReturnsAsync(0.005m);
+        _mockAppSettingsService.Setup(x => x.GetStreamQualifyingSecondsAsync()).ReturnsAsync(30);
 
         var store = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
