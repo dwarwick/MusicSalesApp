@@ -145,7 +145,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             // Build the API request
             var apiUrl = useSandbox
                 ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
-                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/v1.7.3/";
 
             var requestBody = new
             {
