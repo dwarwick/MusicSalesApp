@@ -18,9 +18,12 @@ public class AdminSettingsModel : BlazorBase
     protected decimal? _originalSubscriptionPrice = null;
     protected decimal? _streamPayRateDisplay = null; // Display as per 1000 streams (e.g., 5.00)
     protected decimal? _originalStreamPayRateDisplay = null;
+    protected int _streamQualifyingSeconds = 30;
+    protected int _originalStreamQualifyingSeconds = 30;
 
     protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
-                                   || _streamPayRateDisplay != _originalStreamPayRateDisplay;
+                                   || _streamPayRateDisplay != _originalStreamPayRateDisplay
+                                   || _streamQualifyingSeconds != _originalStreamQualifyingSeconds;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -52,12 +55,16 @@ public class AdminSettingsModel : BlazorBase
         var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
         _streamPayRateDisplay = streamPayRate * 1000;
         _originalStreamPayRateDisplay = _streamPayRateDisplay;
+
+        _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+        _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
     }
 
     protected void CancelChanges()
     {
         _subscriptionPrice = _originalSubscriptionPrice;
         _streamPayRateDisplay = _originalStreamPayRateDisplay;
+        _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
         _validationErrors.Clear();
         _successMessage = null;
         StateHasChanged();
@@ -92,6 +99,16 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Stream pay rate cannot exceed $100 per 1000 streams.");
             }
 
+            if (_streamQualifyingSeconds < 1)
+            {
+                _validationErrors.Add("Stream qualifying seconds must be at least 1.");
+            }
+
+            if (_streamQualifyingSeconds > 300)
+            {
+                _validationErrors.Add("Stream qualifying seconds cannot exceed 300.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
@@ -104,13 +121,17 @@ public class AdminSettingsModel : BlazorBase
             // Save the stream pay rate (convert from per-1000-streams to per-stream)
             await AppSettingsService.SetStreamPayRateAsync(_streamPayRateDisplay!.Value / 1000);
 
+            // Save the stream qualifying seconds
+            await AppSettingsService.SetStreamQualifyingSecondsAsync(_streamQualifyingSeconds);
+
             // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
-            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams";
+            _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
+            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}";
             
-            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams", 
-                _subscriptionPrice.Value, _streamPayRateDisplay.Value);
+            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}", 
+                _subscriptionPrice.Value, _streamPayRateDisplay.Value, _streamQualifyingSeconds);
         }
         catch (Exception ex)
         {

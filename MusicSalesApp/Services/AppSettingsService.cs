@@ -34,6 +34,16 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const decimal DefaultStreamPayRate = 0.005m;
 
+    /// <summary>
+    /// The key used for storing the stream qualifying seconds setting.
+    /// </summary>
+    public const string StreamQualifyingSecondsKey = "StreamQualifyingSeconds";
+
+    /// <summary>
+    /// Default number of continuous seconds of playback that qualifies as a stream.
+    /// </summary>
+    public const int DefaultStreamQualifyingSeconds = 30;
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -147,5 +157,33 @@ public class AppSettingsService : IAppSettingsService
             StreamPayRateKey,
             rate.ToString("F6"),
             "Stream pay rate for creators in USD per stream (0.005 = $5 per 1000 streams)");
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetStreamQualifyingSecondsAsync()
+    {
+        var value = await GetSettingAsync(StreamQualifyingSecondsKey);
+        
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultStreamQualifyingSeconds;
+        }
+
+        if (int.TryParse(value, out var seconds))
+        {
+            return seconds;
+        }
+
+        _logger.LogWarning("Invalid stream qualifying seconds value in database: {Value}. Using default.", value);
+        return DefaultStreamQualifyingSeconds;
+    }
+
+    /// <inheritdoc />
+    public async Task SetStreamQualifyingSecondsAsync(int seconds)
+    {
+        await SetSettingAsync(
+            StreamQualifyingSecondsKey,
+            seconds.ToString(),
+            "Number of continuous seconds of playback that qualifies as a stream");
     }
 }

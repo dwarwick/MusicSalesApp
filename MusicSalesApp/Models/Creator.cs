@@ -86,6 +86,12 @@ public class Creator
     public decimal StreamPayRate { get; set; } = 0.005m;
 
     /// <summary>
+    /// The number of continuous seconds of playback that qualifies as a stream.
+    /// This is set when the creator is onboarded and locked in for the lifetime of the creator account.
+    /// </summary>
+    public int StreamQualifyingSeconds { get; set; } = 30;
+
+    /// <summary>
     /// Display name for the creator (can be different from username).
     /// Maximum 20 characters for display on song cards.
     /// </summary>
