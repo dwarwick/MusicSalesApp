@@ -50,7 +50,6 @@ export async function initTaxForm(transientToken, payeeRef, businessId, useSandb
     dotNetRef = dotNetObjRef;
 
     console.log('[TaxForm] Initializing tax form with:',
-        'payeeRef:', payeeRef,
         'businessId:', businessId,
         'useSandbox:', useSandbox,
         'returnUrl:', returnUrl,
@@ -77,7 +76,7 @@ export async function initTaxForm(transientToken, payeeRef, businessId, useSandb
             }
         };
 
-        console.log('[TaxForm] Calling loadFormWH with payload:', JSON.stringify(payLoad));
+        console.log('[TaxForm] Calling loadFormWH with payload keys:', Object.keys(payLoad));
 
         // loadFormWH(transientToken, payLoad) is the API from dropinWhCertificate.js
         await loadFormWH(transientToken, payLoad);

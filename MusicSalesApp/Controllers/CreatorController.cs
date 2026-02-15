@@ -450,8 +450,8 @@ public class CreatorController : ControllerBase
             var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
             var businessId = _configuration["TaxBandits:BusinessId"];
 
-            _logger.LogInformation("Tax form token generated for user {UserId}. PayeeRef: {PayeeRef}, BusinessId: {BusinessId}, UseSandbox: {UseSandbox}, TokenLength: {TokenLength}",
-                user.Id, payeeRef, businessId, useSandbox, tokenResult.TransientToken?.Length ?? 0);
+            _logger.LogInformation("Tax form token generated for user {UserId}. BusinessId: {BusinessId}, UseSandbox: {UseSandbox}, TokenLength: {TokenLength}",
+                user.Id, businessId, useSandbox, tokenResult.TransientToken?.Length ?? 0);
 
             return Ok(new TaxFormTokenResponse
             {

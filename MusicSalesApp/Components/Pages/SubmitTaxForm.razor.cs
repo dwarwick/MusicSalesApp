@@ -42,8 +42,8 @@ public partial class SubmitTaxFormModel : BlazorBase
                     return;
                 }
 
-                Logger.LogInformation("Tax form token received successfully. PayeeRef: {PayeeRef}, BusinessId: {BusinessId}, UseSandbox: {UseSandbox}",
-                    response.PayeeRef, response.BusinessId, response.UseSandbox);
+                Logger.LogInformation("Tax form token received successfully. BusinessId: {BusinessId}, UseSandbox: {UseSandbox}",
+                    response.BusinessId, response.UseSandbox);
 
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
