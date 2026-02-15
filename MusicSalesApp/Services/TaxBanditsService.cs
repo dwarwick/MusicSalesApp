@@ -990,4 +990,113 @@ public sealed class TaxBanditsService : ITaxBanditsService
 
         return response;
     }
+
+    /// <inheritdoc />
+    public async Task<TransientTokenResponse> GetTransientTokenAsync(
+        List<string> origins,
+        CancellationToken cancellationToken = default)
+    {
+        if (origins == null || origins.Count == 0) throw new ArgumentException("At least one origin is required.", nameof(origins));
+
+        _logger.LogInformation("Requesting TaxBandits transient token for Drop-in UI");
+
+        var response = new TransientTokenResponse();
+
+        try
+        {
+            var clientId = _configuration["TaxBandits:ClientId"];
+            var clientSecret = _configuration["TaxBandits:ClientSecret"];
+            var userToken = _configuration["TaxBandits:UserToken"];
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(userToken))
+            {
+                response.Success = false;
+                response.ErrorMessage = "TaxBandits configuration is incomplete.";
+                return response;
+            }
+
+            // Build JWS for the Authentication header
+            var iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var jws = CreateJwsHs256(clientId, userToken, clientSecret, iat);
+
+            // Transient token endpoint
+            var url = useSandbox
+                ? _configuration["TaxBandits:SandboxAuthUrl"]?.Replace("/tbsauth", "/transienttoken")
+                    ?? "https://testoauth.expressauth.net/v2/transienttoken"
+                : _configuration["TaxBandits:ProductionAuthUrl"]?.Replace("/tbsauth", "/transienttoken")
+                    ?? "https://oauth.expressauth.net/v2/transienttoken";
+
+            var requestBody = new { Origins = origins };
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.TryAddWithoutValidation("Authentication", jws);
+            req.Content = content;
+
+            using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            var body = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("TransientToken", out var tokenEl) && !string.IsNullOrWhiteSpace(tokenEl.GetString()))
+                {
+                    response.Success = true;
+                    response.TransientToken = tokenEl.GetString();
+                    response.TokenType = root.TryGetProperty("TokenType", out var ttEl) ? ttEl.GetString() : "Bearer";
+                    response.ExpiresIn = root.TryGetProperty("ExpiresIn", out var expEl) ? expEl.GetInt32() : 900;
+                    _logger.LogInformation("TaxBandits transient token obtained successfully");
+                }
+                else if (root.TryGetProperty("Errors", out var errors) &&
+                         errors.ValueKind == JsonValueKind.Array &&
+                         errors.GetArrayLength() > 0)
+                {
+                    var firstError = errors[0];
+                    var errorMsg = firstError.TryGetProperty("Message", out var msgEl)
+                        ? msgEl.GetString() ?? "Unknown error"
+                        : "Unknown error";
+                    response.Success = false;
+                    response.ErrorMessage = errorMsg;
+                    _logger.LogError("TaxBandits transient token request failed: {Error}", errorMsg);
+                }
+                else
+                {
+                    response.Success = false;
+                    response.ErrorMessage = "Unexpected response from TaxBandits transient token endpoint.";
+                    _logger.LogError("Unexpected transient token response: {Body}", body);
+                }
+            }
+            else
+            {
+                var errorMsg = $"TaxBandits transient token request failed with HTTP {(int)resp.StatusCode}";
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("StatusMessage", out var msgEl))
+                    {
+                        errorMsg = msgEl.GetString() ?? errorMsg;
+                    }
+                }
+                catch (JsonException) { }
+
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                _logger.LogError("TaxBandits transient token request failed: HTTP {StatusCode}: {Error}", (int)resp.StatusCode, errorMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception while requesting TaxBandits transient token");
+            response.Success = false;
+            response.ErrorMessage = ex.Message;
+        }
+
+        return response;
+    }
 }

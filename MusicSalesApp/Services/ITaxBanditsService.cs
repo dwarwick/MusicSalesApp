@@ -73,6 +73,17 @@ public interface ITaxBanditsService
     Task<WhCertificateStatusResponse> GetWhCertificateStatusAsync(
         string payeeRef,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a transient token from TaxBandits for the Drop-in UI embedded form.
+    /// The token is valid for 15 minutes and bound to the specified origins.
+    /// </summary>
+    /// <param name="origins">The allowed origins (domains) for the Drop-in UI.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The transient token response.</returns>
+    Task<TransientTokenResponse> GetTransientTokenAsync(
+        List<string> origins,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -205,4 +216,16 @@ public sealed class WhCertificateRecord
     public string? StatusTimestamp { get; set; }
     public string? TinMatchingStatus { get; set; }
     public string? TinMatchingStatusTimestamp { get; set; }
+}
+
+/// <summary>
+/// Response from TaxBandits transient token endpoint for Drop-in UI.
+/// </summary>
+public sealed class TransientTokenResponse
+{
+    public bool Success { get; set; }
+    public string? TransientToken { get; set; }
+    public string? TokenType { get; set; }
+    public int ExpiresIn { get; set; }
+    public string? ErrorMessage { get; set; }
 }
