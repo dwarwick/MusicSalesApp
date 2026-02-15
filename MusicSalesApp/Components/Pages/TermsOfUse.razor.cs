@@ -4,6 +4,22 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class TermsOfUseModel : BlazorBase
 {
-    // No specific logic needed for static terms page
-    // Inheriting from BlazorBase provides standard navigation and services
+    protected int _streamQualifyingSeconds = 30;
+    private bool _hasLoadedData = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+            }
+            finally
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
 }

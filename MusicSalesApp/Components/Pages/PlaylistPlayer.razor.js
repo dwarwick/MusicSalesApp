@@ -162,11 +162,16 @@ export function setTrackSource(audioElement, src) {
 // Change the track source for album playback (used when transitioning to next/previous track)
 // isRestricted parameter updates the player state for the new track
 // songMetadataId updates the stream tracking for the new track
-export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0) {
+export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0, streamThresholdSeconds = null) {
     if (audioElement) {
         // Update restriction state if provided
         if (isRestricted !== null) {
             playerState.isRestricted = isRestricted;
+        }
+
+        // Update stream threshold if provided
+        if (streamThresholdSeconds !== null) {
+            STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
         }
 
         // Reset stream tracking for the new track

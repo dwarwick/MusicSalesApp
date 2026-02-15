@@ -81,6 +81,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _savingCreatorProfile = false;
     protected string _creatorProfileMessage = string.Empty;
     protected bool _creatorProfileSuccess = false;
+
+    // Creator stream definition display values
+    protected int _creatorStreamQualifyingSeconds = 30;
+    protected decimal _creatorStreamPayRateDisplay = 5.00m;
     
     /// <summary>
     /// Returns true if the user can start the creator onboarding process.
@@ -737,6 +741,10 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _creatorBio = creator.Bio ?? string.Empty;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
                 
+                // For returning creators, use values from the creator table
+                _creatorStreamQualifyingSeconds = creator.StreamQualifyingSeconds;
+                _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
+                
                 // Initialize edit fields
                 _editCreatorDisplayName = _creatorDisplayName;
                 _editCreatorBio = _creatorBio;
@@ -747,6 +755,11 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _isActiveCreator = false;
                 _creatorOnboardingStatus = null;
                 _creatorTaxFormStatus = null;
+                
+                // For new creators, use current app settings values
+                _creatorStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+                var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
+                _creatorStreamPayRateDisplay = streamPayRate * 1000;
             }
         }
         catch (Exception ex)
