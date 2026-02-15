@@ -825,4 +825,180 @@ public class TaxBanditsServiceTests
             e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
             Times.Never);
     }
+
+    #region GetTransientTokenAsync Tests
+
+    [Test]
+    public void GetTransientTokenAsync_ThrowsArgumentNullException_WhenOriginsIsNull()
+    {
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _service.GetTransientTokenAsync(null!));
+
+        Assert.That(ex.ParamName, Is.EqualTo("origins"));
+    }
+
+    [Test]
+    public void GetTransientTokenAsync_ThrowsArgumentException_WhenOriginsIsEmpty()
+    {
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _service.GetTransientTokenAsync(new List<string>()));
+
+        Assert.That(ex.ParamName, Is.EqualTo("origins"));
+    }
+
+    [Test]
+    public async Task GetTransientTokenAsync_ReturnsError_WhenConfigurationIsMissing()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
+        
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        // Act
+        var result = await _service.GetTransientTokenAsync(new List<string> { "https://example.com" });
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("configuration"));
+    }
+
+    [Test]
+    public async Task GetTransientTokenAsync_ReturnsToken_WhenRequestSucceeds()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
+        
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        var tokenResponse = new
+        {
+            StatusCode = 200,
+            StatusName = "OK",
+            StatusMessage = "Successful API call",
+            TransientToken = "test-transient-token",
+            TokenType = "Bearer",
+            ExpiresIn = 900,
+            Errors = (object)null
+        };
+
+        var responseJson = JsonSerializer.Serialize(tokenResponse);
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseJson)
+        };
+
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Post &&
+                    req.RequestUri!.ToString().Contains("transienttoken")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(httpResponse);
+
+        // Act
+        var result = await _service.GetTransientTokenAsync(new List<string> { "https://example.com" });
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TransientToken, Is.EqualTo("test-transient-token"));
+        Assert.That(result.TokenType, Is.EqualTo("Bearer"));
+        Assert.That(result.ExpiresIn, Is.EqualTo(900));
+    }
+
+    [Test]
+    public async Task GetTransientTokenAsync_ReturnsError_WhenHttpRequestFails()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
+        
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("{\"StatusMessage\": \"Internal server error\"}")
+        };
+
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Post &&
+                    req.RequestUri!.ToString().Contains("transienttoken")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(httpResponse);
+
+        // Act
+        var result = await _service.GetTransientTokenAsync(new List<string> { "https://example.com" });
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public async Task GetTransientTokenAsync_ReturnsError_WhenResponseHasErrors()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
+        
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        var errorResponse = new
+        {
+            StatusCode = 400,
+            Errors = new[]
+            {
+                new { Id = "ERR001", Name = "InvalidOrigin", Message = "Origin not allowed" }
+            }
+        };
+
+        var responseJson = JsonSerializer.Serialize(errorResponse);
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseJson)
+        };
+
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.Method == HttpMethod.Post &&
+                    req.RequestUri!.ToString().Contains("transienttoken")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(httpResponse);
+
+        // Act
+        var result = await _service.GetTransientTokenAsync(new List<string> { "https://example.com" });
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Origin not allowed"));
+    }
+
+    #endregion
 }
