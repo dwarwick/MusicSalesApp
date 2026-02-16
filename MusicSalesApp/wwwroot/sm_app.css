@@ -698,4 +698,63 @@
         gap: 10px;
         margin-bottom: 0.75rem;
     }
+
+    /* CTA Split Section - Stack vertically on small screens */
+    .cta-split-section {
+        margin: 2rem 0;
+    }
+
+    .cta-split-container {
+        flex-direction: column;
+        gap: 1.5rem;
+        padding: 0 1rem;
+    }
+
+    .cta-card {
+        padding: 2rem 1.5rem;
+        width: 100%;
+    }
+
+    .cta-icon {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 1rem;
+    }
+
+    .cta-title {
+        font-size: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .cta-description {
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cta-benefits {
+        margin-bottom: 1.5rem;
+        max-width: 100%;
+    }
+
+    .cta-benefits li {
+        font-size: 0.95rem;
+        gap: 10px;
+        margin-bottom: 0.75rem;
+    }
+
+    .cta-free-notice,
+    .cta-price-highlight {
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cta-price-highlight .price {
+        font-size: 1.75rem;
+    }
+
+    .cta-button {
+        padding: 0.875rem 2rem;
+        font-size: 1rem;
+        width: 100%;
+    }
 }

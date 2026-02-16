@@ -414,4 +414,73 @@ body {
     color: #fff;
 }
 
+/* CTA Split Section Colors */
+.cta-card {
+    background: #fff;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.cta-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.creator-cta .cta-icon {
+    background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+    color: #fff;
+}
+
+.subscriber-cta .cta-icon {
+    background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+    color: #fff;
+}
+
+.cta-title {
+    color: #1a1a2e;
+}
+
+.cta-description {
+    color: #666;
+}
+
+.cta-benefits li {
+    color: #333;
+}
+
+.cta-benefits li svg {
+    color: #1db954;
+}
+
+.creator-cta .cta-benefits li svg {
+    color: #8e44ad;
+}
+
+.cta-free-notice {
+    color: #8e44ad;
+}
+
+.cta-price-highlight {
+    color: #1db954;
+}
+
+.cta-price-highlight .price {
+    color: #1db954;
+}
+
+.cta-button {
+    background-color: #1db954 !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.cta-button:hover {
+    background-color: #1ed760 !important;
+}
+
+.creator-cta .cta-button {
+    background-color: #8e44ad !important;
+}
+
+.creator-cta .cta-button:hover {
+    background-color: #9b59b6 !important;
+}
 

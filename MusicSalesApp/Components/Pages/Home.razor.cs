@@ -17,6 +17,7 @@ public partial class HomeModel : BlazorBase, IDisposable
     private bool _subscriptionStatusChecked;
     private bool _isDisposed;
     private bool _hasLoadedData = false;
+    protected bool _isActiveCreator = false;
 
     /// <summary>
     /// Determines if the user has any playlists to show (recommended or liked songs).
@@ -65,6 +66,7 @@ public partial class HomeModel : BlazorBase, IDisposable
             await LoadSubscriptionStatusAsync();
             await LoadRecommendedPlaylistAsync();
             await LoadLikedSongsPlaylistAsync();
+            await LoadCreatorStatusAsync();
         }
         
         if (!_isDisposed)
@@ -94,6 +96,7 @@ public partial class HomeModel : BlazorBase, IDisposable
                 await LoadSubscriptionStatusAsync();
                 await LoadRecommendedPlaylistAsync();
                 await LoadLikedSongsPlaylistAsync();
+                await LoadCreatorStatusAsync();
             }
         }
         catch (Exception ex)
@@ -193,6 +196,23 @@ public partial class HomeModel : BlazorBase, IDisposable
         if (_likedSongsPlaylist != null)
         {
             NavigationManager.NavigateTo($"/playlist/{_likedSongsPlaylist.Id}");
+        }
+    }
+
+    private async Task LoadCreatorStatusAsync()
+    {
+        if (_currentUserId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _isActiveCreator = await CreatorService.IsActiveCreatorAsync(_currentUserId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to check creator status for user {UserId}", _currentUserId);
         }
     }
 
