@@ -339,9 +339,8 @@ body {
 }
 
 .cta-secondary {
-    background-color: transparent !important;
-    color: #1a1a2e !important;
-    border: 2px solid #1a1a2e !important;
+    background-color: #8e44ad !important;    
+    color: white !important;
 }
 
 .cta-secondary:hover {

@@ -275,9 +275,8 @@ body {
 }
 
 .cta-secondary {
-    background-color: transparent !important;
-    color: #ffffff !important;
-    border: 2px solid #ffffff !important;
+    background-color: #8e44ad !important;
+    color: #ffffff !important;    
 }
 
 .cta-secondary:hover {
