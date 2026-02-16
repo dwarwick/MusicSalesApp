@@ -31,8 +31,7 @@ public class AccountEmailService : IAccountEmailService
             body.Append(@"
                 <p style='font-size: 16px; color: #333;'>Thank you for creating an account with StreamTunes!</p>
                 <p style='font-size: 16px; color: #333;'>Your account has been successfully created. You can now:</p>
-                <ul style='font-size: 16px; color: #333;'>
-                    <li>Browse and purchase your favorite music</li>
+                <ul style='font-size: 16px; color: #333;'>                    
                     <li>Create personalized playlists</li>
                     <li>Subscribe for unlimited streaming access</li>
                 </ul>
@@ -65,8 +64,7 @@ public class AccountEmailService : IAccountEmailService
                 <p style='font-size: 16px; color: #333;'>While your account is suspended:</p>
                 <ul style='font-size: 16px; color: #333;'>
                     <li>You will not be able to log in</li>
-                    <li>You will not receive any communications from us</li>
-                    <li>Your purchased music will remain safe and accessible if you reactivate your account</li>
+                    <li>You will not receive any communications from us</li>                    
                 </ul>
                 <p style='font-size: 16px; color: #333;'>If you wish to reactivate your account in the future, please contact our support team.</p>
                 <p style='font-size: 16px; color: #333;'>If you did not request this action, please contact us immediately.</p>
@@ -128,8 +126,7 @@ public class AccountEmailService : IAccountEmailService
             body.Append(@"
                 <p style='font-size: 16px; color: #333;'>Your StreamTunes account has been permanently deleted as requested.</p>
                 <p style='font-size: 16px; color: #333;'>All your data, including:</p>
-                <ul style='font-size: 16px; color: #333;'>
-                    <li>Purchase history</li>
+                <ul style='font-size: 16px; color: #333;'>                    
                     <li>Playlists</li>
                     <li>Subscriptions</li>
                     <li>Account preferences</li>
@@ -172,8 +169,7 @@ public class AccountEmailService : IAccountEmailService
                     <li>Unlimited music streaming</li>
                     <li>Access to all your playlists</li>
                     <li>All premium features</li>
-                </ul>
-                <p style='font-size: 16px; color: #333;'>After your subscription ends, you will still have access to any music you have purchased.</p>
+                </ul>                
                 <p style='font-size: 16px; color: #333;'>If you change your mind, you can resubscribe at any time from your account settings.</p>
             ");
             body.Append(BuildEmailFooter());
@@ -202,8 +198,7 @@ public class AccountEmailService : IAccountEmailService
                 <p style='font-size: 16px; color: #333;'>Great news! Your StreamTunes account has been reactivated.</p>
                 <p style='font-size: 16px; color: #333;'>You can now:</p>
                 <ul style='font-size: 16px; color: #333;'>
-                    <li>Log in to your account</li>
-                    <li>Access all your previously purchased music</li>
+                    <li>Log in to your account</li>                    
                     <li>Continue enjoying your playlists</li>
                     <li>Subscribe for unlimited streaming access</li>
                 </ul>
