@@ -116,7 +116,6 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
     }
 
-
     [Test]
     [Ignore("Skipped: bUnit does not reliably trigger OnAfterRenderAsync data loading. This test requires component refactoring to use a different lifecycle pattern.")]
     public void Home_ShowsLikedSongsPlaylist_WhenUserIsAuthenticated()
