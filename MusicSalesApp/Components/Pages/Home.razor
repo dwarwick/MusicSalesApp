@@ -23,10 +23,10 @@
             {
                 <div class="hero-cta">
                     <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                        Sign Up
+                        Register
                     </SfButton>
                     <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
-                        Sign In
+                        Log In
                     </SfButton>
                 </div>
             }
@@ -43,6 +43,140 @@
             <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="hero-animation" autoplay loop></dotlottie-wc>
         </div>
     </section>
+
+    @* CTA Split Section - Creators and Subscribers (under hero, before features) *@
+    @if (!_hasActiveSubscription || !_isActiveCreator)
+    {
+        <section class="cta-split-section">
+            <div class="cta-split-container">
+                @* Creator CTA - Left side (or top on mobile) - Only show if not an active creator *@
+                @if (!_isActiveCreator)
+                {
+                    <div class="cta-card creator-cta">
+                        <div class="cta-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                                <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>
+                            </svg>
+                        </div>
+                        <h2 class="cta-title">Become a Creator</h2>
+                        <p class="cta-description">
+                            Do you have your own original music that you'd like to stream? Share your music with the world and earn from your streams.
+                        </p>
+                        <ul class="cta-benefits">
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Make money from your streams
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Reach new fans worldwide
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                You keep control of your music
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Upload in minutes, start earning
+                            </li>
+                        </ul>
+                        <p class="cta-free-notice">
+                            <strong>100% Free</strong> - No cost to become a creator and stream your music
+                        </p>
+                        @if (!_isAuthenticated)
+                        {
+                            <p class="cta-auth-text">Log In or Register to Get Started</p>
+                            <div class="cta-button-group">
+                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                    Log In
+                                </SfButton>
+                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                    Register
+                                </SfButton>
+                            </div>
+                        }
+                        else
+                        {
+                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                                Click Here to Get Started
+                            </SfButton>
+                        }
+                    </div>
+                }
+
+                @* Subscriber CTA - Right side (or bottom on mobile) - Only show if not a subscriber *@
+                @if (!_hasActiveSubscription)
+                {
+                    <div class="cta-card subscriber-cta">
+                        <div class="cta-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                            </svg>
+                        </div>
+                        <h2 class="cta-title">Unlimited Music Streaming</h2>
+                        <p class="cta-description">
+                            Stream all songs with no limits. Access our entire catalog for less than $5 per month.
+                        </p>
+                        <ul class="cta-benefits">
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Full-length streaming of all songs
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Create unlimited playlists
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                Personalized recommendations
+                            </li>
+                            <li>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                No ads, no interruptions
+                            </li>
+                        </ul>
+                        <p class="cta-price-highlight">
+                            Just <span class="price">$@_subscriptionPrice</span> per month
+                        </p>
+                        @if (!_isAuthenticated)
+                        {
+                            <p class="cta-auth-text">Log In or Register to Get Started</p>
+                            <div class="cta-button-group">
+                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                    Log In
+                                </SfButton>
+                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                    Register
+                                </SfButton>
+                            </div>
+                        }
+                        else
+                        {
+                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                                Click Here to Get Started
+                            </SfButton>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    }
 
     @* Value Proposition Section - Only show to non-subscribers *@
     @if (!_hasActiveSubscription)
@@ -132,55 +266,4 @@
         <p class="section-subtitle">Listen to samples from our collection. Subscribe for unlimited access!</p>
         <MusicLibrary ShowHomePageFeatured="true" />
     </section>
-
-    @* Subscription CTA Section - Only show to non-subscribers *@
-    @if (!_hasActiveSubscription)
-    {
-        <section class="subscription-cta-section">
-            <div class="subscription-cta-content">
-                <h2>Ready to unlock unlimited music?</h2>
-                <p class="subscription-price-highlight">
-                    Just <span class="price">$@_subscriptionPrice</span> per month
-                </p>
-                <ul class="subscription-benefits">
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Full-length streaming of all songs
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Create unlimited playlists
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Personalized recommendations
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        No ads, no interruptions
-                    </li>
-                </ul>
-                @if (!_isAuthenticated)
-                {
-                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                        Get Started Free
-                    </SfButton>
-                }
-                else
-                {
-                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
-                        Subscribe Now
-                    </SfButton>
-                }
-            </div>
-        </section>
-    }
 </div>

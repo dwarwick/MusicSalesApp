@@ -32,7 +32,7 @@ public class HomeTests : BUnitTestBase
         // Assert - Verify hero section content
         Assert.That(cut.Markup, Does.Contain("hero-section"));
         Assert.That(cut.Markup, Does.Contain("hero-title"));
-        Assert.That(cut.Markup, Does.Contain("Get Started Free"));
+        Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
     }
 
     [Test]
@@ -61,16 +61,61 @@ public class HomeTests : BUnitTestBase
     }
 
     [Test]
-    public void Home_ShowsSubscriptionCtaSection_ForNonSubscribers()
+    public void Home_ShowsSubscriberCta_ForNonSubscribers()
     {
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - Verify subscription CTA section is present
-        Assert.That(cut.Markup, Does.Contain("Ready to unlock unlimited music?"));
-        Assert.That(cut.Markup, Does.Contain("subscription-benefits"));
+        // Assert - Verify subscriber CTA card is present (not the old green box)
+        Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
+        Assert.That(cut.Markup, Does.Contain("subscriber-cta"));
         Assert.That(cut.Markup, Does.Contain("Full-length streaming"));
-        Assert.That(cut.Markup, Does.Contain("Get Started Free"));
+        Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
+    }
+
+    [Test]
+    public void Home_ShowsCreatorCta_ForNonCreators()
+    {
+        // Arrange - Setup non-authenticated user (default state)
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify Creator CTA is present for non-creators
+        Assert.That(cut.Markup, Does.Contain("Become a Creator"));
+        Assert.That(cut.Markup, Does.Contain("Do you have your own original music"));
+        Assert.That(cut.Markup, Does.Contain("Make money from your streams"));
+        Assert.That(cut.Markup, Does.Contain("Reach new fans"));
+        Assert.That(cut.Markup, Does.Contain("You keep control of your music"));
+        Assert.That(cut.Markup, Does.Contain("Upload in minutes, start earning"));
+        Assert.That(cut.Markup, Does.Contain("100% Free"));
+    }
+
+    [Test]
+    public void Home_ShowsSignInButton_ForCreatorCta_WhenNotAuthenticated()
+    {
+        // Arrange - Setup non-authenticated user (default state)
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify new login/register buttons for non-authenticated users
+        Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
+        Assert.That(cut.Markup, Does.Contain("Log In"));
+        Assert.That(cut.Markup, Does.Contain("Register"));
+    }
+
+    [Test]
+    public void Home_ShowsBothCtas_ForNonSubscriberNonCreator()
+    {
+        // Arrange - Setup non-authenticated user (default state)
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert - Verify both CTAs are shown
+        Assert.That(cut.Markup, Does.Contain("cta-split-section"));
+        Assert.That(cut.Markup, Does.Contain("creator-cta"));
+        Assert.That(cut.Markup, Does.Contain("subscriber-cta"));
+        Assert.That(cut.Markup, Does.Contain("Become a Creator"));
+        Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
     }
 
     [Test]

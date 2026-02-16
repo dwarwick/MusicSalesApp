@@ -1080,6 +1080,98 @@ h1:focus {
     flex-shrink: 0;
 }
 
+/* CTA Split Section Layout */
+.cta-split-section {
+    position: relative;
+    overflow: hidden;
+}
+
+.cta-split-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.cta-card {
+    flex: 1;
+    border-radius: 24px;
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cta-card:hover {
+    transform: translateY(-4px);
+}
+
+.cta-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+}
+
+.cta-title {
+    font-weight: 700;
+    margin: 0;
+}
+
+.cta-description {
+    text-align: center;
+}
+
+.cta-benefits {
+    list-style: none;
+    padding: 0;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.cta-benefits li {
+    display: flex;
+    align-items: flex-start;
+    font-weight: 500;
+}
+
+.cta-benefits li svg {
+    flex-shrink: 0;
+}
+
+.cta-free-notice {
+    text-align: center;
+    font-weight: 500;
+}
+
+.cta-price-highlight {
+    text-align: center;
+    font-weight: 500;
+}
+
+.cta-price-highlight .price {
+    font-weight: 900;
+}
+
+.cta-auth-text {
+    text-align: center;
+    font-weight: 600;
+}
+
+.cta-button-group {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+}
+
+.cta-button {
+    align-self: center;
+}
+
 /* Liked Songs Playlist Card */
 .liked-songs-playlist-card {
     border-left: 4px solid #e91e63;
