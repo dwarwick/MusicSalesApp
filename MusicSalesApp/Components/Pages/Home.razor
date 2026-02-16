@@ -93,14 +93,20 @@
                         </p>
                         @if (!_isAuthenticated)
                         {
-                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
-                                Sign In to Get Started
-                            </SfButton>
+                            <p class="cta-auth-text">Log In or Register to Get Started</p>
+                            <div class="cta-button-group">
+                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                    Log In
+                                </SfButton>
+                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                    Register
+                                </SfButton>
+                            </div>
                         }
                         else
                         {
                             <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
-                                Become a Creator
+                                Click Here to Get Started
                             </SfButton>
                         }
                     </div>
@@ -150,14 +156,20 @@
                         </p>
                         @if (!_isAuthenticated)
                         {
-                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                                Sign Up Now
-                            </SfButton>
+                            <p class="cta-auth-text">Log In or Register to Get Started</p>
+                            <div class="cta-button-group">
+                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                    Log In
+                                </SfButton>
+                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                    Register
+                                </SfButton>
+                            </div>
                         }
                         else
                         {
                             <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
-                                Subscribe Now
+                                Click Here to Get Started
                             </SfButton>
                         }
                     </div>
@@ -254,55 +266,4 @@
         <p class="section-subtitle">Listen to samples from our collection. Subscribe for unlimited access!</p>
         <MusicLibrary ShowHomePageFeatured="true" />
     </section>
-
-    @* Subscription CTA Section - Only show to non-subscribers *@
-    @if (!_hasActiveSubscription)
-    {
-        <section class="subscription-cta-section">
-            <div class="subscription-cta-content">
-                <h2>Ready to unlock unlimited music?</h2>
-                <p class="subscription-price-highlight">
-                    Just <span class="price">$@_subscriptionPrice</span> per month
-                </p>
-                <ul class="subscription-benefits">
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Full-length streaming of all songs
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Create unlimited playlists
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        Personalized recommendations
-                    </li>
-                    <li>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                        </svg>
-                        No ads, no interruptions
-                    </li>
-                </ul>
-                @if (!_isAuthenticated)
-                {
-                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                        Get Started Free
-                    </SfButton>
-                }
-                else
-                {
-                    <SfButton CssClass="cta-primary cta-large" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
-                        Subscribe Now
-                    </SfButton>
-                }
-            </div>
-        </section>
-    }
 </div>

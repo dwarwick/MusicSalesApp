@@ -1155,6 +1155,19 @@ h1:focus {
     font-weight: 900;
 }
 
+.cta-auth-text {
+    text-align: center;
+    font-weight: 600;
+}
+
+.cta-button-group {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+}
+
 .cta-button {
     align-self: center;
 }

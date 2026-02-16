@@ -752,9 +752,23 @@
         font-size: 1.75rem;
     }
 
+    .cta-auth-text {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+
     .cta-button {
         padding: 0.875rem 2rem;
         font-size: 1rem;
+        width: 100%;
+    }
+
+    .cta-button-group {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .cta-button-group .cta-button {
         width: 100%;
     }
 }

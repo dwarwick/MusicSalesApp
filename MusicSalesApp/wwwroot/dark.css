@@ -402,6 +402,10 @@ body {
     color: #1ed760;
 }
 
+.cta-auth-text {
+    color: #ffffff;
+}
+
 .cta-button {
     background-color: #1db954 !important;
     color: #fff !important;
