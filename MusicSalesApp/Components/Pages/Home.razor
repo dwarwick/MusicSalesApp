@@ -21,12 +21,12 @@
             </p>
             @if (!_isAuthenticated)
             {
-                <div class="hero-cta">
-                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                        Register
-                    </SfButton>
+                <div class="hero-cta">                    
                     <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
                         Log In
+                    </SfButton>
+                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                        Register
                     </SfButton>
                 </div>
             }
