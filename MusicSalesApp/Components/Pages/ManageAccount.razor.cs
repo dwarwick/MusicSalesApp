@@ -59,6 +59,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _isActiveCreator = false;
     protected string _creatorOnboardingStatus = null;
     protected string _creatorTaxFormStatus = null;
+    protected TimeSpan? _tinMatchCooldownRemaining = null;
+    private System.Threading.Timer _cooldownTimer;
     protected string _creatorReferralUrl = null;
     protected string _creatorDisplayName = string.Empty;
     protected string _creatorBio = string.Empty;
@@ -735,6 +737,23 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
+                
+                // Calculate TIN match cooldown remaining if status is Failed
+                if (creator.TaxFormStatus == TaxFormStatus.Failed && creator.LastTinMatchFailedAt.HasValue)
+                {
+                    var cooldownEnd = creator.LastTinMatchFailedAt.Value.AddHours(24);
+                    var remaining = cooldownEnd - DateTime.UtcNow;
+                    _tinMatchCooldownRemaining = remaining > TimeSpan.Zero ? remaining : null;
+                    
+                    if (_tinMatchCooldownRemaining.HasValue)
+                    {
+                        StartCooldownTimer();
+                    }
+                }
+                else
+                {
+                    _tinMatchCooldownRemaining = null;
+                }
                 _creatorReferralUrl = null; // PayPal business account onboarding has been removed
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
@@ -1026,6 +1045,25 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         NavigationManager.NavigateTo("/submittaxform");
     }
 
+    private void StartCooldownTimer()
+    {
+        _cooldownTimer?.Dispose();
+        _cooldownTimer = new System.Threading.Timer(async _ =>
+        {
+            if (_tinMatchCooldownRemaining.HasValue)
+            {
+                _tinMatchCooldownRemaining = _tinMatchCooldownRemaining.Value - TimeSpan.FromSeconds(1);
+                if (_tinMatchCooldownRemaining.Value <= TimeSpan.Zero)
+                {
+                    _tinMatchCooldownRemaining = null;
+                    _cooldownTimer?.Dispose();
+                    _cooldownTimer = null;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
     protected void NavigateToUpload()
     {
         NavigationManager.NavigateTo("/upload-files");
@@ -1146,6 +1184,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
         {
             WebhookStatusHubClient.OnWebhookStatusReceived -= _webhookStatusHandler;
         }
+        _cooldownTimer?.Dispose();
     }
 }
 

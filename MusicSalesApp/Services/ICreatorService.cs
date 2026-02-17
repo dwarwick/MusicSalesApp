@@ -37,6 +37,13 @@ public interface ICreatorService
     Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status);
 
     /// <summary>
+    /// Records the timestamp of a failed Instant TIN Match for 24-hour cooldown enforcement.
+    /// </summary>
+    /// <param name="creatorId">The creator ID</param>
+    /// <returns>The updated creator</returns>
+    Task<Creator> SetTinMatchFailedAsync(int creatorId);
+
+    /// <summary>
     /// Updates the creator's tax form status along with full tax residency data.
     /// Called when W-9 or W-8BEN form is completed via TaxBandits webhook.
     /// </summary>

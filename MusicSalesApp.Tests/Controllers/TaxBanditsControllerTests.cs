@@ -172,4 +172,56 @@ public class TaxBanditsControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
     }
+
+    [Test]
+    public async Task HandleTinMatchCompleteWebhook_ReturnsUnauthorized_WhenSignatureInvalid()
+    {
+        // Arrange
+        var webhookBody = @"{""TINStatusCode"":""TIN-001"",""TINStatus"":""SUCCESS""}";
+        
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+
+        var context = new DefaultHttpContext();
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(webhookBody));
+        context.Request.ContentLength = webhookBody.Length;
+        // No signature headers set - should fail validation
+        
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = context
+        };
+
+        // Act
+        var result = await _controller.HandleTinMatchCompleteWebhook();
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+    }
+
+    [Test]
+    public async Task HandleTinMatchCompleteWebhook_ReturnsBadRequest_WhenJsonInvalid()
+    {
+        // Arrange
+        var invalidJson = "not valid json";
+        
+        // Skip signature verification by not configuring credentials
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+
+        var context = new DefaultHttpContext();
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(invalidJson));
+        context.Request.ContentLength = invalidJson.Length;
+        
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = context
+        };
+
+        // Act
+        var result = await _controller.HandleTinMatchCompleteWebhook();
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
 }

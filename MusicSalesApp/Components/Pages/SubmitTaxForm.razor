@@ -15,6 +15,15 @@
             <p class="mt-2">Loading tax form...</p>
         </div>
     }
+    else if (_isCooldownActive)
+    {
+        <div class="alert alert-warning mt-3">
+            <h5>⏳ Please Wait Before Resubmitting</h5>
+            <p>Your previous TIN verification failed. The IRS only allows one TIN match request per 24 hours.</p>
+            <p>Please return to your account page and wait for the cooldown timer to expire before trying again.</p>
+        </div>
+        <a href="/manage-account" class="btn btn-primary mt-2">Return to Account</a>
+    }
     else if (!string.IsNullOrEmpty(_errorMessage))
     {
         <div class="alert alert-danger mt-3">
@@ -24,6 +33,15 @@
     }
     else
     {
+        <div class="alert alert-info mt-3">
+            <h5>⚠️ Important: TIN Verification for W-9 Submissions</h5>
+            <p>If you are submitting a W-9 form, the IRS will verify that your Taxpayer Identification Number (TIN) matches the name on file. Please ensure:</p>
+            <ul>
+                <li>Your TIN (SSN, EIN, or ITIN) is entered correctly</li>
+                <li>The name on the form matches the name associated with your TIN exactly as it appears in IRS records</li>
+            </ul>
+            <p class="mb-0"><strong>If TIN verification fails, you will need to wait 24 hours before you can submit again.</strong></p>
+        </div>
         <p>Please complete the W-9 or W-8 form below to finalize your creator account setup.</p>
         <div id="formLoad" class="mt-3" style="min-height: 600px;">
             <!-- TaxBandits Drop-in UI will be loaded here -->

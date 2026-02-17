@@ -377,8 +377,20 @@
                                 else if (_creatorTaxFormStatus == "Failed")
                                 {
                                     <p class="text-danger"><strong>Status: Failed</strong></p>
-                                    <p>There was an issue with your tax form submission. Please try again:</p>
-                                    <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
+                                    <p>There was an issue with your TIN verification. The IRS could not match your TIN to the name provided.</p>
+                                    @if (_tinMatchCooldownRemaining.HasValue && _tinMatchCooldownRemaining.Value > TimeSpan.Zero)
+                                    {
+                                        <div class="alert alert-warning">
+                                            <strong>Retry W9 Submission:</strong> You must wait before submitting again.
+                                            <br />
+                                            <span class="fw-bold" style="font-size: 1.2em;">@_tinMatchCooldownRemaining.Value.ToString(@"hh\:mm\:ss")</span> remaining
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p>You may now resubmit your tax form. Please double-check that your TIN and name match exactly.</p>
+                                        <SfButton IsPrimary="true" Content="Retry W9 Submission" OnClick="NavigateToTaxForm" />
+                                    }
                                 }
                                 else
                                 {

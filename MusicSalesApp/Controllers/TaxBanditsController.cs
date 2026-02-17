@@ -283,17 +283,20 @@ public class TaxBanditsController : ControllerBase
                     _logger.LogWarning("TIN Match failed via webhook for creator {CreatorId}, user {UserId}",
                         creator.Id, creator.UserId);
 
+                    // Record the failure timestamp for 24-hour cooldown enforcement
+                    await _creatorService.SetTinMatchFailedAsync(creator.Id);
+
                     if (!string.IsNullOrWhiteSpace(userEmail))
                     {
                         await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
-                            "TIN verification failed. Please double-check your Tax Identification Number and resubmit.");
+                            "TIN verification failed. Please double-check your Tax Identification Number and resubmit. You may retry after 24 hours.");
                     }
 
                     await BroadcastWebhookStatusAsync(
                         creator.UserId,
                         "TaxFormStatus",
                         false,
-                        "TIN verification failed",
+                        "TIN verification failed. You may retry after 24 hours.",
                         "Failed");
                 }
                 else
@@ -675,17 +678,24 @@ public class TaxBanditsController : ControllerBase
             _logger.LogWarning("Instant TIN Match failed for user {UserId}. TINStatusCode={TINStatusCode}",
                 w9Request.UserId, tinStatusCode);
 
+            // Record the failure timestamp for 24-hour cooldown enforcement
+            var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+            if (creator != null)
+            {
+                await _creatorService.SetTinMatchFailedAsync(creator.Id);
+            }
+
             if (!string.IsNullOrWhiteSpace(userEmail))
             {
                 await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
-                    "TIN verification failed. Please double-check your Tax Identification Number and resubmit.");
+                    "TIN verification failed. Please double-check your Tax Identification Number and resubmit. You may retry after 24 hours.");
             }
 
             await BroadcastWebhookStatusAsync(
                 w9Request.UserId,
                 "TaxFormStatus",
                 false,
-                "TIN verification failed",
+                "TIN verification failed. You may retry after 24 hours.",
                 "Failed");
         }
         else if (string.Equals(tinStatusCode, TinStatusCodeOnHold, StringComparison.OrdinalIgnoreCase))

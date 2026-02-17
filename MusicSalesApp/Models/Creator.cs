@@ -190,6 +190,12 @@ public class Creator
     public DateTime? AcknowledgmentDateTimeUtc { get; set; }
 
     /// <summary>
+    /// The UTC date and time of the last failed Instant TIN Match.
+    /// Used to enforce the 24-hour cooldown period between TIN match attempts.
+    /// </summary>
+    public DateTime? LastTinMatchFailedAt { get; set; }
+
+    /// <summary>
     /// Checks if both PayPal and tax form onboarding are complete.
     /// </summary>
     [NotMapped]

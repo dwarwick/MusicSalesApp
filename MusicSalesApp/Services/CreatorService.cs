@@ -143,6 +143,27 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<Creator> SetTinMatchFailedAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FindAsync(creatorId);
+        if (creator == null)
+        {
+            throw new InvalidOperationException($"Creator with ID {creatorId} not found");
+        }
+
+        creator.LastTinMatchFailedAt = DateTime.UtcNow;
+        creator.TaxFormStatus = TaxFormStatus.Failed;
+        creator.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Recorded TIN match failure for creator {CreatorId} at {Time}", creatorId, creator.LastTinMatchFailedAt);
+        return creator;
+    }
+
+    /// <inheritdoc />
     public async Task<Creator> UpdateTaxFormStatusWithTaxDataAsync(
         int creatorId,
         TaxFormStatus status,
