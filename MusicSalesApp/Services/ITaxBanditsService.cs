@@ -84,6 +84,18 @@ public interface ITaxBanditsService
     Task<TransientTokenResponse> GetTransientTokenAsync(
         List<string> origins,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Initiates an Instant TIN Matching request with TaxBandits.
+    /// Called after a W-9 form is completed to verify the TIN/name combination with the IRS.
+    /// See: https://developer.taxbandits.com/docs/InstantTINMatching/Request
+    /// </summary>
+    /// <param name="request">The TIN matching request details extracted from the W-9 webhook payload.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The response from TaxBandits Instant TIN Matching API.</returns>
+    Task<InstantTinMatchResponse> RequestInstantTinMatchAsync(
+        InstantTinMatchRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -228,4 +240,83 @@ public sealed class TransientTokenResponse
     public string? TokenType { get; set; }
     public int ExpiresIn { get; set; }
     public string? ErrorMessage { get; set; }
+}
+
+/// <summary>
+/// Request model for Instant TIN Matching API.
+/// See: https://developer.taxbandits.com/docs/InstantTINMatching/Request
+/// </summary>
+public sealed class InstantTinMatchRequest
+{
+    /// <summary>
+    /// The TIN type: SSN, EIN, or ITIN.
+    /// </summary>
+    public required string TINType { get; set; }
+
+    /// <summary>
+    /// The 9-digit TIN (with or without hyphens).
+    /// </summary>
+    public required string TIN { get; set; }
+
+    /// <summary>
+    /// First name (required for SSN/ITIN).
+    /// </summary>
+    public string? FirstNm { get; set; }
+
+    /// <summary>
+    /// Last name (required for SSN/ITIN).
+    /// </summary>
+    public string? LastNm { get; set; }
+
+    /// <summary>
+    /// Middle name (optional).
+    /// </summary>
+    public string? MiddleNm { get; set; }
+
+    /// <summary>
+    /// Business name (required for EIN).
+    /// </summary>
+    public string? BusinessNm { get; set; }
+
+    /// <summary>
+    /// The user ID in our system, used for tracking.
+    /// </summary>
+    public int UserId { get; set; }
+
+    /// <summary>
+    /// The user's email, used for tracking.
+    /// </summary>
+    public string? Email { get; set; }
+}
+
+/// <summary>
+/// Response from TaxBandits Instant TIN Matching API.
+/// See: https://developer.taxbandits.com/docs/InstantTINMatching/Request
+/// </summary>
+public sealed class InstantTinMatchResponse
+{
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// The unique record ID for this TIN match request.
+    /// </summary>
+    public string? RecordId { get; set; }
+
+    /// <summary>
+    /// The TIN status code: TIN-001 (SUCCESS), TIN-002 (FAILED), TIN-003 (ON HOLD).
+    /// </summary>
+    public string? TINStatusCode { get; set; }
+
+    /// <summary>
+    /// The TIN status text: SUCCESS, FAILED, ON HOLD.
+    /// </summary>
+    public string? TINStatus { get; set; }
+
+    /// <summary>
+    /// Human-readable TIN status message.
+    /// </summary>
+    public string? TINStatusMsg { get; set; }
+
+    public string? ErrorMessage { get; set; }
+    public string? RawResponse { get; set; }
 }

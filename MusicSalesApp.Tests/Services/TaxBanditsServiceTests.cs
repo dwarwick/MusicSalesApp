@@ -277,7 +277,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:WebhookRef"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:W9CompleteWebhookRef"]).Returns((string)null);
         
         // Setup the IConfigurationSection for GetValue<bool>
         var mockSection = new Mock<IConfigurationSection>();

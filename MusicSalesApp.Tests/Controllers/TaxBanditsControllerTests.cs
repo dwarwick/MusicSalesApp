@@ -23,6 +23,7 @@ public class TaxBanditsControllerTests
     private Mock<RoleManager<IdentityRole<int>>> _mockRoleManager;
     private Mock<ICreatorService> _mockCreatorService;
     private Mock<ICreatorEmailService> _mockCreatorEmailService;
+    private Mock<ITaxBanditsService> _mockTaxBanditsService;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<TaxBanditsController>> _mockLogger;
     private Mock<IHubContext<WebhookStatusHub>> _mockHubContext;
@@ -45,6 +46,7 @@ public class TaxBanditsControllerTests
         
         _mockCreatorService = new Mock<ICreatorService>();
         _mockCreatorEmailService = new Mock<ICreatorEmailService>();
+        _mockTaxBanditsService = new Mock<ITaxBanditsService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<TaxBanditsController>>();
         
@@ -61,6 +63,7 @@ public class TaxBanditsControllerTests
             _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockCreatorEmailService.Object,
+            _mockTaxBanditsService.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
             _mockHubContext.Object);
