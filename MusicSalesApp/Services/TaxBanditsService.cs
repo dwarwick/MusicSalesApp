@@ -1155,6 +1155,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
             {
                 ["TINType"] = request.TINType,
                 ["TIN"] = request.TIN,
+                // IsForced=false: TaxBandits enforces 1 request per TIN per 24 hours.
+                // Set to false to respect this limit; true would bypass duplicate checks.
                 ["IsForced"] = false,
                 ["IsSaveInAddBook"] = false,
                 ["BusinessId"] = businessId,
