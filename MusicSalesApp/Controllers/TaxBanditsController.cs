@@ -28,13 +28,13 @@ public class TaxBanditsController : ControllerBase
     private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ICreatorService _creatorService;
     private readonly ICreatorEmailService _creatorEmailService;
+    private readonly ITaxBanditsService _taxBanditsService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaxBanditsController> _logger;
     private readonly IHubContext<WebhookStatusHub> _hubContext;
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
-    private const string StatusCompletedTinMatchInProgress = "COMPLETED_AND_TIN_MATCH_INPROGRESS";
     
     // W-8/W-9 failure statuses that require user notification
     private static readonly HashSet<string> FailureStatuses = new(StringComparer.OrdinalIgnoreCase)
@@ -44,10 +44,10 @@ public class TaxBanditsController : ControllerBase
         "ORDER_NOT_CREATED"
     };
     
-    // TIN Match statuses
-    private const string TinMatchStatusSuccess = "Success";
-    private const string TinMatchStatusFailed = "Failed";
-    private const string TinMatchStatusCanceled = "Canceled";
+    // Instant TIN Match status codes
+    private const string TinStatusCodeSuccess = "TIN-001";
+    private const string TinStatusCodeFailed = "TIN-002";
+    private const string TinStatusCodeOnHold = "TIN-003";
     
     // Backup withholding rate for US creators (24% per IRS regulations)
     private const decimal BackupWithholdingRate = 0.24m;
@@ -58,6 +58,7 @@ public class TaxBanditsController : ControllerBase
         RoleManager<IdentityRole<int>> roleManager,
         ICreatorService creatorService,
         ICreatorEmailService creatorEmailService,
+        ITaxBanditsService taxBanditsService,
         IConfiguration configuration,
         ILogger<TaxBanditsController> logger,
         IHubContext<WebhookStatusHub> hubContext)
@@ -67,6 +68,7 @@ public class TaxBanditsController : ControllerBase
         _roleManager = roleManager;
         _creatorService = creatorService;
         _creatorEmailService = creatorEmailService;
+        _taxBanditsService = taxBanditsService;
         _configuration = configuration;
         _logger = logger;
         _hubContext = hubContext;
@@ -144,10 +146,214 @@ public class TaxBanditsController : ControllerBase
     }
 
     /// <summary>
+    /// Handles incoming TaxBandits webhook notifications for Instant TIN Matching status changes.
+    /// This is called when a TIN match that was ON HOLD (TIN-003) completes.
+    /// See: https://developer.taxbandits.com/docs/InstantTINMatching/Webhook
+    /// </summary>
+    [HttpPost("tinmatchcomplete")]
+    public async Task<IActionResult> HandleTinMatchCompleteWebhook()
+    {
+        try
+        {
+            Request.EnableBuffering();
+
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var body = await reader.ReadToEndAsync();
+
+            Request.Body.Position = 0;
+
+            _logger.LogInformation("Received TaxBandits TIN Match webhook: {Body}", body);
+
+            // Verify the webhook signature
+            var isValid = VerifyWebhookSignature(body);
+            if (!isValid)
+            {
+                _logger.LogWarning("TaxBandits TIN Match webhook signature verification failed");
+                return Unauthorized("Invalid webhook signature");
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            string? tinStatusCode = null;
+            string? tinStatus = null;
+            string? tinStatusMsg = null;
+            string? recordId = null;
+
+            if (root.TryGetProperty("TINStatusCode", out var statusCodeEl))
+                tinStatusCode = statusCodeEl.GetString();
+            if (root.TryGetProperty("TINStatus", out var statusEl))
+                tinStatus = statusEl.GetString();
+            if (root.TryGetProperty("TINStatusMsg", out var statusMsgEl))
+                tinStatusMsg = statusMsgEl.GetString();
+            if (root.TryGetProperty("RecordId", out var recordIdEl))
+                recordId = recordIdEl.GetString();
+
+            _logger.LogInformation(
+                "Processing TIN Match webhook: RecordId={RecordId}, StatusCode={TINStatusCode}, Status={TINStatus}",
+                recordId, tinStatusCode, tinStatus);
+
+            // Find the W9Request that has TinMatchInProgress status
+            // The webhook doesn't include the user email/PayeeRef directly,
+            // so we look for users with TIN match in progress
+            await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+            // Get all creators with TinMatchInProgress status
+            var creatorsInProgress = await GetCreatorsWithTinMatchInProgressAsync();
+
+            if (creatorsInProgress.Count == 0)
+            {
+                _logger.LogWarning("No creators found with TinMatchInProgress status for TIN Match webhook. RecordId={RecordId}", recordId);
+                return Ok(new { status = "no_matching_creators" });
+            }
+
+            var baseUrl = GetBaseUrl();
+
+            // Process TIN match result for all creators with TinMatchInProgress
+            // In practice, there should typically be only one at a time
+            foreach (var (creator, w9Request) in creatorsInProgress)
+            {
+                var userEmail = w9Request?.Email;
+
+                _logger.LogInformation(
+                    "Processing TIN Match result for creator {CreatorId}, user {UserId}: StatusCode={TINStatusCode}",
+                    creator.Id, creator.UserId, tinStatusCode);
+
+                if (string.Equals(tinStatusCode, TinStatusCodeSuccess, StringComparison.OrdinalIgnoreCase))
+                {
+                    // TIN-001: SUCCESS
+                    if (w9Request != null)
+                    {
+                        w9Request.IsCompleted = true;
+                        w9Request.CompletedAt = DateTime.UtcNow;
+                        w9Request.UpdatedAt = DateTime.UtcNow;
+                    }
+
+                    // Extract backup withholding from the stored raw response
+                    bool subjectToBackupWithholding = false;
+                    if (w9Request?.RawResponse != null)
+                    {
+                        try
+                        {
+                            using var w9Doc = JsonDocument.Parse(w9Request.RawResponse);
+                            var w9Root = w9Doc.RootElement;
+                            if (w9Root.TryGetProperty("FormW9", out var formW9))
+                            {
+                                subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Could not parse stored W9 response for backup withholding extraction");
+                        }
+                    }
+
+                    Guid? submissionGuid = null;
+                    if (w9Request != null && Guid.TryParse(w9Request.SubmissionId, out var parsedGuid))
+                    {
+                        submissionGuid = parsedGuid;
+                    }
+
+                    var withholdingRate = subjectToBackupWithholding ? BackupWithholdingRate : 0m;
+
+                    await CompleteCreatorOnboardingWithTaxDataAsync(
+                        creator.UserId,
+                        TaxResidencyType.US,
+                        taxResidencyCountry: "US",
+                        withholdingRate: withholdingRate,
+                        taxFormExpirationDate: null,
+                        taxBanditsSubmissionId: submissionGuid,
+                        subjectToBackupWithholding: subjectToBackupWithholding);
+
+                    await BroadcastWebhookStatusAsync(
+                        creator.UserId,
+                        "TaxFormCompleted",
+                        true,
+                        "Your tax form has been completed successfully!",
+                        "Completed");
+
+                    if (!string.IsNullOrWhiteSpace(userEmail))
+                    {
+                        await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+                    }
+                }
+                else if (string.Equals(tinStatusCode, TinStatusCodeFailed, StringComparison.OrdinalIgnoreCase))
+                {
+                    // TIN-002: FAILED
+                    _logger.LogWarning("TIN Match failed via webhook for creator {CreatorId}, user {UserId}",
+                        creator.Id, creator.UserId);
+
+                    // Record the failure timestamp for 24-hour cooldown enforcement
+                    await _creatorService.SetTinMatchFailedAsync(creator.Id);
+
+                    if (!string.IsNullOrWhiteSpace(userEmail))
+                    {
+                        await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
+                            "TIN verification failed. Please double-check your Tax Identification Number and resubmit. You may retry after 24 hours.");
+                    }
+
+                    await BroadcastWebhookStatusAsync(
+                        creator.UserId,
+                        "TaxFormStatus",
+                        false,
+                        "TIN verification failed. You may retry after 24 hours.",
+                        "Failed");
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Unexpected TIN Match status in webhook for creator {CreatorId}: {TINStatusCode}",
+                        creator.Id, tinStatusCode);
+                }
+            }
+
+            await context.SaveChangesAsync();
+
+            return Ok(new { status = "success" });
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to parse TaxBandits TIN Match webhook JSON");
+            return BadRequest("Invalid JSON");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing TaxBandits TIN Match webhook");
+            return StatusCode(500, "Internal server error");
+        }
+    }
+
+    /// <summary>
+    /// Gets all creators with TinMatchInProgress status along with their most recent W9Request.
+    /// </summary>
+    private async Task<List<(Creator Creator, W9Request? W9Request)>> GetCreatorsWithTinMatchInProgressAsync()
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creators = await context.Creators
+            .Where(c => c.TaxFormStatus == TaxFormStatus.TinMatchInProgress)
+            .ToListAsync();
+
+        var result = new List<(Creator, W9Request?)>();
+
+        foreach (var creator in creators)
+        {
+            var w9Request = await context.W9Requests
+                .Where(w => w.UserId == creator.UserId)
+                .OrderByDescending(w => w.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            result.Add((creator, w9Request));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Handles W-9 form status change webhook for US persons.
     /// Sets tax residency type to US. Applies 24% backup withholding if indicated on the W-9.
     /// Only sends emails for terminal states: COMPLETED (success) or INVALID/BOUNCED/ORDER_NOT_CREATED (failure).
-    /// TIN Match is also checked for W-9: Success means passed, Failed/Canceled require user notification.
+    /// When W-9 is COMPLETED, initiates Instant TIN Matching to verify the TIN/name combination with the IRS.
     /// </summary>
     private async Task<IActionResult> HandleFormW9WebhookAsync(JsonElement formW9, string rawBody)
     {
@@ -160,7 +366,6 @@ public class TaxBanditsController : ControllerBase
             // Extract key fields
             string? payeeRef = null;
             string? w9Status = null;
-            string? tinMatchStatus = null;
             string? recipientId = null;
             bool subjectToBackupWithholding = false;
 
@@ -180,14 +385,6 @@ public class TaxBanditsController : ControllerBase
                 w9Status = w9StatusElement.GetString();
             }
 
-            // Extract TIN Match status from TINMatching.Status (nested object)
-            if (formW9.TryGetProperty("TINMatching", out var tinMatchingElement) &&
-                tinMatchingElement.ValueKind != JsonValueKind.Null &&
-                tinMatchingElement.TryGetProperty("Status", out var tinMatchStatusElement))
-            {
-                tinMatchStatus = tinMatchStatusElement.GetString();
-            }
-
             if (formW9.TryGetProperty("RecipientId", out var recipientIdElement))
             {
                 recipientId = recipientIdElement.GetString();
@@ -197,8 +394,8 @@ public class TaxBanditsController : ControllerBase
             subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
 
             _logger.LogInformation(
-                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, TINMatchStatus={TINMatchStatus}, BackupWithholding={BackupWithholding}",
-                submissionId, payeeRef, w9Status, tinMatchStatus, subjectToBackupWithholding);
+                "Processing W-9 webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}, Status={Status}, BackupWithholding={BackupWithholding}",
+                submissionId, payeeRef, w9Status, subjectToBackupWithholding);
 
             // Find and update the W9Request record
             await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -246,95 +443,67 @@ public class TaxBanditsController : ControllerBase
             w9Request.UpdatedAt = DateTime.UtcNow;
             w9Request.RawResponse = rawBody;
 
-            // For W-9 to be successful: W9Status must be COMPLETED AND TINMatchStatus must be Success
             var isW9Completed = string.Equals(w9Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
-            var isTinMatchInProgress = string.Equals(w9Status, StatusCompletedTinMatchInProgress, StringComparison.OrdinalIgnoreCase);
-            var isTinMatchSuccess = string.Equals(tinMatchStatus, TinMatchStatusSuccess, StringComparison.OrdinalIgnoreCase);
-            var isTinMatchFailed = string.Equals(tinMatchStatus, TinMatchStatusFailed, StringComparison.OrdinalIgnoreCase);
-            var isTinMatchCanceled = string.Equals(tinMatchStatus, TinMatchStatusCanceled, StringComparison.OrdinalIgnoreCase);
             var isFormStatusFailure = !string.IsNullOrWhiteSpace(w9Status) && FailureStatuses.Contains(w9Status);
 
-            if (isW9Completed && isTinMatchSuccess)
+            if (isW9Completed)
             {
-                // W-9 fully successful: form completed AND TIN match passed
-                w9Request.IsCompleted = true;
-                w9Request.CompletedAt = DateTime.UtcNow;
-
+                // W-9 form completed — initiate Instant TIN Matching
                 _logger.LogInformation(
-                    "W-9 completed and TIN match passed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                    "W-9 completed for user {UserId}. Initiating Instant TIN Matching. BackupWithholding={BackupWithholding}",
                     w9Request.UserId, subjectToBackupWithholding);
 
-                // Parse submission ID as Guid if possible
-                Guid? submissionGuid = null;
-                if (Guid.TryParse(submissionId, out var parsedGuid))
+                // Extract TIN matching request data from the webhook payload
+                var tinMatchRequest = ExtractTinMatchRequestFromW9(formW9, w9Request.UserId, userEmail);
+
+                if (tinMatchRequest != null)
                 {
-                    submissionGuid = parsedGuid;
+                    // Store backup withholding info in the W9Request raw response for later use
+                    w9Request.RawResponse = rawBody;
+
+                    // Call Instant TIN Matching API
+                    var tinMatchResponse = await _taxBanditsService.RequestInstantTinMatchAsync(tinMatchRequest);
+
+                    if (tinMatchResponse.Success)
+                    {
+                        await HandleInstantTinMatchResultAsync(
+                            tinMatchResponse, w9Request, formW9, subjectToBackupWithholding, submissionId, userEmail, baseUrl);
+                    }
+                    else
+                    {
+                        // Instant TIN Match API call failed — log error but don't fail the webhook
+                        _logger.LogError(
+                            "Instant TIN Match API call failed for user {UserId}: {Error}",
+                            w9Request.UserId, tinMatchResponse.ErrorMessage);
+
+                        // Update tax form status to TinMatchInProgress and let admin handle it
+                        var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+                        if (creator != null)
+                        {
+                            await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+                        }
+
+                        await BroadcastWebhookStatusAsync(
+                            w9Request.UserId,
+                            "TaxFormStatus",
+                            true,
+                            "Your tax form is completed. TIN verification is in progress.",
+                            "TinMatchInProgress");
+                    }
                 }
-
-                // Determine withholding rate: 24% if subject to backup withholding, 0% otherwise
-                var withholdingRate = subjectToBackupWithholding ? BackupWithholdingRate : 0m;
-
-                // Complete the creator onboarding with US tax residency
-                await CompleteCreatorOnboardingWithTaxDataAsync(
-                    w9Request.UserId,
-                    TaxResidencyType.US,
-                    taxResidencyCountry: "US",
-                    withholdingRate: withholdingRate,
-                    taxFormExpirationDate: null, // W-9 forms don't expire
-                    taxBanditsSubmissionId: submissionGuid,
-                    subjectToBackupWithholding: subjectToBackupWithholding);
-
-                // Broadcast SignalR update to notify the user's browser
-                await BroadcastWebhookStatusAsync(
-                    w9Request.UserId, 
-                    "TaxFormCompleted", 
-                    true, 
-                    "Your tax form has been completed successfully!",
-                    "Completed");
-
-                // Send success/welcome email to user and admin notification
-                if (!string.IsNullOrWhiteSpace(userEmail))
+                else
                 {
-                    await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+                    _logger.LogWarning(
+                        "Could not extract TIN match request data from W-9 webhook for user {UserId}",
+                        w9Request.UserId);
+
+                    // Cannot perform TIN matching without the required data
+                    if (!string.IsNullOrWhiteSpace(userEmail))
+                    {
+                        await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                            userEmail, baseUrl, submissionId, "Could not extract TIN information from the completed W-9 form.");
+                    }
                 }
-            }
-            else if (isTinMatchFailed)
-            {
-                // TIN match failed - send failure email
-                _logger.LogWarning("TIN match failed for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}",
-                    w9Request.UserId, w9Status, tinMatchStatus);
-
-                if (!string.IsNullOrWhiteSpace(userEmail))
-                {
-                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9", 
-                        "TIN verification failed. Please double-check your Tax Identification Number and resubmit.");
-                }
-
-                await BroadcastWebhookStatusAsync(
-                    w9Request.UserId,
-                    "TaxFormStatus",
-                    false,
-                    "TIN verification failed",
-                    tinMatchStatus);
-            }
-            else if (isTinMatchCanceled)
-            {
-                // TIN match canceled - notify the user
-                _logger.LogWarning("TIN match canceled for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}",
-                    w9Request.UserId, w9Status, tinMatchStatus);
-
-                if (!string.IsNullOrWhiteSpace(userEmail))
-                {
-                    await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
-                        "Your TIN matching request was canceled. Please request a new tax form and try again.");
-                }
-
-                await BroadcastWebhookStatusAsync(
-                    w9Request.UserId,
-                    "TaxFormStatus",
-                    false,
-                    "TIN matching was canceled",
-                    tinMatchStatus);
             }
             else if (isFormStatusFailure)
             {
@@ -354,41 +523,19 @@ public class TaxBanditsController : ControllerBase
                     $"Tax form status: {w9Status}",
                     w9Status);
             }
-            else if (isTinMatchInProgress)
-            {
-                // W-9 form completed but TIN match is still in progress
-                _logger.LogInformation(
-                    "W-9 completed but TIN match in progress for user {UserId}. This may take up to 1 hour.",
-                    w9Request.UserId);
-
-                // Update the creator's tax form status to TinMatchInProgress
-                var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
-                if (creator != null)
-                {
-                    await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
-                }
-
-                // Broadcast SignalR update to notify the user's browser
-                await BroadcastWebhookStatusAsync(
-                    w9Request.UserId,
-                    "TaxFormStatus",
-                    true,
-                    "Your tax form is completed. TIN verification is in progress and may take up to 1 hour. This status will update automatically when complete.",
-                    "TinMatchInProgress");
-            }
             else
             {
                 // Intermediate status - just log and update, don't send emails
                 _logger.LogInformation(
-                    "W-9 intermediate status for user {UserId}. W9Status={W9Status}, TINMatchStatus={TINMatchStatus}. No email sent.",
-                    w9Request.UserId, w9Status, tinMatchStatus);
+                    "W-9 intermediate status for user {UserId}. W9Status={W9Status}. No email sent.",
+                    w9Request.UserId, w9Status);
             }
 
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, TINMatchStatus: {TINMatchStatus}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
-                w9Request.UserId, w9Status, tinMatchStatus, w9Request.IsCompleted, subjectToBackupWithholding);
+                "Successfully processed W-9 webhook for user {UserId}. Status: {Status}, IsCompleted: {IsCompleted}, BackupWithholding: {BackupWithholding}",
+                w9Request.UserId, w9Status, w9Request.IsCompleted, subjectToBackupWithholding);
 
             return Ok(new { status = "success" });
         }
@@ -404,6 +551,192 @@ public class TaxBanditsController : ControllerBase
             }
 
             return StatusCode(500, "Error processing webhook");
+        }
+    }
+
+    /// <summary>
+    /// Extracts TIN matching request data from a W-9 webhook FormData payload.
+    /// </summary>
+    private InstantTinMatchRequest? ExtractTinMatchRequestFromW9(JsonElement formW9, int userId, string? email)
+    {
+        try
+        {
+            if (!formW9.TryGetProperty("FormData", out var formData) || formData.ValueKind == JsonValueKind.Null)
+            {
+                _logger.LogWarning("W-9 webhook missing FormData for user {UserId}", userId);
+                return null;
+            }
+
+            string? tinType = null;
+            string? tin = null;
+            string? firstName = null;
+            string? lastName = null;
+            string? middleName = null;
+            string? businessName = null;
+
+            if (formData.TryGetProperty("TINType", out var tinTypeEl))
+                tinType = tinTypeEl.GetString();
+            if (formData.TryGetProperty("TIN", out var tinEl))
+                tin = tinEl.GetString();
+            if (formData.TryGetProperty("FirstNm", out var firstNameEl))
+                firstName = firstNameEl.GetString();
+            if (formData.TryGetProperty("LastNm", out var lastNameEl))
+                lastName = lastNameEl.GetString();
+            if (formData.TryGetProperty("MiddleNm", out var middleNameEl))
+                middleName = middleNameEl.GetString();
+
+            // For EIN, the business name is in Line1Nm
+            if (formData.TryGetProperty("Line1Nm", out var line1NmEl))
+                businessName = line1NmEl.GetString();
+
+            if (string.IsNullOrWhiteSpace(tinType) || string.IsNullOrWhiteSpace(tin))
+            {
+                _logger.LogWarning("W-9 webhook missing TINType or TIN for user {UserId}", userId);
+                return null;
+            }
+
+            return new InstantTinMatchRequest
+            {
+                TINType = tinType,
+                TIN = tin,
+                FirstNm = firstName,
+                LastNm = lastName,
+                MiddleNm = middleName,
+                BusinessNm = businessName,
+                UserId = userId,
+                Email = email
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting TIN match request from W-9 webhook for user {UserId}", userId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Handles the result of an Instant TIN Match request.
+    /// TIN-001 (SUCCESS): Activate creator. TIN-002 (FAILED): Send failure email. TIN-003 (ON HOLD): Wait for webhook.
+    /// </summary>
+    private async Task HandleInstantTinMatchResultAsync(
+        InstantTinMatchResponse tinMatchResponse,
+        W9Request w9Request,
+        JsonElement formW9,
+        bool subjectToBackupWithholding,
+        string? submissionId,
+        string? userEmail,
+        string baseUrl)
+    {
+        var tinStatusCode = tinMatchResponse.TINStatusCode;
+
+        _logger.LogInformation(
+            "Instant TIN Match result for user {UserId}: StatusCode={TINStatusCode}, Status={TINStatus}",
+            w9Request.UserId, tinStatusCode, tinMatchResponse.TINStatus);
+
+        if (string.Equals(tinStatusCode, TinStatusCodeSuccess, StringComparison.OrdinalIgnoreCase))
+        {
+            // TIN-001: SUCCESS - TIN and name match IRS records
+            w9Request.IsCompleted = true;
+            w9Request.CompletedAt = DateTime.UtcNow;
+
+            _logger.LogInformation(
+                "Instant TIN Match passed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                w9Request.UserId, subjectToBackupWithholding);
+
+            Guid? submissionGuid = null;
+            if (Guid.TryParse(submissionId, out var parsedGuid))
+            {
+                submissionGuid = parsedGuid;
+            }
+
+            var withholdingRate = subjectToBackupWithholding ? BackupWithholdingRate : 0m;
+
+            await CompleteCreatorOnboardingWithTaxDataAsync(
+                w9Request.UserId,
+                TaxResidencyType.US,
+                taxResidencyCountry: "US",
+                withholdingRate: withholdingRate,
+                taxFormExpirationDate: null,
+                taxBanditsSubmissionId: submissionGuid,
+                subjectToBackupWithholding: subjectToBackupWithholding);
+
+            await BroadcastWebhookStatusAsync(
+                w9Request.UserId,
+                "TaxFormCompleted",
+                true,
+                "Your tax form has been completed successfully!",
+                "Completed");
+
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+            }
+        }
+        else if (string.Equals(tinStatusCode, TinStatusCodeFailed, StringComparison.OrdinalIgnoreCase))
+        {
+            // TIN-002: FAILED - TIN and name don't match IRS records
+            _logger.LogWarning("Instant TIN Match failed for user {UserId}. TINStatusCode={TINStatusCode}",
+                w9Request.UserId, tinStatusCode);
+
+            // Record the failure timestamp for 24-hour cooldown enforcement
+            var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+            if (creator != null)
+            {
+                await _creatorService.SetTinMatchFailedAsync(creator.Id);
+            }
+
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await _creatorEmailService.SendTaxFormFailedEmailAsync(userEmail, baseUrl, "W-9",
+                    "TIN verification failed. Please double-check your Tax Identification Number and resubmit. You may retry after 24 hours.");
+            }
+
+            await BroadcastWebhookStatusAsync(
+                w9Request.UserId,
+                "TaxFormStatus",
+                false,
+                "TIN verification failed. You may retry after 24 hours.",
+                "Failed");
+        }
+        else if (string.Equals(tinStatusCode, TinStatusCodeOnHold, StringComparison.OrdinalIgnoreCase))
+        {
+            // TIN-003: ON HOLD - IRS system issues, will get result via webhook later
+            _logger.LogInformation(
+                "Instant TIN Match on hold for user {UserId}. Will receive status via webhook.",
+                w9Request.UserId);
+
+            var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+            if (creator != null)
+            {
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+            }
+
+            await BroadcastWebhookStatusAsync(
+                w9Request.UserId,
+                "TaxFormStatus",
+                true,
+                "Your tax form is completed. TIN verification is in progress and will update automatically when complete.",
+                "TinMatchInProgress");
+        }
+        else
+        {
+            // Unknown status code - log and treat as on hold
+            _logger.LogWarning(
+                "Unknown Instant TIN Match status code for user {UserId}: {TINStatusCode}",
+                w9Request.UserId, tinStatusCode);
+
+            var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
+            if (creator != null)
+            {
+                await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+            }
+
+            await BroadcastWebhookStatusAsync(
+                w9Request.UserId,
+                "TaxFormStatus",
+                true,
+                "Your tax form is completed. TIN verification is in progress.",
+                "TinMatchInProgress");
         }
     }
 

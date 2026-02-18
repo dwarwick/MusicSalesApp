@@ -108,7 +108,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var clientSecret = _configuration["TaxBandits:ClientSecret"];
             var userToken = _configuration["TaxBandits:UserToken"];
             var businessId = _configuration["TaxBandits:BusinessId"];
-            var webhookRef = _configuration["TaxBandits:WebhookRef"];
+            var webhookRef = _configuration["TaxBandits:W9CompleteWebhookRef"];
             var emailCustomizationId = _configuration["TaxBandits:EmailCustomizationId"];
             var customizationId = _configuration["TaxBandits:CustomizationId"];
 
@@ -1094,6 +1094,174 @@ public sealed class TaxBanditsService : ITaxBanditsService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Exception while requesting TaxBandits transient token");
+            response.Success = false;
+            response.ErrorMessage = ex.Message;
+        }
+
+        return response;
+    }
+
+    /// <inheritdoc />
+    public async Task<InstantTinMatchResponse> RequestInstantTinMatchAsync(
+        InstantTinMatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request == null) throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.TIN)) throw new ArgumentException("TIN is required.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.TINType)) throw new ArgumentException("TINType is required.", nameof(request));
+
+        _logger.LogInformation("Requesting Instant TIN Match for user {UserId}, TINType={TINType}", request.UserId, request.TINType);
+
+        var response = new InstantTinMatchResponse();
+
+        try
+        {
+            var clientId = _configuration["TaxBandits:ClientId"];
+            var clientSecret = _configuration["TaxBandits:ClientSecret"];
+            var userToken = _configuration["TaxBandits:UserToken"];
+            var businessId = _configuration["TaxBandits:BusinessId"];
+            var tinStatusWebhookRef = _configuration["TaxBandits:TinStatusWebhookRef"];
+
+            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
+                string.IsNullOrWhiteSpace(userToken))
+            {
+                var errorMsg = "TaxBandits configuration is incomplete. Please check ClientId, ClientSecret, UserToken.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Get access token
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
+            {
+                var errorMsg = "Failed to obtain TaxBandits access token for Instant TIN Match.";
+                _logger.LogError(errorMsg);
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                return response;
+            }
+
+            // Build the API request
+            var apiUrl = useSandbox
+                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
+                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/v1.7.3/";
+
+            var requestBody = new Dictionary<string, object?>
+            {
+                ["TINType"] = request.TINType,
+                ["TIN"] = request.TIN,
+                // IsForced=false: TaxBandits enforces 1 request per TIN per 24 hours.
+                // Set to false to respect this limit; true would bypass duplicate checks.
+                ["IsForced"] = false,
+                ["IsSaveInAddBook"] = false,
+                ["BusinessId"] = businessId,
+                ["WebhookRef"] = tinStatusWebhookRef
+            };
+
+            // Add name fields based on TIN type
+            if (string.Equals(request.TINType, "EIN", StringComparison.OrdinalIgnoreCase))
+            {
+                requestBody["BusinessNm"] = request.BusinessNm;
+            }
+            else
+            {
+                // SSN or ITIN - use individual name fields
+                requestBody["FirstNm"] = request.FirstNm;
+                requestBody["LastNm"] = request.LastNm;
+                if (!string.IsNullOrWhiteSpace(request.MiddleNm))
+                {
+                    requestBody["MiddleNm"] = request.MiddleNm;
+                }
+            }
+
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{apiUrl.TrimEnd('/')}/InstantTINMatch/Request");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResponse.AccessToken);
+            req.Content = content;
+
+            _logger.LogInformation("Sending Instant TIN Match request for user {UserId}", request.UserId);
+
+            using var resp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            var responseBody = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            response.RawResponse = responseBody;
+
+            _logger.LogInformation("Instant TIN Match response: HTTP {StatusCode}, Body: {Body}", (int)resp.StatusCode, responseBody);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("RecordId", out var recordIdEl))
+                        response.RecordId = recordIdEl.GetString();
+                    if (root.TryGetProperty("TINStatusCode", out var statusCodeEl))
+                        response.TINStatusCode = statusCodeEl.GetString();
+                    if (root.TryGetProperty("TINStatus", out var statusEl))
+                        response.TINStatus = statusEl.GetString();
+                    if (root.TryGetProperty("TINStatusMsg", out var statusMsgEl))
+                        response.TINStatusMsg = statusMsgEl.GetString();
+
+                    // Check for errors in the response
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var firstError = errors[0];
+                        var errorMsg = firstError.TryGetProperty("Message", out var msgElement)
+                            ? msgElement.GetString() ?? "Unknown error from TaxBandits"
+                            : "Unknown error from TaxBandits";
+
+                        response.Success = false;
+                        response.ErrorMessage = errorMsg;
+                        _logger.LogError("Instant TIN Match failed for user {UserId}: {ErrorMessage}", request.UserId, errorMsg);
+                    }
+                    else
+                    {
+                        response.Success = true;
+                        _logger.LogInformation(
+                            "Instant TIN Match response for user {UserId}: StatusCode={TINStatusCode}, Status={TINStatus}",
+                            request.UserId, response.TINStatusCode, response.TINStatus);
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(ex, "Failed to parse Instant TIN Match response for user {UserId}", request.UserId);
+                    response.Success = false;
+                    response.ErrorMessage = "Failed to parse TIN match response.";
+                }
+            }
+            else
+            {
+                var errorMsg = $"TaxBandits Instant TIN Match API returned HTTP {(int)resp.StatusCode}";
+                try
+                {
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("StatusMessage", out var msgEl))
+                    {
+                        errorMsg = msgEl.GetString() ?? errorMsg;
+                    }
+                }
+                catch (JsonException) { }
+
+                response.Success = false;
+                response.ErrorMessage = errorMsg;
+                _logger.LogError("Instant TIN Match request failed for user {UserId}: {Error}", request.UserId, errorMsg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Exception during Instant TIN Match for user {UserId}", request.UserId);
             response.Success = false;
             response.ErrorMessage = ex.Message;
         }

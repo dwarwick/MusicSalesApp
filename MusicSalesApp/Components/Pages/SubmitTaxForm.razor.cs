@@ -9,6 +9,7 @@ namespace MusicSalesApp.Components.Pages;
 public partial class SubmitTaxFormModel : BlazorBase
 {
     protected bool _loading = true;
+    protected bool _isCooldownActive = false;
     protected string _errorMessage = string.Empty;
     private bool _hasLoadedData = false;
     private IJSObjectReference? _jsModule;
@@ -27,6 +28,24 @@ public partial class SubmitTaxFormModel : BlazorBase
                 {
                     NavigationManager.NavigateTo("/login");
                     return;
+                }
+
+                // Check if user is in a 24-hour TIN match cooldown period
+                var appUser = await UserManager.GetUserAsync(user);
+                if (appUser != null)
+                {
+                    var creator = await CreatorService.GetCreatorByUserIdAsync(appUser.Id);
+                    if (creator?.LastTinMatchFailedAt != null)
+                    {
+                        var cooldownEnd = creator.LastTinMatchFailedAt.Value.AddHours(24);
+                        if (DateTime.UtcNow < cooldownEnd)
+                        {
+                            _isCooldownActive = true;
+                            _loading = false;
+                            await InvokeAsync(StateHasChanged);
+                            return;
+                        }
+                    }
                 }
 
                 // Get the transient token and configuration from the server

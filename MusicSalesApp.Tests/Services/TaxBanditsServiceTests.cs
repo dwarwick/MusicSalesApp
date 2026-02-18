@@ -277,7 +277,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:WebhookRef"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:W9CompleteWebhookRef"]).Returns((string)null);
         
         // Setup the IConfigurationSection for GetValue<bool>
         var mockSection = new Mock<IConfigurationSection>();
@@ -998,6 +998,83 @@ public class TaxBanditsServiceTests
         // Assert
         Assert.That(result.Success, Is.False);
         Assert.That(result.ErrorMessage, Does.Contain("Origin not allowed"));
+    }
+
+    #endregion
+
+    #region RequestInstantTinMatchAsync Tests
+
+    [Test]
+    public void RequestInstantTinMatchAsync_ThrowsArgumentNullException_WhenRequestIsNull()
+    {
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentNullException>(() => 
+            _service.RequestInstantTinMatchAsync(null!));
+    }
+
+    [Test]
+    public void RequestInstantTinMatchAsync_ThrowsArgumentException_WhenTINIsEmpty()
+    {
+        // Arrange
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "SSN",
+            TIN = "",
+            FirstNm = "John",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(() => 
+            _service.RequestInstantTinMatchAsync(request));
+    }
+
+    [Test]
+    public void RequestInstantTinMatchAsync_ThrowsArgumentException_WhenTINTypeIsEmpty()
+    {
+        // Arrange
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "",
+            TIN = "123-45-6789",
+            FirstNm = "John",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act & Assert
+        Assert.ThrowsAsync<ArgumentException>(() => 
+            _service.RequestInstantTinMatchAsync(request));
+    }
+
+    [Test]
+    public async Task RequestInstantTinMatchAsync_ReturnsError_WhenConfigurationIsMissing()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
+
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "SSN",
+            TIN = "123-45-6789",
+            FirstNm = "John",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act
+        var result = await _service.RequestInstantTinMatchAsync(request);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("configuration"));
     }
 
     #endregion
