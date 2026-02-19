@@ -405,7 +405,7 @@ public class TaxBanditsController : ControllerBase
             if (w9Request == null)
             {
                 // Drop-in UI flow: W9Request may not exist because the embedded form
-                // doesn't go through RequestW9ByEmailAsync. Look up the creator by PayeeRef instead.
+                // creates records on-the-fly via webhook. Look up the creator by PayeeRef instead.
                 if (!string.IsNullOrWhiteSpace(payeeRef))
                 {
                     var creator = await context.Creators
@@ -870,7 +870,7 @@ public class TaxBanditsController : ControllerBase
             if (w9Request == null)
             {
                 // Drop-in UI flow: W9Request may not exist because the embedded form
-                // doesn't go through RequestW9ByEmailAsync. Look up the creator by PayeeRef instead.
+                // creates records on-the-fly via webhook. Look up the creator by PayeeRef instead.
                 if (!string.IsNullOrWhiteSpace(payeeRef))
                 {
                     var creator = await context.Creators

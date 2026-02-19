@@ -26,21 +26,6 @@ public interface ITaxBanditsService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Requests a W-9/W-8 tax form via email using the TaxBandits API.
-    /// TaxBandits will send an email to the recipient with a link to complete their tax form.
-    /// </summary>
-    /// <param name="userId">The user ID in our system.</param>
-    /// <param name="email">The email address of the recipient.</param>
-    /// <param name="baseUrl">The base URL of the application for email templates.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The response from TaxBandits API.</returns>
-    Task<W9RequestResponse> RequestW9ByEmailAsync(
-        int userId,
-        string email,
-        string baseUrl,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Deletes an incomplete W-9/W-8 form from TaxBandits.
     /// This is used when a user abandons the form and needs to request a new one.
     /// </summary>
@@ -143,18 +128,6 @@ public sealed class TaxBanditsAuthResponse
     public int ExpiresIn { get; set; }
 
     public object? Errors { get; set; }
-}
-
-/// <summary>
-/// Response from TaxBandits W-9 request API.
-/// </summary>
-public sealed class W9RequestResponse
-{
-    public bool Success { get; set; }
-    public string? SubmissionId { get; set; }
-    public string? Status { get; set; }
-    public string? ErrorMessage { get; set; }
-    public string? RawResponse { get; set; }
 }
 
 /// <summary>
