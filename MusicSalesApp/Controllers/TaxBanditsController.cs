@@ -404,8 +404,37 @@ public class TaxBanditsController : ControllerBase
 
             if (w9Request == null)
             {
+                // Drop-in UI flow: W9Request may not exist because the embedded form
+                // doesn't go through RequestW9ByEmailAsync. Look up the creator by PayeeRef instead.
+                if (!string.IsNullOrWhiteSpace(payeeRef))
+                {
+                    var creator = await context.Creators
+                        .FirstOrDefaultAsync(c => c.TaxBanditsPayeeRef == payeeRef);
+
+                    if (creator != null)
+                    {
+                        _logger.LogInformation(
+                            "W9Request not found but matched creator {CreatorId} by PayeeRef {PayeeRef}. Creating W9Request for Drop-in UI flow.",
+                            creator.Id, payeeRef);
+
+                        w9Request = new W9Request
+                        {
+                            UserId = creator.UserId,
+                            Email = payeeRef,
+                            SubmissionId = submissionId,
+                            SubjectToBackupWithholding = subjectToBackupWithholding,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        context.W9Requests.Add(w9Request);
+                    }
+                }
+            }
+
+            if (w9Request == null)
+            {
                 _logger.LogWarning(
-                    "Could not find W9Request for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
+                    "Could not find W9Request or matching creator for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
 
                 // Send processing error email if we have a user email
@@ -840,8 +869,36 @@ public class TaxBanditsController : ControllerBase
 
             if (w9Request == null)
             {
+                // Drop-in UI flow: W9Request may not exist because the embedded form
+                // doesn't go through RequestW9ByEmailAsync. Look up the creator by PayeeRef instead.
+                if (!string.IsNullOrWhiteSpace(payeeRef))
+                {
+                    var creator = await context.Creators
+                        .FirstOrDefaultAsync(c => c.TaxBanditsPayeeRef == payeeRef);
+
+                    if (creator != null)
+                    {
+                        _logger.LogInformation(
+                            "W9Request not found but matched creator {CreatorId} by PayeeRef {PayeeRef}. Creating W9Request for Drop-in UI flow (W-8BEN).",
+                            creator.Id, payeeRef);
+
+                        w9Request = new W9Request
+                        {
+                            UserId = creator.UserId,
+                            Email = payeeRef,
+                            SubmissionId = submissionId,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        context.W9Requests.Add(w9Request);
+                    }
+                }
+            }
+
+            if (w9Request == null)
+            {
                 _logger.LogWarning(
-                    "Could not find W9Request for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
+                    "Could not find W9Request or matching creator for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
 
                 // Send processing error email if we have a user email
