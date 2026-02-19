@@ -393,19 +393,11 @@ public class TaxBanditsController : ControllerBase
                     .FirstOrDefaultAsync(w => w.SubmissionId == submissionId);
             }
 
-            // If not found, try to find by email (PayeeRef is the email)
-            if (w9Request == null && !string.IsNullOrWhiteSpace(payeeRef))
-            {
-                w9Request = await context.W9Requests
-                    .Where(w => w.Email == payeeRef)
-                    .OrderByDescending(w => w.CreatedAt)
-                    .FirstOrDefaultAsync();
-            }
-
             if (w9Request == null)
             {
-                // Drop-in UI flow: W9Request may not exist because the embedded form
-                // creates records on-the-fly via webhook. Look up the creator by PayeeRef instead.
+                // No existing W9Request for this submission — create a new one.
+                // We always create a new record (never reuse by email) to preserve
+                // the history of all submissions for the same creator (e.g., address changes).
                 if (!string.IsNullOrWhiteSpace(payeeRef))
                 {
                     var creator = await context.Creators
@@ -414,8 +406,8 @@ public class TaxBanditsController : ControllerBase
                     if (creator != null)
                     {
                         _logger.LogInformation(
-                            "W9Request not found but matched creator {CreatorId} by PayeeRef {PayeeRef}. Creating W9Request for Drop-in UI flow.",
-                            creator.Id, payeeRef);
+                            "Creating new W9Request for creator {CreatorId} by PayeeRef {PayeeRef}. SubmissionId={SubmissionId}",
+                            creator.Id, payeeRef, submissionId);
 
                         w9Request = new W9Request
                         {
@@ -859,18 +851,11 @@ public class TaxBanditsController : ControllerBase
                     .FirstOrDefaultAsync(w => w.SubmissionId == submissionId);
             }
 
-            if (w9Request == null && !string.IsNullOrWhiteSpace(payeeRef))
-            {
-                w9Request = await context.W9Requests
-                    .Where(w => w.Email == payeeRef)
-                    .OrderByDescending(w => w.CreatedAt)
-                    .FirstOrDefaultAsync();
-            }
-
             if (w9Request == null)
             {
-                // Drop-in UI flow: W9Request may not exist because the embedded form
-                // creates records on-the-fly via webhook. Look up the creator by PayeeRef instead.
+                // No existing W9Request for this submission — create a new one.
+                // We always create a new record (never reuse by email) to preserve
+                // the history of all submissions for the same creator (e.g., address changes).
                 if (!string.IsNullOrWhiteSpace(payeeRef))
                 {
                     var creator = await context.Creators
@@ -879,8 +864,8 @@ public class TaxBanditsController : ControllerBase
                     if (creator != null)
                     {
                         _logger.LogInformation(
-                            "W9Request not found but matched creator {CreatorId} by PayeeRef {PayeeRef}. Creating W9Request for Drop-in UI flow (W-8BEN).",
-                            creator.Id, payeeRef);
+                            "Creating new W9Request for creator {CreatorId} by PayeeRef {PayeeRef} (W-8BEN). SubmissionId={SubmissionId}",
+                            creator.Id, payeeRef, submissionId);
 
                         w9Request = new W9Request
                         {
