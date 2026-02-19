@@ -168,6 +168,41 @@ public class CreatorServiceTests
             () => _service.ResetCreatorOnboardingAsync(9999, "test@paypal.com", true));
     }
 
+    [Test]
+    public async Task ResetCreatorOnboardingAsync_PreservesTaxFormStatus_WhenTaxFormCompletedAtIsSet()
+    {
+        // Arrange — returning creator who previously completed a tax form (TaxFormCompletedAt is set)
+        var user = new ApplicationUser { UserName = "returning2@test.com", Email = "returning2@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            TaxFormStatus = TaxFormStatus.Completed,
+            TaxFormCompletedAt = DateTime.UtcNow.AddMonths(-6),
+            IsActive = false,
+            PayPalEmail = "old@paypal.com",
+            PayPalAccountAffirmed = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.ResetCreatorOnboardingAsync(creator.Id, "new@paypal.com", true);
+
+        // Assert — TaxFormStatus should be preserved since TaxFormCompletedAt is set
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.Completed),
+            "TaxFormStatus should be preserved for returning creators who already completed a tax form");
+        Assert.That(result.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+
+        // Verify persistence
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.TaxFormStatus, Is.EqualTo(TaxFormStatus.Completed));
+    }
+
     #endregion
 
     #region ActivateCreatorAsync Tests
@@ -214,6 +249,7 @@ public class CreatorServiceTests
             UserId = user.Id,
             OnboardingStatus = CreatorOnboardingStatus.Completed,
             TaxFormStatus = TaxFormStatus.Completed,
+            TaxFormCompletedAt = DateTime.UtcNow.AddMonths(-3),
             IsActive = true,
             PayPalEmail = "original@paypal.com",
             PayPalAccountAffirmed = true,
@@ -247,7 +283,7 @@ public class CreatorServiceTests
         // Step 2: Re-signup (ResetCreatorOnboarding)
         await _service.ResetCreatorOnboardingAsync(creator.Id, "new@paypal.com", true);
 
-        // Verify reset state
+        // Verify reset state — TaxFormStatus should be preserved since TaxFormCompletedAt is set
         await using (var ctx2 = await _contextFactory.CreateDbContextAsync())
         {
             var reset = await ctx2.Creators.FindAsync(creator.Id);
@@ -255,6 +291,8 @@ public class CreatorServiceTests
                 "OnboardingStatus should be Completed after re-signup");
             Assert.That(reset.PayPalEmail, Is.EqualTo("new@paypal.com"));
             Assert.That(reset.PayPalAccountAffirmed, Is.True);
+            Assert.That(reset.TaxFormStatus, Is.EqualTo(TaxFormStatus.Completed),
+                "TaxFormStatus should be preserved for returning creators who already completed a tax form");
             // IsActive should still be false — needs ActivateCreatorAsync
             Assert.That(reset.IsActive, Is.False);
         }

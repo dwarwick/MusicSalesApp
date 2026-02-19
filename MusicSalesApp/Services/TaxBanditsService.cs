@@ -138,7 +138,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 response.Success = false;
                 response.ErrorMessage = errorMsg;
                 await SendErrorEmailsAsync(email, baseUrl, errorMsg, null);
-                await SaveW9RequestAsync(userId, email, null, "AUTH_FAILED", errorMsg, null, cancellationToken);
+                await SaveW9RequestAsync(userId, email, null, "AUTH_FAILED", errorMsg, cancellationToken);
                 return response;
             }
 
@@ -207,7 +207,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                     _logger.LogInformation("W-9 request successful for user {UserId}. SubmissionId: {SubmissionId}, Status: {Status}", 
                         userId, response.SubmissionId, response.Status);
 
-                    await SaveW9RequestAsync(userId, email, response.SubmissionId, response.Status, null, responseBody, cancellationToken);
+                    await SaveW9RequestAsync(userId, email, response.SubmissionId, response.Status, null, cancellationToken);
                 }
                 // Check for error records in the response
                 else if (root.TryGetProperty("WhCertificate", out var whCertErr) && 
@@ -228,7 +228,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                     
                     _logger.LogError("W-9 request failed for user {UserId}: {ErrorMessage}", userId, errorMsg);
                     await SendErrorEmailsAsync(email, baseUrl, errorMsg, responseBody);
-                    await SaveW9RequestAsync(userId, email, response.SubmissionId, "ERROR", errorMsg, responseBody, cancellationToken);
+                    await SaveW9RequestAsync(userId, email, response.SubmissionId, "ERROR", errorMsg, cancellationToken);
                 }
                 // Check for top-level errors
                 else if (root.TryGetProperty("Errors", out var topLevelErrors) &&
@@ -245,14 +245,14 @@ public sealed class TaxBanditsService : ITaxBanditsService
                     _logger.LogError("W-9 request failed for user {UserId}. ErrorId: {ErrorId}, Message: {ErrorMessage}", 
                         userId, errorId, errorMsg);
                     await SendErrorEmailsAsync(email, baseUrl, errorMsg, responseBody);
-                    await SaveW9RequestAsync(userId, email, null, "ERROR", errorMsg, responseBody, cancellationToken, errorId);
+                    await SaveW9RequestAsync(userId, email, null, "ERROR", errorMsg, cancellationToken, errorId);
                 }
                 else
                 {
                     // Unexpected response format but HTTP was successful
                     response.Success = true;
                     response.Status = "UNKNOWN";
-                    await SaveW9RequestAsync(userId, email, response.SubmissionId, "UNKNOWN", null, responseBody, cancellationToken);
+                    await SaveW9RequestAsync(userId, email, response.SubmissionId, "UNKNOWN", null, cancellationToken);
                 }
             }
             else
@@ -292,7 +292,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 _logger.LogError("W-9 request failed for user {UserId}. HTTP {StatusCode}: {ErrorMessage}", 
                     userId, (int)resp.StatusCode, errorMsg);
                 await SendErrorEmailsAsync(email, baseUrl, errorMsg, responseBody);
-                await SaveW9RequestAsync(userId, email, null, "HTTP_ERROR", errorMsg, responseBody, cancellationToken);
+                await SaveW9RequestAsync(userId, email, null, "HTTP_ERROR", errorMsg, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -301,7 +301,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             response.Success = false;
             response.ErrorMessage = ex.Message;
             await SendErrorEmailsAsync(email, baseUrl, ex.Message, null);
-            await SaveW9RequestAsync(userId, email, null, "EXCEPTION", ex.Message, null, cancellationToken);
+            await SaveW9RequestAsync(userId, email, null, "EXCEPTION", ex.Message, cancellationToken);
         }
 
         return response;
@@ -376,7 +376,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
         string? submissionId,
         string? status,
         string? errorMessage,
-        string? rawResponse,
         CancellationToken cancellationToken,
         string? errorId = null)
     {
@@ -392,7 +391,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 Status = status,
                 ErrorId = errorId,
                 ErrorMessage = errorMessage,
-                RawResponse = rawResponse,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

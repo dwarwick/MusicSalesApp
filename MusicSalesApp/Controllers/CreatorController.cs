@@ -163,7 +163,25 @@ public class CreatorController : ControllerBase
         // Uses the service method to ensure an atomic, logged state transition.
         // Previously this was done via direct DbContext manipulation which could silently fail
         // for returning creators whose OnboardingStatus was Suspended.
-        await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
+        var resetCreator = await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
+
+        // Returning creators who have already completed a tax form do not need to fill out another one.
+        // Activate them directly instead of requiring a new W8/W9 submission.
+        if (resetCreator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            await _creatorService.ActivateCreatorAsync(creator.Id);
+            var activatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+
+            _logger.LogInformation("Returning creator re-activated for user {UserId} (tax form already completed), PayPal email: {PayPalEmail}",
+                user.Id, request.PayPalEmail);
+
+            return Ok(new StartOnboardingResponse
+            {
+                Success = true,
+                IsActive = activatedCreator?.IsActive ?? false,
+                TaxFormPending = false
+            });
+        }
 
         // Store the PayeeRef (email) used for the W-9/W-8 request.
         // The creator will complete the tax form via the embedded Drop-in UI on the /submittaxform page,
@@ -393,6 +411,36 @@ public class CreatorController : ControllerBase
     }
 
     /// <summary>
+    /// Initiates a tax form update for an active creator who wants to submit a new W8/W9
+    /// (e.g., because their address has changed).
+    /// </summary>
+    [HttpPost("initiate-tax-form-update")]
+    public async Task<IActionResult> InitiateTaxFormUpdate()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
+        if (creator == null || !creator.IsActive)
+        {
+            return BadRequest("You must be an active creator to update your tax form.");
+        }
+
+        // Set tax form status to Pending so the embedded form page can load
+        await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
+
+        // Update the PayeeRef (email) for the new request
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
+        }
+
+        _logger.LogInformation("Creator {CreatorId} initiated tax form update for user {UserId}", creator.Id, user.Id);
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
     /// Gets a transient token and configuration for the TaxBandits Drop-in UI embedded tax form.
     /// The token is valid for 15 minutes and used to load the W-9/W-8 form on the /submittaxform page.
     /// </summary>
@@ -408,10 +456,10 @@ public class CreatorController : ControllerBase
             return BadRequest("Creator record not found. Please start the onboarding process first.");
         }
 
-        // Check if tax form is already completed
-        if (creator.TaxFormStatus == TaxFormStatus.Completed)
+        // Tax form token is only available when status is Pending
+        if (creator.TaxFormStatus != TaxFormStatus.Pending)
         {
-            return BadRequest("Your tax form has already been completed.");
+            return BadRequest("No pending tax form request. Please initiate a tax form submission first.");
         }
 
         // Get the PayeeRef (email) used in the original request

@@ -495,7 +495,12 @@ public class CreatorService : ICreatorService
         creator.PayPalEmail = payPalEmail;
         creator.PayPalAccountAffirmed = payPalAccountAffirmed;
         creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
-        creator.TaxFormStatus = TaxFormStatus.NotStarted;
+        // Preserve TaxFormStatus for returning creators who have already completed a tax form.
+        // They should not be required to fill out another W8/W9 when re-signing up.
+        if (creator.TaxFormCompletedAt == null)
+        {
+            creator.TaxFormStatus = TaxFormStatus.NotStarted;
+        }
         creator.PaymentsReceivable = true;
         creator.PrimaryEmailConfirmed = true;
         creator.OnboardedAt = DateTime.UtcNow;
