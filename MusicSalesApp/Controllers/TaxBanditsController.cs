@@ -229,24 +229,8 @@ public class TaxBanditsController : ControllerBase
                         w9Request.UpdatedAt = DateTime.UtcNow;
                     }
 
-                    // Extract backup withholding from the stored raw response
-                    bool subjectToBackupWithholding = false;
-                    if (w9Request?.RawResponse != null)
-                    {
-                        try
-                        {
-                            using var w9Doc = JsonDocument.Parse(w9Request.RawResponse);
-                            var w9Root = w9Doc.RootElement;
-                            if (w9Root.TryGetProperty("FormW9", out var formW9))
-                            {
-                                subjectToBackupWithholding = ExtractBackupWithholdingFromW9(formW9);
-                            }
-                        }
-                        catch (JsonException ex)
-                        {
-                            _logger.LogWarning(ex, "Could not parse stored W9 response for backup withholding extraction");
-                        }
-                    }
+                    // Read backup withholding from the stored W9Request field
+                    bool subjectToBackupWithholding = w9Request?.SubjectToBackupWithholding ?? false;
 
                     Guid? submissionGuid = null;
                     if (w9Request != null && Guid.TryParse(w9Request.SubmissionId, out var parsedGuid))
@@ -441,7 +425,7 @@ public class TaxBanditsController : ControllerBase
             // Update the W9Request record
             w9Request.Status = w9Status;
             w9Request.UpdatedAt = DateTime.UtcNow;
-            w9Request.RawResponse = rawBody;
+            w9Request.SubjectToBackupWithholding = subjectToBackupWithholding;
 
             var isW9Completed = string.Equals(w9Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
             var isFormStatusFailure = !string.IsNullOrWhiteSpace(w9Status) && FailureStatuses.Contains(w9Status);
@@ -458,8 +442,6 @@ public class TaxBanditsController : ControllerBase
 
                 if (tinMatchRequest != null)
                 {
-                    // Store backup withholding info in the W9Request raw response for later use
-                    w9Request.RawResponse = rawBody;
 
                     // Call Instant TIN Matching API
                     var tinMatchResponse = await _taxBanditsService.RequestInstantTinMatchAsync(tinMatchRequest);
@@ -878,7 +860,6 @@ public class TaxBanditsController : ControllerBase
             // Update the W9Request record
             w9Request.Status = w8Status;
             w9Request.UpdatedAt = DateTime.UtcNow;
-            w9Request.RawResponse = rawBody;
 
             var isW8Completed = string.Equals(w8Status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
             var isFormStatusFailure = !string.IsNullOrWhiteSpace(w8Status) && FailureStatuses.Contains(w8Status);

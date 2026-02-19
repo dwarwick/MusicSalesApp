@@ -51,9 +51,10 @@ public class W9Request
     public DateTime? StatusTimestamp { get; set; }
 
     /// <summary>
-    /// The full JSON response from the TaxBandits API for auditing.
+    /// Whether the creator is subject to backup withholding (extracted from W-9 form data).
+    /// Used during TIN match completion to determine withholding rate.
     /// </summary>
-    public string? RawResponse { get; set; }
+    public bool SubjectToBackupWithholding { get; set; } = false;
 
     /// <summary>
     /// Any error ID from TaxBandits if the request failed.

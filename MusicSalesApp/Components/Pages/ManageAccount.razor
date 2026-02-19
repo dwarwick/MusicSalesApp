@@ -464,7 +464,7 @@
                                 <li>Remove all your uploaded music from the platform</li>
                                 <li>Delete all your song files from storage</li>
                                 <li>Your music will no longer be available for streaming</li>
-                                <li>You will need to go through the creator onboarding process again if you want to share music in the future</li>
+                                <li>You will need to go through the creator onboarding process again if you want to share music in the future (you will not need to resubmit your tax form)</li>
                             </ul>
                             <p>
                             See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.
@@ -473,6 +473,7 @@
                             @if (!_stoppingCreatorStatus)
                             {
                                 <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" />
+                                <SfButton CssClass="e-warning ms-2" Content="Update W8/W9 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
                             }
                             else
                             {

@@ -70,6 +70,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
+    protected bool _updatingTaxForm = false;
     protected string _stopSellingConfirmEmail = string.Empty;
     
     // Creator attestation fields
@@ -1043,6 +1044,40 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected void NavigateToTaxForm()
     {
         NavigationManager.NavigateTo("/submittaxform");
+    }
+
+    protected async Task InitiateTaxFormUpdate()
+    {
+        _updatingTaxForm = true;
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Http.PostAsync("api/creator/initiate-tax-form-update", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                NavigationManager.NavigateTo("/submittaxform");
+                return;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _errorMessage = $"Failed to initiate tax form update: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initiating tax form update");
+            _errorMessage = "An error occurred while initiating the tax form update. Please try again.";
+        }
+        finally
+        {
+            _updatingTaxForm = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void StartCooldownTimer()
