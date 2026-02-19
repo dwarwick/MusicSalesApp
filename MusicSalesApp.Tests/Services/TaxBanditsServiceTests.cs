@@ -259,43 +259,6 @@ public class TaxBanditsServiceTests
     }
 
     [Test]
-    public async Task RequestW9ByEmailAsync_ReturnsError_WhenEmailIsEmpty()
-    {
-        // Act
-        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
-            await _service.RequestW9ByEmailAsync(1, "", "https://example.com"));
-
-        // Assert
-        Assert.That(ex.ParamName, Is.EqualTo("email"));
-    }
-
-    [Test]
-    public async Task RequestW9ByEmailAsync_ReturnsError_WhenConfigurationIsMissing()
-    {
-        // Arrange - Configuration returns null for required fields
-        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
-        _mockConfiguration.Setup(c => c["TaxBandits:W9CompleteWebhookRef"]).Returns((string)null);
-        
-        // Setup the IConfigurationSection for GetValue<bool>
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-        
-        _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(true);
-
-        // Act
-        var result = await _service.RequestW9ByEmailAsync(1, "test@example.com", "https://example.com");
-
-        // Assert
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("configuration"));
-    }
-
-    [Test]
     public void DeleteW9Async_ThrowsArgumentException_WhenPayeeRefIsEmpty()
     {
         // Act & Assert

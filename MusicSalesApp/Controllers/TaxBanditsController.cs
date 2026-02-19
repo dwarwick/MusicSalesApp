@@ -393,19 +393,40 @@ public class TaxBanditsController : ControllerBase
                     .FirstOrDefaultAsync(w => w.SubmissionId == submissionId);
             }
 
-            // If not found, try to find by email (PayeeRef is the email)
-            if (w9Request == null && !string.IsNullOrWhiteSpace(payeeRef))
+            if (w9Request == null)
             {
-                w9Request = await context.W9Requests
-                    .Where(w => w.Email == payeeRef)
-                    .OrderByDescending(w => w.CreatedAt)
-                    .FirstOrDefaultAsync();
+                // No existing W9Request for this submission — create a new one.
+                // We always create a new record (never reuse by email) to preserve
+                // the history of all submissions for the same creator (e.g., address changes).
+                if (!string.IsNullOrWhiteSpace(payeeRef))
+                {
+                    var creator = await context.Creators
+                        .FirstOrDefaultAsync(c => c.TaxBanditsPayeeRef == payeeRef);
+
+                    if (creator != null)
+                    {
+                        _logger.LogInformation(
+                            "Creating new W9Request for creator {CreatorId} by PayeeRef {PayeeRef}. SubmissionId={SubmissionId}",
+                            creator.Id, payeeRef, submissionId);
+
+                        w9Request = new W9Request
+                        {
+                            UserId = creator.UserId,
+                            Email = payeeRef,
+                            SubmissionId = submissionId,
+                            SubjectToBackupWithholding = subjectToBackupWithholding,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        context.W9Requests.Add(w9Request);
+                    }
+                }
             }
 
             if (w9Request == null)
             {
                 _logger.LogWarning(
-                    "Could not find W9Request for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
+                    "Could not find W9Request or matching creator for webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
 
                 // Send processing error email if we have a user email
@@ -830,18 +851,39 @@ public class TaxBanditsController : ControllerBase
                     .FirstOrDefaultAsync(w => w.SubmissionId == submissionId);
             }
 
-            if (w9Request == null && !string.IsNullOrWhiteSpace(payeeRef))
+            if (w9Request == null)
             {
-                w9Request = await context.W9Requests
-                    .Where(w => w.Email == payeeRef)
-                    .OrderByDescending(w => w.CreatedAt)
-                    .FirstOrDefaultAsync();
+                // No existing W9Request for this submission — create a new one.
+                // We always create a new record (never reuse by email) to preserve
+                // the history of all submissions for the same creator (e.g., address changes).
+                if (!string.IsNullOrWhiteSpace(payeeRef))
+                {
+                    var creator = await context.Creators
+                        .FirstOrDefaultAsync(c => c.TaxBanditsPayeeRef == payeeRef);
+
+                    if (creator != null)
+                    {
+                        _logger.LogInformation(
+                            "Creating new W9Request for creator {CreatorId} by PayeeRef {PayeeRef} (W-8BEN). SubmissionId={SubmissionId}",
+                            creator.Id, payeeRef, submissionId);
+
+                        w9Request = new W9Request
+                        {
+                            UserId = creator.UserId,
+                            Email = payeeRef,
+                            SubmissionId = submissionId,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        context.W9Requests.Add(w9Request);
+                    }
+                }
             }
 
             if (w9Request == null)
             {
                 _logger.LogWarning(
-                    "Could not find W9Request for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
+                    "Could not find W9Request or matching creator for W-8BEN webhook: SubmissionId={SubmissionId}, PayeeRef={PayeeRef}",
                     submissionId, payeeRef);
 
                 // Send processing error email if we have a user email
