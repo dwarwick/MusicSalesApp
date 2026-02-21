@@ -193,7 +193,7 @@ public abstract class BUnitTestBase
         // Setup default returns for IStreamCountService methods
         MockStreamCountService.Setup(x => x.GetStreamCountAsync(It.IsAny<int>()))
             .ReturnsAsync(0);
-        MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>()))
+        MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
             .ReturnsAsync(1);
 
         // Setup default returns for IStreamCountHubClient methods

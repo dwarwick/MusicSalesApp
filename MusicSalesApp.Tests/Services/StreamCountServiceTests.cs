@@ -72,6 +72,45 @@ public class StreamCountServiceTests
         return metadata;
     }
 
+    private async Task<(SongMetadata metadata, Creator creator, ApplicationUser user)> CreateTestSongWithCreator(int numberOfStreams = 0)
+    {
+        using var context = new AppDbContext(_contextOptions);
+        var user = new ApplicationUser
+        {
+            UserName = $"creator_{Guid.NewGuid()}@test.com",
+            Email = $"creator_{Guid.NewGuid()}@test.com",
+            NormalizedEmail = $"CREATOR_{Guid.NewGuid()}@TEST.COM",
+            NormalizedUserName = $"CREATOR_{Guid.NewGuid()}@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed
+        };
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var metadata = new SongMetadata
+        {
+            BlobPath = "test/song.mp3",
+            Mp3BlobPath = "test/song.mp3",
+            AlbumName = "Test Album",
+            NumberOfStreams = numberOfStreams,
+            CreatorId = creator.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.SongMetadata.Add(metadata);
+        await context.SaveChangesAsync();
+        return (metadata, creator, user);
+    }
+
     [Test]
     public async Task GetStreamCountAsync_SongExists_ReturnsStreamCount()
     {
@@ -198,5 +237,147 @@ public class StreamCountServiceTests
         Assert.That(eventFired, Is.True);
         Assert.That(receivedSongId, Is.EqualTo(metadata.Id));
         Assert.That(receivedCount, Is.EqualTo(11));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_RegularUser_CreatesStreamRecordAndIncrementsCount()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 5);
+        var streamerUserId = 999;
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, streamerUserId);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(6));
+
+        // Verify SongStream record was created
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Not.Null);
+        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(streamerUserId));
+        Assert.That(streamRecord.SongMetadataId, Is.EqualTo(metadata.Id));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_CreatorStreamsOwnSong_DoesNotIncrementCount()
+    {
+        // Arrange
+        var (metadata, creator, user) = await CreateTestSongWithCreator(numberOfStreams: 5);
+
+        // Act - Creator streams their own song
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, user.Id);
+
+        // Assert - Count should NOT be incremented
+        Assert.That(result, Is.EqualTo(5));
+
+        // Verify the database was NOT updated
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var updatedMetadata = await verifyContext.SongMetadata.FindAsync(metadata.Id);
+        Assert.That(updatedMetadata?.NumberOfStreams, Is.EqualTo(5));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_CreatorStreamsOwnSong_StillCreatesStreamRecord()
+    {
+        // Arrange
+        var (metadata, creator, user) = await CreateTestSongWithCreator(numberOfStreams: 5);
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, user.Id);
+
+        // Assert - SongStream record should still be created
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Not.Null);
+        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(user.Id));
+        Assert.That(streamRecord.CreatorId, Is.EqualTo(creator.Id));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_AdminStreams_DoesNotIncrementCount()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 10);
+        var adminUserId = 1;
+
+        // Act - Admin streams a song
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
+
+        // Assert - Count should NOT be incremented
+        Assert.That(result, Is.EqualTo(10));
+
+        // Verify the database was NOT updated
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var updatedMetadata = await verifyContext.SongMetadata.FindAsync(metadata.Id);
+        Assert.That(updatedMetadata?.NumberOfStreams, Is.EqualTo(10));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_AdminStreams_StillCreatesStreamRecord()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 10);
+        var adminUserId = 1;
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
+
+        // Assert - SongStream record should still be created
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Not.Null);
+        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(adminUserId));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_UnauthenticatedUser_IncrementsCountAndCreatesRecord()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 3);
+
+        // Act - No streamerUserId (unauthenticated)
+        var result = await _service.IncrementStreamCountAsync(metadata.Id);
+
+        // Assert - Count should be incremented
+        Assert.That(result, Is.EqualTo(4));
+
+        // Verify SongStream record was created with null StreamerUserId
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Not.Null);
+        Assert.That(streamRecord.StreamerUserId, Is.Null);
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_CreatorStreamsOtherCreatorSong_IncrementsCount()
+    {
+        // Arrange
+        var (metadata, creator, songOwner) = await CreateTestSongWithCreator(numberOfStreams: 5);
+
+        // Create another user who is NOT the creator of this song
+        using var setupContext = new AppDbContext(_contextOptions);
+        var otherUser = new ApplicationUser
+        {
+            UserName = "other@test.com",
+            Email = "other@test.com",
+            NormalizedEmail = "OTHER@TEST.COM",
+            NormalizedUserName = "OTHER@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        setupContext.Users.Add(otherUser);
+        await setupContext.SaveChangesAsync();
+
+        // Act - Another user streams this song
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, otherUser.Id);
+
+        // Assert - Count should be incremented
+        Assert.That(result, Is.EqualTo(6));
     }
 }
