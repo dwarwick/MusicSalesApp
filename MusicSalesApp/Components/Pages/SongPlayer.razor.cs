@@ -140,12 +140,13 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // Get all metadata from database - SQL is the source of truth
             var allMetadata = await SongMetadataService.GetAllAsync();
             
-            // Find matching song metadata by filename
+            // Find matching song metadata by filename or stored title
             _songMetadata = allMetadata.FirstOrDefault(m =>
                 !string.IsNullOrEmpty(m.Mp3BlobPath) &&
                 IsAudioFile(m.Mp3BlobPath) &&
                 (Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
-                 Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
+                 Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                 (!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase))));
 
             if (_songMetadata == null)
             {
