@@ -42,6 +42,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected bool _hasActiveSubscription;
     protected bool _isAdmin;
     protected bool _isCreatorOfSong;
+    private int? _currentUserId;
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
 
@@ -199,15 +200,18 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 // Check if user is admin
                 _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
 
+                // Load current user ID for stream recording
+                var user = await UserManager.GetUserAsync(authState.User);
+                _currentUserId = user?.Id;
+
                 // Check if user is the creator of this song
-                if (_songMetadata.Creator != null)
+                if (_songMetadata.Creator != null && user != null)
                 {
-                    var user = await UserManager.GetUserAsync(authState.User);
-                    if (user != null)
-                    {
-                        _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
-                    }
+                    _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
                 }
+
+                Logger.LogInformation("SongPlayer: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}, _isCreatorOfSong={IsCreatorOfSong}", 
+                    _isAuthenticated, _isAdmin, _currentUserId, _isCreatorOfSong);
             }
         }
         catch (Exception ex)
@@ -500,42 +504,20 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task RecordStream(int songMetadataId)
     {
-        // Admins and creators streaming their own songs should not generate stream records
-        if (_isAdmin)
-        {
-            Logger.LogDebug("SongPlayer: Skipping stream recording for admin user on song {SongMetadataId}", songMetadataId);
-            return;
-        }
-        if (_isCreatorOfSong)
-        {
-            Logger.LogDebug("SongPlayer: Skipping stream recording for creator on their own song {SongMetadataId}", songMetadataId);
-            return;
-        }
+        Logger.LogInformation("SongPlayer.RecordStream called: songMetadataId={SongMetadataId}, _currentUserId={CurrentUserId}, _isAdmin={IsAdmin}, _isCreatorOfSong={IsCreatorOfSong}", 
+            songMetadataId, _currentUserId, _isAdmin, _isCreatorOfSong);
 
         try
         {
-            var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
-                if (result != null)
-                {
-                    _streamCount = result.StreamCount;
-                    await InvokeAsync(StateHasChanged);
-                    Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
-                }
-            }
+            // Call StreamCountService directly (bypasses HTTP which loses auth context in Blazor Server)
+            var newCount = await StreamCountService.IncrementStreamCountAsync(songMetadataId, _currentUserId, _isAdmin);
+            _streamCount = newCount;
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+            Logger.LogWarning(ex, "SongPlayer: Failed to record stream for song {SongMetadataId}", songMetadataId);
         }
-    }
-
-    private class StreamCountResponse
-    {
-        public int SongMetadataId { get; set; }
-        public int StreamCount { get; set; }
     }
 
     protected async Task SeekTo(double percentage)

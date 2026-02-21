@@ -108,6 +108,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
             var appUser = await UserManager.GetUserAsync(authState.User);
             _currentUserId = appUser?.Id;
+            Logger.LogInformation("MusicLibrary: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}", 
+                _isAuthenticated, _isAdmin, _currentUserId);
         }
         
         // Load default stream qualifying seconds for songs without a creator
@@ -870,45 +872,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task RecordStream(int songMetadataId)
     {
-        // Admins should not generate stream records
-        if (_isAdmin)
-        {
-            Logger.LogDebug("MusicLibrary: Skipping stream recording for admin user on song {SongMetadataId}", songMetadataId);
-            return;
-        }
-
-        // Creators streaming their own songs should not generate stream records
-        if (_currentUserId.HasValue && _creatorUserIdMap.TryGetValue(songMetadataId, out var creatorUserId) && creatorUserId == _currentUserId.Value)
-        {
-            Logger.LogDebug("MusicLibrary: Skipping stream recording for creator (UserId={UserId}) on their own song {SongMetadataId}", _currentUserId.Value, songMetadataId);
-            return;
-        }
+        Logger.LogInformation("MusicLibrary.RecordStream called: songMetadataId={SongMetadataId}, _currentUserId={CurrentUserId}, _isAdmin={IsAdmin}", 
+            songMetadataId, _currentUserId, _isAdmin);
 
         try
         {
-            var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
-                if (result != null)
-                {
-                    // Update local stream count tracking
-                    _streamCounts[songMetadataId] = result.StreamCount;
-                    await InvokeAsync(StateHasChanged);
-                    Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
-                }
-            }
+            // Call StreamCountService directly (bypasses HTTP which loses auth context in Blazor Server)
+            var newCount = await StreamCountService.IncrementStreamCountAsync(songMetadataId, _currentUserId, _isAdmin);
+            _streamCounts[songMetadataId] = newCount;
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+            Logger.LogWarning(ex, "MusicLibrary: Failed to record stream for song {SongMetadataId}", songMetadataId);
         }
-    }
-
-    private class StreamCountResponse
-    {
-        public int SongMetadataId { get; set; }
-        public int StreamCount { get; set; }
     }
 
     protected string GetSongShareUrl(string fileName)
