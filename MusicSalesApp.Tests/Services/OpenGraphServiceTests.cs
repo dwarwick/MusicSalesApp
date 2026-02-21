@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -14,6 +15,8 @@ public class OpenGraphServiceTests
     private Mock<IHttpContextAccessor> _mockHttpContextAccessor;
     private Mock<HttpContext> _mockHttpContext;
     private Mock<HttpRequest> _mockHttpRequest;
+    private Mock<IAzureStorageService> _mockStorageService;
+    private Mock<ILogger<OpenGraphService>> _mockLogger;
     private OpenGraphService _service;
 
     [SetUp]
@@ -24,6 +27,8 @@ public class OpenGraphServiceTests
         _mockHttpContextAccessor = new Mock<IHttpContextAccessor>();
         _mockHttpContext = new Mock<HttpContext>();
         _mockHttpRequest = new Mock<HttpRequest>();
+        _mockStorageService = new Mock<IAzureStorageService>();
+        _mockLogger = new Mock<ILogger<OpenGraphService>>();
 
         // Setup default configuration
         _mockConfiguration.Setup(c => c["Facebook:AppId"]).Returns("test-app-id");
@@ -37,10 +42,17 @@ public class OpenGraphServiceTests
         _mockHttpContext.Setup(c => c.Request).Returns(_mockHttpRequest.Object);
         _mockHttpContextAccessor.Setup(a => a.HttpContext).Returns(_mockHttpContext.Object);
 
+        // Setup storage service to return false for ExistsAsync by default (no FB image exists)
+        _mockStorageService.Setup(s => s.ExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
+        // Setup storage service to return empty stream for DownloadAsync by default
+        _mockStorageService.Setup(s => s.DownloadAsync(It.IsAny<string>())).ReturnsAsync(new MemoryStream());
+
         _service = new OpenGraphService(
             _mockSongMetadataService.Object,
             _mockConfiguration.Object,
-            _mockHttpContextAccessor.Object
+            _mockHttpContextAccessor.Object,
+            _mockStorageService.Object,
+            _mockLogger.Object
         );
     }
 
@@ -327,5 +339,156 @@ public class OpenGraphServiceTests
         Assert.That(result, Is.Not.Empty);
         Assert.That(result, Does.Contain("og:image"));
         Assert.That(result, Does.Contain("cover.jpg")); // Should use ImageBlobPath from song record
+    }
+
+    [Test]
+    public void GetFacebookImagePath_WithFolderPath_ReturnsCorrectPath()
+    {
+        var result = OpenGraphService.GetFacebookImagePath("folder/image.jpg");
+        Assert.That(result, Is.EqualTo("folder/image_fb.png"));
+    }
+
+    [Test]
+    public void GetFacebookImagePath_WithoutFolder_ReturnsCorrectPath()
+    {
+        var result = OpenGraphService.GetFacebookImagePath("image.jpg");
+        Assert.That(result, Is.EqualTo("image_fb.png"));
+    }
+
+    [Test]
+    public void GetFacebookImagePath_WithNestedFolder_ReturnsCorrectPath()
+    {
+        var result = OpenGraphService.GetFacebookImagePath("artist/album/cover.png");
+        Assert.That(result, Is.EqualTo("artist/album/cover_fb.png"));
+    }
+
+    [Test]
+    public async Task GetOrCreateFacebookImageAsync_WhenFbImageExists_ReturnsFbPath()
+    {
+        // Arrange
+        var originalPath = "folder/image.jpg";
+        var fbPath = "folder/image_fb.png";
+        _mockStorageService.Setup(s => s.ExistsAsync(fbPath)).ReturnsAsync(true);
+
+        // Act
+        var result = await _service.GetOrCreateFacebookImageAsync(originalPath);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(fbPath));
+        _mockStorageService.Verify(s => s.DownloadAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetOrCreateFacebookImageAsync_WhenOriginalStreamEmpty_ReturnsOriginalPath()
+    {
+        // Arrange
+        var originalPath = "folder/image.jpg";
+        _mockStorageService.Setup(s => s.ExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
+        _mockStorageService.Setup(s => s.DownloadAsync(originalPath)).ReturnsAsync(new MemoryStream());
+
+        // Act
+        var result = await _service.GetOrCreateFacebookImageAsync(originalPath);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(originalPath));
+    }
+
+    [Test]
+    public async Task GetOrCreateFacebookImageAsync_WhenEmptyPath_ReturnsOriginalPath()
+    {
+        // Act
+        var result = await _service.GetOrCreateFacebookImageAsync("");
+
+        // Assert
+        Assert.That(result, Is.EqualTo(""));
+    }
+
+    [Test]
+    public async Task GenerateSongMetaTagsAsync_WithExistingFbImage_UsesFbImageUrl()
+    {
+        // Arrange
+        var songTitle = "Test%20Song";
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "Test Song.mp3",
+                ImageBlobPath = "Test Song/cover.jpg",
+                AlbumName = null,
+                Genre = "Rock"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.ExistsAsync("Test Song/cover_fb.png")).ReturnsAsync(true);
+
+        // Act
+        var result = await _service.GenerateSongMetaTagsAsync(songTitle);
+
+        // Assert
+        Assert.That(result, Is.Not.Empty);
+        Assert.That(result, Does.Contain("cover_fb.png"));
+        Assert.That(result, Does.Contain("og:image:width"));
+        Assert.That(result, Does.Contain("1200"));
+        Assert.That(result, Does.Contain("og:image:height"));
+        Assert.That(result, Does.Contain("630"));
+    }
+
+    [Test]
+    public void CreateFacebookImage_WithValidImage_ReturnsCorrectDimensions()
+    {
+        // Arrange - create a simple 100x100 test image
+        using var bitmap = new SkiaSharp.SKBitmap(100, 100);
+        using var canvas = new SkiaSharp.SKCanvas(bitmap);
+        canvas.Clear(SkiaSharp.SKColors.Red);
+
+        using var imageStream = new MemoryStream();
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        data.SaveTo(imageStream);
+        imageStream.Position = 0;
+
+        // Act
+        using var result = OpenGraphService.CreateFacebookImage(imageStream);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Length, Is.GreaterThan(0));
+
+        // Verify the output dimensions
+        result.Position = 0;
+        using var outputBitmap = SkiaSharp.SKBitmap.Decode(result);
+        Assert.That(outputBitmap.Width, Is.EqualTo(OpenGraphService.FacebookImageWidth));
+        Assert.That(outputBitmap.Height, Is.EqualTo(OpenGraphService.FacebookImageHeight));
+    }
+
+    [Test]
+    public void CreateFacebookImage_WithWideImage_CentersVertically()
+    {
+        // Arrange - create a wide 1200x400 test image (wider than tall)
+        using var bitmap = new SkiaSharp.SKBitmap(1200, 400);
+        using var canvas = new SkiaSharp.SKCanvas(bitmap);
+        canvas.Clear(SkiaSharp.SKColors.Blue);
+
+        using var imageStream = new MemoryStream();
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        data.SaveTo(imageStream);
+        imageStream.Position = 0;
+
+        // Act
+        using var result = OpenGraphService.CreateFacebookImage(imageStream);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        result.Position = 0;
+        using var outputBitmap = SkiaSharp.SKBitmap.Decode(result);
+        Assert.That(outputBitmap.Width, Is.EqualTo(1200));
+        Assert.That(outputBitmap.Height, Is.EqualTo(630));
+
+        // The top and bottom should have black padding (center pixel of top row should be black)
+        var topPixel = outputBitmap.GetPixel(600, 0);
+        Assert.That(topPixel, Is.EqualTo(SkiaSharp.SKColors.Black));
     }
 }
