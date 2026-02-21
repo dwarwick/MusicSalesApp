@@ -39,12 +39,13 @@ public class OpenGraphService : IOpenGraphService
             // URL decode the song title
             var decodedTitle = Uri.UnescapeDataString(songTitle);
             
-            // Find song metadata by matching MP3 filename (without extension)
+            // Find song metadata by matching stored title or MP3 filename (without extension)
             var allMetadata = await _songMetadataService.GetAllAsync();
             var songMetadata = allMetadata.FirstOrDefault(m => 
                 !string.IsNullOrEmpty(m.Mp3BlobPath) && 
                 string.IsNullOrEmpty(m.AlbumName) && // Standalone song only
-                Path.GetFileNameWithoutExtension(m.Mp3BlobPath) == decodedTitle);
+                ((!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)) ||
+                 Path.GetFileNameWithoutExtension(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
 
             if (songMetadata == null)
             {
@@ -52,33 +53,34 @@ public class OpenGraphService : IOpenGraphService
             }
 
             // Find the associated image for this song using BlobPath or ImageBlobPath
-            var imageMetadata = allMetadata.FirstOrDefault(m =>
-                !string.IsNullOrEmpty(m.ImageBlobPath) &&
-                !m.IsAlbumCover &&
-                Path.GetFileNameWithoutExtension(m.ImageBlobPath) == decodedTitle);
-
-            // Use the full blob path for the image URL
+            // First try using the image from the song metadata record itself
             string imageUrl;
-            if (imageMetadata != null)
+            if (!string.IsNullOrEmpty(songMetadata.ImageBlobPath))
             {
-                var imagePath = !string.IsNullOrEmpty(imageMetadata.ImageBlobPath) 
-                    ? imageMetadata.ImageBlobPath 
-                    : imageMetadata.BlobPath;
-                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(imagePath)}");
+                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(songMetadata.ImageBlobPath)}");
             }
             else
             {
-                imageUrl = GetAbsoluteUrl("/favicon.ico");
+                // Fall back to searching for a separate image record matching the decoded title
+                var imageMetadata = allMetadata.FirstOrDefault(m =>
+                    !string.IsNullOrEmpty(m.ImageBlobPath) &&
+                    !m.IsAlbumCover &&
+                    Path.GetFileNameWithoutExtension(m.ImageBlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase));
+                imageUrl = imageMetadata != null
+                    ? GetAbsoluteUrl($"/api/music/{SafeEncodePath(imageMetadata.ImageBlobPath)}")
+                    : GetAbsoluteUrl("/favicon.ico");
             }
+
+            var displayTitle = !string.IsNullOrEmpty(songMetadata.SongTitle) ? songMetadata.SongTitle : decodedTitle;
 
             var tags = new Dictionary<string, string>
             {
                 ["fb:app_id"] = _configuration["Facebook:AppId"] ?? "",
                 ["og:url"] = GetCurrentUrl(),
                 ["og:type"] = "music.song",
-                ["og:title"] = decodedTitle,
+                ["og:title"] = displayTitle,
                 ["og:image"] = imageUrl,
-                ["og:description"] = $"Listen to {decodedTitle} on StreamTunes"
+                ["og:description"] = $"Listen to {displayTitle} on StreamTunes"
             };
 
             if (!string.IsNullOrEmpty(songMetadata.Genre))

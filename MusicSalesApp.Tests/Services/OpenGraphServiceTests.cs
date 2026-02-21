@@ -241,4 +241,91 @@ public class OpenGraphServiceTests
         Assert.That(result, Is.Not.Empty);
         Assert.That(result, Does.Contain("https://streamtunes.net"));
     }
+
+    [Test]
+    public async Task GenerateSongMetaTagsAsync_WithStoredSongTitle_UsesStoredTitleForOgTitle()
+    {
+        // Arrange - blob filename differs from the stored SongTitle
+        var songTitle = "My%20Great%20Song"; // URL uses stored title
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "my_great_song/my_great_song.mp3",
+                SongTitle = "My Great Song", // Human-readable stored title
+                AlbumName = null,
+                Genre = "Pop",
+                TrackLength = 180.0,
+                ImageBlobPath = "my_great_song/my_great_song.jpg"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+
+        // Act
+        var result = await _service.GenerateSongMetaTagsAsync(songTitle);
+
+        // Assert
+        Assert.That(result, Is.Not.Empty);
+        Assert.That(result, Does.Contain("og:title"));
+        Assert.That(result, Does.Contain("My Great Song")); // Should use stored SongTitle
+        Assert.That(result, Does.Contain("og:image"));
+        Assert.That(result, Does.Contain("my_great_song.jpg")); // Should use ImageBlobPath from song record
+    }
+
+    [Test]
+    public async Task GenerateSongMetaTagsAsync_WithStoredSongTitle_FindsSongBySongTitle()
+    {
+        // Arrange - song is searched by stored SongTitle, not blob filename
+        var songTitle = "Awesome%20Track"; // URL title matches stored SongTitle
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "track001/track001.mp3", // Blob filename does not match URL title
+                SongTitle = "Awesome Track",           // Stored title matches URL title
+                AlbumName = null,
+                Genre = "Jazz"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+
+        // Act
+        var result = await _service.GenerateSongMetaTagsAsync(songTitle);
+
+        // Assert
+        Assert.That(result, Is.Not.Empty);
+        Assert.That(result, Does.Contain("Awesome Track"));
+    }
+
+    [Test]
+    public async Task GenerateSongMetaTagsAsync_WithImageOnSongRecord_UsesImageBlobPath()
+    {
+        // Arrange - image is on the same metadata record as the MP3
+        var songTitle = "Test%20Song";
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "Test Song.mp3",
+                ImageBlobPath = "Test Song/cover.jpg", // Image on same record
+                AlbumName = null,
+                Genre = "Rock"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+
+        // Act
+        var result = await _service.GenerateSongMetaTagsAsync(songTitle);
+
+        // Assert
+        Assert.That(result, Is.Not.Empty);
+        Assert.That(result, Does.Contain("og:image"));
+        Assert.That(result, Does.Contain("cover.jpg")); // Should use ImageBlobPath from song record
+    }
 }

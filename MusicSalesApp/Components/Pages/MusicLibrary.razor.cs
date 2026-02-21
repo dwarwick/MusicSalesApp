@@ -890,7 +890,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected string GetSongShareUrl(string fileName)
     {
-        var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+        var songTitle = GetDisplayTitle(fileName);
         var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
         return $"{baseUrl}/song/{Uri.EscapeDataString(songTitle)}";
     }
