@@ -146,13 +146,23 @@ namespace MusicSalesApp.Services
         public async Task<SongMetadata> UpsertAsync(SongMetadata metadata)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
+            
+            // Build a comprehensive lookup that checks all blob path fields
+            var blobPath = metadata.BlobPath;
+            var mp3BlobPath = metadata.Mp3BlobPath;
+            var imageBlobPath = metadata.ImageBlobPath;
+            
             var existing = await context.SongMetadata
-                .FirstOrDefaultAsync(s => s.BlobPath == metadata.BlobPath || 
-                                         s.Mp3BlobPath == metadata.BlobPath || 
-                                         s.ImageBlobPath == metadata.BlobPath);
+                .FirstOrDefaultAsync(s => 
+                    (!string.IsNullOrEmpty(blobPath) && (s.BlobPath == blobPath || s.Mp3BlobPath == blobPath || s.ImageBlobPath == blobPath)) ||
+                    (!string.IsNullOrEmpty(mp3BlobPath) && (s.BlobPath == mp3BlobPath || s.Mp3BlobPath == mp3BlobPath)) ||
+                    (!string.IsNullOrEmpty(imageBlobPath) && (s.BlobPath == imageBlobPath || s.ImageBlobPath == imageBlobPath)));
             
             if (existing != null)
             {
+                _logger.LogInformation("SongMetadataService.UpsertAsync: Updating existing record Id={Id}, setting CreatorId from {OldCreatorId} to {NewCreatorId}", 
+                    existing.Id, existing.CreatorId, metadata.CreatorId ?? existing.CreatorId);
+                
                 // Update existing
                 existing.AlbumName = metadata.AlbumName;
                 existing.IsAlbumCover = metadata.IsAlbumCover;
@@ -178,6 +188,8 @@ namespace MusicSalesApp.Services
             else
             {
                 // Create new - ensure IsActive is true by default
+                _logger.LogInformation("SongMetadataService.UpsertAsync: Creating new record with BlobPath={BlobPath}, Mp3BlobPath={Mp3BlobPath}, CreatorId={CreatorId}", 
+                    metadata.BlobPath, metadata.Mp3BlobPath, metadata.CreatorId);
                 metadata.IsActive = true;
                 context.SongMetadata.Add(metadata);
             }

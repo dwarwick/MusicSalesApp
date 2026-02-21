@@ -43,10 +43,31 @@ public class StreamCountService : IStreamCountService
             return 0;
         }
 
-        // Determine if the streamer is the creator of this song
-        bool isCreatorOfSong = streamerUserId.HasValue 
-            && song.Creator != null 
-            && song.Creator.UserId == streamerUserId.Value;
+        // Determine if the streamer is the creator of this song.
+        // Check via SongMetadata.CreatorId -> Creator.UserId navigation.
+        bool isCreatorOfSong = false;
+        if (streamerUserId.HasValue)
+        {
+            if (song.Creator != null && song.Creator.UserId == streamerUserId.Value)
+            {
+                isCreatorOfSong = true;
+            }
+            else if (song.CreatorId == null)
+            {
+                // SongMetadata.CreatorId is null - the upload flow may not have set it.
+                // Check if the streamer is an active creator and auto-populate CreatorId.
+                var creator = await context.Creators
+                    .FirstOrDefaultAsync(c => c.UserId == streamerUserId.Value && c.IsActive);
+                if (creator != null)
+                {
+                    _logger.LogWarning("StreamCountService: Song {SongMetadataId} has null CreatorId but streamer {UserId} is active creator {CreatorId}. Auto-fixing CreatorId.", 
+                        songMetadataId, streamerUserId.Value, creator.Id);
+                    song.CreatorId = creator.Id;
+                    await context.SaveChangesAsync();
+                    isCreatorOfSong = true;
+                }
+            }
+        }
 
         // Creators streaming their own songs and admins do not generate stream counts or records
         bool isCountableStream = !isAdmin && !isCreatorOfSong;

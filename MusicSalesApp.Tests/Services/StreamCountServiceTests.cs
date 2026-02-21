@@ -377,4 +377,61 @@ public class StreamCountServiceTests
         // Assert - Count should be incremented
         Assert.That(result, Is.EqualTo(6));
     }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_NullCreatorId_ActiveCreatorStreams_DoesNotIncrementAndAutoFixes()
+    {
+        // Arrange - Create a song WITHOUT CreatorId, and a separate active creator
+        using var setupContext = new AppDbContext(_contextOptions);
+        var user = new ApplicationUser
+        {
+            UserName = "creator_noid@test.com",
+            Email = "creator_noid@test.com",
+            NormalizedEmail = "CREATOR_NOID@TEST.COM",
+            NormalizedUserName = "CREATOR_NOID@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        setupContext.Users.Add(user);
+        await setupContext.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed
+        };
+        setupContext.Creators.Add(creator);
+        await setupContext.SaveChangesAsync();
+
+        // Song with NULL CreatorId (simulates the upload bug)
+        var metadata = new SongMetadata
+        {
+            BlobPath = "nullcreator/song.mp3",
+            Mp3BlobPath = "nullcreator/song.mp3",
+            AlbumName = "Test",
+            NumberOfStreams = 5,
+            CreatorId = null, // BUG: should have been set during upload
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        setupContext.SongMetadata.Add(metadata);
+        await setupContext.SaveChangesAsync();
+
+        // Act - Active creator streams the song
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, user.Id);
+
+        // Assert - Count should NOT be incremented (treated as creator's own song)
+        Assert.That(result, Is.EqualTo(5));
+
+        // Verify CreatorId was auto-fixed
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var updatedSong = await verifyContext.SongMetadata.FindAsync(metadata.Id);
+        Assert.That(updatedSong?.CreatorId, Is.EqualTo(creator.Id));
+
+        // Verify no SongStream record was created
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Null);
+    }
 }

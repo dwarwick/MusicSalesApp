@@ -65,11 +65,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                     {
                         // Check if the user is a creator and get their creator ID
                         _currentCreatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
+                        Logger.LogInformation("UploadFiles: Loaded CreatorId={CreatorId} for UserId={UserId}", _currentCreatorId, appUser.Id);
+                    }
+                    else
+                    {
+                        Logger.LogWarning("UploadFiles: UserManager.GetUserAsync returned null for authenticated user");
                     }
                 }
+                else
+                {
+                    Logger.LogWarning("UploadFiles: User is not authenticated");
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Logger.LogError(ex, "UploadFiles: Failed to determine creator status");
                 // If we can't determine creator status, uploads will be assigned to admin
                 _currentCreatorId = null;
             }

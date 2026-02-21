@@ -241,7 +241,7 @@ namespace MusicSalesApp.Services
                     CreatorId = creatorId
                 });
 
-                _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
+                _logger.LogInformation("Successfully uploaded music and album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
             }
             finally
             {
@@ -337,7 +337,7 @@ namespace MusicSalesApp.Services
                     CreatorId = creatorId
                 });
 
-                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder}", folderPath);
+                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
             }
             finally
             {
