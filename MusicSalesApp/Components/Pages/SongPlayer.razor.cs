@@ -500,6 +500,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task RecordStream(int songMetadataId)
     {
+        // Admins and creators streaming their own songs should not generate stream records
+        if (_isAdmin || _isCreatorOfSong)
+            return;
+
         try
         {
             var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);

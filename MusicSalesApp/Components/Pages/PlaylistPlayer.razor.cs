@@ -1378,6 +1378,18 @@ namespace MusicSalesApp.Components.Pages
         [JSInvokable]
         public async Task RecordStream(int songMetadataId)
         {
+            // Admins should not generate stream records
+            if (_isAdmin)
+                return;
+
+            // Creators streaming their own songs should not generate stream records
+            if (_currentUserId.HasValue)
+            {
+                var metadata = _metadataLookup.Values.FirstOrDefault(m => m.Id == songMetadataId);
+                if (metadata?.Creator?.UserId == _currentUserId.Value)
+                    return;
+            }
+
             try
             {
                 var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
