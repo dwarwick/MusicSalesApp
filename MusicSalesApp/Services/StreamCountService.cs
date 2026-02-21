@@ -48,12 +48,12 @@ public class StreamCountService : IStreamCountService
             && song.Creator != null 
             && song.Creator.UserId == streamerUserId.Value;
 
-        // Creators streaming their own songs and admins do not generate paid stream counts
-        bool shouldIncrementCount = !isAdmin && !isCreatorOfSong;
+        // Creators streaming their own songs and admins do not generate stream counts or records
+        bool isCountableStream = !isAdmin && !isCreatorOfSong;
 
         int newCount;
 
-        if (shouldIncrementCount)
+        if (isCountableStream)
         {
             // Check if we're using a relational database (supports raw SQL)
             if (context.Database.IsRelational())
@@ -78,25 +78,25 @@ public class StreamCountService : IStreamCountService
                 song.NumberOfStreams++;
                 newCount = song.NumberOfStreams;
             }
+
+            // Create a SongStream record to correlate with the count increment
+            var songStream = new Models.SongStream
+            {
+                SongMetadataId = songMetadataId,
+                CreatorId = song.CreatorId,
+                StreamerUserId = streamerUserId,
+                CreatedDate = DateTime.UtcNow
+            };
+            context.SongStreams.Add(songStream);
+            await context.SaveChangesAsync();
         }
         else
         {
             newCount = song.NumberOfStreams;
         }
 
-        // Always create a SongStream record for auditing
-        var songStream = new Models.SongStream
-        {
-            SongMetadataId = songMetadataId,
-            CreatorId = song.CreatorId,
-            StreamerUserId = streamerUserId,
-            CreatedDate = DateTime.UtcNow
-        };
-        context.SongStreams.Add(songStream);
-        await context.SaveChangesAsync();
-
-        _logger.LogDebug("Recorded stream for song {SongMetadataId} by user {StreamerUserId}. Count incremented: {Incremented}. New count: {NewCount}", 
-            songMetadataId, streamerUserId, shouldIncrementCount, newCount);
+        _logger.LogDebug("Stream request for song {SongMetadataId} by user {StreamerUserId}. Recorded: {Recorded}. Count: {NewCount}", 
+            songMetadataId, streamerUserId, isCountableStream, newCount);
 
         // Notify subscribers (local in-process event)
         NotifyStreamCountUpdated(songMetadataId, newCount);

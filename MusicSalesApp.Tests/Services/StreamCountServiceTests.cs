@@ -280,7 +280,7 @@ public class StreamCountServiceTests
     }
 
     [Test]
-    public async Task IncrementStreamCountAsync_CreatorStreamsOwnSong_StillCreatesStreamRecord()
+    public async Task IncrementStreamCountAsync_CreatorStreamsOwnSong_DoesNotCreateStreamRecord()
     {
         // Arrange
         var (metadata, creator, user) = await CreateTestSongWithCreator(numberOfStreams: 5);
@@ -288,13 +288,11 @@ public class StreamCountServiceTests
         // Act
         var result = await _service.IncrementStreamCountAsync(metadata.Id, user.Id);
 
-        // Assert - SongStream record should still be created
+        // Assert - SongStream record should NOT be created for creator's own song
         using var verifyContext = new AppDbContext(_contextOptions);
         var streamRecord = await verifyContext.SongStreams
             .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
-        Assert.That(streamRecord, Is.Not.Null);
-        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(user.Id));
-        Assert.That(streamRecord.CreatorId, Is.EqualTo(creator.Id));
+        Assert.That(streamRecord, Is.Null);
     }
 
     [Test]
@@ -317,7 +315,7 @@ public class StreamCountServiceTests
     }
 
     [Test]
-    public async Task IncrementStreamCountAsync_AdminStreams_StillCreatesStreamRecord()
+    public async Task IncrementStreamCountAsync_AdminStreams_DoesNotCreateStreamRecord()
     {
         // Arrange
         var metadata = await CreateTestSongMetadata(numberOfStreams: 10);
@@ -326,12 +324,11 @@ public class StreamCountServiceTests
         // Act
         var result = await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
 
-        // Assert - SongStream record should still be created
+        // Assert - SongStream record should NOT be created for admin
         using var verifyContext = new AppDbContext(_contextOptions);
         var streamRecord = await verifyContext.SongStreams
             .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
-        Assert.That(streamRecord, Is.Not.Null);
-        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(adminUserId));
+        Assert.That(streamRecord, Is.Null);
     }
 
     [Test]
