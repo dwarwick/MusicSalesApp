@@ -1380,14 +1380,20 @@ namespace MusicSalesApp.Components.Pages
         {
             // Admins should not generate stream records
             if (_isAdmin)
+            {
+                Logger.LogDebug("PlaylistPlayer: Skipping stream recording for admin user on song {SongMetadataId}", songMetadataId);
                 return;
+            }
 
             // Creators streaming their own songs should not generate stream records
             if (_currentUserId.HasValue)
             {
                 var metadata = _metadataLookup.Values.FirstOrDefault(m => m.Id == songMetadataId);
                 if (metadata?.Creator?.UserId == _currentUserId.Value)
+                {
+                    Logger.LogDebug("PlaylistPlayer: Skipping stream recording for creator (UserId={UserId}) on their own song {SongMetadataId}", _currentUserId.Value, songMetadataId);
                     return;
+                }
             }
 
             try

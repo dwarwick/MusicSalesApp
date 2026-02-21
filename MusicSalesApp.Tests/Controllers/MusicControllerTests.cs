@@ -17,6 +17,7 @@ public class MusicControllerTests
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IStreamCountService> _mockStreamCountService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
+    private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
 
     [SetUp]
@@ -25,6 +26,7 @@ public class MusicControllerTests
         _mockStorageService = new Mock<IAzureStorageService>();
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockStreamCountService = new Mock<IStreamCountService>();
+        _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
@@ -35,7 +37,8 @@ public class MusicControllerTests
             _mockStorageService.Object,
             _mockSubscriptionService.Object,
             _mockStreamCountService.Object,
-            _mockUserManager.Object);
+            _mockUserManager.Object,
+            _mockLogger.Object);
 
         // Set up HttpContext for controller (required for Response.Headers access)
         _controller.ControllerContext = new ControllerContext

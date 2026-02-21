@@ -95,8 +95,8 @@ public class StreamCountService : IStreamCountService
             newCount = song.NumberOfStreams;
         }
 
-        _logger.LogDebug("Stream request for song {SongMetadataId} by user {StreamerUserId}. Recorded: {Recorded}. Count: {NewCount}", 
-            songMetadataId, streamerUserId, isCountableStream, newCount);
+        _logger.LogInformation("StreamCountService: Stream request for song {SongMetadataId} by user {StreamerUserId}, isAdmin={IsAdmin}, isCreatorOfSong={IsCreatorOfSong}, recorded={Recorded}. Count: {NewCount}", 
+            songMetadataId, streamerUserId, isAdmin, isCreatorOfSong, isCountableStream, newCount);
 
         // Notify subscribers (local in-process event)
         NotifyStreamCountUpdated(songMetadataId, newCount);

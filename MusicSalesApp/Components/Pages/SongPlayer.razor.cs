@@ -501,8 +501,16 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     public async Task RecordStream(int songMetadataId)
     {
         // Admins and creators streaming their own songs should not generate stream records
-        if (_isAdmin || _isCreatorOfSong)
+        if (_isAdmin)
+        {
+            Logger.LogDebug("SongPlayer: Skipping stream recording for admin user on song {SongMetadataId}", songMetadataId);
             return;
+        }
+        if (_isCreatorOfSong)
+        {
+            Logger.LogDebug("SongPlayer: Skipping stream recording for creator on their own song {SongMetadataId}", songMetadataId);
+            return;
+        }
 
         try
         {

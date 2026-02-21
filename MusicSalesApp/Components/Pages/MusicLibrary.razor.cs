@@ -70,6 +70,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private bool _needsJsInit;
     private bool _isAuthenticated;
     protected bool _hasActiveSubscription;
+    private bool _isAdmin;
+    private int? _currentUserId;
+    private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
     private int _defaultStreamQualifyingSeconds = 30;
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
@@ -98,10 +101,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
-        // Check subscription status if authenticated
+        // Check subscription status and load user context if authenticated
         if (_isAuthenticated)
         {
             await LoadSubscriptionStatus();
+            _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            _currentUserId = appUser?.Id;
         }
         
         // Load default stream qualifying seconds for songs without a creator
@@ -321,6 +327,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _genreMap[audioFile.Name] = songMeta.Genre;
                     // Store stream qualifying seconds from creator
                     _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
+                    // Store creator user ID for stream recording guard
+                    _creatorUserIdMap[songMeta.Id] = songMeta.Creator?.UserId;
                 }
             }
         }
@@ -586,12 +594,25 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Checks if the currently playing track is restricted (60 second preview).
     /// Restricted for non-authenticated users OR authenticated users without an active subscription.
+    /// Admins and creators streaming their own songs are never restricted.
     /// </summary>
     protected bool IsCurrentPlayingTrackRestricted()
     {
         // If user has an active subscription, they can listen to everything
         if (_hasActiveSubscription)
             return false;
+
+        // Admins can fully stream all songs without a subscription
+        if (_isAdmin)
+            return false;
+
+        // Creators can fully stream their own songs
+        if (_currentUserId.HasValue && !string.IsNullOrEmpty(_playingFileName))
+        {
+            var metadataId = GetSongMetadataId(_playingFileName);
+            if (metadataId > 0 && _creatorUserIdMap.TryGetValue(metadataId, out var creatorUserId) && creatorUserId == _currentUserId.Value)
+                return false;
+        }
 
         // Non-authenticated users are always restricted
         if (!_isAuthenticated)
@@ -849,6 +870,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task RecordStream(int songMetadataId)
     {
+        // Admins should not generate stream records
+        if (_isAdmin)
+        {
+            Logger.LogDebug("MusicLibrary: Skipping stream recording for admin user on song {SongMetadataId}", songMetadataId);
+            return;
+        }
+
+        // Creators streaming their own songs should not generate stream records
+        if (_currentUserId.HasValue && _creatorUserIdMap.TryGetValue(songMetadataId, out var creatorUserId) && creatorUserId == _currentUserId.Value)
+        {
+            Logger.LogDebug("MusicLibrary: Skipping stream recording for creator (UserId={UserId}) on their own song {SongMetadataId}", _currentUserId.Value, songMetadataId);
+            return;
+        }
+
         try
         {
             var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);

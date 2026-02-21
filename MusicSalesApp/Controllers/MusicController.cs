@@ -16,17 +16,20 @@ namespace MusicSalesApp.Controllers
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILogger<MusicController> _logger;
 
         public MusicController(
             IAzureStorageService storageService,
             ISubscriptionService subscriptionService,
             IStreamCountService streamCountService,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            ILogger<MusicController> logger)
         {
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
             _userManager = userManager;
+            _logger = logger;
         }
 
         // Legacy / fallback streaming endpoint (server proxy)
@@ -89,6 +92,9 @@ namespace MusicSalesApp.Controllers
             var user = await _userManager.GetUserAsync(User);
             int? userId = user?.Id;
             bool isAdmin = user != null && await _userManager.IsInRoleAsync(user, Common.Helpers.Roles.Admin);
+
+            _logger.LogInformation("MusicController.RecordStream: songMetadataId={SongMetadataId}, userId={UserId}, isAdmin={IsAdmin}, userIsAuthenticated={IsAuthenticated}", 
+                songMetadataId, userId, isAdmin, User?.Identity?.IsAuthenticated);
 
             var newCount = await _streamCountService.IncrementStreamCountAsync(songMetadataId, userId, isAdmin);
             
