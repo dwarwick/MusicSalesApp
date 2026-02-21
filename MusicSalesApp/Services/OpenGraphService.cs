@@ -265,40 +265,52 @@ public class OpenGraphService : IOpenGraphService
     /// </summary>
     internal static MemoryStream CreateFacebookImage(Stream originalStream)
     {
-        using var original = SKBitmap.Decode(originalStream);
+        SKBitmap original;
+        try
+        {
+            original = SKBitmap.Decode(originalStream);
+        }
+        catch
+        {
+            return null;
+        }
+
         if (original == null)
             return null;
 
-        using var surface = SKSurface.Create(new SKImageInfo(FacebookImageWidth, FacebookImageHeight));
-        var canvas = surface.Canvas;
-        canvas.Clear(SKColors.Black);
+        using (original)
+        {
+            using var surface = SKSurface.Create(new SKImageInfo(FacebookImageWidth, FacebookImageHeight));
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.Black);
 
-        // Scale the original to fit within the Facebook dimensions while maintaining aspect ratio
-        float scaleX = (float)FacebookImageWidth / original.Width;
-        float scaleY = (float)FacebookImageHeight / original.Height;
-        float scale = Math.Min(scaleX, scaleY);
+            // Scale the original to fit within the Facebook dimensions while maintaining aspect ratio
+            float scaleX = (float)FacebookImageWidth / original.Width;
+            float scaleY = (float)FacebookImageHeight / original.Height;
+            float scale = Math.Min(scaleX, scaleY);
 
-        int scaledWidth = (int)(original.Width * scale);
-        int scaledHeight = (int)(original.Height * scale);
+            int scaledWidth = (int)(original.Width * scale);
+            int scaledHeight = (int)(original.Height * scale);
 
-        // Center the image on the canvas
-        int offsetX = (FacebookImageWidth - scaledWidth) / 2;
-        int offsetY = (FacebookImageHeight - scaledHeight) / 2;
+            // Center the image on the canvas
+            int offsetX = (FacebookImageWidth - scaledWidth) / 2;
+            int offsetY = (FacebookImageHeight - scaledHeight) / 2;
 
-        var destRect = new SKRect(offsetX, offsetY, offsetX + scaledWidth, offsetY + scaledHeight);
-        var sourceRect = new SKRect(0, 0, original.Width, original.Height);
-        var sampling = new SKSamplingOptions(SKCubicResampler.Mitchell);
-        using var skImage = SKImage.FromBitmap(original);
-        canvas.DrawImage(skImage, sourceRect, destRect, sampling);
+            var destRect = new SKRect(offsetX, offsetY, offsetX + scaledWidth, offsetY + scaledHeight);
+            var sourceRect = new SKRect(0, 0, original.Width, original.Height);
+            var sampling = new SKSamplingOptions(SKCubicResampler.Mitchell);
+            using var skImage = SKImage.FromBitmap(original);
+            canvas.DrawImage(skImage, sourceRect, destRect, sampling);
 
-        // Encode as PNG
-        using var image = surface.Snapshot();
-        using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+            // Encode as PNG (lossless)
+            using var image = surface.Snapshot();
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
 
-        var ms = new MemoryStream();
-        data.SaveTo(ms);
-        ms.Position = 0;
-        return ms;
+            var ms = new MemoryStream();
+            data.SaveTo(ms);
+            ms.Position = 0;
+            return ms;
+        }
     }
 
     private string GenerateMetaTagsHtml(Dictionary<string, string> tags)
