@@ -28,50 +28,74 @@ public class StreamCountService : IStreamCountService
     public event Action<int, int> OnStreamCountUpdated;
 
     /// <inheritdoc />
-    public async Task<int> IncrementStreamCountAsync(int songMetadataId)
+    public async Task<int> IncrementStreamCountAsync(int songMetadataId, int? streamerUserId = null, bool isAdmin = false)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         
-        int newCount;
-        
-        // Check if we're using a relational database (supports raw SQL)
-        if (context.Database.IsRelational())
+        // Look up the song metadata to get CreatorId and check if streamer is the creator
+        var song = await context.SongMetadata
+            .Include(s => s.Creator)
+            .FirstOrDefaultAsync(s => s.Id == songMetadataId);
+
+        if (song == null)
         {
-            // Use ExecuteSqlRawAsync for atomic update in production.
-            // Note: {0} is a parameterized placeholder, not string interpolation.
-            // EF Core properly parameterizes the query to prevent SQL injection.
-            var rowsAffected = await context.Database.ExecuteSqlRawAsync(
-                "UPDATE SongMetadata SET NumberOfStreams = NumberOfStreams + 1 WHERE Id = {0}",
-                songMetadataId);
+            _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
+            return 0;
+        }
 
-            if (rowsAffected == 0)
+        // Determine if the streamer is the creator of this song
+        bool isCreatorOfSong = streamerUserId.HasValue 
+            && song.Creator != null 
+            && song.Creator.UserId == streamerUserId.Value;
+
+        // Creators streaming their own songs and admins do not generate paid stream counts
+        bool shouldIncrementCount = !isAdmin && !isCreatorOfSong;
+
+        int newCount;
+
+        if (shouldIncrementCount)
+        {
+            // Check if we're using a relational database (supports raw SQL)
+            if (context.Database.IsRelational())
             {
-                _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
-                return 0;
-            }
+                // Use ExecuteSqlRawAsync for atomic update in production.
+                // Note: {0} is a parameterized placeholder, not string interpolation.
+                // EF Core properly parameterizes the query to prevent SQL injection.
+                await context.Database.ExecuteSqlRawAsync(
+                    "UPDATE SongMetadata SET NumberOfStreams = NumberOfStreams + 1 WHERE Id = {0}",
+                    songMetadataId);
 
-            // Get the new count
-            newCount = await context.SongMetadata
-                .Where(s => s.Id == songMetadataId)
-                .Select(s => s.NumberOfStreams)
-                .FirstOrDefaultAsync();
+                // Get the new count
+                newCount = await context.SongMetadata
+                    .Where(s => s.Id == songMetadataId)
+                    .Select(s => s.NumberOfStreams)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // Fallback for in-memory database (testing)
+                song.NumberOfStreams++;
+                newCount = song.NumberOfStreams;
+            }
         }
         else
         {
-            // Fallback for in-memory database (testing)
-            var song = await context.SongMetadata.FindAsync(songMetadataId);
-            if (song == null)
-            {
-                _logger.LogWarning("Attempted to increment stream count for non-existent song metadata ID {SongMetadataId}", songMetadataId);
-                return 0;
-            }
-
-            song.NumberOfStreams++;
-            await context.SaveChangesAsync();
             newCount = song.NumberOfStreams;
         }
 
-        _logger.LogDebug("Incremented stream count for song {SongMetadataId} to {NewCount}", songMetadataId, newCount);
+        // Always create a SongStream record for auditing
+        var songStream = new Models.SongStream
+        {
+            SongMetadataId = songMetadataId,
+            CreatorId = song.CreatorId,
+            StreamerUserId = streamerUserId,
+            CreatedDate = DateTime.UtcNow
+        };
+        context.SongStreams.Add(songStream);
+        await context.SaveChangesAsync();
+
+        _logger.LogDebug("Recorded stream for song {SongMetadataId} by user {StreamerUserId}. Count incremented: {Incremented}. New count: {NewCount}", 
+            songMetadataId, streamerUserId, shouldIncrementCount, newCount);
 
         // Notify subscribers (local in-process event)
         NotifyStreamCountUpdated(songMetadataId, newCount);

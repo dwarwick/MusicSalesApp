@@ -40,6 +40,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     private DotNetObjectReference<SongPlayerModel> _dotNetRef;
     private bool invokedJs = false;
     protected bool _hasActiveSubscription;
+    protected bool _isAdmin;
+    protected bool _isCreatorOfSong;
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
 
@@ -193,6 +195,19 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             if (_isAuthenticated)
             {
                 await LoadSubscriptionStatus();
+
+                // Check if user is admin
+                _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+
+                // Check if user is the creator of this song
+                if (_songMetadata.Creator != null)
+                {
+                    var user = await UserManager.GetUserAsync(authState.User);
+                    if (user != null)
+                    {
+                        _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -249,6 +264,14 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     {
         // If user has an active subscription, they can listen to everything
         if (_hasActiveSubscription)
+            return false;
+
+        // Admins can fully stream all songs without a subscription
+        if (_isAdmin)
+            return false;
+
+        // Creators can fully stream their own songs
+        if (_isCreatorOfSong)
             return false;
 
         // Non-authenticated users or users without subscription are restricted to preview

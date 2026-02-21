@@ -81,6 +81,8 @@ namespace MusicSalesApp.Components.Pages
         private int? _lastLoadedCreatorId;
         private string _lastLoadedGenreName;
         protected bool _hasActiveSubscription;
+        protected bool _isAdmin;
+        private int? _currentUserId;
         private int _defaultStreamQualifyingSeconds = 30;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
@@ -251,6 +253,13 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
+        private async Task LoadUserContext(System.Security.Claims.ClaimsPrincipal claimsPrincipal)
+        {
+            _isAdmin = claimsPrincipal.IsInRole(Common.Helpers.Roles.Admin);
+            var appUser = await UserManager.GetUserAsync(claimsPrincipal);
+            _currentUserId = appUser?.Id;
+        }
+
         private async Task LoadPlaylistInfo()
         {
             _loading = true;
@@ -279,6 +288,8 @@ namespace MusicSalesApp.Components.Pages
                 // Get the current user
                 var user = authState.User;
                 var appUser = await UserManager.GetUserAsync(user);
+                _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+                _currentUserId = appUser?.Id;
                 if (appUser == null)
                 {
                     _error = "User not found.";
@@ -441,6 +452,8 @@ namespace MusicSalesApp.Components.Pages
                 // Get the current user
                 var user = authState.User;
                 var appUser = await UserManager.GetUserAsync(user);
+                _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+                _currentUserId = appUser?.Id;
                 if (appUser == null)
                 {
                     _error = "User not found.";
@@ -576,6 +589,11 @@ namespace MusicSalesApp.Components.Pages
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
 
+                if (_isAuthenticated)
+                {
+                    await LoadUserContext(authState.User);
+                }
+
                 // URL decode the artist name
                 var decodedArtistName = Uri.UnescapeDataString(ArtistName);
                 _playlistName = decodedArtistName;
@@ -696,6 +714,11 @@ namespace MusicSalesApp.Components.Pages
                 // Check authentication status
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                if (_isAuthenticated)
+                {
+                    await LoadUserContext(authState.User);
+                }
 
                 // Get all songs from this creator
                 var creatorSongs = await SongMetadataService.GetByCreatorIdAsync(CreatorId.Value);
@@ -818,6 +841,11 @@ namespace MusicSalesApp.Components.Pages
                 // Check authentication status
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                if (_isAuthenticated)
+                {
+                    await LoadUserContext(authState.User);
+                }
 
                 // URL decode the genre name
                 var decodedGenreName = Uri.UnescapeDataString(GenreName);
@@ -996,12 +1024,25 @@ namespace MusicSalesApp.Components.Pages
         /// <summary>
         /// Checks if a specific track should be restricted (60 second preview).
         /// Restricted for non-authenticated users OR authenticated users without an active subscription.
+        /// Admins and creators streaming their own songs are never restricted.
         /// </summary>
         protected bool IsTrackRestricted(int trackIndex)
         {
             // If user has an active subscription, they can listen to everything
             if (_hasActiveSubscription)
                 return false;
+
+            // Admins can fully stream all songs without a subscription
+            if (_isAdmin)
+                return false;
+
+            // Creators can fully stream their own songs
+            if (_currentUserId.HasValue && _playlistInfo?.Tracks != null && trackIndex >= 0 && trackIndex < _playlistInfo.Tracks.Count)
+            {
+                var track = _playlistInfo.Tracks[trackIndex];
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.Creator?.UserId == _currentUserId.Value)
+                    return false;
+            }
 
             // Non-authenticated users or users without subscription are restricted
             return true;
