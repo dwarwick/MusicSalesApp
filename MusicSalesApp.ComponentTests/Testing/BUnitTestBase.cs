@@ -50,6 +50,7 @@ public abstract class BUnitTestBase
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
+    protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
@@ -81,6 +82,7 @@ public abstract class BUnitTestBase
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
+        MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
         MockSongStatusService = new Mock<ISongStatusService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
@@ -193,7 +195,7 @@ public abstract class BUnitTestBase
         // Setup default returns for IStreamCountService methods
         MockStreamCountService.Setup(x => x.GetStreamCountAsync(It.IsAny<int>()))
             .ReturnsAsync(0);
-        MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>()))
+        MockStreamCountService.Setup(x => x.IncrementStreamCountAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
             .ReturnsAsync(1);
 
         // Setup default returns for IStreamCountHubClient methods
@@ -245,6 +247,17 @@ public abstract class BUnitTestBase
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        // Setup default returns for IEmailService methods
+        MockEmailService.Setup(x => x.SendEmailAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        MockEmailService.Setup(x => x.GetEmailLogoHtml())
+            .Returns("<div>Logo</div>");
+        MockEmailService.Setup(x => x.GetLogoUrl())
+            .Returns("https://streamtunes.net/images/logo-light-small.png");
+        MockEmailService.Setup(x => x.GetAppBaseUrl())
+            .Returns("https://streamtunes.net");
+
         // Setup default returns for ICreatorService methods
         MockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(It.IsAny<int>()))
             .ReturnsAsync((Creator)null);
@@ -295,6 +308,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
+        TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);

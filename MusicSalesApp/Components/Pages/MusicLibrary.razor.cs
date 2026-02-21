@@ -70,6 +70,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private bool _needsJsInit;
     private bool _isAuthenticated;
     protected bool _hasActiveSubscription;
+    private bool _isAdmin;
+    private int? _currentUserId;
+    private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
     private int _defaultStreamQualifyingSeconds = 30;
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
@@ -98,10 +101,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         
-        // Check subscription status if authenticated
+        // Check subscription status and load user context if authenticated
         if (_isAuthenticated)
         {
             await LoadSubscriptionStatus();
+            _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+            var appUser = await UserManager.GetUserAsync(authState.User);
+            _currentUserId = appUser?.Id;
+            Logger.LogInformation("MusicLibrary: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}", 
+                _isAuthenticated, _isAdmin, _currentUserId);
         }
         
         // Load default stream qualifying seconds for songs without a creator
@@ -321,6 +329,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _genreMap[audioFile.Name] = songMeta.Genre;
                     // Store stream qualifying seconds from creator
                     _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
+                    // Store creator user ID for stream recording guard
+                    _creatorUserIdMap[songMeta.Id] = songMeta.Creator?.UserId;
                 }
             }
         }
@@ -586,12 +596,25 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Checks if the currently playing track is restricted (60 second preview).
     /// Restricted for non-authenticated users OR authenticated users without an active subscription.
+    /// Admins and creators streaming their own songs are never restricted.
     /// </summary>
     protected bool IsCurrentPlayingTrackRestricted()
     {
         // If user has an active subscription, they can listen to everything
         if (_hasActiveSubscription)
             return false;
+
+        // Admins can fully stream all songs without a subscription
+        if (_isAdmin)
+            return false;
+
+        // Creators can fully stream their own songs
+        if (_currentUserId.HasValue && !string.IsNullOrEmpty(_playingFileName))
+        {
+            var metadataId = GetSongMetadataId(_playingFileName);
+            if (metadataId > 0 && _creatorUserIdMap.TryGetValue(metadataId, out var creatorUserId) && creatorUserId == _currentUserId.Value)
+                return false;
+        }
 
         // Non-authenticated users are always restricted
         if (!_isAuthenticated)
@@ -849,31 +872,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     [JSInvokable]
     public async Task RecordStream(int songMetadataId)
     {
+        Logger.LogInformation("MusicLibrary.RecordStream called: songMetadataId={SongMetadataId}, _currentUserId={CurrentUserId}, _isAdmin={IsAdmin}", 
+            songMetadataId, _currentUserId, _isAdmin);
+
         try
         {
-            var response = await Http.PostAsync($"api/music/stream/{songMetadataId}", null);
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<StreamCountResponse>();
-                if (result != null)
-                {
-                    // Update local stream count tracking
-                    _streamCounts[songMetadataId] = result.StreamCount;
-                    await InvokeAsync(StateHasChanged);
-                    Logger.LogDebug("Recorded stream for song {SongMetadataId}, new count: {StreamCount}", songMetadataId, result.StreamCount);
-                }
-            }
+            // Call StreamCountService directly (bypasses HTTP which loses auth context in Blazor Server)
+            var newCount = await StreamCountService.IncrementStreamCountAsync(songMetadataId, _currentUserId, _isAdmin);
+            _streamCounts[songMetadataId] = newCount;
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to record stream for song {SongMetadataId}", songMetadataId);
+            Logger.LogWarning(ex, "MusicLibrary: Failed to record stream for song {SongMetadataId}", songMetadataId);
         }
-    }
-
-    private class StreamCountResponse
-    {
-        public int SongMetadataId { get; set; }
-        public int StreamCount { get; set; }
     }
 
     protected string GetSongShareUrl(string fileName)

@@ -143,6 +143,11 @@ namespace MusicSalesApp.Services
                 throw new ArgumentException("Audio file name is required.", nameof(audioFileName));
             if (string.IsNullOrWhiteSpace(albumArtFileName))
                 throw new ArgumentException("Album art file name is required.", nameof(albumArtFileName));
+            if (creatorId == null)
+            {
+                _logger.LogError("MusicUploadService: CreatorId is null for upload of {AudioFileName} + {AlbumArtFileName}. Songs must have a creator.", audioFileName, albumArtFileName);
+                throw new InvalidOperationException("Cannot upload music without a creator ID. Please ensure you are logged in as a creator.");
+            }
 
             // Validate file pairing
             if (!ValidateFilePairing(audioFileName, albumArtFileName))
@@ -241,7 +246,7 @@ namespace MusicSalesApp.Services
                     CreatorId = creatorId
                 });
 
-                _logger.LogInformation("Successfully uploaded music and album art to folder {Folder}", folderPath);
+                _logger.LogInformation("Successfully uploaded music and album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
             }
             finally
             {
@@ -267,6 +272,11 @@ namespace MusicSalesApp.Services
                 throw new ArgumentNullException(nameof(audioStream));
             if (string.IsNullOrWhiteSpace(audioFileName))
                 throw new ArgumentException("Audio file name is required.", nameof(audioFileName));
+            if (creatorId == null)
+            {
+                _logger.LogError("MusicUploadService: CreatorId is null for upload of {AudioFileName}. Songs must have a creator.", audioFileName);
+                throw new InvalidOperationException("Cannot upload music without a creator ID. Please ensure you are logged in as a creator.");
+            }
 
             // Get the normalized base name for folder and file naming
             var baseName = GetNormalizedBaseName(audioFileName);
@@ -337,7 +347,7 @@ namespace MusicSalesApp.Services
                     CreatorId = creatorId
                 });
 
-                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder}", folderPath);
+                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
             }
             finally
             {

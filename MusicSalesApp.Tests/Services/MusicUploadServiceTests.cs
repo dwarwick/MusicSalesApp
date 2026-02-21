@@ -392,7 +392,7 @@ public class MusicUploadServiceTests
 
         // Act
         var result = await _service.UploadMusicWithAlbumArtAsync(
-            audioStream, audioFileName, albumArtStream, albumArtFileName);
+            audioStream, audioFileName, albumArtStream, albumArtFileName, creatorId: 1);
 
         // Assert
         Assert.That(result, Is.EqualTo("Lipstick and Leather"));
@@ -425,7 +425,7 @@ public class MusicUploadServiceTests
 
         // Act
         var result = await _service.UploadMusicWithAlbumArtAsync(
-            audioStream, audioFileName, albumArtStream, albumArtFileName, albumName);
+            audioStream, audioFileName, albumArtStream, albumArtFileName, albumName, creatorId: 1);
 
         // Assert
         Assert.That(result, Is.EqualTo("Song"));

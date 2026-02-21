@@ -16,17 +16,20 @@ namespace MusicSalesApp.Controllers
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILogger<MusicController> _logger;
 
         public MusicController(
             IAzureStorageService storageService,
             ISubscriptionService subscriptionService,
             IStreamCountService streamCountService,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            ILogger<MusicController> logger)
         {
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
             _userManager = userManager;
+            _logger = logger;
         }
 
         // Legacy / fallback streaming endpoint (server proxy)
@@ -76,6 +79,7 @@ namespace MusicSalesApp.Controllers
 
         /// <summary>
         /// Records a stream for a song. Called when a song has been played for at least the creator's configured continuous seconds.
+        /// Creators streaming their own songs and admins do not generate paid stream counts.
         /// </summary>
         /// <param name="songMetadataId">The ID of the song metadata record.</param>
         /// <returns>The updated stream count.</returns>
@@ -85,7 +89,14 @@ namespace MusicSalesApp.Controllers
             if (songMetadataId <= 0)
                 return BadRequest(new { error = "Invalid song metadata ID" });
 
-            var newCount = await _streamCountService.IncrementStreamCountAsync(songMetadataId);
+            var user = await _userManager.GetUserAsync(User);
+            int? userId = user?.Id;
+            bool isAdmin = user != null && await _userManager.IsInRoleAsync(user, Common.Helpers.Roles.Admin);
+
+            _logger.LogInformation("MusicController.RecordStream: songMetadataId={SongMetadataId}, userId={UserId}, isAdmin={IsAdmin}, userIsAuthenticated={IsAuthenticated}", 
+                songMetadataId, userId, isAdmin, User?.Identity?.IsAuthenticated);
+
+            var newCount = await _streamCountService.IncrementStreamCountAsync(songMetadataId, userId, isAdmin);
             
             return Ok(new { songMetadataId, streamCount = newCount });
         }

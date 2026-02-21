@@ -33,6 +33,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     
     // Creator ID - will be populated if the current user is a creator
     private int? _currentCreatorId = null;
+    private string _currentUserEmail = null;
     private bool _hasLoadedCreatorId = false;
 
     // Track upload state for navigation/close warnings and cleanup
@@ -44,6 +45,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // Configuration for chunked uploads
     private const int MaxFilesAllowed = 50;
     private const int ChunkSize = 8;
+    private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
@@ -53,26 +55,45 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         if (firstRender && !_hasLoadedCreatorId)
         {
             _hasLoadedCreatorId = true;
-            try
-            {
-                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                var user = authState.User;
+            await LoadCreatorIdAsync();
+        }
+    }
 
-                if (user.Identity?.IsAuthenticated == true)
+    /// <summary>
+    /// Loads the current user's Creator ID and email from the authentication state.
+    /// Can be called multiple times safely - always refreshes from the database.
+    /// </summary>
+    private async Task LoadCreatorIdAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var appUser = await UserManager.GetUserAsync(user);
+                if (appUser != null)
                 {
-                    var appUser = await UserManager.GetUserAsync(user);
-                    if (appUser != null)
-                    {
-                        // Check if the user is a creator and get their creator ID
-                        _currentCreatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
-                    }
+                    // Check if the user is a creator and get their creator ID
+                    _currentCreatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
+                    _currentUserEmail = appUser.Email;
+                    Logger.LogInformation("UploadFiles: Loaded CreatorId={CreatorId} for UserId={UserId}, Email={Email}", _currentCreatorId, appUser.Id, _currentUserEmail);
+                }
+                else
+                {
+                    Logger.LogWarning("UploadFiles: UserManager.GetUserAsync returned null for authenticated user");
                 }
             }
-            catch (Exception)
+            else
             {
-                // If we can't determine creator status, uploads will be assigned to admin
-                _currentCreatorId = null;
+                Logger.LogWarning("UploadFiles: User is not authenticated");
             }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to determine creator status");
+            _currentCreatorId = null;
         }
     }
 
@@ -81,6 +102,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
+
+        // Ensure CreatorId is loaded - retry if not yet available (e.g. race with OnAfterRenderAsync)
+        if (_currentCreatorId == null)
+        {
+            Logger.LogWarning("UploadFiles: CreatorId is null at file selection time. Attempting to reload...");
+            await LoadCreatorIdAsync();
+        }
+
+        // Final check - if CreatorId is still null, the upload cannot proceed
+        if (_currentCreatorId == null)
+        {
+            var selectedFileNames = string.Join(", ", e.GetMultipleFiles(MaxFilesAllowed).Select(f => f.Name));
+            Logger.LogError("UploadFiles: CreatorId is still null after reload for user {Email}. Cannot proceed with upload of: {FileNames}", _currentUserEmail, selectedFileNames);
+            await SendCreatorIdFailureEmailAsync(selectedFileNames);
+            _validationErrorMessage = UploadFailedUserMessage;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
         
         // Reset upload tracking for this batch
         _uploadCts = new CancellationTokenSource();
@@ -245,6 +284,19 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         try
         {
+            // Validate CreatorId before uploading - songs without a creator cannot be tracked or paid
+            if (_currentCreatorId == null)
+            {
+                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload {FileName} without a creator association.", _currentUserEmail, audioFile.Name);
+                await SendCreatorIdFailureEmailAsync(audioFile.Name);
+                uploadItem.Status = UploadStatus.Failed;
+                uploadItem.Progress = 0;
+                uploadItem.StatusMessage = "Upload failed";
+                uploadItem.ErrorMessage = UploadFailedUserMessage;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Reading audio file...";
             uploadItem.Progress = 5;
@@ -322,6 +374,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         try
         {
+            // Validate CreatorId before uploading - songs without a creator cannot be tracked or paid
+            if (_currentCreatorId == null)
+            {
+                var fileNames = $"{audioFile.Name}, {coverArtFile.Name}";
+                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload {FileNames} without a creator association.", _currentUserEmail, fileNames);
+                await SendCreatorIdFailureEmailAsync(fileNames);
+                uploadItem.Status = UploadStatus.Failed;
+                uploadItem.Progress = 0;
+                uploadItem.StatusMessage = "Upload failed";
+                uploadItem.ErrorMessage = UploadFailedUserMessage;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Reading audio file...";
             uploadItem.Progress = 5;
@@ -538,5 +604,48 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
         _uploadCts.Dispose();
+    }
+
+    /// <summary>
+    /// Sends an email to admin when a creator upload fails due to null CreatorId.
+    /// </summary>
+    private async Task SendCreatorIdFailureEmailAsync(string fileNames)
+    {
+        try
+        {
+            var adminEmail = Configuration["EmailSettings:AdminEmail"] ?? "admin@streamtunes.net";
+            var logoHtml = EmailService.GetEmailLogoHtml();
+            var subject = "Upload Failure: Creator ID Not Found";
+            var body = $@"
+                {logoHtml}
+                <h2 style='color: #dc3545;'>Upload Failure: Creator ID Not Found</h2>
+                <p>A creator attempted to upload files but their Creator ID could not be determined.</p>
+                <table style='border-collapse: collapse; width: 100%; margin: 15px 0;'>
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; font-weight: bold;'>Creator Email</td>
+                        <td style='padding: 8px; border: 1px solid #ddd;'>{System.Net.WebUtility.HtmlEncode(_currentUserEmail ?? "Unknown")}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; font-weight: bold;'>Files</td>
+                        <td style='padding: 8px; border: 1px solid #ddd;'>{System.Net.WebUtility.HtmlEncode(fileNames)}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; font-weight: bold;'>Error</td>
+                        <td style='padding: 8px; border: 1px solid #ddd;'>CreatorId is null - the user may not have an active Creator record in the database.</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; font-weight: bold;'>Timestamp (UTC)</td>
+                        <td style='padding: 8px; border: 1px solid #ddd;'>{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}</td>
+                    </tr>
+                </table>
+                <p>Please investigate why this creator does not have a Creator record associated with their account.</p>";
+
+            await EmailService.SendEmailAsync(adminEmail, subject, body);
+            Logger.LogInformation("UploadFiles: Sent admin notification email about null CreatorId for user {Email}", _currentUserEmail);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to send admin notification email about null CreatorId for user {Email}", _currentUserEmail);
+        }
     }
 }

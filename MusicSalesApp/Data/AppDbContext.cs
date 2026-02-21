@@ -25,6 +25,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StreamPayout> StreamPayouts { get; set; }
     public DbSet<W9Request> W9Requests { get; set; }
     public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
+    public DbSet<SongStream> SongStreams { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -324,5 +325,40 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on ChangedAt for efficient querying of recent changes
         builder.Entity<SongStatusHistory>()
             .HasIndex(ssh => ssh.ChangedAt);
+
+        // Configure SongStream entity
+        builder.Entity<SongStream>()
+            .HasOne(ss => ss.SongMetadata)
+            .WithMany()
+            .HasForeignKey(ss => ss.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<SongStream>()
+            .HasOne(ss => ss.Creator)
+            .WithMany()
+            .HasForeignKey(ss => ss.CreatorId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<SongStream>()
+            .HasOne(ss => ss.StreamerUser)
+            .WithMany()
+            .HasForeignKey(ss => ss.StreamerUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Index on SongMetadataId for efficient lookups
+        builder.Entity<SongStream>()
+            .HasIndex(ss => ss.SongMetadataId);
+
+        // Index on CreatorId for efficient lookups by creator
+        builder.Entity<SongStream>()
+            .HasIndex(ss => ss.CreatorId);
+
+        // Index on StreamerUserId for efficient lookups
+        builder.Entity<SongStream>()
+            .HasIndex(ss => ss.StreamerUserId);
+
+        // Index on CreatedDate for efficient querying of recent streams
+        builder.Entity<SongStream>()
+            .HasIndex(ss => ss.CreatedDate);
     }
 }

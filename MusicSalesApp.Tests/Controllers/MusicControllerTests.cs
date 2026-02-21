@@ -17,6 +17,7 @@ public class MusicControllerTests
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IStreamCountService> _mockStreamCountService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
+    private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
 
     [SetUp]
@@ -25,6 +26,7 @@ public class MusicControllerTests
         _mockStorageService = new Mock<IAzureStorageService>();
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockStreamCountService = new Mock<IStreamCountService>();
+        _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
@@ -35,7 +37,8 @@ public class MusicControllerTests
             _mockStorageService.Object,
             _mockSubscriptionService.Object,
             _mockStreamCountService.Object,
-            _mockUserManager.Object);
+            _mockUserManager.Object,
+            _mockLogger.Object);
 
         // Set up HttpContext for controller (required for Response.Headers access)
         _controller.ControllerContext = new ControllerContext
@@ -186,7 +189,9 @@ public class MusicControllerTests
         var songMetadataId = 1;
         var newCount = 42;
         
-        _mockStreamCountService.Setup(s => s.IncrementStreamCountAsync(songMetadataId))
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+        _mockStreamCountService.Setup(s => s.IncrementStreamCountAsync(songMetadataId, null, false))
             .ReturnsAsync(newCount);
 
         // Act
@@ -199,6 +204,50 @@ public class MusicControllerTests
         var streamCountProperty = value.GetType().GetProperty("streamCount");
         var streamCount = (int)streamCountProperty.GetValue(value);
         Assert.That(streamCount, Is.EqualTo(newCount));
+    }
+
+    [Test]
+    public async Task RecordStream_WithAdminUser_PassesIsAdminTrue()
+    {
+        // Arrange
+        var songMetadataId = 1;
+        var adminUser = new ApplicationUser { Id = 1, UserName = "admin@app.com" };
+        
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(adminUser);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(adminUser, "Admin"))
+            .ReturnsAsync(true);
+        _mockStreamCountService.Setup(s => s.IncrementStreamCountAsync(songMetadataId, adminUser.Id, true))
+            .ReturnsAsync(10);
+
+        // Act
+        var result = await _controller.RecordStream(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockStreamCountService.Verify(s => s.IncrementStreamCountAsync(songMetadataId, adminUser.Id, true), Times.Once);
+    }
+
+    [Test]
+    public async Task RecordStream_WithRegularUser_PassesIsAdminFalse()
+    {
+        // Arrange
+        var songMetadataId = 1;
+        var regularUser = new ApplicationUser { Id = 2, UserName = "user@app.com" };
+        
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(regularUser);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(regularUser, "Admin"))
+            .ReturnsAsync(false);
+        _mockStreamCountService.Setup(s => s.IncrementStreamCountAsync(songMetadataId, regularUser.Id, false))
+            .ReturnsAsync(15);
+
+        // Act
+        var result = await _controller.RecordStream(songMetadataId);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockStreamCountService.Verify(s => s.IncrementStreamCountAsync(songMetadataId, regularUser.Id, false), Times.Once);
     }
 
     [Test]
