@@ -288,8 +288,7 @@ namespace MusicSalesApp.Components.Pages
                 // Get the current user
                 var user = authState.User;
                 var appUser = await UserManager.GetUserAsync(user);
-                _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
-                _currentUserId = appUser?.Id;
+                await LoadUserContext(authState.User);
                 if (appUser == null)
                 {
                     _error = "User not found.";
@@ -452,8 +451,7 @@ namespace MusicSalesApp.Components.Pages
                 // Get the current user
                 var user = authState.User;
                 var appUser = await UserManager.GetUserAsync(user);
-                _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
-                _currentUserId = appUser?.Id;
+                await LoadUserContext(authState.User);
                 if (appUser == null)
                 {
                     _error = "User not found.";

@@ -349,6 +349,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<SongStream>()
             .HasIndex(ss => ss.SongMetadataId);
 
+        // Index on CreatorId for efficient lookups by creator
+        builder.Entity<SongStream>()
+            .HasIndex(ss => ss.CreatorId);
+
         // Index on StreamerUserId for efficient lookups
         builder.Entity<SongStream>()
             .HasIndex(ss => ss.StreamerUserId);

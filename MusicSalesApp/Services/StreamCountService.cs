@@ -73,7 +73,8 @@ public class StreamCountService : IStreamCountService
             }
             else
             {
-                // Fallback for in-memory database (testing)
+                // Fallback for in-memory database (testing).
+                // The tracked entity change is persisted by SaveChangesAsync below.
                 song.NumberOfStreams++;
                 newCount = song.NumberOfStreams;
             }

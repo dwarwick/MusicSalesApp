@@ -12,7 +12,7 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260221023430_AddSongStreamsTable")]
+    [Migration("20260221024104_AddSongStreamsTable")]
     partial class AddSongStreamsTable
     {
         /// <inheritdoc />
