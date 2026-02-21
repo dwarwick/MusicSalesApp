@@ -84,6 +84,9 @@ public abstract class BlazorBase : ComponentBase
     protected ICreatorService CreatorService { get; set; } = default!;
 
     [Inject]
+    protected IEmailService EmailService { get; set; } = default!;
+
+    [Inject]
     protected IAzureStorageService AzureStorageService { get; set; } = default!;
 
     // Ensure components can access the same scoped UserManager used by DI
