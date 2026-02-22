@@ -33,6 +33,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     protected IBrowserFile _songImageFile = null;
+    protected List<string> _genreOptions = new();
+    protected string _newGenreName = string.Empty;
+    protected bool _showAddGenre = false;
 
     // Crop tool fields
     protected bool _showCropTool = false;
@@ -43,6 +46,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     private int? _creatorId;
     private bool _hasLoadedData = false;
+    private string _currentUserEmail = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -51,6 +55,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             _hasLoadedData = true;
             try
             {
+                // Load genres from database
+                await LoadGenresAsync();
+
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 var user = authState.User;
 
@@ -59,6 +66,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     var appUser = await UserManager.GetUserAsync(user);
                     if (appUser != null)
                     {
+                        _currentUserEmail = appUser.Email ?? string.Empty;
+
                         // Get the creator ID for this user
                         _creatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
 
@@ -235,8 +244,56 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _cropTargetBlobPath = null;
         _showCropTool = false;
         _cropZoom = 50;
+        _newGenreName = string.Empty;
+        _showAddGenre = false;
         _validationErrors.Clear();
         _showEditDialog = true;
+    }
+
+    protected async Task LoadGenresAsync()
+    {
+        var genres = await GenreService.GetActiveGenresAsync();
+        _genreOptions = genres.Select(g => g.Name).ToList();
+    }
+
+    protected async Task AddNewGenre()
+    {
+        if (string.IsNullOrWhiteSpace(_newGenreName))
+            return;
+
+        var genre = await GenreService.AddGenreAsync(_newGenreName.Trim(), _currentUserEmail);
+        if (genre != null)
+        {
+            await LoadGenresAsync();
+            _editGenre = genre.Name;
+            _newGenreName = string.Empty;
+            _showAddGenre = false;
+
+            // Send email to admin about new genre
+            try
+            {
+                var logoHtml = EmailService.GetEmailLogoHtml();
+                var body = $@"{logoHtml}
+<h2>New Genre Added</h2>
+<p>A new genre has been added to StreamTunes:</p>
+<ul>
+    <li><strong>Genre:</strong> {genre.Name}</li>
+    <li><strong>Added by:</strong> {_currentUserEmail}</li>
+    <li><strong>Date:</strong> {genre.CreatedAt:MMMM dd, yyyy 'at' h:mm tt} UTC</li>
+</ul>";
+                await EmailService.SendEmailAsync("admin@streamtunes.net", $"New Genre Added: {genre.Name}", body);
+            }
+            catch
+            {
+                // Best-effort email notification
+            }
+        }
+        else
+        {
+            _validationErrors.Add($"Genre '{_newGenreName.Trim()}' already exists.");
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     protected async Task CancelEdit()

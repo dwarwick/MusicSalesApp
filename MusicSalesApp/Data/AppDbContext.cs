@@ -26,6 +26,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<W9Request> W9Requests { get; set; }
     public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
+    public DbSet<Genre> Genres { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -360,5 +361,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on CreatedDate for efficient querying of recent streams
         builder.Entity<SongStream>()
             .HasIndex(ss => ss.CreatedDate);
+
+        // Configure Genre entity
+        builder.Entity<Genre>()
+            .HasIndex(g => g.Name)
+            .IsUnique();
+
+        // Seed default genres from the existing creator song management page
+        builder.Entity<Genre>().HasData(
+            new Genre { Id = 1, Name = "Classical", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 2, Name = "Country", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 3, Name = "Electronic", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 4, Name = "Hip-Hop", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 5, Name = "Jazz", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 6, Name = "Pop", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 7, Name = "R&B", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
+            new Genre { Id = 8, Name = "Rock", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" }
+        );
     }
 }

@@ -53,6 +53,7 @@ public abstract class BUnitTestBase
     protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
+    protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -85,6 +86,7 @@ public abstract class BUnitTestBase
         MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
         MockSongStatusService = new Mock<ISongStatusService>();
+        MockGenreService = new Mock<IGenreService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -276,6 +278,18 @@ public abstract class BUnitTestBase
         MockSongStatusService.Setup(x => x.EnableSongAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        // Setup default returns for IGenreService methods
+        MockGenreService.Setup(x => x.GetActiveGenresAsync())
+            .ReturnsAsync(new List<Genre>());
+        MockGenreService.Setup(x => x.GetAllGenresAsync())
+            .ReturnsAsync(new List<Genre>());
+        MockGenreService.Setup(x => x.AddGenreAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((Genre)null);
+        MockGenreService.Setup(x => x.DisableGenreAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
+        MockGenreService.Setup(x => x.EnableGenreAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -311,6 +325,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
+        TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

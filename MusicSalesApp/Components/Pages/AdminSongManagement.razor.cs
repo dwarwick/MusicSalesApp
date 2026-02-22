@@ -30,6 +30,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected AuthenticationStateProvider AuthenticationStateProvider { get; set; }
     [Inject] protected UserManager<ApplicationUser> UserManager { get; set; }
     [Inject] protected IJSRuntime JS { get; set; }
+    [Inject] protected IGenreService GenreService { get; set; }
+    [Inject] protected IEmailService EmailService { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -59,10 +61,30 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     private IJSObjectReference _cropModule;
     private Dictionary<string, SongMetadata> _metadataById = new();
 
+    // Genre management fields
+    protected List<string> _genreOptions = new();
+    protected string _newGenreName = string.Empty;
+    protected bool _showAddGenre = false;
+    protected List<Genre> _allGenres = new();
+    protected bool _showGenreManagement = false;
+    private string _currentAdminEmail = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            // Load genres from database
+            await LoadGenresAsync();
+
+            // Get current admin email
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var appUser = await UserManager.GetUserAsync(user);
+                _currentAdminEmail = appUser?.Email ?? string.Empty;
+            }
+
             // Pre-load the cache
             await SongAdminService.RefreshCacheAsync();
             
@@ -147,6 +169,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         _cropTargetBlobPath = null;
         _showCropTool = false;
         _cropZoom = 50;
+        _newGenreName = string.Empty;
+        _showAddGenre = false;
         _validationErrors.Clear();
         _showEditModal = true;
     }
@@ -635,5 +659,148 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         var segments = filePath.Split('/');
         var encodedSegments = segments.Select(s => Uri.EscapeDataString(s));
         return string.Join("/", encodedSegments);
+    }
+
+    protected async Task LoadGenresAsync()
+    {
+        _allGenres = await GenreService.GetAllGenresAsync();
+        _genreOptions = _allGenres.Where(g => g.IsActive).Select(g => g.Name).ToList();
+    }
+
+    protected async Task AddNewGenre()
+    {
+        if (string.IsNullOrWhiteSpace(_newGenreName))
+            return;
+
+        var genre = await GenreService.AddGenreAsync(_newGenreName.Trim(), _currentAdminEmail);
+        if (genre != null)
+        {
+            await LoadGenresAsync();
+            _editGenre = genre.Name;
+            _newGenreName = string.Empty;
+            _showAddGenre = false;
+
+            // Send email to admin about new genre
+            try
+            {
+                var logoHtml = EmailService.GetEmailLogoHtml();
+                var body = $@"{logoHtml}
+<h2>New Genre Added</h2>
+<p>A new genre has been added to StreamTunes:</p>
+<ul>
+    <li><strong>Genre:</strong> {genre.Name}</li>
+    <li><strong>Added by:</strong> {_currentAdminEmail}</li>
+    <li><strong>Date:</strong> {genre.CreatedAt:MMMM dd, yyyy 'at' h:mm tt} UTC</li>
+</ul>";
+                await EmailService.SendEmailAsync("admin@streamtunes.net", $"New Genre Added: {genre.Name}", body);
+            }
+            catch
+            {
+                // Best-effort email notification
+            }
+        }
+        else
+        {
+            _validationErrors.Add($"Genre '{_newGenreName.Trim()}' already exists.");
+        }
+
+        StateHasChanged();
+    }
+
+    protected async Task DisableGenre(int genreId)
+    {
+        var genre = _allGenres.FirstOrDefault(g => g.Id == genreId);
+        if (genre == null) return;
+
+        var genreName = genre.Name;
+
+        // Disable the genre
+        var success = await GenreService.DisableGenreAsync(genreId);
+        if (!success) return;
+
+        // Find all songs with this genre and null out the genre, collecting affected user emails
+        var affectedSongs = await MetadataService.GetByGenreAsync(genreName);
+        var creatorEmails = new HashSet<string>();
+
+        foreach (var song in affectedSongs)
+        {
+            // Collect creator emails for notification
+            if (song.Creator?.User?.Email != null)
+            {
+                creatorEmails.Add(song.Creator.User.Email);
+            }
+
+            song.Genre = null;
+            await MetadataService.UpsertAsync(song);
+        }
+
+        // Send email to each affected creator
+        foreach (var email in creatorEmails)
+        {
+            try
+            {
+                var logoHtml = EmailService.GetEmailLogoHtml();
+                var body = $@"{logoHtml}
+<h2>Genre Disabled</h2>
+<p>The genre <strong>{genreName}</strong> has been disabled by an administrator.</p>
+<p>Songs that were assigned this genre have had their genre cleared. Please update your songs with a new genre.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
+<p style='color: #999; font-size: 12px;'>
+    <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+</p>";
+                await EmailService.SendEmailAsync(email, $"Genre Disabled: {genreName}", body);
+            }
+            catch
+            {
+                // Best-effort email notification
+            }
+        }
+
+        // Refresh genres and songs
+        await LoadGenresAsync();
+        await SongAdminService.RefreshCacheAsync();
+        await LoadSongsAsync();
+        _totalCount = _allSongs.Count;
+        StateHasChanged();
+    }
+
+    protected async Task EnableGenre(int genreId)
+    {
+        var genre = _allGenres.FirstOrDefault(g => g.Id == genreId);
+        if (genre == null) return;
+
+        var genreName = genre.Name;
+
+        // Enable the genre
+        var success = await GenreService.EnableGenreAsync(genreId);
+        if (!success) return;
+
+        // Find creators who had songs with this genre (genre was nulled on disable)
+        // We notify creators who added the genre originally
+        var creatorEmail = genre.CreatedByEmail;
+        if (!string.IsNullOrEmpty(creatorEmail))
+        {
+            try
+            {
+                var logoHtml = EmailService.GetEmailLogoHtml();
+                var body = $@"{logoHtml}
+<h2>Genre Re-Enabled</h2>
+<p>The genre <strong>{genreName}</strong> has been re-enabled by an administrator.</p>
+<p>You can now assign this genre to your songs again.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
+<p style='color: #999; font-size: 12px;'>
+    <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+</p>";
+                await EmailService.SendEmailAsync(creatorEmail, $"Genre Re-Enabled: {genreName}", body);
+            }
+            catch
+            {
+                // Best-effort email notification
+            }
+        }
+
+        // Refresh genres
+        await LoadGenresAsync();
+        StateHasChanged();
     }
 }

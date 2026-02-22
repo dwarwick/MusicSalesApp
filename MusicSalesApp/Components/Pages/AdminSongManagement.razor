@@ -190,6 +190,62 @@ else
         <div class="mt-3">
             <p class="text-muted">Total: @_totalCount songs</p>
         </div>
+
+        <div class="mt-4">
+            <SfButton CssClass="e-btn e-outline" OnClick="() => _showGenreManagement = !_showGenreManagement">
+                <i class="bi bi-tags me-1"></i> @(_showGenreManagement ? "Hide" : "Manage") Genres
+            </SfButton>
+        </div>
+
+        @if (_showGenreManagement)
+        {
+            <div class="mt-3 p-3 border rounded">
+                <h5><i class="bi bi-tags me-1"></i>Genre Management</h5>
+                <table class="table table-sm table-striped mt-2">
+                    <thead>
+                        <tr>
+                            <th>Genre</th>
+                            <th>Status</th>
+                            <th>Created By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var genre in _allGenres)
+                        {
+                            <tr>
+                                <td>@genre.Name</td>
+                                <td>
+                                    @if (genre.IsActive)
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Disabled</span>
+                                    }
+                                </td>
+                                <td><small>@genre.CreatedByEmail</small></td>
+                                <td>
+                                    @if (genre.IsActive)
+                                    {
+                                        <SfButton CssClass="e-btn e-small e-danger" OnClick="() => DisableGenre(genre.Id)">
+                                            <i class="bi bi-x-circle me-1"></i> Disable
+                                        </SfButton>
+                                    }
+                                    else
+                                    {
+                                        <SfButton CssClass="e-btn e-small e-success" OnClick="() => EnableGenre(genre.Id)">
+                                            <i class="bi bi-check-circle me-1"></i> Enable
+                                        </SfButton>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 }
 
@@ -238,10 +294,26 @@ else
                         <div class="col-md-4">
                             <label class="e-label">Genre</label>
                             <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
-                                          DataSource="@(new List<string> { "Rock", "Country", "Pop" })" 
+                                          DataSource="@_genreOptions" 
                                           Placeholder="-- Select Genre --"
                                           CssClass="e-outline">
                             </SfDropDownList>
+                            @if (!_showAddGenre)
+                            {
+                                <div class="mt-1">
+                                    <SfButton CssClass="e-btn e-small e-outline" OnClick="() => _showAddGenre = true">
+                                        <i class="bi bi-plus-circle me-1"></i> Add New Genre
+                                    </SfButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mt-2 d-flex gap-2 align-items-end">
+                                    <SfTextBox @bind-Value="_newGenreName" CssClass="e-outline" Placeholder="Enter new genre name" MaxLength="50" />
+                                    <SfButton CssClass="e-btn e-small e-success" OnClick="AddNewGenre">Add</SfButton>
+                                    <SfButton CssClass="e-btn e-small" OnClick="() => { _showAddGenre = false; _newGenreName = string.Empty; }">Cancel</SfButton>
+                                </div>
+                            }
                         </div>
                         <div class="col-md-4">
                             <label class="e-label">Artist Name</label>
