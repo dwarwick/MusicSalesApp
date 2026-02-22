@@ -19,7 +19,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected StreamInterval _selectedInterval = StreamInterval.Day;
     protected string _selectedIntervalStr = "Day";
     protected List<StreamDataPoint> _chartData = new();
-    protected string _userTimeZoneDisplayName = string.Empty;
+    protected string _userTimeZoneDisplayName = "UTC";
 
     private TimeZoneInfo _userTimeZone = TimeZoneInfo.Utc;
 
@@ -140,8 +140,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         try
         {
             // Get the IANA timezone name from the browser (e.g., "Australia/Sydney", "America/New_York")
-            var ianaTimeZone = await JS.InvokeAsync<string>("eval",
-                "Intl.DateTimeFormat().resolvedOptions().timeZone");
+            var ianaTimeZone = await JS.InvokeAsync<string>("dashboardHelper.getUserTimeZone");
 
             if (!string.IsNullOrEmpty(ianaTimeZone))
             {
@@ -149,9 +148,15 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 _userTimeZoneDisplayName = ianaTimeZone;
             }
         }
-        catch
+        catch (TimeZoneNotFoundException ex)
         {
-            // Fallback to UTC if timezone detection fails
+            Logger.LogWarning(ex, "Browser returned unrecognized timezone, falling back to UTC");
+            _userTimeZone = TimeZoneInfo.Utc;
+            _userTimeZoneDisplayName = "UTC";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to detect user timezone via JS interop, falling back to UTC");
             _userTimeZone = TimeZoneInfo.Utc;
             _userTimeZoneDisplayName = "UTC";
         }
