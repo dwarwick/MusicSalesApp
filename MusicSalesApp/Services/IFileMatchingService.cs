@@ -18,7 +18,27 @@ public interface IFileMatchingService
     Task<FileMatchingResult> MatchFilesAsync(
         IEnumerable<string> audioFileNames,
         IEnumerable<string> imageFileNames);
+
+    /// <summary>
+    /// Uses AI to match audio files with their corresponding cover art image files.
+    /// When image filenames look like GUIDs or other nonsense text (and the audio files do not),
+    /// the image bytes are used to extract text via vision OCR for better matching.
+    /// </summary>
+    /// <param name="audioFileNames">Original filenames of the audio files.</param>
+    /// <param name="imageFileNames">Original filenames of the image files.</param>
+    /// <param name="imageData">
+    /// Optional map of image filename → (raw bytes, MIME content type).
+    /// Provide this to enable vision-based OCR fallback for nonsense filenames.
+    /// </param>
+    /// <returns>
+    /// A <see cref="FileMatchingResult"/> containing matched pairs and unmatched image files.
+    /// </returns>
+    Task<FileMatchingResult> MatchFilesAsync(
+        IEnumerable<string> audioFileNames,
+        IEnumerable<string> imageFileNames,
+        IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData);
 }
+
 
 /// <summary>
 /// Result of the AI file matching operation.

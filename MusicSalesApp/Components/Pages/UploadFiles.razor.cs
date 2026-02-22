@@ -47,6 +47,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private const int MaxFilesAllowed = 50;
     private const int ChunkSize = 8;
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
+    private const long MaxOcrImageSizeBytes = 10 * 1024 * 1024; // 10 MB per image for vision OCR
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
@@ -154,13 +155,22 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
         }
 
-        // Use AI to match audio files with cover art by filename similarity
+        // Use AI to match audio files with cover art by filename similarity.
+        // For any image file with a nonsense filename (GUID, hex hash, etc.) and real audio names,
+        // pre-buffer the image bytes so the service can use vision OCR for matching.
         FileMatchingResult matchingResult;
         try
         {
+            IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData = null;
+            if (coverArtFilesByName.Any() && coverArtFilesByName.Keys.Any(HasNonsenseFilename))
+            {
+                imageData = await BufferImagesForOcrAsync(coverArtFilesByName);
+            }
+
             matchingResult = await FileMatchingService.MatchFilesAsync(
                 audioFilesByName.Keys,
-                coverArtFilesByName.Keys);
+                coverArtFilesByName.Keys,
+                imageData);
         }
         catch (Exception ex)
         {
@@ -496,6 +506,43 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             coverArtMemoryStream?.Dispose();
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    /// <summary>Delegates to <see cref="FileMatchingService.IsNonsenseFilename"/> without ambiguity with the injected property.</summary>
+    private static bool HasNonsenseFilename(string fileName) => MusicSalesApp.Services.FileMatchingService.IsNonsenseFilename(fileName);
+
+    /// <summary>
+    /// Buffers image files into memory so their bytes can be passed to the file matching service
+    /// for vision-based OCR on images with nonsense filenames (GUIDs, hex hashes, etc.).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, (byte[] Data, string ContentType)>> BufferImagesForOcrAsync(
+        Dictionary<string, IBrowserFile> coverArtFilesByName)
+    {
+        const int bufferSize = 81920;
+        var result = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kvp in coverArtFilesByName)
+        {
+            try
+            {
+                using var ms = new MemoryStream();
+                await using var stream = kvp.Value.OpenReadStream(MaxOcrImageSizeBytes);
+                await stream.CopyToAsync(ms, bufferSize, _uploadCts.Token);
+                var extension = Path.GetExtension(kvp.Key).ToLowerInvariant();
+                var contentType = extension switch
+                {
+                    ".png" => "image/png",
+                    _ => "image/jpeg"
+                };
+                result[kvp.Key] = (ms.ToArray(), contentType);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "UploadFiles: Failed to buffer image '{FileName}' for OCR; will use filename for matching.", kvp.Key);
+            }
+        }
+
+        return result;
     }
 
     protected void ClearValidationError()
