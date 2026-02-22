@@ -734,10 +734,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected double GetCardDisplayDuration(string cardId)
     {
         if (_playingCardId != cardId) return 0;
-        if (IsCurrentPlayingTrackRestricted())
-        {
-            return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
-        }
         return _duration;
     }
 
