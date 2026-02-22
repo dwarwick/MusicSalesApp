@@ -258,9 +258,26 @@
                     <div class="mb-3">
                         <label class="form-label">Genre <span class="text-danger">*</span></label>
                         <SfDropDownList TValue="string" TItem="string" @bind-Value="_editGenre" 
-                                      DataSource="@(new List<string> { "Rock", "Country", "Pop", "Jazz", "Classical", "Electronic", "Hip-Hop", "R&B" })"
+                                      DataSource="@_genreOptions"
+                                      Placeholder="-- Select Genre --"
                                       CssClass="e-outline">
                         </SfDropDownList>
+                        @if (!_showAddGenre)
+                        {
+                            <div class="mt-1">
+                                <SfButton CssClass="e-btn e-small e-outline" OnClick="() => _showAddGenre = true">
+                                    <i class="bi bi-plus-circle me-1"></i> Add New Genre
+                                </SfButton>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="mt-2 d-flex gap-2 align-items-end">
+                                <SfTextBox @bind-Value="_newGenreName" CssClass="e-outline" Placeholder="Enter new genre name" MaxLength="50" />
+                                <SfButton CssClass="e-btn e-small e-success" OnClick="AddNewGenre">Add</SfButton>
+                                <SfButton CssClass="e-btn e-small" OnClick="() => { _showAddGenre = false; _newGenreName = string.Empty; }">Cancel</SfButton>
+                            </div>
+                        }
                     </div>
 
                     <div class="mb-3">
