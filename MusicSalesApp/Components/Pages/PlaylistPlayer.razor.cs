@@ -1086,10 +1086,6 @@ namespace MusicSalesApp.Components.Pages
 
         protected double GetDisplayDuration()
         {
-            if (IsProgressBarRestricted())
-            {
-                return Math.Min(_duration, PREVIEW_DURATION_SECONDS);
-            }
             return _duration;
         }
 
