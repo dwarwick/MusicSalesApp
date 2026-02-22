@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
+using Syncfusion.Blazor.Grids.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,6 +50,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
+    
+    protected InputFile FileInput { get; set;}
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -585,6 +588,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 // Best-effort cleanup — don't throw if a single file fails
             }
         }
+    }
+
+    protected async Task TriggerFileDialog()
+    {
+        await JS.InvokeVoidAsync("triggerClick", FileInput.Element);
     }
 
     /// <summary>

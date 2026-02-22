@@ -258,6 +258,10 @@ body {
     color: #1db954;
 }
 
+.hero-background {
+    background-color: #1db954;
+}
+
 .hero-subtitle {
     color: #b3b3b3;
 }
@@ -426,5 +430,44 @@ body {
 /* Dashboard - Dark Theme */
 .dashboard-timezone-note {
     color: #b3b3b3;
+}
+
+/* Text Muted Override - Dark Theme */
+.text-muted {
+    color: #9a9a9a !important;
+}
+
+/* Upload Page - Dark Theme */
+.upload-box {
+    border-color: #6c757d;
+}
+
+.upload-box:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.upload-content i {
+    color: #8a8a8a;
+}
+
+.table {
+    --bs-table-bg: #212529;
+    --bs-table-color: #e0e0e0;
+    --bs-table-striped-bg: #2a2f34;
+    --bs-table-striped-color: #e0e0e0;
+    --bs-table-border-color: #444;
+}
+
+.table thead th {
+    color: #e0e0e0;
+    border-color: #444;
+}
+
+.table > tbody > tr > td {
+    border-color: #444;
+}
+
+.progress {
+    background-color: #3a3a3a;
 }
 
