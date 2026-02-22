@@ -423,3 +423,8 @@ body {
     background-color: #9b59b6 !important;
 }
 
+/* Dashboard - Dark Theme */
+.dashboard-timezone-note {
+    color: #b3b3b3;
+}
+

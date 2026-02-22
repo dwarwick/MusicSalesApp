@@ -235,6 +235,7 @@ try
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
     builder.Services.AddScoped<ICreatorService, CreatorService>();
+    builder.Services.AddScoped<IDashboardService, DashboardService>();
     builder.Services.AddScoped<ICreatorEmailService, CreatorEmailService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
     

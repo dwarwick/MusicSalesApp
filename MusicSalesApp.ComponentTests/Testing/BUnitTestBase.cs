@@ -52,6 +52,7 @@ public abstract class BUnitTestBase
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
     protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
+    protected Mock<IDashboardService> MockDashboardService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
@@ -85,6 +86,7 @@ public abstract class BUnitTestBase
         MockAccountEmailService = new Mock<IAccountEmailService>();
         MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
+        MockDashboardService = new Mock<IDashboardService>();
         MockSongStatusService = new Mock<ISongStatusService>();
         MockGenreService = new Mock<IGenreService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
@@ -268,6 +270,10 @@ public abstract class BUnitTestBase
         MockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(It.IsAny<int>()))
             .ReturnsAsync((int?)null);
 
+        // Setup default returns for IDashboardService methods
+        MockDashboardService.Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
         // Setup default returns for ISongStatusService methods
         MockSongStatusService.Setup(x => x.GetAllStatusHistoryAsync())
             .ReturnsAsync(new List<SongStatusHistory>());
@@ -324,6 +330,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
         TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
+        TestContext.Services.AddSingleton<IDashboardService>(MockDashboardService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
