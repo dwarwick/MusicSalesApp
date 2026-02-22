@@ -1275,3 +1275,26 @@ h1:focus {
     height: calc(80vh - 120px);
     border: none;
 }
+
+/* Dashboard layout styles */
+.dashboard-chart-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.dashboard-control-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-timezone-note {
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+}

@@ -52,6 +52,7 @@
 
                         <AuthorizeView Policy="@Permissions.ManageOwnSongs">
                             <Authorized>
+                                <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="fas fa-chart-column"></MenuItem>
                                 <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="fas fa-file-audio"></MenuItem>
                             </Authorized>
                         </AuthorizeView>

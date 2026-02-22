@@ -771,4 +771,13 @@
     .cta-button-group .cta-button {
         width: 100%;
     }
+
+    /* Dashboard responsive */
+    .dashboard-controls {
+        flex-direction: column;
+    }
+
+    .dashboard-control-group {
+        width: 100%;
+    }
 }
