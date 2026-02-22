@@ -47,7 +47,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private const int MaxFilesAllowed = 50;
     private const int ChunkSize = 8;
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
-    private const long MaxOcrImageSizeBytes = 10 * 1024 * 1024; // 10 MB per image for vision OCR
+    private const long MaxOcrImageSizeBytes = 20 * 1024 * 1024; // 20 MB per cover art image (buffered upfront for OCR + upload)
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
@@ -155,22 +155,25 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
         }
 
+        // Buffer ALL cover art files upfront before any other processing.
+        // In Blazor Server, IBrowserFile.OpenReadStream() can only be called once per file selection.
+        // Since BufferImagesForOcrAsync already reads streams for GUID images, we must buffer
+        // all images here so the upload methods use pre-buffered bytes instead of re-opening streams.
+        var bufferedImages = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
+        if (coverArtFilesByName.Any())
+        {
+            bufferedImages = await BufferAllCoverArtAsync(coverArtFilesByName);
+        }
+
         // Use AI to match audio files with cover art by filename similarity.
-        // For any image file with a nonsense filename (GUID, hex hash, etc.) and real audio names,
-        // pre-buffer the image bytes so the service can use vision OCR for matching.
+        // Buffered image data enables OCR for nonsense-named images (GUIDs, hex hashes, etc.).
         FileMatchingResult matchingResult;
         try
         {
-            IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData = null;
-            if (coverArtFilesByName.Any() && coverArtFilesByName.Keys.Any(HasNonsenseFilename))
-            {
-                imageData = await BufferImagesForOcrAsync(coverArtFilesByName);
-            }
-
             matchingResult = await FileMatchingService.MatchFilesAsync(
                 audioFilesByName.Keys,
                 coverArtFilesByName.Keys,
-                imageData);
+                bufferedImages.Count > 0 ? bufferedImages : null);
         }
         catch (Exception ex)
         {
@@ -191,7 +194,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _unmatchedCoverArtFiles = matchingResult.UnmatchedImageFiles;
 
         // Build the list of upload items to display
-        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)>();
+        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)>();
 
         foreach (var pair in matchingResult.Pairs)
         {
@@ -199,9 +202,25 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             if (audioFile == null)
                 continue;
 
-            IBrowserFile coverArtFile = null;
+            byte[] coverArtBytes = null;
+            string coverArtContentType = null;
+            string coverArtFileName = "(No cover art)";
+            long coverArtFileSize = 0;
+
             if (!string.IsNullOrEmpty(pair.ImageFileName))
-                coverArtFilesByName.TryGetValue(pair.ImageFileName, out coverArtFile);
+            {
+                if (bufferedImages.TryGetValue(pair.ImageFileName, out var imageData))
+                {
+                    coverArtBytes = imageData.Data;
+                    coverArtContentType = imageData.ContentType;
+                }
+                // Use IBrowserFile only for display metadata (name/size), not for stream reading
+                if (coverArtFilesByName.TryGetValue(pair.ImageFileName, out var coverArtFile))
+                {
+                    coverArtFileName = coverArtFile.Name;
+                    coverArtFileSize = coverArtFile.Size;
+                }
+            }
 
             var normalizedName = string.IsNullOrWhiteSpace(pair.NormalizedName)
                 ? MusicUploadService.GetNormalizedBaseName(pair.AudioFileName)
@@ -212,16 +231,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 BaseName = normalizedName,
                 AudioFileName = audioFile.Name,
                 AudioFileSize = audioFile.Size,
-                CoverArtFileName = coverArtFile?.Name ?? "(No cover art)",
-                CoverArtFileSize = coverArtFile?.Size ?? 0,
-                HasCoverArt = coverArtFile != null,
+                CoverArtFileName = coverArtFileName,
+                CoverArtFileSize = coverArtFileSize,
+                HasCoverArt = coverArtBytes != null,
                 Status = UploadStatus.Pending,
                 Progress = 0,
                 StatusMessage = "Pending"
             };
 
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile, normalizedName));
+            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtBytes, coverArtContentType, normalizedName));
         }
 
         await InvokeAsync(StateHasChanged);
@@ -256,7 +275,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// Audio/cover art pairs are kept together within their chunks.
     /// ChunkSize represents the maximum number of files (not pairs) to process concurrently.
     /// </summary>
-    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)> uploadItemsWithFiles)
+    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)> uploadItemsWithFiles)
     {
         var itemsList = uploadItemsWithFiles.ToList();
         var currentIndex = 0;
@@ -264,14 +283,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         while (currentIndex < itemsList.Count)
         {
             // Build a chunk that respects the max file count
-            var chunk = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)>();
+            var chunk = new List<(UploadPairItem Item, IBrowserFile AudioFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)>();
             var currentFileCount = 0;
 
             while (currentIndex < itemsList.Count && currentFileCount < ChunkSize)
             {
                 var item = itemsList[currentIndex];
                 // Count files: 2 for pair (audio + cover art), 1 for audio only
-                var fileCount = item.CoverArtFile != null ? 2 : 1;
+                var fileCount = item.CoverArtBytes != null ? 2 : 1;
 
                 // Check if adding this item would exceed the limit
                 // Always allow at least one item per chunk
@@ -287,11 +306,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
-            foreach (var (item, audioFile, coverArtFile, normalizedName) in chunk)
+            foreach (var (item, audioFile, coverArtBytes, coverArtContentType, normalizedName) in chunk)
             {
-                if (coverArtFile != null)
+                if (coverArtBytes != null)
                 {
-                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtFile, item, normalizedName));
+                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtBytes, coverArtContentType, item, normalizedName));
                 }
                 else
                 {
@@ -394,7 +413,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, UploadPairItem uploadItem, string normalizedName)
+    private async Task UploadFilePairAsync(IBrowserFile audioFile, byte[] coverArtBytes, string coverArtContentType, UploadPairItem uploadItem, string normalizedName)
     {
         const long maxFileSize = 100 * 1024 * 1024; // 100 MB
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
@@ -407,9 +426,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // Validate CreatorId before uploading - songs without a creator cannot be tracked or paid
             if (_currentCreatorId == null)
             {
-                var fileNames = $"{audioFile.Name}, {coverArtFile.Name}";
-                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload {FileNames} without a creator association.", _currentUserEmail, fileNames);
-                await SendCreatorIdFailureEmailAsync(fileNames);
+                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload audio '{AudioFile}' + cover art '{CoverArtFile}' without a creator association.", _currentUserEmail, audioFile.Name, uploadItem.CoverArtFileName);
+                await SendCreatorIdFailureEmailAsync($"{audioFile.Name}, {uploadItem.CoverArtFileName}");
                 uploadItem.Status = UploadStatus.Failed;
                 uploadItem.Progress = 0;
                 uploadItem.StatusMessage = "Upload failed";
@@ -433,17 +451,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
             audioMemoryStream.Position = 0;
 
-            uploadItem.StatusMessage = "Reading cover art...";
-            uploadItem.Progress = 15;
-            await InvokeAsync(StateHasChanged);
-
-            // Now buffer the cover art file
-            coverArtMemoryStream = new MemoryStream();
-            await using (var coverArtStream = coverArtFile.OpenReadStream(maxFileSize))
-            {
-                await coverArtStream.CopyToAsync(coverArtMemoryStream, bufferSize, _uploadCts.Token);
-            }
-            coverArtMemoryStream.Position = 0;
+            // Cover art is already buffered upfront in HandleFileSelected to avoid re-reading the
+            // Blazor IBrowserFile stream, which causes "There is no file with ID X" errors.
+            coverArtMemoryStream = new MemoryStream(coverArtBytes);
 
             uploadItem.StatusMessage = "Uploading...";
             uploadItem.Progress = 25;
@@ -452,7 +462,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // Delegate to the service with buffered streams - use normalized name for both files
             // so they are stored under the same clean base name regardless of original filenames
             var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
-            var coverArtExtension = Path.GetExtension(coverArtFile.Name).ToLowerInvariant();
+            var coverArtExtension = coverArtContentType switch
+            {
+                "image/png" => ".png",
+                "image/jpeg" => ".jpg",
+                _ => Path.GetExtension(uploadItem.CoverArtFileName).ToLowerInvariant() is { Length: > 0 } ext ? ext : ".jpg"
+            };
             var audioFileNameForStorage = normalizedName + audioExtension;
             var coverArtFileNameForStorage = normalizedName + coverArtExtension;
             var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
@@ -508,14 +523,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Delegates to <see cref="FileMatchingService.IsNonsenseFilename"/> without ambiguity with the injected property.</summary>
-    private static bool HasNonsenseFilename(string fileName) => MusicSalesApp.Services.FileMatchingService.IsNonsenseFilename(fileName);
-
     /// <summary>
-    /// Buffers image files into memory so their bytes can be passed to the file matching service
-    /// for vision-based OCR on images with nonsense filenames (GUIDs, hex hashes, etc.).
+    /// Buffers ALL cover art files into memory upfront before any upload or OCR operations.
+    /// Pre-buffering is required because Blazor Server's IBrowserFile.OpenReadStream() can only
+    /// be called once per file selection; reading it twice causes "There is no file with ID X".
+    /// As a side benefit, the buffered bytes are also passed to the file matching service to
+    /// enable vision OCR for images with nonsense filenames (GUIDs, hex hashes, etc.).
     /// </summary>
-    private async Task<IReadOnlyDictionary<string, (byte[] Data, string ContentType)>> BufferImagesForOcrAsync(
+    private async Task<Dictionary<string, (byte[] Data, string ContentType)>> BufferAllCoverArtAsync(
         Dictionary<string, IBrowserFile> coverArtFilesByName)
     {
         const int bufferSize = 81920;
@@ -538,7 +553,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "UploadFiles: Failed to buffer image '{FileName}' for OCR; will use filename for matching.", kvp.Key);
+                Logger.LogWarning(ex, "UploadFiles: Failed to buffer image '{FileName}'; it will be skipped.", kvp.Key);
             }
         }
 
