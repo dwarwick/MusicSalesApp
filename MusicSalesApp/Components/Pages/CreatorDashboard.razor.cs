@@ -179,9 +179,9 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 await LoadChartData();
                 await InvokeAsync(StateHasChanged);
             }
-            catch
+            catch (ObjectDisposedException)
             {
-                // Ignore errors during real-time updates
+                // Component was disposed during the async update - safe to ignore
             }
         }
     }
