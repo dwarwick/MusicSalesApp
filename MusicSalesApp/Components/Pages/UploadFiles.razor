@@ -40,16 +40,6 @@
                     <strong>Validation Error:</strong> @_validationErrorMessage
                     <button type="button" class="btn-close" @onclick="ClearValidationError" aria-label="Close"></button>
                 </div>
-                @if (_unmatchedCoverArtFiles.Any())
-                {
-                    <p class="text-danger"><strong>Unmatched cover art files (missing audio):</strong></p>
-                    <ul class="text-danger">
-                        @foreach (var file in _unmatchedCoverArtFiles)
-                        {
-                            <li>@file</li>
-                        }
-                    </ul>
-                }
             </div>
         </div>
     }
@@ -130,6 +120,21 @@
                 </div>
             </div>
         </div>
+
+        @if (_unmatchedCoverArtFiles.Any())
+        {
+            <div class="row mt-3">
+                <div class="col-12">
+                    <p class="text-muted"><strong>The following cover art files could not be matched to an audio file and were not uploaded:</strong></p>
+                    <ul class="text-muted">
+                        @foreach (var file in _unmatchedCoverArtFiles)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
     }
 </div>
 

@@ -105,6 +105,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
+        _unmatchedCoverArtFiles.Clear();
 
         // Ensure CreatorId is loaded - retry if not yet available (e.g. race with OnAfterRenderAsync)
         if (_currentCreatorId == null)
@@ -133,57 +134,72 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
-        // Separate files into audio and cover art
-        var audioFiles = new Dictionary<string, IBrowserFile>();
-        var coverArtFiles = new Dictionary<string, IBrowserFile>();
+        // Separate files into audio and cover art by original filename
+        var audioFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
+        var coverArtFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in files)
         {
             var extension = Path.GetExtension(file.Name).ToLowerInvariant();
-            var baseName = MusicUploadService.GetNormalizedBaseName(file.Name).ToLowerInvariant();
-
             if (ValidAudioExtensions.Contains(extension))
-            {
-                audioFiles[baseName] = file;
-            }
+                audioFilesByName[file.Name] = file;
             else if (ValidCoverArtExtensions.Contains(extension))
-            {
-                coverArtFiles[baseName] = file;
-            }
+                coverArtFilesByName[file.Name] = file;
         }
 
-        // Validate files - cover art is now optional, but orphan cover art files are not allowed
-        var fileNames = files.Select(f => f.Name).ToList();
-        var validationResult = MusicUploadService.ValidateAllFilePairings(fileNames);
-
-        if (!validationResult.IsValid)
+        // Show a "matching" status before calling AI
+        if (audioFilesByName.Any() && coverArtFilesByName.Any())
         {
-            // Only show error for unmatched cover art (cover art without matching audio)
-            // Audio files without cover art are now allowed
-            if (validationResult.UnmatchedAlbumArtFiles.Any())
-            {
-                _validationErrorMessage = "Some cover art files do not have matching audio files with the same base name.";
-                _unmatchedCoverArtFiles = validationResult.UnmatchedAlbumArtFiles;
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
+            _validationErrorMessage = string.Empty;
+            await InvokeAsync(StateHasChanged);
         }
+
+        // Use AI to match audio files with cover art by filename similarity
+        FileMatchingResult matchingResult;
+        try
+        {
+            matchingResult = await FileMatchingService.MatchFilesAsync(
+                audioFilesByName.Keys,
+                coverArtFilesByName.Keys);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: File matching service failed unexpectedly.");
+            matchingResult = new FileMatchingResult
+            {
+                Pairs = audioFilesByName.Keys.Select(a => new FilePair
+                {
+                    AudioFileName = a,
+                    ImageFileName = null,
+                    NormalizedName = MusicUploadService.GetNormalizedBaseName(a)
+                }).ToList(),
+                UnmatchedImageFiles = coverArtFilesByName.Keys.ToList()
+            };
+        }
+
+        // Track any image files that could not be matched (shown to user below progress table)
+        _unmatchedCoverArtFiles = matchingResult.UnmatchedImageFiles;
 
         // Build the list of upload items to display
-        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)>();
+        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)>();
 
-        // Create upload items for all audio files (with or without cover art)
-        foreach (var audioEntry in audioFiles)
+        foreach (var pair in matchingResult.Pairs)
         {
-            var audioFile = audioEntry.Value;
-            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
-            
-            // Check if there's a matching cover art file
-            coverArtFiles.TryGetValue(audioEntry.Key, out var coverArtFile);
+            audioFilesByName.TryGetValue(pair.AudioFileName, out var audioFile);
+            if (audioFile == null)
+                continue;
+
+            IBrowserFile coverArtFile = null;
+            if (!string.IsNullOrEmpty(pair.ImageFileName))
+                coverArtFilesByName.TryGetValue(pair.ImageFileName, out coverArtFile);
+
+            var normalizedName = string.IsNullOrWhiteSpace(pair.NormalizedName)
+                ? MusicUploadService.GetNormalizedBaseName(pair.AudioFileName)
+                : pair.NormalizedName;
 
             var uploadItem = new UploadPairItem
             {
-                BaseName = baseName,
+                BaseName = normalizedName,
                 AudioFileName = audioFile.Name,
                 AudioFileSize = audioFile.Size,
                 CoverArtFileName = coverArtFile?.Name ?? "(No cover art)",
@@ -195,7 +211,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             };
 
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile));
+            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile, normalizedName));
         }
 
         await InvokeAsync(StateHasChanged);
@@ -230,7 +246,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// Audio/cover art pairs are kept together within their chunks.
     /// ChunkSize represents the maximum number of files (not pairs) to process concurrently.
     /// </summary>
-    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)> uploadItemsWithFiles)
+    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)> uploadItemsWithFiles)
     {
         var itemsList = uploadItemsWithFiles.ToList();
         var currentIndex = 0;
@@ -238,7 +254,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         while (currentIndex < itemsList.Count)
         {
             // Build a chunk that respects the max file count
-            var chunk = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile)>();
+            var chunk = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, string NormalizedName)>();
             var currentFileCount = 0;
 
             while (currentIndex < itemsList.Count && currentFileCount < ChunkSize)
@@ -261,15 +277,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
-            foreach (var (item, audioFile, coverArtFile) in chunk)
+            foreach (var (item, audioFile, coverArtFile, normalizedName) in chunk)
             {
                 if (coverArtFile != null)
                 {
-                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtFile, item));
+                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtFile, item, normalizedName));
                 }
                 else
                 {
-                    chunkTasks.Add(UploadAudioOnlyAsync(audioFile, item));
+                    chunkTasks.Add(UploadAudioOnlyAsync(audioFile, item, normalizedName));
                 }
             }
 
@@ -278,7 +294,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem)
+    private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem, string normalizedName)
     {
         const long maxFileSize = 100 * 1024 * 1024; // 100 MB
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
@@ -317,17 +333,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Upload without cover art
+            // Upload without cover art - use the normalized name as the filename so storage uses clean names
+            var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
+            var audioFileNameForStorage = normalizedName + audioExtension;
             var folderPath = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
                 audioMemoryStream,
-                audioFile.Name,
+                audioFileNameForStorage,
                 null, // No album name
                 _currentCreatorId,
                 _uploadCts.Token);
 
             // Track the uploaded blob path for cleanup if user leaves
-            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
-            var mp3Path = $"{baseName}/{baseName}.mp3";
+            var mp3Path = $"{normalizedName}/{normalizedName}.mp3";
             lock (_blobPathsLock)
             {
                 _uploadedBlobPaths.Add(mp3Path);
@@ -367,7 +384,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, UploadPairItem uploadItem)
+    private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, UploadPairItem uploadItem, string normalizedName)
     {
         const long maxFileSize = 100 * 1024 * 1024; // 100 MB
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
@@ -422,21 +439,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Delegate to the service with buffered streams (no album name)
+            // Delegate to the service with buffered streams - use normalized name for both files
+            // so they are stored under the same clean base name regardless of original filenames
+            var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
+            var coverArtExtension = Path.GetExtension(coverArtFile.Name).ToLowerInvariant();
+            var audioFileNameForStorage = normalizedName + audioExtension;
+            var coverArtFileNameForStorage = normalizedName + coverArtExtension;
             var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
                 audioMemoryStream,
-                audioFile.Name,
+                audioFileNameForStorage,
                 coverArtMemoryStream,
-                coverArtFile.Name,
+                coverArtFileNameForStorage,
                 null, // No album name
                 _currentCreatorId,
                 _uploadCts.Token);
 
             // Track the uploaded blob paths for cleanup if user leaves
-            var baseName = MusicUploadService.GetNormalizedBaseName(audioFile.Name);
-            var mp3Path = $"{baseName}/{baseName}.mp3";
-            var coverArtExtension = Path.GetExtension(coverArtFile.Name).ToLowerInvariant();
-            var imagePath = $"{baseName}/{baseName}{coverArtExtension}";
+            var mp3Path = $"{normalizedName}/{normalizedName}.mp3";
+            var imagePath = $"{normalizedName}/{normalizedName}{coverArtExtension}";
             lock (_blobPathsLock)
             {
                 _uploadedBlobPaths.Add(mp3Path);
