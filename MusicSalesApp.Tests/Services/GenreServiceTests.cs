@@ -285,4 +285,39 @@ public class GenreServiceTests
         // Assert
         Assert.That(result, Is.Null);
     }
+
+    [Test]
+    public async Task EnableGenreAsync_EnablesGenre()
+    {
+        // Arrange
+        int genreId;
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            var genre = new Genre { Name = "Rock", IsActive = false };
+            context.Genres.Add(genre);
+            await context.SaveChangesAsync();
+            genreId = genre.Id;
+        }
+
+        // Act
+        var result = await _service.EnableGenreAsync(genreId);
+
+        // Assert
+        Assert.That(result, Is.True);
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            var genre = await context.Genres.FindAsync(genreId);
+            Assert.That(genre.IsActive, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task EnableGenreAsync_ReturnsFalse_WhenGenreNotFound()
+    {
+        // Act
+        var result = await _service.EnableGenreAsync(999);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
 }

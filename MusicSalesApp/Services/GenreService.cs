@@ -85,6 +85,21 @@ public class GenreService : IGenreService
         return true;
     }
 
+    public async Task<bool> EnableGenreAsync(int genreId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var genre = await context.Genres.FindAsync(genreId);
+
+        if (genre == null)
+            return false;
+
+        genre.IsActive = true;
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Genre '{GenreName}' (ID: {GenreId}) has been enabled", genre.Name, genreId);
+        return true;
+    }
+
     public async Task<Genre> GetByIdAsync(int genreId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();

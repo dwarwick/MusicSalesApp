@@ -287,6 +287,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync((Genre)null);
         MockGenreService.Setup(x => x.DisableGenreAsync(It.IsAny<int>()))
             .ReturnsAsync(true);
+        MockGenreService.Setup(x => x.EnableGenreAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
 
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()

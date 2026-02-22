@@ -233,6 +233,12 @@ else
                                             <i class="bi bi-x-circle me-1"></i> Disable
                                         </SfButton>
                                     }
+                                    else
+                                    {
+                                        <SfButton CssClass="e-btn e-small e-success" OnClick="() => EnableGenre(genre.Id)">
+                                            <i class="bi bi-check-circle me-1"></i> Enable
+                                        </SfButton>
+                                    }
                                 </td>
                             </tr>
                         }

@@ -744,6 +744,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 <h2>Genre Disabled</h2>
 <p>The genre <strong>{genreName}</strong> has been disabled by an administrator.</p>
 <p>Songs that were assigned this genre have had their genre cleared. Please update your songs with a new genre.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
 <p style='color: #999; font-size: 12px;'>
     <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
 </p>";
@@ -760,6 +761,46 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         await SongAdminService.RefreshCacheAsync();
         await LoadSongsAsync();
         _totalCount = _allSongs.Count;
+        StateHasChanged();
+    }
+
+    protected async Task EnableGenre(int genreId)
+    {
+        var genre = _allGenres.FirstOrDefault(g => g.Id == genreId);
+        if (genre == null) return;
+
+        var genreName = genre.Name;
+
+        // Enable the genre
+        var success = await GenreService.EnableGenreAsync(genreId);
+        if (!success) return;
+
+        // Find creators who had songs with this genre (genre was nulled on disable)
+        // We notify creators who added the genre originally
+        var creatorEmail = genre.CreatedByEmail;
+        if (!string.IsNullOrEmpty(creatorEmail))
+        {
+            try
+            {
+                var logoHtml = EmailService.GetEmailLogoHtml();
+                var body = $@"{logoHtml}
+<h2>Genre Re-Enabled</h2>
+<p>The genre <strong>{genreName}</strong> has been re-enabled by an administrator.</p>
+<p>You can now assign this genre to your songs again.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
+<p style='color: #999; font-size: 12px;'>
+    <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+</p>";
+                await EmailService.SendEmailAsync(creatorEmail, $"Genre Re-Enabled: {genreName}", body);
+            }
+            catch
+            {
+                // Best-effort email notification
+            }
+        }
+
+        // Refresh genres
+        await LoadGenresAsync();
         StateHasChanged();
     }
 }

@@ -30,6 +30,11 @@ public interface IGenreService
     Task<bool> DisableGenreAsync(int genreId);
 
     /// <summary>
+    /// Enables a previously disabled genre by ID. Returns true if successful.
+    /// </summary>
+    Task<bool> EnableGenreAsync(int genreId);
+
+    /// <summary>
     /// Gets a genre by its ID.
     /// </summary>
     Task<Genre> GetByIdAsync(int genreId);
