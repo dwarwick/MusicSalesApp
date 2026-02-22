@@ -55,6 +55,21 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected Syncfusion.Blazor.Theme _chartTheme =>
         ThemeService.IsDarkTheme ? Syncfusion.Blazor.Theme.Bootstrap5Dark : Syncfusion.Blazor.Theme.Bootstrap5;
 
+    protected double _yAxisInterval
+    {
+        get
+        {
+            if (_chartData == null || _chartData.Count == 0) return 1;
+            var maxCount = _chartData.Max(d => d.StreamCount);
+            if (maxCount <= 10) return 1;
+            if (maxCount <= 50) return 5;
+            if (maxCount <= 100) return 10;
+            if (maxCount <= 500) return 50;
+            if (maxCount <= 1000) return 100;
+            return Math.Ceiling(maxCount / 10.0);
+        }
+    }
+
     private int? _creatorId;
 
     /// <summary>
