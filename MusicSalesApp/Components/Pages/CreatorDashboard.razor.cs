@@ -52,6 +52,9 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         _ => Syncfusion.Blazor.Charts.IntervalType.Days
     };
 
+    protected Syncfusion.Blazor.Theme _chartTheme =>
+        ThemeService.IsDarkTheme ? Syncfusion.Blazor.Theme.Bootstrap5Dark : Syncfusion.Blazor.Theme.Bootstrap5;
+
     private int? _creatorId;
 
     /// <summary>

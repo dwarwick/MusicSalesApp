@@ -63,7 +63,7 @@
 
             @if (_chartData != null && _chartData.Count > 0)
             {
-                <SfChart Title="Overall Streams">
+                <SfChart Title="Overall Streams" Theme="@_chartTheme">
                     <ChartPrimaryXAxis ValueType="Syncfusion.Blazor.Charts.ValueType.DateTime" 
                         LabelFormat="@_chartDateFormat"
                         IntervalType="@_chartIntervalType"
