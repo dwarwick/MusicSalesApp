@@ -125,6 +125,9 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 // Subscribe to real-time stream updates
                 StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
                 await StreamCountHubClient.StartAsync();
+
+                // Subscribe to theme changes so the chart updates when dark/light mode is toggled
+                ThemeService.OnThemeChanged += HandleThemeChanged;
             }
             catch (Exception ex)
             {
@@ -257,11 +260,17 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         }
     }
 
+    private void HandleThemeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         if (!_disposed)
         {
             StreamCountHubClient.OnStreamCountReceived -= HandleStreamCountReceived;
+            ThemeService.OnThemeChanged -= HandleThemeChanged;
             _disposed = true;
         }
     }
