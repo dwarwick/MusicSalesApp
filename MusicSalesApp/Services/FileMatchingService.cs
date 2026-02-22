@@ -15,7 +15,7 @@ public class FileMatchingService : IFileMatchingService
 {
     private readonly ILogger<FileMatchingService> _logger;
     private readonly string _apiKey;
-    private const string ChatModel = "gpt-4o-mini";
+    private const string ChatModel = "gpt-4.1-mini";
 
     private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
     private static readonly string[] ValidImageExtensions = { ".jpeg", ".jpg", ".png" };
