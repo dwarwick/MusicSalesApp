@@ -143,7 +143,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             // Find matching song metadata by filename or stored title
             _songMetadata = allMetadata.FirstOrDefault(m =>
                 !string.IsNullOrEmpty(m.Mp3BlobPath) &&
-                IsAudioFile(m.Mp3BlobPath) &&
+                MusicFileExtensions.IsAudioFile(m.Mp3BlobPath) &&
                 (Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  (!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase))));
@@ -316,12 +316,6 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
-    }
-
-    private bool IsAudioFile(string fileName)
-    {
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".wma";
     }
 
     /// <summary>

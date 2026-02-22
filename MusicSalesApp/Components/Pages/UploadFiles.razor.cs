@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Grids.Internal;
@@ -49,8 +50,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
     private const long MaxOcrImageSizeBytes = 20 * 1024 * 1024; // 20 MB per cover art image (buffered upfront for OCR + upload)
 
-    private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
-    private static readonly string[] ValidCoverArtExtensions = { ".jpeg", ".jpg", ".png" };
+    private static readonly string[] ValidAudioExtensions = MusicFileExtensions.ValidAudioExtensions;
+    private static readonly string[] ValidCoverArtExtensions = MusicFileExtensions.ValidCoverArtExtensions;
     
     protected InputFile FileInput { get; set;}
 

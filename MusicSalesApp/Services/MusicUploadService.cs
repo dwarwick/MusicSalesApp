@@ -18,8 +18,6 @@ namespace MusicSalesApp.Services
         private readonly ILogger<MusicUploadService> _logger;
 
         private const string MasteredSuffix = "_mastered";
-        private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
-        private static readonly string[] ValidAlbumArtExtensions = { ".jpeg", ".jpg", ".png" };
 
         public MusicUploadService(
             IAzureStorageService storageService,
@@ -588,23 +586,11 @@ namespace MusicSalesApp.Services
             return result;
         }
 
-        private bool IsAudioFile(string fileName)
-        {
-            if (string.IsNullOrWhiteSpace(fileName))
-                return false;
+        private static bool IsAudioFile(string fileName)
+            => MusicFileExtensions.IsAudioFile(fileName);
 
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            return ValidAudioExtensions.Contains(extension);
-        }
-
-        private bool IsAlbumArtFile(string fileName)
-        {
-            if (string.IsNullOrWhiteSpace(fileName))
-                return false;
-
-            var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            return ValidAlbumArtExtensions.Contains(extension);
-        }
+        private static bool IsAlbumArtFile(string fileName)
+            => MusicFileExtensions.IsCoverArtFile(fileName);
 
         private static string GetImageContentType(string extension)
         {

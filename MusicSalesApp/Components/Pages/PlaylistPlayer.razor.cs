@@ -1100,12 +1100,6 @@ namespace MusicSalesApp.Components.Pages
             return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
         }
 
-        private bool IsAudioFile(string fileName)
-        {
-            var ext = Path.GetExtension(fileName).ToLowerInvariant();
-            return ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".wma";
-        }
-
         private string SafeEncodePath(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))

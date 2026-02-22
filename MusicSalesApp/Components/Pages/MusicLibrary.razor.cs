@@ -256,7 +256,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 m => m);
             
             // Get all audio files
-            var audioFiles = allFiles.Where(f => IsAudioFile(f.Name)).ToList();
+            var audioFiles = allFiles.Where(f => MusicFileExtensions.IsAudioFile(f.Name)).ToList();
             
             // Get all image files
             var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
@@ -460,12 +460,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private class StreamUrlResponseDto
     {
         public string Url { get; set; }
-    }
-
-    private bool IsAudioFile(string fileName)
-    {
-        var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        return ext == ".mp3" || ext == ".wav" || ext == ".flac" || ext == ".ogg" || ext == ".m4a" || ext == ".aac" || ext == ".wma";
     }
 
     private bool IsImageFile(string fileName)
