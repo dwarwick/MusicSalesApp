@@ -1,5 +1,6 @@
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
+using Microsoft.JSInterop;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -10,12 +11,17 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     private bool _hasLoadedData;
     private bool _disposed;
 
-    protected DateTime _startDate = DateTime.Now.AddDays(-30);
-    protected DateTime _endDate = DateTime.Now;
-    protected DateTime _maxStartDate = DateTime.Now;
+    // These will be set from the user's browser timezone in OnAfterRenderAsync
+    protected DateTime _startDate;
+    protected DateTime _endDate;
+    protected DateTime _maxStartDate;
+    protected DateTime _maxEndDate;
     protected StreamInterval _selectedInterval = StreamInterval.Day;
     protected string _selectedIntervalStr = "Day";
     protected List<StreamDataPoint> _chartData = new();
+    protected string _userTimeZoneDisplayName = string.Empty;
+
+    private TimeZoneInfo _userTimeZone = TimeZoneInfo.Utc;
 
     protected List<IntervalOption> _intervalOptions = new()
     {
@@ -48,6 +54,29 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
 
     private int? _creatorId;
 
+    /// <summary>
+    /// Gets the current time in the user's timezone.
+    /// </summary>
+    private DateTime GetUserNow() => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _userTimeZone);
+
+    /// <summary>
+    /// Converts a user's local time to UTC using the detected browser timezone.
+    /// </summary>
+    private DateTime ConvertUserLocalToUtc(DateTime userLocal)
+    {
+        var unspecified = DateTime.SpecifyKind(userLocal, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(unspecified, _userTimeZone);
+    }
+
+    /// <summary>
+    /// Converts a UTC time to the user's local timezone.
+    /// </summary>
+    private DateTime ConvertUtcToUserLocal(DateTime utc)
+    {
+        var utcTime = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(utcTime, _userTimeZone);
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_hasLoadedData)
@@ -55,6 +84,16 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             _hasLoadedData = true;
             try
             {
+                // Detect user's browser timezone via JS interop
+                await DetectUserTimezone();
+
+                // Now set default dates using user's actual timezone
+                var userNow = GetUserNow();
+                _startDate = userNow.AddDays(-30);
+                _endDate = userNow;
+                _maxStartDate = userNow;
+                _maxEndDate = userNow;
+
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
                 var user = authState.User;
 
@@ -96,6 +135,28 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         }
     }
 
+    private async Task DetectUserTimezone()
+    {
+        try
+        {
+            // Get the IANA timezone name from the browser (e.g., "Australia/Sydney", "America/New_York")
+            var ianaTimeZone = await JS.InvokeAsync<string>("eval",
+                "Intl.DateTimeFormat().resolvedOptions().timeZone");
+
+            if (!string.IsNullOrEmpty(ianaTimeZone))
+            {
+                _userTimeZone = TimeZoneInfo.FindSystemTimeZoneById(ianaTimeZone);
+                _userTimeZoneDisplayName = ianaTimeZone;
+            }
+        }
+        catch
+        {
+            // Fallback to UTC if timezone detection fails
+            _userTimeZone = TimeZoneInfo.Utc;
+            _userTimeZoneDisplayName = "UTC";
+        }
+    }
+
     private async Task LoadChartData()
     {
         if (_creatorId == null) return;
@@ -109,16 +170,16 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
 
         _errorMessage = string.Empty;
 
-        // Convert local times to UTC for the query
-        var startUtc = _startDate.ToUniversalTime();
-        var endUtc = _endDate.ToUniversalTime();
+        // Convert user's local times to UTC for the query
+        var startUtc = ConvertUserLocalToUtc(_startDate);
+        var endUtc = ConvertUserLocalToUtc(_endDate);
 
         _chartData = await DashboardService.GetStreamDataAsync(_creatorId.Value, startUtc, endUtc, _selectedInterval);
 
-        // Convert UTC data points back to local time for display
+        // Convert UTC data points to the user's timezone for display
         foreach (var point in _chartData)
         {
-            point.PeriodStart = point.PeriodStart.ToLocalTime();
+            point.PeriodStart = ConvertUtcToUserLocal(point.PeriodStart);
         }
     }
 
@@ -173,9 +234,11 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         {
             try
             {
-                // Update end date to now to include the latest data
-                _endDate = DateTime.Now;
-                _maxStartDate = _endDate;
+                // Update end date to user's current time to include the latest data
+                var userNow = GetUserNow();
+                _endDate = userNow;
+                _maxStartDate = userNow;
+                _maxEndDate = userNow;
                 await LoadChartData();
                 await InvokeAsync(StateHasChanged);
             }

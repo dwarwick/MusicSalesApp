@@ -156,8 +156,8 @@ public class CreatorDashboardTests : BUnitTestBase
         await Task.Delay(100);
         cut.Render();
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("All times shown in your local time zone"));
+        // Assert - should show timezone info (detected from browser or UTC fallback)
+        Assert.That(cut.Markup, Does.Contain("time zone"));
     }
 
     [Test]

@@ -42,7 +42,7 @@
                 <div class="dashboard-control-group">
                     <label class="form-label">End Date/Time</label>
                     <SfDateTimePicker TValue="DateTime" @bind-Value="_endDate" 
-                        Max="@DateTime.Now"
+                        Max="@_maxEndDate"
                         Min="@_startDate"
                         Placeholder="End date"
                         CssClass="dashboard-datetime">
@@ -59,7 +59,7 @@
                     </SfDropDownList>
                 </div>
             </div>
-            <p class="text-muted dashboard-timezone-note"><small>All times shown in your local time zone</small></p>
+            <p class="text-muted dashboard-timezone-note"><small>All times shown in @(_userTimeZoneDisplayName) time zone</small></p>
 
             @if (_chartData != null && _chartData.Count > 0)
             {
