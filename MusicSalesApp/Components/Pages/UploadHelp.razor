@@ -23,10 +23,31 @@
         <h4><span class="step-badge">2</span> Add Cover Art <span class="text-muted small">(optional)</span></h4>
         <p>
             Want your song to stand out? Drop a <strong>JPEG</strong> or <strong>PNG</strong> image alongside the audio file.
-            The trick is simple: <em>give the image the same base name as the audio file</em>.
+            The app will <strong>automatically try to pair</strong> each image with the right audio file — filenames
+            don't have to match perfectly.
         </p>
 
-        <h5 class="mt-3 mb-2"><i class="fas fa-check-circle text-success me-1"></i> Correct naming</h5>
+        <h5 class="mt-3 mb-2"><i class="fas fa-wand-magic-sparkles me-1"></i> How Smart Matching Works</h5>
+        <p>The upload process uses a multi-step approach to pair your cover art with the correct audio file:</p>
+        <ol>
+            <li>
+                <strong>Filename similarity</strong> — The app compares filenames intelligently.
+                Underscores, hyphens, and differences in spacing or casing are handled automatically.
+                For example, <code>lipstick_and_leather.jpeg</code> will match <code>Lipstick and Leather.mp3</code>.
+            </li>
+            <li>
+                <strong>Image text extraction</strong> — If filename matching doesn't find a pair,
+                the app reads any visible text in the image (such as a song title on album art) and
+                uses that to find the right audio file.
+            </li>
+            <li>
+                <strong>No match?</strong> — If neither method finds a match, the image is skipped
+                and the song will use a default animated visual instead. You can always upload cover art
+                later from the <a href="/creator/songs"><i class="fas fa-file-audio me-1"></i>Manage My Songs</a> page.
+            </li>
+        </ol>
+
+        <h5 class="mt-3 mb-2"><i class="fas fa-check-circle text-success me-1"></i> Examples</h5>
         <div class="table-responsive">
             <table class="table table-sm help-table">
                 <thead>
@@ -43,44 +64,24 @@
                         <td><span class="badge bg-success">Paired <i class="fas fa-link ms-1"></i></span></td>
                     </tr>
                     <tr>
-                        <td><code>Midnight Drive.wav</code></td>
-                        <td><code>Midnight Drive.png</code></td>
+                        <td><code>Lipstick and Leather.mp3</code></td>
+                        <td><code>lipstick_and_leather.jpeg</code></td>
                         <td><span class="badge bg-success">Paired <i class="fas fa-link ms-1"></i></span></td>
+                    </tr>
+                    <tr>
+                        <td><code>Midnight Drive.wav</code></td>
+                        <td><code>MidnightDrive_cover.png</code></td>
+                        <td><span class="badge bg-success">Paired <i class="fas fa-link ms-1"></i></span></td>
+                    </tr>
+                    <tr>
+                        <td><code>Summer Vibes.flac</code></td>
+                        <td><em class="text-muted">— image with "Summer Vibes" text on it —</em></td>
+                        <td><span class="badge bg-success">Paired via text extraction <i class="fas fa-link ms-1"></i></span></td>
                     </tr>
                     <tr>
                         <td><code>Summer Vibes.flac</code></td>
                         <td><em class="text-muted">— none —</em></td>
                         <td><span class="badge bg-secondary">Default animation</span></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <h5 class="mt-3 mb-2"><i class="fas fa-times-circle text-danger me-1"></i> Incorrect naming</h5>
-        <div class="table-responsive">
-            <table class="table table-sm help-table">
-                <thead>
-                    <tr>
-                        <th>Audio File</th>
-                        <th>Cover Art File</th>
-                        <th>Why It Won't Match</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>Lipstick and Leather.mp3</code></td>
-                        <td><code>lipstick_and_leather.jpeg</code></td>
-                        <td>Underscores &amp; different casing — names must match exactly</td>
-                    </tr>
-                    <tr>
-                        <td><code>Midnight Drive.wav</code></td>
-                        <td><code>MidnightDrive_cover.png</code></td>
-                        <td>Extra text (<code>_cover</code>) and missing space</td>
-                    </tr>
-                    <tr>
-                        <td><code>Summer Vibes.flac</code></td>
-                        <td><code>album art.png</code></td>
-                        <td>Completely different name — no way to match it</td>
                     </tr>
                 </tbody>
             </table>
