@@ -161,39 +161,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
         }
 
-        // Phase 1: filename-based matching — no images are buffered into memory.
-        // OpenAI receives all filenames at once for the best overall matching quality.
-        FileMatchingResult matchingResult;
-        try
-        {
-            matchingResult = await FileMatchingService.MatchFilesAsync(
-                audioFilesByName.Keys,
-                coverArtFilesByName.Keys);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "UploadFiles: File matching service failed unexpectedly.");
-            matchingResult = new FileMatchingResult
-            {
-                Pairs = audioFilesByName.Keys.Select(a => new FilePair
-                {
-                    AudioFileName = a,
-                    ImageFileName = null,
-                    NormalizedName = MusicUploadService.GetNormalizedBaseName(a)
-                }).ToList(),
-                UnmatchedImageFiles = coverArtFilesByName.Keys.ToList()
-            };
-        }
-
-        // Phase 2: OCR refinement for images left unmatched after Phase 1.
-        // Processes at most ImageOcrChunkSize images at a time to limit peak memory usage.
-        Dictionary<string, (byte[] Data, string ContentType)> bufferedOcrImages = null;
-        var unmatchedImages = matchingResult.UnmatchedImageFiles.ToList();
-        if (unmatchedImages.Any())
-        {
-            bufferedOcrImages = await PerformOcrChunkedMatchingAsync(
-                unmatchedImages, matchingResult, coverArtFilesByName);
-        }
+        // Process all image files in chunks of ImageOcrChunkSize (4).
+        // Each chunk: filename-only match first (no bytes), then OCR for any still-unmatched
+        // images in that chunk. At most ImageOcrChunkSize images are buffered at once.
+        var (matchingResult, bufferedOcrImages) = await PerformChunkedMatchingAsync(
+            audioFilesByName.Keys.ToList(),
+            coverArtFilesByName.Keys.ToList(),
+            coverArtFilesByName);
 
         // Track image files that could not be matched (shown below progress table, no error)
         _unmatchedCoverArtFiles = matchingResult.UnmatchedImageFiles;
@@ -563,78 +537,116 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Second matching pass: for images left unmatched after Phase 1,
-    /// buffers and OCR-scans them in chunks of <see cref="ImageOcrChunkSize"/> to limit peak memory.
-    /// The matching service decides internally whether to run vision OCR on each image.
+    /// Processes ALL image files in chunks of <see cref="ImageOcrChunkSize"/> (4).
+    /// For each chunk: (a) filename-only matching — no bytes read; then (b) for images still
+    /// unmatched in that chunk, buffer their bytes and attempt OCR matching.
+    /// At most <see cref="ImageOcrChunkSize"/> images are in memory at any one time.
+    /// Bytes for unmatched images in each chunk become GC-eligible immediately after the chunk.
+    /// Bytes for OCR-matched images are retained and returned so they can be used during upload
+    /// (their IBrowserFile streams have been consumed and cannot be re-read).
     /// </summary>
-    /// <returns>
-    /// A dictionary of image filename → buffered bytes for images that were successfully matched.
-    /// These bytes must be held until the corresponding upload completes because their
-    /// <see cref="IBrowserFile"/> streams have been consumed and cannot be re-read.
-    /// </returns>
-    private async Task<Dictionary<string, (byte[] Data, string ContentType)>> PerformOcrChunkedMatchingAsync(
-        List<string> unmatchedImages,
-        FileMatchingResult matchingResult,
-        Dictionary<string, IBrowserFile> coverArtFilesByName)
+    private async Task<(FileMatchingResult Result, Dictionary<string, (byte[] Data, string ContentType)> BufferedImages)>
+        PerformChunkedMatchingAsync(
+            List<string> audioFileNames,
+            List<string> allImageFileNames,
+            Dictionary<string, IBrowserFile> coverArtFilesByName)
     {
-        var bufferedOcrImages = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
+        var allPairs = new List<FilePair>();
+        var unmatchedImages = new List<string>();
+        var bufferedImages = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
+        var remainingAudioNames = audioFileNames.ToList();
 
-        // Collect audio files that are still unmatched after Phase 1
-        var unmatchedAudioNames = matchingResult.Pairs
-            .Where(p => p.ImageFileName == null)
-            .Select(p => p.AudioFileName)
-            .ToList();
-
-        if (!unmatchedAudioNames.Any())
-            return bufferedOcrImages;
-
-        // Process unmatched images in chunks of ImageOcrChunkSize
-        for (int i = 0; i < unmatchedImages.Count && unmatchedAudioNames.Any(); i += ImageOcrChunkSize)
+        for (int i = 0; i < allImageFileNames.Count; i += ImageOcrChunkSize)
         {
-            var chunk = unmatchedImages.Skip(i).Take(ImageOcrChunkSize).ToList();
-            var chunkFiles = chunk
-                .Where(f => coverArtFilesByName.ContainsKey(f))
-                .ToDictionary(f => f, f => coverArtFilesByName[f]);
+            if (!remainingAudioNames.Any())
+            {
+                // All audio already matched — remaining images are unmatched
+                unmatchedImages.AddRange(allImageFileNames.Skip(i));
+                break;
+            }
 
-            if (!chunkFiles.Any())
-                continue;
+            var imageChunk = allImageFileNames.Skip(i).Take(ImageOcrChunkSize).ToList();
 
-            // Buffer only the images in this chunk (reads their IBrowserFile streams)
-            var chunkData = await BufferCoverArtChunkAsync(chunkFiles);
-
+            // Step A: filename-only match for this chunk (no bytes read)
+            FileMatchingResult chunkResult;
             try
             {
-                var chunkResult = await FileMatchingService.MatchFilesAsync(
-                    unmatchedAudioNames, chunk, chunkData);
-
-                // Merge newly-matched pairs into the overall result
-                foreach (var newPair in chunkResult.Pairs.Where(p => p.ImageFileName != null))
-                {
-                    var existingPair = matchingResult.Pairs
-                        .FirstOrDefault(p =>
-                            string.Equals(p.AudioFileName, newPair.AudioFileName, StringComparison.OrdinalIgnoreCase)
-                            && p.ImageFileName == null);
-                    if (existingPair == null)
-                        continue;
-
-                    existingPair.ImageFileName = newPair.ImageFileName;
-                    existingPair.NormalizedName = newPair.NormalizedName;
-                    unmatchedAudioNames.Remove(newPair.AudioFileName);
-                    matchingResult.UnmatchedImageFiles.Remove(newPair.ImageFileName);
-
-                    // Retain bytes for matched images — needed for upload (stream already consumed)
-                    if (chunkData.TryGetValue(newPair.ImageFileName, out var data))
-                        bufferedOcrImages[newPair.ImageFileName] = data;
-                }
+                chunkResult = await FileMatchingService.MatchFilesAsync(remainingAudioNames, imageChunk);
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "UploadFiles: OCR chunk matching failed for images at index {Index}; those images will remain unmatched.", i);
+                Logger.LogError(ex, "UploadFiles: Filename matching failed for image chunk {ChunkIndex}.", i / ImageOcrChunkSize);
+                chunkResult = new FileMatchingResult
+                {
+                    Pairs = remainingAudioNames.Select(a => new FilePair
+                    {
+                        AudioFileName = a,
+                        ImageFileName = null,
+                        NormalizedName = MusicUploadService.GetNormalizedBaseName(a)
+                    }).ToList(),
+                    UnmatchedImageFiles = imageChunk
+                };
             }
-            // Bytes for any unmatched images in this chunk are no longer referenced → GC-eligible
+
+            // Collect filename-matched pairs; remove matched audio from the remaining pool
+            foreach (var pair in chunkResult.Pairs.Where(p => p.ImageFileName != null))
+            {
+                allPairs.Add(pair);
+                remainingAudioNames.Remove(pair.AudioFileName);
+            }
+
+            // Step B: OCR for images still unmatched in this chunk (up to ImageOcrChunkSize bytes at once)
+            var stillUnmatched = chunkResult.UnmatchedImageFiles.ToList();
+            if (stillUnmatched.Any() && remainingAudioNames.Any())
+            {
+                var chunkFiles = stillUnmatched
+                    .Where(coverArtFilesByName.ContainsKey)
+                    .ToDictionary(f => f, f => coverArtFilesByName[f]);
+
+                if (chunkFiles.Any())
+                {
+                    var chunkData = await BufferCoverArtChunkAsync(chunkFiles);
+                    try
+                    {
+                        var ocrResult = await FileMatchingService.MatchFilesAsync(
+                            remainingAudioNames, stillUnmatched, chunkData);
+
+                        foreach (var pair in ocrResult.Pairs.Where(p => p.ImageFileName != null))
+                        {
+                            allPairs.Add(pair);
+                            remainingAudioNames.Remove(pair.AudioFileName);
+                            // Retain bytes — IBrowserFile stream already consumed by OCR
+                            if (chunkData.TryGetValue(pair.ImageFileName, out var data))
+                                bufferedImages[pair.ImageFileName] = data;
+                        }
+                        unmatchedImages.AddRange(ocrResult.UnmatchedImageFiles);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "UploadFiles: OCR matching failed for image chunk {ChunkIndex}; images will remain unmatched.", i / ImageOcrChunkSize);
+                        unmatchedImages.AddRange(stillUnmatched);
+                    }
+                    // Bytes for unmatched images in chunkData go out of scope → GC-eligible
+                }
+            }
+            else
+            {
+                unmatchedImages.AddRange(stillUnmatched);
+            }
         }
 
-        return bufferedOcrImages;
+        // Audio files with no image match → audio-only pairs
+        foreach (var audio in remainingAudioNames)
+        {
+            allPairs.Add(new FilePair
+            {
+                AudioFileName = audio,
+                ImageFileName = null,
+                NormalizedName = MusicUploadService.GetNormalizedBaseName(audio)
+            });
+        }
+
+        return (new FileMatchingResult { Pairs = allPairs, UnmatchedImageFiles = unmatchedImages }, bufferedImages);
     }
 
     /// <summary>

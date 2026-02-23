@@ -17,7 +17,7 @@
 
 <div class="container-fluid">
     
-    <label class="upload-box mb-2" style="display: @(_isUploading ? "none" : "flex")">
+    <label class="upload-box @(_isUploading ? "upload-box-disabled" : "") mb-2">
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
                    class="hidden-input"
@@ -32,7 +32,7 @@
         </div>
     </label>
 
-    <div class="upload-processing-wrapper mb-2" style="display: @(_isUploading ? "flex" : "none")">
+    <div class="upload-processing-wrapper mb-2 @(_isUploading ? "" : "d-none")">
         <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie"
                       class="upload-processing-animation"
                       autoplay loop></dotlottie-wc>
@@ -160,6 +160,12 @@
     background-color: rgba(255,255,255,0.05);
 }
 
+.upload-box-disabled {
+    pointer-events: none;
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .hidden-input {
     display: none;
 }
@@ -223,7 +229,7 @@
         // Handle drop: forward files to the hidden InputFile inside the upload box
         document.addEventListener('drop', function (e) {
             var uploadBox = e.target.closest('.upload-box');
-            if (uploadBox) {
+            if (uploadBox && !uploadBox.classList.contains('upload-box-disabled')) {
                 e.preventDefault();
                 var input = uploadBox.querySelector('input[type="file"]');
                 if (input && e.dataTransfer.files.length > 0) {
