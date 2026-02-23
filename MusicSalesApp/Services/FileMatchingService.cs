@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenAI;
@@ -12,8 +11,8 @@ namespace MusicSalesApp.Services;
 /// <summary>
 /// Uses OpenAI Chat Completions to intelligently match audio files with cover art image files
 /// based on filename similarity. Falls back to exact base-name matching if OpenAI is unavailable.
-/// When image filenames look like GUIDs or other nonsense, uses OpenAI Vision OCR to extract
-/// text from the image and uses that for matching instead.
+/// When image data is provided, uses OpenAI Vision OCR to extract text from the image and uses
+/// that for matching instead of (or in addition to) the filename.
 /// </summary>
 public class FileMatchingService : IFileMatchingService
 {
@@ -23,21 +22,6 @@ public class FileMatchingService : IFileMatchingService
     private const string VisionModel = "gpt-5-mini";
 
     private const string MasteredSuffix = "_mastered";
-
-    // Detects GUID-like patterns: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (with or without separators)
-    private static readonly Regex GuidPattern = new Regex(
-        @"^[0-9a-f]{8}[-_]?[0-9a-f]{4}[-_]?[0-9a-f]{4}[-_]?[0-9a-f]{4}[-_]?[0-9a-f]{12}$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    // Detects purely hex strings (16+ chars, e.g. MD5 / SHA hashes)
-    private static readonly Regex HexOnlyPattern = new Regex(
-        @"^[0-9a-f]{16,}$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    // Detects purely numeric names (6+ digits, e.g. IMG_20240101)
-    private static readonly Regex AllNumericPattern = new Regex(
-        @"^[0-9]{6,}$",
-        RegexOptions.Compiled);
 
     public FileMatchingService(IConfiguration configuration, ILogger<FileMatchingService> logger)
     {
@@ -82,10 +66,7 @@ public class FileMatchingService : IFileMatchingService
         {
             try
             {
-                // Resolve display names for images: use OCR text for nonsense filenames
-                // (but only when the audio side doesn't also have nonsense names)
-                var audioAllNonsense = audioList.All(a => IsNonsenseFilename(a));
-                var imageDisplayNames = await ResolveImageDisplayNamesAsync(imageList, imageData, audioAllNonsense);
+                var imageDisplayNames = await ResolveImageDisplayNamesAsync(imageList, imageData);
                 return await MatchWithOpenAiAsync(audioList, imageList, imageDisplayNames);
             }
             catch (Exception ex)
@@ -102,38 +83,36 @@ public class FileMatchingService : IFileMatchingService
     }
 
     /// <summary>
-    /// Builds a display-name map for each image file.
-    /// Only stores an entry when OCR successfully extracts text from a nonsense filename.
-    /// Images with normal filenames are not included (the filename itself is used for matching).
+    /// Builds a display-name map for each image file using OCR.
+    /// For every image that has bytes available in <paramref name="imageData"/>, attempts to extract
+    /// readable text via OpenAI Vision and uses that text in the matching prompt instead of the filename.
+    /// Images without available bytes are matched on their filename alone.
     /// </summary>
     private async Task<Dictionary<string, string>> ResolveImageDisplayNamesAsync(
         List<string> imageFiles,
-        IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData,
-        bool audioAllNonsense)
+        IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData)
     {
         // Maps original image filename → OCR-extracted text (only set when OCR succeeds)
         var ocrNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        if (imageData == null)
+            return ocrNames;
+
         foreach (var imageFile in imageFiles)
         {
-            // Use OCR when:
-            // 1. This image has a nonsense filename AND
-            // 2. The audio files don't also have nonsense names (meaning audio names carry real info) AND
-            // 3. We have actual image bytes to analyze
-            if (!audioAllNonsense && IsNonsenseFilename(imageFile)
-                && imageData != null && imageData.TryGetValue(imageFile, out var data))
+            if (!imageData.TryGetValue(imageFile, out var data))
+                continue;
+
+            _logger.LogInformation("Attempting OCR on image '{FileName}'.", imageFile);
+            var ocrText = await ExtractTextFromImageAsync(data.Data, data.ContentType);
+            if (!string.IsNullOrWhiteSpace(ocrText))
             {
-                _logger.LogInformation("Image '{FileName}' has a nonsense filename; attempting OCR.", imageFile);
-                var ocrText = await ExtractTextFromImageAsync(data.Data, data.ContentType);
-                if (!string.IsNullOrWhiteSpace(ocrText))
-                {
-                    _logger.LogInformation("OCR extracted text for '{FileName}': {Text}", imageFile, ocrText);
-                    ocrNames[imageFile] = ocrText;
-                }
-                else
-                {
-                    _logger.LogWarning("OCR returned no text for '{FileName}'; using filename.", imageFile);
-                }
+                _logger.LogInformation("OCR extracted text for '{FileName}': {Text}", imageFile, ocrText);
+                ocrNames[imageFile] = ocrText;
+            }
+            else
+            {
+                _logger.LogWarning("OCR returned no text for '{FileName}'; using filename.", imageFile);
             }
         }
 
@@ -217,7 +196,9 @@ public class FileMatchingService : IFileMatchingService
     }
 
     /// <summary>
-    /// Builds the prompt for OpenAI to match audio and image filenames.
+    /// Builds the prompt for OpenAI to match audio and image files.
+    /// Uses numeric indices in the response format so OpenAI never has to reproduce filenames
+    /// verbatim — this avoids encoding/escaping issues with special characters like apostrophes and ampersands.
     /// <paramref name="ocrNames"/> maps image filenames to OCR-extracted text
     /// (only populated when OCR succeeded for that file).
     /// </summary>
@@ -226,50 +207,55 @@ public class FileMatchingService : IFileMatchingService
         List<string> imageFiles,
         Dictionary<string, string> ocrNames)
     {
-        var audioJson = JsonSerializer.Serialize(audioFiles);
+        // Numbered list of audio files
+        var audioLines = string.Join("\n", audioFiles.Select((f, i) => $"  {i}: \"{f}\""));
 
-        // For OCR-enriched images, show "original.jpg (content: OCR text)" so OpenAI can match on content.
-        // For normal filenames, just include the filename as-is.
-        var imageEntries = imageFiles.Select(f =>
-            ocrNames.TryGetValue(f, out var ocrText) && !string.IsNullOrWhiteSpace(ocrText)
-                ? $"{f} (content: {ocrText})"
-                : f
-        ).ToList();
-        var imageJson = JsonSerializer.Serialize(imageEntries);
+        // Numbered list of image files; append OCR content annotation when available
+        var imageLines = string.Join("\n", imageFiles.Select((f, i) =>
+        {
+            var annotation = ocrNames.TryGetValue(f, out var ocrText) && !string.IsNullOrWhiteSpace(ocrText)
+                ? $" (content: {ocrText})"
+                : string.Empty;
+            return $"  {i}: \"{f}\"{annotation}";
+        }));
 
-        return $@"Match each audio file with the most similar image file based on their filenames.
+        return $@"Match each audio file with the most similar image file based on their names and content.
 
-Audio files: {audioJson}
-Image files: {imageJson}
+Audio files (refer to these by their numeric index):
+{audioLines}
+
+Image files (refer to these by their numeric index):
+{imageLines}
 
 Rules:
 - Treat underscores and hyphens as spaces when comparing names.
 - Ignore file extensions when matching (e.g., ""dark_night.mp3"" can match ""DarkNight.jpg"").
 - Recognize similar words, abbreviations, and slight misspellings.
 - Ignore a ""_mastered"" suffix in audio filenames (e.g., ""dark_night_mastered.mp3"" is the same song as ""dark_night.mp3"").
-- For image files that have a ""(content: ...)"" annotation, use that content text instead of the filename for matching.
+- For image files with a ""(content: ...)"" annotation, use that content text instead of the filename for matching.
 - Each audio file can match at most one image file.
 - Each image file can match at most one audio file.
 - For each match, provide a clean normalized song name with proper capitalization and single spaces between words.
-- If an audio file has no good match in the image list, include it with null image_file.
-- List any image files that could not be matched in unmatched_images.
-- Always use the original filename (not the content annotation) in your JSON response.
+- If an audio file has no good match, include it with null image_index.
+- List the indices of any image files that could not be matched in unmatched_image_indices.
 
-Respond with JSON in this exact format:
+Respond with JSON using the numeric indices (NOT the filenames):
 {{
   ""pairs"": [
     {{
-      ""audio_file"": ""original_audio_filename.mp3"",
-      ""image_file"": ""original_image_filename.jpg"",
+      ""audio_index"": 0,
+      ""image_index"": 1,
       ""normalized_name"": ""Song Name Here""
     }}
   ],
-  ""unmatched_images"": [""unmatched_image.jpg""]
+  ""unmatched_image_indices"": [2]
 }}";
     }
 
     /// <summary>
-    /// Parses the OpenAI JSON response into a <see cref="FileMatchingResult"/>.
+    /// Parses the OpenAI JSON response (index-based) into a <see cref="FileMatchingResult"/>.
+    /// OpenAI returns numeric indices into the audio/image arrays instead of filenames,
+    /// which avoids any encoding/escaping ambiguity for special characters.
     /// Falls back to exact matching if parsing fails.
     /// </summary>
     private FileMatchingResult ParseOpenAiResponse(string jsonText, List<string> audioFiles, List<string> imageFiles)
@@ -288,67 +274,61 @@ Respond with JSON in this exact format:
             }
 
             var result = new FileMatchingResult();
-            var matchedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var matchedAudioIndices = new HashSet<int>();
+            var matchedImageIndices = new HashSet<int>();
 
             foreach (var pair in parsed.Pairs ?? new List<OpenAiPair>())
             {
-                if (string.IsNullOrWhiteSpace(pair.AudioFile))
+                // Skip pairs where audio_index is out of range or already used
+                if (pair.AudioIndex < 0 || pair.AudioIndex >= audioFiles.Count)
+                    continue;
+                if (matchedAudioIndices.Contains(pair.AudioIndex))
                     continue;
 
-                // Verify the audio file is in our original list
-                var originalAudio = audioFiles.FirstOrDefault(a =>
-                    string.Equals(a, pair.AudioFile, StringComparison.OrdinalIgnoreCase));
-                if (originalAudio == null)
-                    continue;
+                matchedAudioIndices.Add(pair.AudioIndex);
 
-                string originalImage = null;
-                if (!string.IsNullOrWhiteSpace(pair.ImageFile))
+                string imageFileName = null;
+                if (pair.ImageIndex.HasValue)
                 {
-                    // Verify the image file is in our original list and not already matched
-                    originalImage = imageFiles.FirstOrDefault(i =>
-                        string.Equals(i, pair.ImageFile, StringComparison.OrdinalIgnoreCase)
-                        && !matchedImages.Contains(i));
-                    if (originalImage != null)
-                        matchedImages.Add(originalImage);
+                    var imgIdx = pair.ImageIndex.Value;
+                    if (imgIdx >= 0 && imgIdx < imageFiles.Count && !matchedImageIndices.Contains(imgIdx))
+                    {
+                        imageFileName = imageFiles[imgIdx];
+                        matchedImageIndices.Add(imgIdx);
+                    }
                 }
 
                 var normalizedName = string.IsNullOrWhiteSpace(pair.NormalizedName)
-                    ? NormalizeBaseName(GetBaseNameWithoutExtension(originalAudio))
+                    ? NormalizeBaseName(GetBaseNameWithoutExtension(audioFiles[pair.AudioIndex]))
                     : pair.NormalizedName.Trim();
 
                 result.Pairs.Add(new FilePair
                 {
-                    AudioFileName = originalAudio,
-                    ImageFileName = originalImage,
+                    AudioFileName = audioFiles[pair.AudioIndex],
+                    ImageFileName = imageFileName,
                     NormalizedName = normalizedName
                 });
             }
 
             // Add any audio files that OpenAI didn't include in the pairs
-            var matchedAudio = result.Pairs.Select(p => p.AudioFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var audio in audioFiles.Where(a => !matchedAudio.Contains(a)))
+            for (int i = 0; i < audioFiles.Count; i++)
             {
-                result.Pairs.Add(new FilePair
+                if (!matchedAudioIndices.Contains(i))
                 {
-                    AudioFileName = audio,
-                    ImageFileName = null,
-                    NormalizedName = NormalizeBaseName(GetBaseNameWithoutExtension(audio))
-                });
+                    result.Pairs.Add(new FilePair
+                    {
+                        AudioFileName = audioFiles[i],
+                        ImageFileName = null,
+                        NormalizedName = NormalizeBaseName(GetBaseNameWithoutExtension(audioFiles[i]))
+                    });
+                }
             }
 
-            // Unmatched images
-            result.UnmatchedImageFiles = imageFiles
-                .Where(i => !matchedImages.Contains(i))
-                .ToList();
-
-            // Also add any unmatched images returned by OpenAI
-            foreach (var unmatchedImage in parsed.UnmatchedImages ?? new List<string>())
+            // Unmatched images: any image not assigned to a pair
+            for (int i = 0; i < imageFiles.Count; i++)
             {
-                var original = imageFiles.FirstOrDefault(i =>
-                    string.Equals(i, unmatchedImage, StringComparison.OrdinalIgnoreCase)
-                    && !matchedImages.Contains(i));
-                if (original != null && !result.UnmatchedImageFiles.Contains(original, StringComparer.OrdinalIgnoreCase))
-                    result.UnmatchedImageFiles.Add(original);
+                if (!matchedImageIndices.Contains(i))
+                    result.UnmatchedImageFiles.Add(imageFiles[i]);
             }
 
             return result;
@@ -388,33 +368,6 @@ Respond with JSON in this exact format:
 
         result.UnmatchedImageFiles = imageFiles.Where(i => !matchedImages.Contains(i)).ToList();
         return result;
-    }
-
-    /// <summary>
-    /// Returns true if the filename base name looks like a GUID, hex hash, or purely numeric sequence
-    /// that carries no real song-name information.
-    /// </summary>
-    internal static bool IsNonsenseFilename(string fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName))
-            return false;
-
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        if (string.IsNullOrWhiteSpace(baseName))
-            return false;
-
-        // Check full GUID pattern (with or without dashes)
-        if (GuidPattern.IsMatch(baseName))
-            return true;
-
-        // Strip separators and check for all-hex or all-numeric
-        var stripped = baseName.Replace("-", "").Replace("_", "").Replace(" ", "");
-        if (HexOnlyPattern.IsMatch(stripped))
-            return true;
-        if (AllNumericPattern.IsMatch(stripped))
-            return true;
-
-        return false;
     }
 
     /// <summary>
@@ -461,23 +414,24 @@ Respond with JSON in this exact format:
         return string.Join(' ', words);
     }
 
-    // DTO models for deserializing OpenAI response
+    // DTO models for deserializing OpenAI index-based response
     private class OpenAiMatchResponse
     {
         [JsonPropertyName("pairs")]
         public List<OpenAiPair> Pairs { get; set; } = new();
 
-        [JsonPropertyName("unmatched_images")]
-        public List<string> UnmatchedImages { get; set; } = new();
+        [JsonPropertyName("unmatched_image_indices")]
+        public List<int> UnmatchedImageIndices { get; set; } = new();
     }
 
     private class OpenAiPair
     {
-        [JsonPropertyName("audio_file")]
-        public string AudioFile { get; set; }
+        [JsonPropertyName("audio_index")]
+        public int AudioIndex { get; set; }
 
-        [JsonPropertyName("image_file")]
-        public string ImageFile { get; set; }
+        /// <summary>Nullable - null means no image match for this audio file.</summary>
+        [JsonPropertyName("image_index")]
+        public int? ImageIndex { get; set; }
 
         [JsonPropertyName("normalized_name")]
         public string NormalizedName { get; set; }

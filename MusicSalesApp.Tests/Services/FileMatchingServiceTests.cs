@@ -208,58 +208,6 @@ public class FileMatchingServiceTests
 
     #endregion
 
-    #region IsNonsenseFilename Tests
-
-    [Test]
-    public void IsNonsenseFilename_StandardGuid_ReturnsTrue()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("123e4567-e89b-12d3-a456-426614174000.jpg"), Is.True);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_GuidWithoutDashes_ReturnsTrue()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("123e4567e89b12d3a456426614174000.png"), Is.True);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_Md5Hash_ReturnsTrue()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("d41d8cd98f00b204e9800998ecf8427e.jpg"), Is.True);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_AllNumeric_ReturnsTrue()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("20240101123456.jpg"), Is.True);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_RealSongName_ReturnsFalse()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("dark_night.jpg"), Is.False);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_RealSongNameWithNumbers_ReturnsFalse()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("song2024.jpg"), Is.False);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_Empty_ReturnsFalse()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename(string.Empty), Is.False);
-    }
-
-    [Test]
-    public void IsNonsenseFilename_NullLike_ReturnsFalse()
-    {
-        Assert.That(FileMatchingService.IsNonsenseFilename("   "), Is.False);
-    }
-
-    #endregion
-
     #region MatchFilesAsync with imageData overload Tests
 
     [Test]
@@ -276,21 +224,21 @@ public class FileMatchingServiceTests
     }
 
     [Test]
-    public async Task MatchFilesAsync_GuidImageNoImageData_ImageTreatedAsUnmatched()
+    public async Task MatchFilesAsync_NonMatchingImageNoImageData_FallsBackToExactMatch()
     {
-        // Without image data, a GUID image is matched by its base name only (nonsense → won't match real audio name)
+        // Without image data (no OCR), the exact base-name fallback is used.
+        // An image whose name has nothing in common with the audio file will not be matched.
         var service = CreateService();
         var audioFiles = new[] { "dark_night.mp3" };
-        var guidImage = "123e4567-e89b-12d3-a456-426614174000.jpg";
-        var imageFiles = new[] { guidImage };
+        var unmatchedImage = "completely_different_cover.jpg";
+        var imageFiles = new[] { unmatchedImage };
 
-        // No imageData → falls back to exact match → GUID base name won't match "dark_night"
         var result = await service.MatchFilesAsync(audioFiles, imageFiles, null);
 
         Assert.That(result.Pairs, Has.Count.EqualTo(1));
         Assert.That(result.Pairs[0].ImageFileName, Is.Null);
         Assert.That(result.UnmatchedImageFiles, Has.Count.EqualTo(1));
-        Assert.That(result.UnmatchedImageFiles[0], Is.EqualTo(guidImage));
+        Assert.That(result.UnmatchedImageFiles[0], Is.EqualTo(unmatchedImage));
     }
 
     #endregion
