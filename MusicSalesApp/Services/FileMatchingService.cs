@@ -20,7 +20,7 @@ public class FileMatchingService : IFileMatchingService
     private readonly ILogger<FileMatchingService> _logger;
     private readonly string _apiKey;
     private const string ChatModel = "gpt-4.1-mini";
-    private const string VisionModel = "gpt-4.1-mini";
+    private const string VisionModel = "gpt-5-mini";
 
     private const string MasteredSuffix = "_mastered";
 
