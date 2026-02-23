@@ -135,6 +135,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _uploadedBlobPaths.Clear();
         }
 
+        // Show spinner immediately — hide upload box, prevent further drops
+        _isUploading = true;
+        await InvokeAsync(StateHasChanged);
+
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
         // Separate files into audio and cover art by original filename
@@ -256,8 +260,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         await InvokeAsync(StateHasChanged);
 
-        // Enable upload-in-progress state and browser warning
-        _isUploading = true;
+        // Enable browser warning for navigation away during upload
         try
         {
             await JS.InvokeVoidAsync("uploadFilesHelper.enableBeforeUnload");
@@ -271,13 +274,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            // Uploads finished (completed or failed) — disable warnings
+            // Uploads finished (completed or failed) — hide spinner, re-show upload box, disable warnings
             _isUploading = false;
             try
             {
                 await JS.InvokeVoidAsync("uploadFilesHelper.disableBeforeUnload");
             }
             catch (JSDisconnectedException) { }
+            await InvokeAsync(StateHasChanged);
         }
     }
 
