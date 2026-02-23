@@ -17,18 +17,24 @@
 
 <div class="container-fluid">
     
-    <label class="upload-box mb-2">
+    <label class="upload-box @(_isUploading ? "upload-box-disabled" : "") mb-2">
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
                    class="hidden-input"
                    multiple />
 
-        <div class="upload-content">
+        <div class="upload-content" style="display: @(_isUploading ? "none" : "block")">
             <i class="fa-solid fa-cloud-arrow-up"></i>
             <div class="mt-2 fw-semibold">Drag & drop files here</div>
             <div class="text-muted small">or click to browse</div>
             <div class="text-muted small mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</div>
             <div class="text-muted small mt-2">Cover art formats: JPEG, PNG (optional)</div>
+        </div>
+
+        <div class="upload-spinner" style="display: @(_isUploading ? "flex" : "none")">
+            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie"
+                          class="upload-processing-animation"
+                          autoplay loop></dotlottie-wc>
         </div>
     </label>
 
@@ -40,16 +46,6 @@
                     <strong>Validation Error:</strong> @_validationErrorMessage
                     <button type="button" class="btn-close" @onclick="ClearValidationError" aria-label="Close"></button>
                 </div>
-                @if (_unmatchedCoverArtFiles.Any())
-                {
-                    <p class="text-danger"><strong>Unmatched cover art files (missing audio):</strong></p>
-                    <ul class="text-danger">
-                        @foreach (var file in _unmatchedCoverArtFiles)
-                        {
-                            <li>@file</li>
-                        }
-                    </ul>
-                }
             </div>
         </div>
     }
@@ -130,6 +126,21 @@
                 </div>
             </div>
         </div>
+
+        @if (_unmatchedCoverArtFiles.Any())
+        {
+            <div class="row mt-3">
+                <div class="col-12">
+                    <p class="text-muted"><strong>The following cover art files could not be matched to an audio file and were not uploaded:</strong></p>
+                    <ul class="text-muted">
+                        @foreach (var file in _unmatchedCoverArtFiles)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
     }
 </div>
 
@@ -149,6 +160,11 @@
     background-color: rgba(255,255,255,0.05);
 }
 
+.upload-box-disabled {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
 .hidden-input {
     display: none;
 }
@@ -160,6 +176,25 @@
 
 .upload-content i {
     font-size: 3rem;
+}
+
+.upload-spinner {
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+@@keyframes upload-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.upload-processing-animation {
+    width: 200px;
+    height: 200px;
+    animation: upload-spin 2s linear infinite;
 }
 
     .dropzone {
@@ -194,7 +229,7 @@
         // Handle drop: forward files to the hidden InputFile inside the upload box
         document.addEventListener('drop', function (e) {
             var uploadBox = e.target.closest('.upload-box');
-            if (uploadBox) {
+            if (uploadBox && !uploadBox.classList.contains('upload-box-disabled')) {
                 e.preventDefault();
                 var input = uploadBox.querySelector('input[type="file"]');
                 if (input && e.dataTransfer.files.length > 0) {

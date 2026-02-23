@@ -55,6 +55,7 @@ public abstract class BUnitTestBase
     protected Mock<IDashboardService> MockDashboardService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
+    protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -89,6 +90,7 @@ public abstract class BUnitTestBase
         MockDashboardService = new Mock<IDashboardService>();
         MockSongStatusService = new Mock<ISongStatusService>();
         MockGenreService = new Mock<IGenreService>();
+        MockFileMatchingService = new Mock<IFileMatchingService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -296,6 +298,19 @@ public abstract class BUnitTestBase
         MockGenreService.Setup(x => x.EnableGenreAsync(It.IsAny<int>()))
             .ReturnsAsync(true);
 
+        // Setup default returns for IFileMatchingService methods
+        MockFileMatchingService
+            .Setup(x => x.MatchFilesAsync(
+                It.IsAny<IEnumerable<string>>(),
+                It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new FileMatchingResult());
+        MockFileMatchingService
+            .Setup(x => x.MatchFilesAsync(
+                It.IsAny<IEnumerable<string>>(),
+                It.IsAny<IEnumerable<string>>(),
+                It.IsAny<IReadOnlyDictionary<string, (byte[] Data, string ContentType)>>()))
+            .ReturnsAsync(new FileMatchingResult());
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -333,6 +348,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IDashboardService>(MockDashboardService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
+        TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

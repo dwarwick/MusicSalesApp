@@ -1,6 +1,7 @@
 using FFMpegCore;
 using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
+using MusicSalesApp.Common.Helpers;
 using System;
 using System.IO;
 using System.Linq;
@@ -11,7 +12,6 @@ namespace MusicSalesApp.Services
     public class MusicService : IMusicService
     {
         private readonly ILogger<MusicService> _logger;
-        private static readonly string[] ValidAudioExtensions = { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma" };
         private static readonly string[] ValidAudioMimeTypes = {
             "audio/mpeg", "audio/wav", "audio/wave", "audio/x-wav",
             "audio/flac", "audio/ogg", "audio/mp4", "audio/aac",
@@ -31,7 +31,7 @@ namespace MusicSalesApp.Services
             }
 
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
-            if (!ValidAudioExtensions.Contains(extension))
+            if (!MusicFileExtensions.ValidAudioExtensions.Contains(extension))
             {
                 _logger.LogWarning("File {FileName} has invalid extension {Extension}", fileName, extension);
                 return Task.FromResult(false);
