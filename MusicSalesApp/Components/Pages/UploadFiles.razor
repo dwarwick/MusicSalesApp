@@ -17,31 +17,26 @@
 
 <div class="container-fluid">
     
-    @if (!_isUploading)
-    {
-        <label class="upload-box mb-2">
-            <InputFile @ref="FileInput"
-                       OnChange="HandleFileSelected"
-                       class="hidden-input"
-                       multiple />
+    <label class="upload-box mb-2" style="display: @(_isUploading ? "none" : "flex")">
+        <InputFile @ref="FileInput"
+                   OnChange="HandleFileSelected"
+                   class="hidden-input"
+                   multiple />
 
-            <div class="upload-content">
-                <i class="fa-solid fa-cloud-arrow-up"></i>
-                <div class="mt-2 fw-semibold">Drag & drop files here</div>
-                <div class="text-muted small">or click to browse</div>
-                <div class="text-muted small mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</div>
-                <div class="text-muted small mt-2">Cover art formats: JPEG, PNG (optional)</div>
-            </div>
-        </label>
-    }
-    else
-    {
-        <div class="upload-processing-wrapper mb-2">
-            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie"
-                          class="upload-processing-animation"
-                          autoplay loop></dotlottie-wc>
+        <div class="upload-content">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <div class="mt-2 fw-semibold">Drag & drop files here</div>
+            <div class="text-muted small">or click to browse</div>
+            <div class="text-muted small mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</div>
+            <div class="text-muted small mt-2">Cover art formats: JPEG, PNG (optional)</div>
         </div>
-    }
+    </label>
+
+    <div class="upload-processing-wrapper mb-2" style="display: @(_isUploading ? "flex" : "none")">
+        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie"
+                      class="upload-processing-animation"
+                      autoplay loop></dotlottie-wc>
+    </div>
 
     @if (!string.IsNullOrEmpty(_validationErrorMessage))
     {
