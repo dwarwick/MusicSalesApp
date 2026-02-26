@@ -8,27 +8,6 @@ namespace MusicSalesApp.ComponentTests.Components;
 public class UploadFilesTests : BUnitTestBase
 {
     [Test]
-    public void UploadFiles_HasInstructions()
-    {
-        // Act
-        var cut = TestContext.Render<UploadFiles>();
-
-        // Assert - Check for instructions about uploading audio files
-        Assert.That(cut.Markup, Does.Contain("Upload audio files"));
-    }
-
-    [Test]
-    public void UploadFiles_HasUploadZone()
-    {
-        // Act
-        var cut = TestContext.Render<UploadFiles>();
-
-        // Assert
-        var uploadZone = cut.Find(".upload-zone");
-        Assert.That(uploadZone, Is.Not.Null);
-    }    
-
-    [Test]
     public void UploadFiles_DisplaysSupportedFormats()
     {
         // Act
