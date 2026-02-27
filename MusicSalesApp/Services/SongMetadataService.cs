@@ -340,5 +340,34 @@ namespace MusicSalesApp.Services
                 TotalCount = totalCount
             };
         }
+
+        public async Task<HashSet<string>> FindExistingSongTitlesAsync(IEnumerable<string> titles)
+        {
+            var titleSet = new HashSet<string>(titles, StringComparer.OrdinalIgnoreCase);
+            if (!titleSet.Any())
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var activeSongs = await context.SongMetadata
+                .Include(s => s.Creator)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null)
+                .Select(s => new { s.SongTitle, s.Mp3BlobPath })
+                .ToListAsync();
+
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var song in activeSongs)
+            {
+                var effectiveTitle = !string.IsNullOrEmpty(song.SongTitle)
+                    ? song.SongTitle
+                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath);
+
+                if (!string.IsNullOrEmpty(effectiveTitle) && titleSet.Contains(effectiveTitle))
+                    result.Add(effectiveTitle);
+            }
+
+            return result;
+        }
     }
 }

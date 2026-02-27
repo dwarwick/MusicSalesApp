@@ -69,5 +69,12 @@ namespace MusicSalesApp.Services
         /// Get paginated song metadata with filtering and sorting
         /// </summary>
         Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters);
+
+        /// <summary>
+        /// Given a set of candidate song titles, returns the subset that already exist
+        /// as active songs in the database (case-insensitive comparison).
+        /// Checks both the explicit SongTitle field and the title derived from Mp3BlobPath.
+        /// </summary>
+        Task<HashSet<string>> FindExistingSongTitlesAsync(IEnumerable<string> titles);
     }
 }

@@ -509,6 +509,183 @@ public class SongMetadataServiceTests
 
     #endregion
 
+    #region FindExistingSongTitlesAsync Tests
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_EmptyInput_ReturnsEmpty()
+    {
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new List<string>());
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_NoMatchingSongs_ReturnsEmpty()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "existing/existing.mp3",
+            Mp3BlobPath = "existing/existing.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "nonexistent" });
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_MatchesDerivedTitle_ReturnsDuplicate()
+    {
+        // Arrange - song title derived from Mp3BlobPath "Mercy Found Me/Mercy Found Me.mp3" → "Mercy Found Me"
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "Mercy Found Me/Mercy Found Me.mp3",
+            Mp3BlobPath = "Mercy Found Me/Mercy Found Me.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "Mercy Found Me" });
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result, Does.Contain("Mercy Found Me"));
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_MatchesExplicitSongTitle_ReturnsDuplicate()
+    {
+        // Arrange - SongTitle explicitly set
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            SongTitle = "My Custom Title",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "My Custom Title" });
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result, Does.Contain("My Custom Title"));
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_CaseInsensitive_ReturnsDuplicate()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "Mercy Found Me/Mercy Found Me.mp3",
+            Mp3BlobPath = "Mercy Found Me/Mercy Found Me.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "mercy found me" });
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_ExcludesInactiveSongs()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "inactive/inactive.mp3",
+            Mp3BlobPath = "inactive/inactive.mp3",
+            IsActive = false,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "inactive" });
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_ExcludesAlbumCovers()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "album/cover.jpg",
+            ImageBlobPath = "album/cover.jpg",
+            Mp3BlobPath = null,
+            IsAlbumCover = true,
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "cover" });
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task FindExistingSongTitlesAsync_MultipleTitles_ReturnsOnlyExisting()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "Song A/Song A.mp3",
+            Mp3BlobPath = "Song A/Song A.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "Song C/Song C.mp3",
+            Mp3BlobPath = "Song C/Song C.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.FindExistingSongTitlesAsync(new[] { "Song A", "Song B", "Song C" });
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result, Does.Contain("Song A"));
+        Assert.That(result, Does.Contain("Song C"));
+        Assert.That(result, Does.Not.Contain("Song B"));
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

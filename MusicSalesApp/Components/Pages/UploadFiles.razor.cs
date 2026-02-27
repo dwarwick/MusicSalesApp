@@ -32,6 +32,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     protected string _validationErrorMessage = string.Empty;
     protected List<string> _unmatchedMp3Files = new List<string>();
     protected List<string> _unmatchedCoverArtFiles = new List<string>();
+    protected List<string> _duplicateSongFiles = new List<string>();
     
     // Creator ID - will be populated if the current user is a creator
     private int? _currentCreatorId = null;
@@ -109,6 +110,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         ClearValidationError();
         _uploadItems.Clear();
         _unmatchedCoverArtFiles.Clear();
+        _duplicateSongFiles.Clear();
 
         // Ensure CreatorId is loaded - retry if not yet available (e.g. race with OnAfterRenderAsync)
         if (_currentCreatorId == null)
@@ -232,7 +234,46 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile, coverArtBytes, coverArtContentType, normalizedName));
         }
 
+        // Check for duplicate song titles before uploading
+        var candidateTitles = uploadItemsWithFiles.Select(x => x.NormalizedName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        HashSet<string> existingTitles;
+        try
+        {
+            existingTitles = await SongMetadataService.FindExistingSongTitlesAsync(candidateTitles);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
+            existingTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (existingTitles.Any())
+        {
+            // Remove duplicates from upload list and track them for display
+            var duplicateItems = uploadItemsWithFiles
+                .Where(x => existingTitles.Contains(x.NormalizedName))
+                .ToList();
+
+            foreach (var dup in duplicateItems)
+            {
+                _duplicateSongFiles.Add(dup.Item.AudioFileName);
+                _uploadItems.Remove(dup.Item);
+            }
+
+            uploadItemsWithFiles = uploadItemsWithFiles
+                .Where(x => !existingTitles.Contains(x.NormalizedName))
+                .ToList();
+        }
+
         await InvokeAsync(StateHasChanged);
+
+        // If all files were duplicates, no need to proceed with upload
+        if (!uploadItemsWithFiles.Any())
+        {
+            _isUploading = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
 
         // Enable browser warning for navigation away during upload
         try
@@ -688,6 +729,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _validationErrorMessage = string.Empty;
         _unmatchedMp3Files.Clear();
         _unmatchedCoverArtFiles.Clear();
+        _duplicateSongFiles.Clear();
     }
 
     protected string FormatFileSize(long bytes)

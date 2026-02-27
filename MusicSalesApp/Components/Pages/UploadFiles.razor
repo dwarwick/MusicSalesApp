@@ -142,6 +142,23 @@
             </div>
         }
     }
+
+    @if (_duplicateSongFiles.Any())
+    {
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-warning" role="alert">
+                    <strong>Duplicate songs detected:</strong> The following files were not uploaded because a song with the same title already exists.
+                    <ul class="mb-0 mt-2">
+                        @foreach (var file in _duplicateSongFiles)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 <style>
