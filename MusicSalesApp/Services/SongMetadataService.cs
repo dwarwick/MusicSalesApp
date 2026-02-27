@@ -361,7 +361,7 @@ namespace MusicSalesApp.Services
             {
                 var effectiveTitle = !string.IsNullOrEmpty(song.SongTitle)
                     ? song.SongTitle
-                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath);
+                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? string.Empty);
 
                 if (!string.IsNullOrEmpty(effectiveTitle) && titleSet.Contains(effectiveTitle))
                     result.Add(effectiveTitle);
