@@ -1,5 +1,6 @@
 using FFMpegCore;
 using Fido2NetLib;
+using Fido2NetLib.Serialization;
 using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.SqlServer;
@@ -108,7 +109,34 @@ try
         options.SlidingExpiration = true;
     });
 
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            // Insert Fido2's source-generated context FIRST so its custom Base64Url
+            // converters are used for AuthenticatorAttestationRawResponse / AssertionRawResponse.
+            // .Add() places it after the default reflection resolver which handles all
+            // types and never falls through, making the Fido2 context unreachable.
+            options.JsonSerializerOptions.TypeInfoResolverChain.Insert(0, FidoModelSerializerContext.Default);
+        });
+
+    // Log model-validation errors that the [ApiController] auto-400 would hide
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("ModelValidation");
+            var errors = context.ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    e => e.Key,
+                    e => e.Value!.Errors.Select(err =>
+                        err.ErrorMessage + (err.Exception != null ? $" | {err.Exception.Message}" : "")).ToArray());
+            logger.LogWarning("Model validation failed for {Path}: {@Errors}",
+                context.HttpContext.Request.Path, errors);
+            return new BadRequestObjectResult(new ValidationProblemDetails(context.ModelState));
+        };
+    });
 
     // Add SignalR for real-time stream count updates
     const int SignalRMaxMessageSizeKB = 32;

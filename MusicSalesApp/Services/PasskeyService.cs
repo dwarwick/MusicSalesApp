@@ -53,10 +53,10 @@ public class PasskeyService : IPasskeyService
         // and cross-platform (security keys, phone passkeys, cloud password managers) authenticators
         var authenticatorSelection = new AuthenticatorSelection
         {
-            // RequireResidentKey = false allows both discoverable and non-discoverable credentials
+            // ResidentKey = Discouraged allows both discoverable and non-discoverable credentials
             // This enables cloud password managers like Google Password Manager while still supporting
             // traditional authenticators
-            RequireResidentKey = false,
+            ResidentKey = ResidentKeyRequirement.Discouraged,
             UserVerification = UserVerificationRequirement.Preferred
             // AuthenticatorAttachment is intentionally not set to allow all authenticator types
         };
@@ -67,12 +67,14 @@ public class PasskeyService : IPasskeyService
             UserVerificationMethod = true
         };
 
-        var options = _fido2.RequestNewCredential(
-            fido2User,
-            existingKeys,
-            authenticatorSelection,
-            AttestationConveyancePreference.None,
-            exts);
+        var options = _fido2.RequestNewCredential(new RequestNewCredentialParams
+        {
+            User = fido2User,
+            ExcludeCredentials = existingKeys,
+            AuthenticatorSelection = authenticatorSelection,
+            AttestationPreference = AttestationConveyancePreference.None,
+            Extensions = exts
+        });
 
         // Set a longer timeout (3 minutes) to accommodate cloud password managers
         // which may need extra time to sync/communicate with their servers
@@ -85,39 +87,50 @@ public class PasskeyService : IPasskeyService
     {
         try
         {
+            _logger.LogInformation("CompleteRegistrationAsync started for user {UserId}, passkeyName: {PasskeyName}", userId, passkeyName);
+
             var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null)
             {
+                _logger.LogWarning("CompleteRegistrationAsync: User {UserId} not found", userId);
                 return false;
             }
+
+            _logger.LogInformation("AttestationResponse — Id: {Id}, RawId len: {RawIdLen}, Response null: {RespNull}",
+                attestationResponse?.Id, attestationResponse?.RawId?.Length, attestationResponse?.Response == null);
 
             // Use the original options that were created during BeginRegistrationAsync
             // This is critical - the challenge must match!
             
             // Verify and make the credential
-            var success = await _fido2.MakeNewCredentialAsync(
-                attestationResponse,
-                originalOptions,
-                async (args, cancellationToken) =>
+            _logger.LogInformation("Calling MakeNewCredentialAsync...");
+            var success = await _fido2.MakeNewCredentialAsync(new MakeNewCredentialParams
+            {
+                AttestationResponse = attestationResponse,
+                OriginalOptions = originalOptions,
+                IsCredentialIdUniqueToUserCallback = async (args, cancellationToken) =>
                 {
                     // Check if credential ID already exists
-                    var credIdString = Convert.ToBase64String(args.CredentialId);
                     var exists = await _context.Passkeys
                         .AnyAsync(p => p.CredentialId == args.CredentialId, cancellationToken);
                     return !exists;
-                });
+                }
+            });
+
+            _logger.LogInformation("MakeNewCredentialAsync succeeded. Id len: {IdLen}, PublicKey len: {PkLen}, SignCount: {SignCount}",
+                success.Id?.Length, success.PublicKey?.Length, success.SignCount);
 
             // Store the passkey
             var passkey = new Passkey
             {
                 UserId = userId,
                 Name = passkeyName,
-                CredentialId = success.Result.CredentialId,
-                PublicKey = success.Result.PublicKey,
-                AttestationObject = attestationResponse.Response.AttestationObject,
-                ClientDataJSON = attestationResponse.Response.ClientDataJson,
-                SignCount = (int)success.Result.Counter,
-                AAGUID = success.Result.Aaguid.ToString(),
+                CredentialId = success.Id,
+                PublicKey = success.PublicKey,
+                AttestationObject = success.AttestationObject,
+                ClientDataJSON = success.AttestationClientDataJson,
+                SignCount = (int)success.SignCount,
+                AAGUID = Guid.Empty.ToString(),
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = DateTime.UtcNow
             };
@@ -125,11 +138,12 @@ public class PasskeyService : IPasskeyService
             _context.Passkeys.Add(passkey);
             await _context.SaveChangesAsync();
 
+            _logger.LogInformation("Passkey saved successfully for user {UserId}, passkeyId: {PasskeyId}", userId, passkey.Id);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error completing passkey registration for user {UserId}", userId);
+            _logger.LogError(ex, "Error completing passkey registration for user {UserId}. Exception type: {ExType}", userId, ex.GetType().FullName);
             return false;
         }
     }
@@ -169,10 +183,12 @@ public class PasskeyService : IPasskeyService
             UserVerificationMethod = true
         };
 
-        var options = _fido2.GetAssertionOptions(
-            existingCredentials,
-            UserVerificationRequirement.Preferred,
-            exts);
+        var options = _fido2.GetAssertionOptions(new GetAssertionOptionsParams
+        {
+            AllowedCredentials = existingCredentials,
+            UserVerification = UserVerificationRequirement.Preferred,
+            Extensions = exts
+        });
 
         return options;
     }
@@ -181,10 +197,11 @@ public class PasskeyService : IPasskeyService
     {
         try
         {
-            // Find the passkey by credential ID
+            // Find the passkey by credential ID (RawId is byte[], matching DB column type)
+            var rawId = assertionResponse.RawId;
             var passkey = await _context.Passkeys
                 .Include(p => p.User)
-                .FirstOrDefaultAsync(p => p.CredentialId == assertionResponse.Id);
+                .FirstOrDefaultAsync(p => p.CredentialId == rawId);
 
             if (passkey == null)
             {
@@ -195,20 +212,22 @@ public class PasskeyService : IPasskeyService
             // This is critical - the challenge must match!
 
             // Verify the assertion
-            var res = await _fido2.MakeAssertionAsync(
-                assertionResponse,
-                originalOptions,
-                passkey.PublicKey,
-                (uint)passkey.SignCount,
-                async (args, cancellationToken) =>
+            var res = await _fido2.MakeAssertionAsync(new MakeAssertionParams
+            {
+                AssertionResponse = assertionResponse,
+                OriginalOptions = originalOptions,
+                StoredPublicKey = passkey.PublicKey,
+                StoredSignatureCounter = (uint)passkey.SignCount,
+                IsUserHandleOwnerOfCredentialIdCallback = async (args, cancellationToken) =>
                 {
                     var storedPasskey = await _context.Passkeys
                         .FirstOrDefaultAsync(p => p.CredentialId == args.CredentialId, cancellationToken);
                     return storedPasskey?.UserId == passkey.UserId;
-                });
+                }
+            });
 
             // Update sign count and last used
-            passkey.SignCount = (int)res.Counter;
+            passkey.SignCount = (int)res.SignCount;
             passkey.LastUsedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 

@@ -61,8 +61,10 @@ window.passkeyHelper = {
                 type: credential.type,
                 response: {
                     clientDataJson: this.arrayBufferToBase64(credential.response.clientDataJSON),
-                    attestationObject: this.arrayBufferToBase64(credential.response.attestationObject)
-                }
+                    attestationObject: this.arrayBufferToBase64(credential.response.attestationObject),
+                    transports: credential.response.getTransports ? credential.response.getTransports() : []
+                },
+                clientExtensionResults: credential.getClientExtensionResults()
             };
 
             // Complete registration
@@ -167,7 +169,8 @@ window.passkeyHelper = {
                     authenticatorData: this.arrayBufferToBase64(assertion.response.authenticatorData),
                     signature: this.arrayBufferToBase64(assertion.response.signature),
                     userHandle: assertion.response.userHandle ? this.arrayBufferToBase64(assertion.response.userHandle) : null
-                }
+                },
+                clientExtensionResults: assertion.getClientExtensionResults()
             };
 
             // Complete login

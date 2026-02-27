@@ -141,7 +141,7 @@ namespace MusicSalesApp.Services
             var list = new List<StorageFileInfo>();
             try
             {
-                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Tags))
+                await foreach (var blobItem in _containerClient.GetBlobsAsync(new GetBlobsOptions { Traits = BlobTraits.Tags }))
                 {
                     list.Add(new StorageFileInfo
                     {
@@ -166,7 +166,7 @@ namespace MusicSalesApp.Services
             var list = new List<StorageFileInfo>();
             try
             {
-                await foreach (var blobItem in _containerClient.GetBlobsAsync(BlobTraits.Tags))
+                await foreach (var blobItem in _containerClient.GetBlobsAsync(new GetBlobsOptions { Traits = BlobTraits.Tags }))
                 {
                     list.Add(new StorageFileInfo
                     {

@@ -128,7 +128,7 @@ public class FileMatchingService : IFileMatchingService
         try
         {
             var client = new OpenAIClient(_apiKey);
-            var responseClient = client.GetOpenAIResponseClient(VisionModel);
+            var responseClient = client.GetResponsesClient(VisionModel);
 
             var clientResult = await responseClient.CreateResponseAsync(
             [

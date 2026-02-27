@@ -68,14 +68,36 @@ public class PasskeyController : ControllerBase
     [HttpPost("register/complete")]
     public async Task<IActionResult> CompleteRegistration([FromBody] CompleteRegistrationRequest request)
     {
+        // Log model state errors — these fire before any action code runs
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .Select(e => new { Field = e.Key, Messages = e.Value.Errors.Select(err => err.ErrorMessage + (err.Exception != null ? $" | Exception: {err.Exception.Message}" : "")) });
+            _logger.LogWarning("Passkey register/complete model binding failed: {@ModelErrors}", errors);
+        }
+
         try
         {
+            _logger.LogInformation("Passkey register/complete called. AttestationResponse is null: {IsNull}, PasskeyName: {Name}",
+                request.AttestationResponse == null, request.PasskeyName);
+
+            if (request.AttestationResponse != null)
+            {
+                _logger.LogInformation("AttestationResponse — Id: {Id}, RawId length: {RawIdLen}, Type: {Type}, Response is null: {RespNull}",
+                    request.AttestationResponse.Id,
+                    request.AttestationResponse.RawId?.Length,
+                    request.AttestationResponse.Type,
+                    request.AttestationResponse.Response == null);
+            }
+
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
             
             // Retrieve the stored options from cache
             var sessionId = HttpContext.Request.Cookies["passkey_session"];
             if (string.IsNullOrEmpty(sessionId) || !_credentialCreateOptionsCache.TryGetValue(sessionId, out var originalOptions))
             {
+                _logger.LogWarning("Passkey session cookie missing or not found in cache. SessionId: {SessionId}", sessionId);
                 return BadRequest(new { message = "Session expired. Please try again." });
             }
 
