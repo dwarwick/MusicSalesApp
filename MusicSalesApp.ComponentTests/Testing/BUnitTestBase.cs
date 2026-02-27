@@ -141,6 +141,8 @@ public abstract class BUnitTestBase
         // Setup default returns for ISongMetadataService methods
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+        MockSongMetadataService.Setup(x => x.FindExistingSongTitlesAsync(It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new HashSet<string>());
 
         // Setup default returns for IThemeService methods
         MockThemeService.Setup(x => x.CurrentTheme).Returns("Light");
