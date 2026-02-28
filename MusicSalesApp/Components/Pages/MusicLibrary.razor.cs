@@ -69,6 +69,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Genre filter state
     protected HashSet<string> _selectedGenres = new HashSet<string>();
     protected bool _genreDropdownOpen;
+    private Dictionary<string, int> _genreCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -431,24 +432,25 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected List<string> GetAvailableGenres()
     {
-        var genres = _genreMap.Values
+        // Build genre counts once; keyed case-insensitively
+        _genreCounts = _genreMap.Values
             .Where(g => !string.IsNullOrWhiteSpace(g))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .GroupBy(g => g, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
 
         // Sort: selected genres first (alphabetically), then unselected (alphabetically)
-        return genres
+        return _genreCounts.Keys
             .OrderByDescending(g => _selectedGenres.Contains(g))
             .ThenBy(g => g, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
     /// <summary>
-    /// Gets the count of songs matching a specific genre from the currently displayed files.
+    /// Gets the count of songs matching a specific genre from the cached genre counts.
     /// </summary>
     protected int GetGenreCount(string genre)
     {
-        return _genreMap.Count(kvp => string.Equals(kvp.Value, genre, StringComparison.OrdinalIgnoreCase));
+        return _genreCounts.TryGetValue(genre, out var count) ? count : 0;
     }
 
     protected void ToggleGenreDropdown()
