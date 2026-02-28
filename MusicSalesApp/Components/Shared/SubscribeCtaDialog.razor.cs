@@ -9,7 +9,7 @@ public partial class SubscribeCtaDialogModel : BlazorBase
     private const int MinPreviewInterval = 2;
     private const int MaxPreviewIntervalExclusive = 5; // Random.Next upper bound is exclusive, so this gives 2-4
 
-    protected SfDialog _dialogRef;
+    protected bool _showDialog;
     private int _previewCount;
     private int _nextShowAtCount;
     private bool _initialized;
@@ -52,12 +52,8 @@ public partial class SubscribeCtaDialogModel : BlazorBase
                 await LoadSubscriptionPriceAsync();
             }
 
+            _showDialog = true;
             await InvokeAsync(StateHasChanged);
-
-            if (_dialogRef != null)
-            {
-                await _dialogRef.ShowAsync();
-            }
         }
     }
 
@@ -71,24 +67,31 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         _initialized = false;
     }
 
-    protected async Task NavigateToLogin()
+    /// <summary>
+    /// Handles the dialog's OnClose event (fires before close).
+    /// Sets _showDialog to false immediately to prevent race conditions
+    /// where a parent re-render could re-open the dialog.
+    /// </summary>
+    protected void OnDialogClosing(BeforeCloseEventArgs args)
     {
-        if (_dialogRef != null)
-            await _dialogRef.HideAsync();
+        _showDialog = false;
+    }
+
+    protected void NavigateToLogin()
+    {
+        _showDialog = false;
         NavigationManager.NavigateTo("/login?returnUrl=" + Uri.EscapeDataString(NavigationManager.Uri), forceLoad: true);
     }
 
-    protected async Task NavigateToRegister()
+    protected void NavigateToRegister()
     {
-        if (_dialogRef != null)
-            await _dialogRef.HideAsync();
+        _showDialog = false;
         NavigationManager.NavigateTo("/register", forceLoad: true);
     }
 
-    protected async Task NavigateToSubscribe()
+    protected void NavigateToSubscribe()
     {
-        if (_dialogRef != null)
-            await _dialogRef.HideAsync();
+        _showDialog = false;
         NavigationManager.NavigateTo("/manage-account", forceLoad: true);
     }
 

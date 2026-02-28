@@ -24,7 +24,8 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         playedTime: 0,
         lastTime: 0,
         hasRecordedStream: false,
-        isSeeking: false
+        isSeeking: false,
+        hasReachedLimit: false
     });
 
     // Track seeking events to reset continuous playback tracking
@@ -48,7 +49,8 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
     audioElement.addEventListener('timeupdate', () => {
         const player = cardPlayers.get(cardId);
         // Enforce 60 second limit for restricted users
-        if (player && player.isRestricted && audioElement.currentTime >= player.maxDuration) {
+        if (player && player.isRestricted && !player.hasReachedLimit && audioElement.currentTime >= player.maxDuration) {
+            player.hasReachedLimit = true;
             audioElement.pause();
             audioElement.currentTime = player.maxDuration;
             dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
@@ -271,6 +273,7 @@ export function changeTrack(audioElement, newSrc, cardId, isRestricted = null, s
             player.lastTime = 0;
             player.hasRecordedStream = false;
             player.isSeeking = false;
+            player.hasReachedLimit = false;
         }
 
         // Pause and reset first

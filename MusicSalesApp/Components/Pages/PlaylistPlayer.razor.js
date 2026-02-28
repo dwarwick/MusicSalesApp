@@ -1,7 +1,8 @@
 // State object to store restriction settings (can be updated when tracks change)
 let playerState = {
     isRestricted: false,
-    maxDuration: 60
+    maxDuration: 60,
+    hasReachedLimit: false
 };
 
 // Stream tracking state for album player
@@ -21,6 +22,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     // Store initial state
     playerState.isRestricted = isRestricted;
     playerState.maxDuration = maxDuration;
+    playerState.hasReachedLimit = false;
 
     // Update stream threshold from server-provided value
     STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
@@ -48,7 +50,8 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
 
     audioElement.addEventListener('timeupdate', () => {
         // Enforce 60 second limit for restricted users (uses current state)
-        if (playerState.isRestricted && audioElement.currentTime >= playerState.maxDuration) {
+        if (playerState.isRestricted && !playerState.hasReachedLimit && audioElement.currentTime >= playerState.maxDuration) {
+            playerState.hasReachedLimit = true;
             audioElement.pause();
             audioElement.currentTime = playerState.maxDuration;
             dotNetRef.invokeMethodAsync('AudioEnded');
@@ -101,6 +104,7 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
 // Update the restriction state (called when track ownership changes)
 export function updateRestrictionState(isRestricted) {
     playerState.isRestricted = isRestricted;
+    playerState.hasReachedLimit = false;
 }
 
 export function play(audioElement) {
@@ -168,6 +172,7 @@ export function changeTrack(audioElement, newSrc, isRestricted = null, songMetad
         if (isRestricted !== null) {
             playerState.isRestricted = isRestricted;
         }
+        playerState.hasReachedLimit = false;
 
         // Update stream threshold if provided
         if (streamThresholdSeconds !== null) {

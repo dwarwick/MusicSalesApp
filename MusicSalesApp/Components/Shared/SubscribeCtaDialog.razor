@@ -1,6 +1,7 @@
 @inherits SubscribeCtaDialogModel
 
-<SfDialog @ref="_dialogRef" Width="400px" IsModal="true" ShowCloseIcon="true" Visible="false" CssClass="subscribe-cta-dialog">
+<SfDialog @bind-Visible="_showDialog" Width="400px" IsModal="true" ShowCloseIcon="true" CssClass="subscribe-cta-dialog">
+    <DialogEvents OnClose="@OnDialogClosing" />
     <DialogTemplates>
         <Content>
             <div class="subscribe-cta-dialog-content">
