@@ -30,18 +30,14 @@ public class DashboardService : IDashboardService
 
         if (hasFilters)
         {
-            // Need to join with SongMetadata to apply filters
-            var query = context.SongStreams
-                .Include(s => s.SongMetadata)
-                    .ThenInclude(sm => sm.Creator)
-                        .ThenInclude(c => c.User)
-                .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc);
-
             // Get the matching SongMetadataIds first, then filter streams
             var metadataIds = await GetFilteredSongMetadataIdsAsync(context, creatorId, genres, artists, songTitles);
-            query = query.Where(s => metadataIds.Contains(s.SongMetadataId));
 
-            streams = await query.Select(s => s.CreatedDate).ToListAsync();
+            streams = await context.SongStreams
+                .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc)
+                .Where(s => metadataIds.Contains(s.SongMetadataId))
+                .Select(s => s.CreatedDate)
+                .ToListAsync();
         }
         else
         {
@@ -78,19 +74,22 @@ public class DashboardService : IDashboardService
         HashSet<string> genres, HashSet<string> artists, HashSet<string> songTitles)
     {
         var query = context.SongMetadata
-            .Include(sm => sm.Creator)
-                .ThenInclude(c => c.User)
             .Where(sm => sm.CreatorId == creatorId && !string.IsNullOrEmpty(sm.Mp3BlobPath));
 
-        var songs = await query.ToListAsync();
-
-        // Apply filters in memory to use the same artist name / song title derivation logic
-        var filtered = songs.AsEnumerable();
-
+        // Apply genre filter at the database level
         if (genres != null && genres.Count > 0)
         {
-            filtered = filtered.Where(sm => !string.IsNullOrEmpty(sm.Genre) && genres.Contains(sm.Genre));
+            query = query.Where(sm => sm.Genre != null && genres.Contains(sm.Genre));
         }
+
+        // Need Creator and User navigation properties for artist name derivation
+        var songs = await query
+            .Include(sm => sm.Creator)
+                .ThenInclude(c => c.User)
+            .ToListAsync();
+
+        // Apply artist and song title filters in memory to use derivation logic
+        var filtered = songs.AsEnumerable();
 
         if (artists != null && artists.Count > 0)
         {
