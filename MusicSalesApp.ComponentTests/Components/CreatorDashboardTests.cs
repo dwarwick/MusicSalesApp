@@ -214,22 +214,23 @@ public class CreatorDashboardTests : BUnitTestBase
     }
 
     [Test]
-    public async Task CreatorDashboard_LoadsFilterData_FromCreatorSongs()
+    public async Task CreatorDashboard_LoadsFilterData_FromStreamData()
     {
         // Arrange
         int creatorId = 10;
         SetupAuthenticatedCreator(creatorId: creatorId);
 
-        var creatorSongs = new List<SongMetadata>
+        var filterOptions = new StreamFilterOptions
         {
-            new SongMetadata { Id = 1, CreatorId = creatorId, Mp3BlobPath = "test/song1.mp3", Genre = "Rock", SongTitle = "My Rock Song", ArtistName = "TestArtist" },
-            new SongMetadata { Id = 2, CreatorId = creatorId, Mp3BlobPath = "test/song2.mp3", Genre = "Pop", SongTitle = "My Pop Song", ArtistName = "TestArtist" },
-            new SongMetadata { Id = 3, CreatorId = creatorId, Mp3BlobPath = "test/song3.mp3", Genre = "Rock", SongTitle = "Another Rock Song", ArtistName = "OtherArtist" }
+            Genres = new Dictionary<string, int> { { "Rock", 5 }, { "Pop", 3 } },
+            Artists = new Dictionary<string, int> { { "TestArtist", 6 }, { "OtherArtist", 2 } },
+            SongTitles = new Dictionary<string, int> { { "My Rock Song", 3 }, { "My Pop Song", 5 } }
         };
 
-        MockSongMetadataService
-            .Setup(x => x.GetByCreatorIdAsync(creatorId))
-            .ReturnsAsync(creatorSongs);
+        MockDashboardService
+            .Setup(x => x.GetStreamFilterOptionsAsync(creatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(filterOptions);
 
         MockDashboardService
             .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
@@ -243,7 +244,8 @@ public class CreatorDashboardTests : BUnitTestBase
         await Task.Delay(100);
         cut.Render();
 
-        // Assert - Verify SongMetadataService was called to load filter data
-        MockSongMetadataService.Verify(x => x.GetByCreatorIdAsync(creatorId), Times.Once);
+        // Assert - Verify DashboardService.GetStreamFilterOptionsAsync was called to load filter data
+        MockDashboardService.Verify(x => x.GetStreamFilterOptionsAsync(creatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()), Times.Once);
     }
 }

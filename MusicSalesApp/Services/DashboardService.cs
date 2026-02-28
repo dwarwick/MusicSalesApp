@@ -120,6 +120,65 @@ public class DashboardService : IDashboardService
         return Path.GetFileNameWithoutExtension(sm.Mp3BlobPath ?? sm.ImageBlobPath ?? sm.BlobPath ?? "Unknown");
     }
 
+    /// <inheritdoc />
+    public async Task<StreamFilterOptions> GetStreamFilterOptionsAsync(int creatorId, DateTime startUtc, DateTime endUtc,
+        HashSet<string> selectedGenres = null, HashSet<string> selectedArtists = null, HashSet<string> selectedSongTitles = null)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        // Get all streams in the date range with their song metadata
+        var allStreamedSongs = await context.SongStreams
+            .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc)
+            .Include(s => s.SongMetadata)
+                .ThenInclude(sm => sm.Creator)
+                    .ThenInclude(c => c.User)
+            .Select(s => s.SongMetadata)
+            .ToListAsync();
+
+        var hasGenreFilter = selectedGenres != null && selectedGenres.Count > 0;
+        var hasArtistFilter = selectedArtists != null && selectedArtists.Count > 0;
+        var hasTitleFilter = selectedSongTitles != null && selectedSongTitles.Count > 0;
+
+        var options = new StreamFilterOptions();
+
+        // Genres: cross-filter by artist and song title selections (but NOT by genre selections)
+        var genreSource = allStreamedSongs.AsEnumerable();
+        if (hasArtistFilter)
+            genreSource = genreSource.Where(sm => selectedArtists.Contains(sm.GetEffectiveArtistName()));
+        if (hasTitleFilter)
+            genreSource = genreSource.Where(sm => selectedSongTitles.Contains(GetEffectiveSongTitle(sm)));
+        options.Genres = genreSource
+            .Where(sm => !string.IsNullOrEmpty(sm.Genre))
+            .GroupBy(sm => sm.Genre)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Artists: cross-filter by genre and song title selections (but NOT by artist selections)
+        var artistSource = allStreamedSongs.AsEnumerable();
+        if (hasGenreFilter)
+            artistSource = artistSource.Where(sm => !string.IsNullOrEmpty(sm.Genre) && selectedGenres.Contains(sm.Genre));
+        if (hasTitleFilter)
+            artistSource = artistSource.Where(sm => selectedSongTitles.Contains(GetEffectiveSongTitle(sm)));
+        options.Artists = artistSource
+            .Select(sm => sm.GetEffectiveArtistName())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .GroupBy(a => a)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Song titles: cross-filter by genre and artist selections (but NOT by song title selections)
+        var titleSource = allStreamedSongs.AsEnumerable();
+        if (hasGenreFilter)
+            titleSource = titleSource.Where(sm => !string.IsNullOrEmpty(sm.Genre) && selectedGenres.Contains(sm.Genre));
+        if (hasArtistFilter)
+            titleSource = titleSource.Where(sm => selectedArtists.Contains(sm.GetEffectiveArtistName()));
+        options.SongTitles = titleSource
+            .Select(sm => GetEffectiveSongTitle(sm))
+            .Where(t => !string.IsNullOrEmpty(t))
+            .GroupBy(t => t)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return options;
+    }
+
     private static DateTime TruncateToInterval(DateTime date, StreamInterval interval)
     {
         return interval switch

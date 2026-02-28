@@ -280,6 +280,9 @@ public abstract class BUnitTestBase
         MockDashboardService.Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
                 It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
+        MockDashboardService.Setup(x => x.GetStreamFilterOptionsAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new StreamFilterOptions());
 
         // Setup default returns for ISongStatusService methods
         MockSongStatusService.Setup(x => x.GetAllStatusHistoryAsync())

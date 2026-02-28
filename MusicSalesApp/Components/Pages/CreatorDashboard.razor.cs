@@ -1,6 +1,5 @@
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
-using MusicSalesApp.Models;
 using Microsoft.JSInterop;
 
 namespace MusicSalesApp.Components.Pages;
@@ -227,42 +226,24 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     {
         if (_creatorId == null) return;
 
-        var songs = await SongMetadataService.GetByCreatorIdAsync(_creatorId.Value);
+        // Convert user's local times to UTC for the query
+        var startUtc = ConvertUserLocalToUtc(_startDate);
+        var endUtc = ConvertUserLocalToUtc(_endDate);
 
-        // Only include MP3 songs (not album covers)
-        var mp3Songs = songs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)).ToList();
+        var genres = _selectedGenres.Count > 0 ? _selectedGenres : null;
+        var artists = _selectedArtists.Count > 0 ? _selectedArtists : null;
+        var titles = _selectedSongTitles.Count > 0 ? _selectedSongTitles : null;
 
-        // Build genre items with counts
-        _genreItems = mp3Songs
-            .Where(s => !string.IsNullOrEmpty(s.Genre))
-            .GroupBy(s => s.Genre)
-            .ToDictionary(g => g.Key, g => g.Count());
+        var options = await DashboardService.GetStreamFilterOptionsAsync(_creatorId.Value, startUtc, endUtc, genres, artists, titles);
 
-        // Build artist items with counts using the same derivation as song cards
-        _artistItems = mp3Songs
-            .Select(s => s.GetEffectiveArtistName())
-            .Where(a => !string.IsNullOrEmpty(a))
-            .GroupBy(a => a)
-            .ToDictionary(g => g.Key, g => g.Count());
+        _genreItems = options.Genres;
+        _artistItems = options.Artists;
+        _songTitleItems = options.SongTitles;
 
-        // Build song title items with counts using the same derivation as song cards
-        _songTitleItems = mp3Songs
-            .Select(s => GetEffectiveSongTitle(s))
-            .Where(t => !string.IsNullOrEmpty(t))
-            .GroupBy(t => t)
-            .ToDictionary(g => g.Key, g => g.Count());
-    }
-
-    /// <summary>
-    /// Gets the effective display title for a song.
-    /// Priority: SongTitle > filename derived from Mp3BlobPath
-    /// </summary>
-    private static string GetEffectiveSongTitle(SongMetadata sm)
-    {
-        if (!string.IsNullOrEmpty(sm.SongTitle))
-            return sm.SongTitle;
-
-        return Path.GetFileNameWithoutExtension(sm.Mp3BlobPath ?? sm.ImageBlobPath ?? sm.BlobPath ?? "Unknown");
+        // Remove any selected items that are no longer available
+        _selectedGenres.IntersectWith(_genreItems.Keys);
+        _selectedArtists.IntersectWith(_artistItems.Keys);
+        _selectedSongTitles.IntersectWith(_songTitleItems.Keys);
     }
 
     protected async Task OnStartDateChanged(Syncfusion.Blazor.Calendars.ChangedEventArgs<DateTime> args)
@@ -277,6 +258,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             return;
         }
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -293,6 +275,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             return;
         }
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -316,6 +299,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         else
             _selectedGenres.Remove(args.item);
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -323,6 +307,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected async Task OnGenreCleared()
     {
         _selectedGenres.Clear();
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -334,6 +319,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         else
             _selectedArtists.Remove(args.item);
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -341,6 +327,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected async Task OnArtistCleared()
     {
         _selectedArtists.Clear();
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -352,6 +339,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         else
             _selectedSongTitles.Remove(args.item);
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -359,6 +347,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected async Task OnSongTitleCleared()
     {
         _selectedSongTitles.Clear();
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -375,6 +364,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 _endDate = userNow;
                 _maxStartDate = userNow;
                 _maxEndDate = userNow;
+                await LoadFilterData();
                 await LoadChartData();
                 await InvokeAsync(StateHasChanged);
             }

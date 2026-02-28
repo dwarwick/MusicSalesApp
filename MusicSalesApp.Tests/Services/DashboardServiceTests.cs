@@ -389,4 +389,116 @@ public class DashboardServiceTests
         Assert.That(day1, Is.Not.Null);
         Assert.That(day1.StreamCount, Is.EqualTo(2)); // Only "Other Song" streams
     }
+
+    [Test]
+    public async Task GetStreamFilterOptionsAsync_ReturnsOnlyStreamedSongs()
+    {
+        using var context = new AppDbContext(_contextOptions);
+
+        var user = new ApplicationUser
+        {
+            UserName = "filtercreator@test.com",
+            Email = "filtercreator@test.com",
+            NormalizedUserName = "FILTERCREATOR@TEST.COM",
+            NormalizedEmail = "FILTERCREATOR@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true, User = user };
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var rockSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/rock.mp3", Genre = "Rock", SongTitle = "Rock Hit", ArtistName = "RockBand" };
+        var popSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/pop.mp3", Genre = "Pop", SongTitle = "Pop Hit", ArtistName = "PopStar" };
+        var jazzSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/jazz.mp3", Genre = "Jazz", SongTitle = "Jazz Tune", ArtistName = "JazzCat" };
+        context.SongMetadata.AddRange(rockSong, popSong, jazzSong);
+        await context.SaveChangesAsync();
+
+        var baseDate = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+
+        // Only add streams for Rock and Pop songs — Jazz has no streams
+        context.SongStreams.AddRange(
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(1) },
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(2) },
+            new SongStream { SongMetadataId = popSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(3) }
+        );
+        await context.SaveChangesAsync();
+
+        var result = await _service.GetStreamFilterOptionsAsync(
+            creator.Id,
+            baseDate,
+            baseDate.AddDays(1));
+
+        // Jazz should NOT appear since it has no streams
+        Assert.That(result.Genres, Does.ContainKey("Rock"));
+        Assert.That(result.Genres, Does.ContainKey("Pop"));
+        Assert.That(result.Genres, Does.Not.ContainKey("Jazz"));
+        Assert.That(result.Genres["Rock"], Is.EqualTo(2));
+        Assert.That(result.Genres["Pop"], Is.EqualTo(1));
+
+        Assert.That(result.Artists, Does.ContainKey("RockBand"));
+        Assert.That(result.Artists, Does.ContainKey("PopStar"));
+        Assert.That(result.Artists, Does.Not.ContainKey("JazzCat"));
+
+        Assert.That(result.SongTitles, Does.ContainKey("Rock Hit"));
+        Assert.That(result.SongTitles, Does.ContainKey("Pop Hit"));
+        Assert.That(result.SongTitles, Does.Not.ContainKey("Jazz Tune"));
+    }
+
+    [Test]
+    public async Task GetStreamFilterOptionsAsync_CrossFiltersWhenGenreSelected()
+    {
+        using var context = new AppDbContext(_contextOptions);
+
+        var user = new ApplicationUser
+        {
+            UserName = "crossfilter@test.com",
+            Email = "crossfilter@test.com",
+            NormalizedUserName = "CROSSFILTER@TEST.COM",
+            NormalizedEmail = "CROSSFILTER@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true, User = user };
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var rockSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/rock.mp3", Genre = "Rock", SongTitle = "Rock Hit", ArtistName = "RockBand" };
+        var popSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/pop.mp3", Genre = "Pop", SongTitle = "Pop Hit", ArtistName = "PopStar" };
+        context.SongMetadata.AddRange(rockSong, popSong);
+        await context.SaveChangesAsync();
+
+        var baseDate = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        context.SongStreams.AddRange(
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(1) },
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(2) },
+            new SongStream { SongMetadataId = popSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(3) }
+        );
+        await context.SaveChangesAsync();
+
+        // Select "Rock" genre — artists and song titles should only show Rock items
+        var result = await _service.GetStreamFilterOptionsAsync(
+            creator.Id,
+            baseDate,
+            baseDate.AddDays(1),
+            selectedGenres: new HashSet<string> { "Rock" });
+
+        // Genres should still show both (genre filter doesn't filter itself)
+        Assert.That(result.Genres, Does.ContainKey("Rock"));
+        Assert.That(result.Genres, Does.ContainKey("Pop"));
+
+        // Artists should only show RockBand (cross-filtered by selected genre)
+        Assert.That(result.Artists, Does.ContainKey("RockBand"));
+        Assert.That(result.Artists, Does.Not.ContainKey("PopStar"));
+
+        // Song titles should only show Rock Hit (cross-filtered by selected genre)
+        Assert.That(result.SongTitles, Does.ContainKey("Rock Hit"));
+        Assert.That(result.SongTitles, Does.Not.ContainKey("Pop Hit"));
+    }
 }
