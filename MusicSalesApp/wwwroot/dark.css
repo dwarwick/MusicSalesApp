@@ -427,11 +427,6 @@ body {
     background-color: #9b59b6 !important;
 }
 
-/* Subscribe CTA Dialog */
-.subscribe-cta-dialog .e-dlg-header-content {
-    background: #2a2a2a;
-    border-bottom: none;
-}
 .dashboard-timezone-note {
     color: #b3b3b3;
 }

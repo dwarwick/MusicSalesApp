@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
+using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -8,7 +9,7 @@ public partial class SubscribeCtaDialogModel : BlazorBase
     private const int MinPreviewInterval = 2;
     private const int MaxPreviewIntervalExclusive = 5; // Random.Next upper bound is exclusive, so this gives 2-4
 
-    protected bool _showDialog;
+    protected SfDialog _dialogRef;
     private int _previewCount;
     private int _nextShowAtCount;
     private bool _initialized;
@@ -45,7 +46,18 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         {
             // Set next show count (2-4 previews from now)
             _nextShowAtCount = _previewCount + Random.Shared.Next(MinPreviewInterval, MaxPreviewIntervalExclusive);
-            await ShowDialogAsync();
+
+            if (!_priceLoaded)
+            {
+                await LoadSubscriptionPriceAsync();
+            }
+
+            await InvokeAsync(StateHasChanged);
+
+            if (_dialogRef != null)
+            {
+                await _dialogRef.ShowAsync();
+            }
         }
     }
 
@@ -59,37 +71,21 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         _initialized = false;
     }
 
-    private async Task ShowDialogAsync()
-    {
-        if (!_priceLoaded)
-        {
-            await LoadSubscriptionPriceAsync();
-        }
-
-        _showDialog = true;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    protected void CloseDialog()
-    {
-        _showDialog = false;
-    }
-
     protected void NavigateToLogin()
     {
-        _showDialog = false;
+        _dialogRef?.HideAsync();
         NavigationManager.NavigateTo("/login?returnUrl=" + Uri.EscapeDataString(NavigationManager.Uri), forceLoad: true);
     }
 
     protected void NavigateToRegister()
     {
-        _showDialog = false;
+        _dialogRef?.HideAsync();
         NavigationManager.NavigateTo("/register", forceLoad: true);
     }
 
     protected void NavigateToSubscribe()
     {
-        _showDialog = false;
+        _dialogRef?.HideAsync();
         NavigationManager.NavigateTo("/manage-account", forceLoad: true);
     }
 

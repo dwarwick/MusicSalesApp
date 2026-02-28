@@ -141,7 +141,7 @@ public class SubscribeCtaDialogTests : BUnitTestBase
     }
 
     [Test]
-    public async Task SubscribeCtaDialog_ShowsBenefitsList()
+    public async Task SubscribeCtaDialog_HasSimplifiedContent()
     {
         // Arrange
         var cut = TestContext.Render<SubscribeCtaDialog>(parameters => parameters
@@ -151,10 +151,10 @@ public class SubscribeCtaDialogTests : BUnitTestBase
         // Act
         await cut.InvokeAsync(() => cut.Instance.OnPreviewEndedAsync());
 
-        // Assert - Should show all benefits
-        Assert.That(cut.Markup, Does.Contain("Full-length streaming of all songs"));
-        Assert.That(cut.Markup, Does.Contain("Create unlimited playlists"));
-        Assert.That(cut.Markup, Does.Contain("Personalized recommendations"));
-        Assert.That(cut.Markup, Does.Contain("No ads, no interruptions"));
+        // Assert - Should NOT have the extra content removed per user feedback
+        Assert.That(cut.Markup, Does.Not.Contain("cta-icon"), "Should not have music note icon");
+        Assert.That(cut.Markup, Does.Not.Contain("cta-benefits"), "Should not have benefits checklist");
+        Assert.That(cut.Markup, Does.Not.Contain("cta-description"), "Should not have description text");
+        Assert.That(cut.Markup, Does.Not.Contain("Full-length streaming"), "Should not have benefits text");
     }
 }
