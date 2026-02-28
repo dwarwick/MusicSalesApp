@@ -402,6 +402,12 @@ namespace MusicSalesApp.Services
             if (string.IsNullOrWhiteSpace(artistName))
                 return false;
 
+            // Strip email domain if artist name contains @ to normalize input
+            if (artistName.Contains('@'))
+            {
+                artistName = artistName.Split('@')[0];
+            }
+
             await using var context = await _contextFactory.CreateDbContextAsync();
 
             // Find active songs that use this artist name but belong to a different creator
@@ -409,7 +415,7 @@ namespace MusicSalesApp.Services
                 .Include(s => s.Creator)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null)
-                .Where(s => s.ArtistName != null && s.ArtistName != "")
+                .Where(s => !string.IsNullOrEmpty(s.ArtistName))
                 .Select(s => new { s.ArtistName, s.CreatorId })
                 .ToListAsync();
 

@@ -355,15 +355,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             // Check for artist name uniqueness across creators
             if (!string.IsNullOrWhiteSpace(_editArtistName))
             {
-                var artistNameToCheck = _editArtistName.Trim();
-                if (artistNameToCheck.Contains('@'))
-                {
-                    artistNameToCheck = artistNameToCheck.Split('@')[0];
-                }
-                var isArtistNameTaken = await SongMetadataService.IsArtistNameTakenByAnotherCreatorAsync(artistNameToCheck, _creatorId);
+                var isArtistNameTaken = await SongMetadataService.IsArtistNameTakenByAnotherCreatorAsync(_editArtistName.Trim(), _creatorId);
                 if (isArtistNameTaken)
                 {
-                    _validationErrors.Add($"The artist name '{artistNameToCheck}' is already used by another creator.");
+                    var displayName = _editArtistName.Trim();
+                    if (displayName.Contains('@'))
+                        displayName = displayName.Split('@')[0];
+                    _validationErrors.Add($"The artist name '{displayName}' is already used by another creator.");
                     return;
                 }
             }

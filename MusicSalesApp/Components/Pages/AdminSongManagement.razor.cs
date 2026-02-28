@@ -217,12 +217,6 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // Check for artist name uniqueness across creators
             if (!string.IsNullOrWhiteSpace(_editArtistName))
             {
-                var artistNameToCheck = _editArtistName.Trim();
-                if (artistNameToCheck.Contains('@'))
-                {
-                    artistNameToCheck = artistNameToCheck.Split('@')[0];
-                }
-
                 // Get the creator ID from the metadata dictionary
                 int? songCreatorId = null;
                 if (_metadataById.TryGetValue(_editingSong.Id, out var songMetadata))
@@ -230,10 +224,13 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     songCreatorId = songMetadata.CreatorId;
                 }
 
-                var isArtistNameTaken = await MetadataService.IsArtistNameTakenByAnotherCreatorAsync(artistNameToCheck, songCreatorId);
+                var isArtistNameTaken = await MetadataService.IsArtistNameTakenByAnotherCreatorAsync(_editArtistName.Trim(), songCreatorId);
                 if (isArtistNameTaken)
                 {
-                    _validationErrors.Add($"The artist name '{artistNameToCheck}' is already used by another creator.");
+                    var displayName = _editArtistName.Trim();
+                    if (displayName.Contains('@'))
+                        displayName = displayName.Split('@')[0];
+                    _validationErrors.Add($"The artist name '{displayName}' is already used by another creator.");
                 }
             }
 
