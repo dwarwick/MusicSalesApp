@@ -1,0 +1,35 @@
+@inherits SubscribeCtaDialogModel
+
+<SfDialog @bind-Visible="_showDialog" Width="400px" IsModal="true" ShowCloseIcon="true" CssClass="subscribe-cta-dialog">
+    <DialogEvents OnClose="@OnDialogClosing" />
+    <DialogTemplates>
+        <Content>
+            <div class="subscribe-cta-dialog-content">
+                <h2 class="cta-title">Unlimited Music Streaming</h2>
+                <p class="cta-price-highlight">
+                    Just <span class="price">$@_subscriptionPrice</span> per month
+                </p>
+                @if (!IsAuthenticated)
+                {
+                    <p class="cta-auth-text">Log In or Register to Get Started</p>
+                    <div class="cta-button-group">
+                        <SfButton CssClass="cta-button cta-button-login" OnClick="@NavigateToLogin">
+                            Log In
+                        </SfButton>
+                        <SfButton CssClass="cta-button cta-button-register" OnClick="@NavigateToRegister">
+                            Register
+                        </SfButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="cta-button-group">
+                        <SfButton CssClass="cta-button" OnClick="@NavigateToSubscribe">
+                            Subscribe
+                        </SfButton>
+                    </div>
+                }
+            </div>
+        </Content>
+    </DialogTemplates>
+</SfDialog>

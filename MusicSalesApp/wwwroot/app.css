@@ -1172,6 +1172,57 @@ h1:focus {
     align-self: center;
 }
 
+/* Subscribe CTA Dialog */
+.subscribe-cta-dialog .e-dlg-content {
+    padding: 0 !important;
+}
+
+.subscribe-cta-dialog .e-dlg-header-content {
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 1;
+    border-bottom: none !important;
+}
+
+.subscribe-cta-dialog-content {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    border-radius: 8px;
+}
+
+.subscribe-cta-dialog-content .cta-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+}
+
+.subscribe-cta-dialog-content .cta-price-highlight {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 1.25rem;
+}
+
+.subscribe-cta-dialog-content .cta-price-highlight .price {
+    font-size: 1.75rem;
+    font-weight: 900;
+}
+
+.subscribe-cta-dialog-content .cta-auth-text {
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.subscribe-cta-dialog-content .cta-button-group {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.subscribe-cta-dialog-content .cta-button {
+    min-width: 100px;
+}
+
 /* Liked Songs Playlist Card */
 .liked-songs-playlist-card {
     border-left: 4px solid #e91e63;

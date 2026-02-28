@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
@@ -86,6 +87,7 @@ namespace MusicSalesApp.Components.Pages
         private int _defaultStreamQualifyingSeconds = 30;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
+        protected SubscribeCtaDialogModel _subscribeCtaDialog;
 
         protected override async Task OnInitializedAsync()
         {
@@ -1405,6 +1407,12 @@ namespace MusicSalesApp.Components.Pages
         [JSInvokable]
         public async Task AudioEnded()
         {
+            // Show subscribe CTA when a restricted preview ends
+            if (IsCurrentTrackRestricted() && _subscribeCtaDialog != null)
+            {
+                await _subscribeCtaDialog.OnPreviewEndedAsync();
+            }
+
             // Get next track index based on shuffle state
             var nextIndex = GetNextTrackIndex();
             

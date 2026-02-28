@@ -9,11 +9,16 @@ let streamTracker = {
     isSeeking: false
 };
 
+let hasReachedLimit = false;
+
 export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
     if (!audioElement) return;
 
     // Update stream threshold from server-provided value
     STREAM_THRESHOLD_SECONDS = streamThresholdSeconds;
+
+    // Reset state for new song
+    hasReachedLimit = false;
 
     // Reset stream tracking for new song
     streamTracker = {
@@ -41,7 +46,10 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         if (isRestricted && audioElement.currentTime >= maxDuration) {
             audioElement.pause();
             audioElement.currentTime = maxDuration;
-            dotNetRef.invokeMethodAsync('AudioEnded');
+            if (!hasReachedLimit) {
+                hasReachedLimit = true;
+                dotNetRef.invokeMethodAsync('AudioEnded');
+            }
         }
 
         // Track continuous playback time for stream counting

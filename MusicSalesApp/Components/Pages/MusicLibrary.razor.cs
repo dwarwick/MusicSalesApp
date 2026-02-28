@@ -6,6 +6,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Services;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
@@ -68,7 +69,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
-    private bool _isAuthenticated;
+    protected bool _isAuthenticated;
     protected bool _hasActiveSubscription;
     private bool _isAdmin;
     private int? _currentUserId;
@@ -77,6 +78,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
+    protected SubscribeCtaDialogModel _subscribeCtaDialog;
 
     /// <summary>
     /// Represents the artist display information for a song card.
@@ -850,12 +852,19 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     }
 
     [JSInvokable]
-    public void CardAudioEnded(string cardId)
+    public async Task CardAudioEnded(string cardId)
     {
         if (_playingCardId == cardId)
         {
             _isActuallyPlaying = false;
-            InvokeAsync(StateHasChanged);
+
+            // Show subscribe CTA when a restricted preview ends
+            if (IsCurrentPlayingTrackRestricted() && _subscribeCtaDialog != null)
+            {
+                await _subscribeCtaDialog.OnPreviewEndedAsync();
+            }
+
+            await InvokeAsync(StateHasChanged);
         }
     }
 

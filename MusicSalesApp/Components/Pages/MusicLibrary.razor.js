@@ -24,7 +24,8 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         playedTime: 0,
         lastTime: 0,
         hasRecordedStream: false,
-        isSeeking: false
+        isSeeking: false,
+        hasReachedLimit: false
     });
 
     // Track seeking events to reset continuous playback tracking
@@ -51,7 +52,10 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         if (player && player.isRestricted && audioElement.currentTime >= player.maxDuration) {
             audioElement.pause();
             audioElement.currentTime = player.maxDuration;
-            dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            if (!player.hasReachedLimit) {
+                player.hasReachedLimit = true;
+                dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            }
             return;
         }
 
@@ -271,6 +275,7 @@ export function changeTrack(audioElement, newSrc, cardId, isRestricted = null, s
             player.lastTime = 0;
             player.hasRecordedStream = false;
             player.isSeeking = false;
+            player.hasReachedLimit = false;
         }
 
         // Pause and reset first

@@ -427,7 +427,45 @@ body {
     background-color: #9b59b6 !important;
 }
 
-/* Dashboard - Dark Theme */
+/* Subscribe CTA Dialog */
+.subscribe-cta-dialog .e-dlg-header-content {
+    background: transparent !important;
+}
+
+.subscribe-cta-dialog-content {
+    background: #2d3748;
+}
+
+.subscribe-cta-dialog-content .cta-title {
+    color: #fff;
+}
+
+.subscribe-cta-dialog-content .cta-price-highlight {
+    color: #fff;
+}
+
+.subscribe-cta-dialog-content .cta-price-highlight .price {
+    color: #1db954;
+}
+
+.subscribe-cta-dialog-content .cta-auth-text {
+    color: #fff;
+}
+
+.subscribe-cta-dialog-content .cta-button {
+    background-color: #1db954 !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.subscribe-cta-dialog-content .cta-button:hover {
+    background-color: #1ed760 !important;
+}
+
+.subscribe-cta-dialog .e-dlg-closeicon-btn {
+    color: #fff !important;
+}
+
 .dashboard-timezone-note {
     color: #b3b3b3;
 }
