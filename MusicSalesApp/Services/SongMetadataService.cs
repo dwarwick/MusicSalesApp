@@ -369,5 +369,59 @@ namespace MusicSalesApp.Services
 
             return result;
         }
+
+        public async Task<bool> IsSongTitleDuplicateAsync(string title, int excludeSongId)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                return false;
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var activeSongs = await context.SongMetadata
+                .Include(s => s.Creator)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null && s.Id != excludeSongId)
+                .Select(s => new { s.Id, s.SongTitle, s.Mp3BlobPath })
+                .ToListAsync();
+
+            foreach (var song in activeSongs)
+            {
+                var effectiveTitle = !string.IsNullOrEmpty(song.SongTitle)
+                    ? song.SongTitle
+                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? string.Empty);
+
+                if (string.Equals(effectiveTitle, title, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        public async Task<bool> IsArtistNameTakenByAnotherCreatorAsync(string artistName, int? creatorId)
+        {
+            if (string.IsNullOrWhiteSpace(artistName))
+                return false;
+
+            // Strip email domain if artist name contains @ to normalize input
+            if (artistName.Contains('@'))
+            {
+                artistName = artistName.Split('@')[0];
+            }
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // Find active songs that use this artist name but belong to a different creator
+            var activeSongs = await context.SongMetadata
+                .Include(s => s.Creator)
+                .Where(ActiveSongFromActiveCreator)
+                .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null)
+                .Where(s => !string.IsNullOrEmpty(s.ArtistName))
+                .Select(s => new { s.ArtistName, s.CreatorId })
+                .ToListAsync();
+
+            return activeSongs.Any(s =>
+                string.Equals(s.ArtistName, artistName, StringComparison.OrdinalIgnoreCase) &&
+                s.CreatorId != creatorId);
+        }
     }
 }

@@ -214,6 +214,26 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 _validationErrors.Add("A reason is required when enabling or disabling a song.");
             }
 
+            // Check for artist name uniqueness across creators
+            if (!string.IsNullOrWhiteSpace(_editArtistName))
+            {
+                // Get the creator ID from the metadata dictionary
+                int? songCreatorId = null;
+                if (_metadataById.TryGetValue(_editingSong.Id, out var songMetadata))
+                {
+                    songCreatorId = songMetadata.CreatorId;
+                }
+
+                var isArtistNameTaken = await MetadataService.IsArtistNameTakenByAnotherCreatorAsync(_editArtistName.Trim(), songCreatorId);
+                if (isArtistNameTaken)
+                {
+                    var displayName = _editArtistName.Trim();
+                    if (displayName.Contains('@'))
+                        displayName = displayName.Split('@')[0];
+                    _validationErrors.Add($"The artist name '{displayName}' is already used by another creator.");
+                }
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();

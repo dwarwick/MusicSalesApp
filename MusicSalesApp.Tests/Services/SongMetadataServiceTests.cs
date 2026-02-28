@@ -686,6 +686,340 @@ public class SongMetadataServiceTests
 
     #endregion
 
+    #region IsSongTitleDuplicateAsync Tests
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_NoDuplicate_ReturnsFalse()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            SongTitle = "Unique Song",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+        var existingId = _context.SongMetadata.First().Id;
+
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("Different Song", existingId);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_DuplicateExists_ReturnsTrue()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            SongTitle = "My Song",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song2/song2.mp3",
+            Mp3BlobPath = "song2/song2.mp3",
+            SongTitle = "Another Song",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+        var firstId = _context.SongMetadata.First(s => s.SongTitle == "My Song").Id;
+
+        // Act - trying to rename "My Song" to "Another Song"
+        var result = await _service.IsSongTitleDuplicateAsync("Another Song", firstId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_SameTitle_SameSong_ReturnsFalse()
+    {
+        // Arrange - saving the same title for the same song (no change)
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            SongTitle = "My Song",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+        var existingId = _context.SongMetadata.First().Id;
+
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("My Song", existingId);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_CaseInsensitive_ReturnsTrue()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            SongTitle = "My Song",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song2/song2.mp3",
+            Mp3BlobPath = "song2/song2.mp3",
+            SongTitle = "Other",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+        var secondId = _context.SongMetadata.First(s => s.SongTitle == "Other").Id;
+
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("my song", secondId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_MatchesDerivedTitle_ReturnsTrue()
+    {
+        // Arrange - song with no explicit SongTitle (derived from Mp3BlobPath)
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "folder/Derived Title.mp3",
+            Mp3BlobPath = "folder/Derived Title.mp3",
+            SongTitle = null,
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "other/other.mp3",
+            Mp3BlobPath = "other/other.mp3",
+            SongTitle = "Other",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+        var secondId = _context.SongMetadata.First(s => s.SongTitle == "Other").Id;
+
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("Derived Title", secondId);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_InactiveSong_ReturnsFalse()
+    {
+        // Arrange
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "inactive/inactive.mp3",
+            Mp3BlobPath = "inactive/inactive.mp3",
+            SongTitle = "Inactive Song",
+            IsActive = false,
+            IsEnabled = true,
+            CreatorId = null
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("Inactive Song", 999);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsSongTitleDuplicateAsync_EmptyTitle_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.IsSongTitleDuplicateAsync("", 1);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    #endregion
+
+    #region IsArtistNameTakenByAnotherCreatorAsync Tests
+
+    private async Task<Creator> SeedCreatorAsync(int userId, int creatorId)
+    {
+        var user = new ApplicationUser { Id = userId, UserName = $"user{userId}@test.com", Email = $"user{userId}@test.com" };
+        // Check if user already exists to avoid duplicates
+        if (!_context.Users.Any(u => u.Id == userId))
+        {
+            _context.Users.Add(user);
+        }
+        var creator = new Creator { Id = creatorId, UserId = userId, IsActive = true };
+        if (!_context.Creators.Any(c => c.Id == creatorId))
+        {
+            _context.Creators.Add(creator);
+        }
+        await _context.SaveChangesAsync();
+        return creator;
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_NotTaken_ReturnsFalse()
+    {
+        // Arrange
+        await SeedCreatorAsync(1, 1);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            ArtistName = "ArtistA",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - same creator checking their own artist name
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("ArtistA", 1);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_TakenByAnother_ReturnsTrue()
+    {
+        // Arrange
+        await SeedCreatorAsync(1, 1);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            ArtistName = "ArtistA",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - different creator trying to use the same name
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("ArtistA", 2);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_CaseInsensitive_ReturnsTrue()
+    {
+        // Arrange
+        await SeedCreatorAsync(1, 1);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            ArtistName = "CoolArtist",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("coolartist", 2);
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_EmptyName_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("", 1);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_NullName_ReturnsFalse()
+    {
+        // Act
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync(null, 1);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_InactiveSong_ReturnsFalse()
+    {
+        // Arrange - inactive song should not count
+        await SeedCreatorAsync(1, 1);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            ArtistName = "InactiveArtist",
+            IsActive = false,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("InactiveArtist", 2);
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsArtistNameTakenByAnotherCreatorAsync_NullCreatorId_ReturnsTrueIfTaken()
+    {
+        // Arrange
+        await SeedCreatorAsync(1, 1);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song1/song1.mp3",
+            Mp3BlobPath = "song1/song1.mp3",
+            ArtistName = "AdminArtist",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - checking from an admin (null creatorId) perspective
+        var result = await _service.IsArtistNameTakenByAnotherCreatorAsync("AdminArtist", null);
+
+        // Assert - name is used by creator 1, different from null
+        Assert.That(result, Is.True);
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

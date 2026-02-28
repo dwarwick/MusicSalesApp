@@ -76,5 +76,17 @@ namespace MusicSalesApp.Services
         /// Checks both the explicit SongTitle field and the title derived from Mp3BlobPath.
         /// </summary>
         Task<HashSet<string>> FindExistingSongTitlesAsync(IEnumerable<string> titles);
+
+        /// <summary>
+        /// Checks if a song title already exists as an active song, excluding the specified song ID.
+        /// Checks both the explicit SongTitle field and the title derived from Mp3BlobPath.
+        /// </summary>
+        Task<bool> IsSongTitleDuplicateAsync(string title, int excludeSongId);
+
+        /// <summary>
+        /// Checks if an artist name is already used by a different creator.
+        /// Returns true if another creator (different CreatorId) has songs with the given ArtistName.
+        /// </summary>
+        Task<bool> IsArtistNameTakenByAnotherCreatorAsync(string artistName, int? creatorId);
     }
 }
