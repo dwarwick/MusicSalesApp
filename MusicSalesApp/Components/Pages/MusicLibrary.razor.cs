@@ -66,6 +66,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to genre
     private Dictionary<string, string> _genreMap = new Dictionary<string, string>();
 
+    // Genre filter state
+    protected HashSet<string> _selectedGenres = new HashSet<string>();
+    protected bool _genreDropdownOpen;
+    protected string _genreSearchText = string.Empty;
+    private Dictionary<string, int> _genreCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
@@ -422,6 +428,65 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return $"/genre/{Uri.EscapeDataString(genre)}";
     }
 
+    /// <summary>
+    /// Gets all unique genres from loaded songs, sorted alphabetically with selected genres first.
+    /// Filters by search text if provided.
+    /// </summary>
+    protected List<string> GetAvailableGenres()
+    {
+        // Build genre counts once; keyed case-insensitively
+        _genreCounts = _genreMap.Values
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .GroupBy(g => g, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
+
+        var genres = _genreCounts.Keys.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_genreSearchText))
+        {
+            genres = genres.Where(g => g.Contains(_genreSearchText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Sort: selected genres first (alphabetically), then unselected (alphabetically)
+        return genres
+            .OrderByDescending(g => _selectedGenres.Contains(g))
+            .ThenBy(g => g, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets the count of songs matching a specific genre from the cached genre counts.
+    /// </summary>
+    protected int GetGenreCount(string genre)
+    {
+        return _genreCounts.TryGetValue(genre, out var count) ? count : 0;
+    }
+
+    protected void ToggleGenreDropdown()
+    {
+        _genreDropdownOpen = !_genreDropdownOpen;
+    }
+
+    protected void ToggleGenreFilter(string genre, bool isChecked)
+    {
+        if (isChecked)
+        {
+            _selectedGenres.Add(genre);
+        }
+        else
+        {
+            _selectedGenres.Remove(genre);
+        }
+    }
+
+    protected void ClearGenreFilter()
+    {
+        _selectedGenres.Clear();
+        _genreSearchText = string.Empty;
+        _genreDropdownOpen = false;
+    }
+
     private async Task LoadSubscriptionStatus()
     {
         try
@@ -444,6 +509,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (ShowHomePageFeatured)
         {
             files = files.Where(f => _homePageSongs.Contains(f.Name));
+        }
+        
+        // Apply genre filter
+        if (_selectedGenres.Count > 0)
+        {
+            files = files.Where(f => _selectedGenres.Contains(GetSongGenre(f.Name)));
         }
         
         return files;

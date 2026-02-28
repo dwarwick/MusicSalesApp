@@ -55,6 +55,70 @@ body {
     color: #e0e0e0;
 }
 
+/* Genre Filter Colors - Dark Theme */
+.music-library-sticky-header {
+    background-color: #212529;
+}
+
+.genre-filter-pill {
+    background-color: #343a40;
+    border-color: #6c757d;
+    color: #e0e0e0;
+}
+
+.genre-filter-pill:hover {
+    background-color: #495057;
+    border-color: #adb5bd;
+}
+
+.genre-filter-pill.active {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.genre-filter-pill.active:hover {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+.genre-clear-x {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.genre-clear-x:hover {
+    color: #fff;
+}
+
+.genre-filter-count {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.genre-dropdown {
+    background-color: #2a2a2a;
+    border-color: #444;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.genre-search-input {
+    background-color: #333;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+.genre-search-input:focus {
+    border-color: #1db954;
+}
+
+.genre-dropdown-item:hover {
+    background-color: #353535;
+}
+
+.genre-dropdown-item span {
+    color: #e0e0e0;
+}
+
 .loading-state,
 .error-state {
     color: #e0e0e0;
