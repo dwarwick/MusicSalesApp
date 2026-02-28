@@ -780,4 +780,8 @@
     .dashboard-control-group {
         width: 100%;
     }
+
+    .dashboard-filters {
+        width: 100%;
+    }
 }

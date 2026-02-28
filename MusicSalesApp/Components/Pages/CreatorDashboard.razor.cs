@@ -23,6 +23,14 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
 
     private TimeZoneInfo _userTimeZone = TimeZoneInfo.Utc;
 
+    // Filter pill state
+    protected Dictionary<string, int> _genreItems = new();
+    protected HashSet<string> _selectedGenres = new();
+    protected Dictionary<string, int> _artistItems = new();
+    protected HashSet<string> _selectedArtists = new();
+    protected Dictionary<string, int> _songTitleItems = new();
+    protected HashSet<string> _selectedSongTitles = new();
+
     protected List<IntervalOption> _intervalOptions = new()
     {
         new IntervalOption { Label = "Hour" },
@@ -135,6 +143,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                     return;
                 }
 
+                await LoadFilterData();
                 await LoadChartData();
 
                 // Subscribe to real-time stream updates
@@ -200,13 +209,41 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         var startUtc = ConvertUserLocalToUtc(_startDate);
         var endUtc = ConvertUserLocalToUtc(_endDate);
 
-        _chartData = await DashboardService.GetStreamDataAsync(_creatorId.Value, startUtc, endUtc, _selectedInterval);
+        var genres = _selectedGenres.Count > 0 ? _selectedGenres : null;
+        var artists = _selectedArtists.Count > 0 ? _selectedArtists : null;
+        var titles = _selectedSongTitles.Count > 0 ? _selectedSongTitles : null;
+
+        _chartData = await DashboardService.GetStreamDataAsync(_creatorId.Value, startUtc, endUtc, _selectedInterval, genres, artists, titles);
 
         // Convert UTC data points to the user's timezone for display
         foreach (var point in _chartData)
         {
             point.PeriodStart = ConvertUtcToUserLocal(point.PeriodStart);
         }
+    }
+
+    private async Task LoadFilterData()
+    {
+        if (_creatorId == null) return;
+
+        // Convert user's local times to UTC for the query
+        var startUtc = ConvertUserLocalToUtc(_startDate);
+        var endUtc = ConvertUserLocalToUtc(_endDate);
+
+        var genres = _selectedGenres.Count > 0 ? _selectedGenres : null;
+        var artists = _selectedArtists.Count > 0 ? _selectedArtists : null;
+        var titles = _selectedSongTitles.Count > 0 ? _selectedSongTitles : null;
+
+        var options = await DashboardService.GetStreamFilterOptionsAsync(_creatorId.Value, startUtc, endUtc, genres, artists, titles);
+
+        _genreItems = options.Genres;
+        _artistItems = options.Artists;
+        _songTitleItems = options.SongTitles;
+
+        // Remove any selected items that are no longer available
+        _selectedGenres.IntersectWith(_genreItems.Keys);
+        _selectedArtists.IntersectWith(_artistItems.Keys);
+        _selectedSongTitles.IntersectWith(_songTitleItems.Keys);
     }
 
     protected async Task OnStartDateChanged(Syncfusion.Blazor.Calendars.ChangedEventArgs<DateTime> args)
@@ -221,6 +258,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             return;
         }
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -237,6 +275,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             return;
         }
 
+        await LoadFilterData();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }
@@ -253,6 +292,66 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         await InvokeAsync(StateHasChanged);
     }
 
+    protected async Task OnGenreToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedGenres.Add(args.item);
+        else
+            _selectedGenres.Remove(args.item);
+
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnGenreCleared()
+    {
+        _selectedGenres.Clear();
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnArtistToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedArtists.Add(args.item);
+        else
+            _selectedArtists.Remove(args.item);
+
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnArtistCleared()
+    {
+        _selectedArtists.Clear();
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnSongTitleToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedSongTitles.Add(args.item);
+        else
+            _selectedSongTitles.Remove(args.item);
+
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnSongTitleCleared()
+    {
+        _selectedSongTitles.Clear();
+        await LoadFilterData();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async void HandleStreamCountReceived(int songMetadataId, int newCount)
     {
         // Reload chart data when a new stream is recorded
@@ -265,6 +364,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 _endDate = userNow;
                 _maxStartDate = userNow;
                 _maxEndDate = userNow;
+                await LoadFilterData();
                 await LoadChartData();
                 await InvokeAsync(StateHasChanged);
             }

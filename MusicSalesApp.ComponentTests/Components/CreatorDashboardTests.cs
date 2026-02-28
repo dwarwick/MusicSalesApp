@@ -74,7 +74,8 @@ public class CreatorDashboardTests : BUnitTestBase
         SetupAuthenticatedCreator();
 
         MockDashboardService
-            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
 
         // Act
@@ -102,7 +103,8 @@ public class CreatorDashboardTests : BUnitTestBase
         };
 
         MockDashboardService
-            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(testData);
 
         // Act
@@ -123,7 +125,8 @@ public class CreatorDashboardTests : BUnitTestBase
         SetupAuthenticatedCreator();
 
         MockDashboardService
-            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
 
         // Act
@@ -146,7 +149,8 @@ public class CreatorDashboardTests : BUnitTestBase
         SetupAuthenticatedCreator();
 
         MockDashboardService
-            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
 
         // Act
@@ -168,7 +172,8 @@ public class CreatorDashboardTests : BUnitTestBase
         SetupAuthenticatedCreator(creatorId: expectedCreatorId);
 
         MockDashboardService
-            .Setup(x => x.GetStreamDataAsync(expectedCreatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+            .Setup(x => x.GetStreamDataAsync(expectedCreatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
 
         // Act
@@ -179,7 +184,68 @@ public class CreatorDashboardTests : BUnitTestBase
 
         // Assert
         MockDashboardService.Verify(
-            x => x.GetStreamDataAsync(expectedCreatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), StreamInterval.Day),
+            x => x.GetStreamDataAsync(expectedCreatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), StreamInterval.Day,
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()),
             Times.Once);
+    }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsFilterPills_WhenLoaded()
+    {
+        // Arrange
+        SetupAuthenticatedCreator();
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert - Filter pills should be present
+        Assert.That(cut.Markup, Does.Contain("Genre"));
+        Assert.That(cut.Markup, Does.Contain("Artist"));
+        Assert.That(cut.Markup, Does.Contain("Song Title"));
+    }
+
+    [Test]
+    public async Task CreatorDashboard_LoadsFilterData_FromStreamData()
+    {
+        // Arrange
+        int creatorId = 10;
+        SetupAuthenticatedCreator(creatorId: creatorId);
+
+        var filterOptions = new StreamFilterOptions
+        {
+            Genres = new Dictionary<string, int> { { "Rock", 5 }, { "Pop", 3 } },
+            Artists = new Dictionary<string, int> { { "TestArtist", 6 }, { "OtherArtist", 2 } },
+            SongTitles = new Dictionary<string, int> { { "My Rock Song", 3 }, { "My Pop Song", 5 } }
+        };
+
+        MockDashboardService
+            .Setup(x => x.GetStreamFilterOptionsAsync(creatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(filterOptions);
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert - Verify DashboardService.GetStreamFilterOptionsAsync was called to load filter data
+        MockDashboardService.Verify(x => x.GetStreamFilterOptionsAsync(creatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()), Times.Once);
     }
 }

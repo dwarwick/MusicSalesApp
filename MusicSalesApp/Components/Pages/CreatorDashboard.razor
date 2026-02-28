@@ -58,6 +58,17 @@
                         <DropDownListFieldSettings Text="Label" Value="Label" />
                     </SfDropDownList>
                 </div>
+                <div class="dashboard-filters">
+                    <FilterPill Label="Genre" SearchPlaceholder="Find a genre"
+                        Items="_genreItems" SelectedItems="_selectedGenres"
+                        OnItemToggled="OnGenreToggled" OnCleared="OnGenreCleared" />
+                    <FilterPill Label="Artist" SearchPlaceholder="Find an artist"
+                        Items="_artistItems" SelectedItems="_selectedArtists"
+                        OnItemToggled="OnArtistToggled" OnCleared="OnArtistCleared" />
+                    <FilterPill Label="Song Title" SearchPlaceholder="Find a song"
+                        Items="_songTitleItems" SelectedItems="_selectedSongTitles"
+                        OnItemToggled="OnSongTitleToggled" OnCleared="OnSongTitleCleared" />
+                </div>
             </div>
             <p class="text-muted dashboard-timezone-note"><small>All times shown in @(_userTimeZoneDisplayName) time zone</small></p>
 
