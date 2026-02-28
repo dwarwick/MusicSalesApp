@@ -1,5 +1,24 @@
 // MusicLibrary card audio player module
 
+// Volume persistence via localStorage
+const VOLUME_STORAGE_KEY = 'streamtunes_volume';
+const DEFAULT_VOLUME = 0.4;
+
+function saveVolume(volume) {
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { /* ignore */ }
+}
+
+export function getSavedVolume() {
+    try {
+        const saved = localStorage.getItem(VOLUME_STORAGE_KEY);
+        if (saved !== null) {
+            const vol = parseFloat(saved);
+            if (!isNaN(vol) && vol >= 0 && vol <= 1) return vol;
+        }
+    } catch (e) { /* ignore */ }
+    return DEFAULT_VOLUME;
+}
+
 // Map of audio elements by cardId for tracking multiple audio players
 const cardPlayers = new Map();
 
@@ -90,6 +109,9 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
         dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
     });
 
+    // Set initial volume from saved preference
+    audioElement.volume = getSavedVolume();
+
     // Force load the metadata if not already loaded
     if (audioElement.readyState >= 1 && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
         dotNetRef.invokeMethodAsync('UpdateCardDuration', cardId, audioElement.duration);
@@ -120,6 +142,7 @@ export function stopCard(audioElement) {
 export function setCardVolume(audioElement, volume) {
     if (audioElement) {
         audioElement.volume = Math.max(0, Math.min(1, volume));
+        saveVolume(audioElement.volume);
     }
 }
 
@@ -237,6 +260,7 @@ export function setupCardVolumeBarDrag(volumeBarContainer, audioElement, cardId,
         if (percentage !== null) {
             audioElement.volume = percentage;
             audioElement.muted = false;
+            saveVolume(percentage);
             dotNetRef.invokeMethodAsync('UpdateCardVolume', cardId, percentage, false);
         }
     });

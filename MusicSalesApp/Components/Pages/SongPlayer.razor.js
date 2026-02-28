@@ -1,3 +1,22 @@
+// Volume persistence via localStorage
+const VOLUME_STORAGE_KEY = 'streamtunes_volume';
+const DEFAULT_VOLUME = 0.4;
+
+function saveVolume(volume) {
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { /* ignore */ }
+}
+
+export function getSavedVolume() {
+    try {
+        const saved = localStorage.getItem(VOLUME_STORAGE_KEY);
+        if (saved !== null) {
+            const vol = parseFloat(saved);
+            if (!isNaN(vol) && vol >= 0 && vol <= 1) return vol;
+        }
+    } catch (e) { /* ignore */ }
+    return DEFAULT_VOLUME;
+}
+
 // Stream tracking state
 let STREAM_THRESHOLD_SECONDS = 30;
 const MAX_TIME_DELTA_SECONDS = 1; // Maximum expected time between timeupdate events
@@ -78,6 +97,9 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     audioElement.addEventListener('ended', () => {
         dotNetRef.invokeMethodAsync('AudioEnded');
     });
+
+    // Set initial volume from saved preference
+    audioElement.volume = getSavedVolume();
 
     // Force load the metadata if not already loaded
     if (audioElement.readyState >= 1 && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
@@ -201,6 +223,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
 export function setVolume(audioElement, volume) {
     if (audioElement) {
         audioElement.volume = Math.max(0, Math.min(1, volume));
+        saveVolume(audioElement.volume);
     }
 }
 
@@ -208,7 +231,7 @@ export function getVolume(audioElement) {
     if (audioElement) {
         return audioElement.volume;
     }
-    return 1;
+    return DEFAULT_VOLUME;
 }
 
 export function setMuted(audioElement, muted) {
@@ -238,6 +261,7 @@ export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) 
             const volume = Math.max(0, Math.min(1, offsetX / width));
             audioElement.volume = volume;
             audioElement.muted = false;
+            saveVolume(volume);
             dotNetRef.invokeMethodAsync('UpdateVolume', volume, false);
         }
     };

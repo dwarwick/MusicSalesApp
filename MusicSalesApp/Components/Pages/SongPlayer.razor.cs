@@ -29,8 +29,8 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     protected ElementReference _volumeBarContainer;
     protected bool _shuffleEnabled;
     protected bool _repeatEnabled;
-    protected double _volume = 1.0;
-    protected double _previousVolume = 1.0;
+    protected double _volume = 0.4;
+    protected double _previousVolume = 0.4;
     protected bool _isMuted;
     protected bool _isAuthenticated;
     protected int _streamCount;
@@ -82,6 +82,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), GetStreamQualifyingSeconds());
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
+
+            // Load saved volume from localStorage
+            var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
+            _volume = savedVolume;
+            _previousVolume = savedVolume;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
