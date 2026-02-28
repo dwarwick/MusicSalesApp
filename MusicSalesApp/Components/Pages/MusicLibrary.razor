@@ -27,7 +27,7 @@
                     {
                         <label class="genre-dropdown-item">
                             <input type="checkbox" checked="@_selectedGenres.Contains(genre)"
-                                   @onchange="(e) => ToggleGenreFilter(genre, e.Value)" />
+                                   @onchange="(e) => ToggleGenreFilter(genre, (bool)e.Value)" />
                             <span>@genre</span>
                         </label>
                     }

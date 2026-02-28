@@ -448,9 +448,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _genreDropdownOpen = !_genreDropdownOpen;
     }
 
-    protected void ToggleGenreFilter(string genre, object checkedValue)
+    protected void ToggleGenreFilter(string genre, bool isChecked)
     {
-        var isChecked = (bool)checkedValue;
         if (isChecked)
         {
             _selectedGenres.Add(genre);
@@ -494,11 +493,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         // Apply genre filter
         if (_selectedGenres.Count > 0)
         {
-            files = files.Where(f =>
-            {
-                var genre = GetSongGenre(f.Name);
-                return _selectedGenres.Contains(genre);
-            });
+            files = files.Where(f => _selectedGenres.Contains(GetSongGenre(f.Name)));
         }
         
         return files;
