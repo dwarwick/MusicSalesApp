@@ -243,15 +243,40 @@
             }
         });
 
-        // Handle drop: forward files to the hidden InputFile inside the upload box
+        // Handle drop: forward files to the hidden InputFile inside the upload box.
+        // IMPORTANT: In some browsers, setting input.files programmatically fires
+        // a native 'change' event. In .NET 9+ Blazor, a second change event on
+        // InputFile invalidates file references from the first event, causing
+        // "There is no file with ID X" errors. To prevent this, we detect whether
+        // the browser already fired a native change event and only dispatch a
+        // synthetic one if it did not.
         document.addEventListener('drop', function (e) {
             var uploadBox = e.target.closest('.upload-box');
             if (uploadBox && !uploadBox.classList.contains('upload-box-disabled')) {
                 e.preventDefault();
                 var input = uploadBox.querySelector('input[type="file"]');
                 if (input && e.dataTransfer.files.length > 0) {
-                    input.files = e.dataTransfer.files;
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Copy files into a fresh DataTransfer so references stay valid
+                    // after the drop event's DataTransfer is cleaned up.
+                    var dt = new DataTransfer();
+                    for (var i = 0; i < e.dataTransfer.files.length; i++) {
+                        dt.items.add(e.dataTransfer.files[i]);
+                    }
+
+                    // Track whether the browser fires a native change event
+                    var nativeChangeFired = false;
+                    var onNativeChange = function () { nativeChangeFired = true; };
+                    input.addEventListener('change', onNativeChange, { once: true });
+
+                    input.files = dt.files;
+
+                    // Remove our detector — it either fired synchronously or won't
+                    input.removeEventListener('change', onNativeChange);
+
+                    // Only dispatch a synthetic event if the browser didn't fire one
+                    if (!nativeChangeFired) {
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
                 }
             } else {
                 e.preventDefault();
