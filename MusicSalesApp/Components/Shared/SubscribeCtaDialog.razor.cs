@@ -68,7 +68,8 @@ public partial class SubscribeCtaDialogModel : BlazorBase
     }
 
     /// <summary>
-    /// Handles the dialog's OnClose event (fires before close).
+    /// Handles the dialog's OnClose event.
+    /// In Syncfusion, OnClose fires with BeforeCloseEventArgs before the dialog fully closes.
     /// Sets _showDialog to false immediately to prevent race conditions
     /// where a parent re-render could re-open the dialog.
     /// </summary>
