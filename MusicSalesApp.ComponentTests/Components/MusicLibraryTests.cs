@@ -582,6 +582,59 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("Artists"));
     }
 
+    [Test]
+    public void MusicLibrary_CrossFilter_ArtistFilterUpdatesGenreItems()
+    {
+        // Arrange - Set up metadata with multiple artists and genres
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "Song1.mp3",
+                Genre = "Rock",
+                ArtistName = "Artist A",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "Song2.mp3",
+                Genre = "Jazz",
+                ArtistName = "Artist B",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "Song3.mp3",
+                Genre = "Country",
+                ArtistName = "Artist A",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Act - open artist dropdown (second pill) and select Artist A
+        cut.FindAll(".filter-pill")[1].Click();
+        var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
+        var artistACheckbox = checkboxes.FirstOrDefault(cb =>
+            cb.ParentElement.TextContent.Contains("Artist A"));
+        artistACheckbox?.Change(true);
+
+        // Now open genre dropdown (first pill) to see updated items
+        cut.FindAll(".filter-pill")[0].Click();
+
+        // Assert - genre dropdown should only show Rock and Country (Artist A's genres), not Jazz
+        var genreItems = cut.FindAll(".filter-pill-dropdown-item");
+        var genreTexts = genreItems.Select(i => i.TextContent).ToList();
+        Assert.That(genreTexts.Any(t => t.Contains("Rock")), Is.True);
+        Assert.That(genreTexts.Any(t => t.Contains("Country")), Is.True);
+        Assert.That(genreTexts.Any(t => t.Contains("Jazz")), Is.False);
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

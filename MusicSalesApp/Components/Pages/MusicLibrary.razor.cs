@@ -430,10 +430,25 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Gets genre items with counts for the FilterPill component.
+    /// Counts are cross-filtered by the currently selected artists.
     /// </summary>
     protected Dictionary<string, int> GetGenreItems()
     {
-        return _genreMap.Values
+        var fileNames = _genreMap.Keys.AsEnumerable();
+
+        // Cross-filter: when artists are selected, only count genres from those artists' songs
+        if (_selectedArtists.Count > 0)
+        {
+            fileNames = fileNames.Where(f =>
+            {
+                var artistInfo = GetArtistInfo(f);
+                return !string.IsNullOrEmpty(artistInfo.DisplayName) &&
+                       _selectedArtists.Contains(artistInfo.DisplayName);
+            });
+        }
+
+        return fileNames
+            .Select(f => _genreMap[f])
             .Where(g => !string.IsNullOrWhiteSpace(g))
             .GroupBy(g => g, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
@@ -458,10 +473,20 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Gets artist items with counts for the FilterPill component.
+    /// Counts are cross-filtered by the currently selected genres.
     /// </summary>
     protected Dictionary<string, int> GetArtistItems()
     {
-        return _artistInfoMap.Values
+        var fileNames = _artistInfoMap.Keys.AsEnumerable();
+
+        // Cross-filter: when genres are selected, only count artists from those genres' songs
+        if (_selectedGenres.Count > 0)
+        {
+            fileNames = fileNames.Where(f => _selectedGenres.Contains(GetSongGenre(f)));
+        }
+
+        return fileNames
+            .Select(f => _artistInfoMap[f])
             .Where(a => !string.IsNullOrEmpty(a.DisplayName))
             .GroupBy(a => a.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
