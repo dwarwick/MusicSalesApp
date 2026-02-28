@@ -68,9 +68,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // Genre filter state
     protected HashSet<string> _selectedGenres = new HashSet<string>();
-    protected bool _genreDropdownOpen;
-    protected string _genreSearchText = string.Empty;
-    private Dictionary<string, int> _genreCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    // Artist filter state
+    protected HashSet<string> _selectedArtists = new HashSet<string>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -429,62 +429,59 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets all unique genres from loaded songs, sorted alphabetically with selected genres first.
-    /// Filters by search text if provided.
+    /// Gets genre items with counts for the FilterPill component.
     /// </summary>
-    protected List<string> GetAvailableGenres()
+    protected Dictionary<string, int> GetGenreItems()
     {
-        // Build genre counts once; keyed case-insensitively
-        _genreCounts = _genreMap.Values
+        return _genreMap.Values
             .Where(g => !string.IsNullOrWhiteSpace(g))
             .GroupBy(g => g, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
+    }
 
-        var genres = _genreCounts.Keys.AsEnumerable();
-
-        // Apply search filter
-        if (!string.IsNullOrWhiteSpace(_genreSearchText))
+    protected void HandleGenreToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
         {
-            genres = genres.Where(g => g.Contains(_genreSearchText, StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Sort: selected genres first (alphabetically), then unselected (alphabetically)
-        return genres
-            .OrderByDescending(g => _selectedGenres.Contains(g))
-            .ThenBy(g => g, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    /// <summary>
-    /// Gets the count of songs matching a specific genre from the cached genre counts.
-    /// </summary>
-    protected int GetGenreCount(string genre)
-    {
-        return _genreCounts.TryGetValue(genre, out var count) ? count : 0;
-    }
-
-    protected void ToggleGenreDropdown()
-    {
-        _genreDropdownOpen = !_genreDropdownOpen;
-    }
-
-    protected void ToggleGenreFilter(string genre, bool isChecked)
-    {
-        if (isChecked)
-        {
-            _selectedGenres.Add(genre);
+            _selectedGenres.Add(args.item);
         }
         else
         {
-            _selectedGenres.Remove(genre);
+            _selectedGenres.Remove(args.item);
         }
     }
 
-    protected void ClearGenreFilter()
+    protected void HandleGenreCleared()
     {
         _selectedGenres.Clear();
-        _genreSearchText = string.Empty;
-        _genreDropdownOpen = false;
+    }
+
+    /// <summary>
+    /// Gets artist items with counts for the FilterPill component.
+    /// </summary>
+    protected Dictionary<string, int> GetArtistItems()
+    {
+        return _artistInfoMap.Values
+            .Where(a => !string.IsNullOrEmpty(a.DisplayName))
+            .GroupBy(a => a.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(grp => grp.Key, grp => grp.Count(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    protected void HandleArtistToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+        {
+            _selectedArtists.Add(args.item);
+        }
+        else
+        {
+            _selectedArtists.Remove(args.item);
+        }
+    }
+
+    protected void HandleArtistCleared()
+    {
+        _selectedArtists.Clear();
     }
 
     private async Task LoadSubscriptionStatus()
@@ -515,6 +512,17 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (_selectedGenres.Count > 0)
         {
             files = files.Where(f => _selectedGenres.Contains(GetSongGenre(f.Name)));
+        }
+
+        // Apply artist filter
+        if (_selectedArtists.Count > 0)
+        {
+            files = files.Where(f =>
+            {
+                var artistInfo = GetArtistInfo(f.Name);
+                return !string.IsNullOrEmpty(artistInfo.DisplayName) &&
+                       _selectedArtists.Contains(artistInfo.DisplayName);
+            });
         }
         
         return files;

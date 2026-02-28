@@ -7,37 +7,18 @@
 {
     <div class="music-library-sticky-header">
         <h3>Music Library</h3>
-        <div class="genre-filter-container">
-            <button class="genre-filter-pill @(_selectedGenres.Count > 0 ? "active" : "")" @onclick="ToggleGenreDropdown">
-                @if (_selectedGenres.Count > 0)
-                {
-                    <span class="genre-clear-x" @onclick="ClearGenreFilter" @onclick:stopPropagation="true" title="Clear genre filters">✕</span>
-                }
-                <span>Genres</span>
-                @if (_selectedGenres.Count > 0)
-                {
-                    <span class="genre-filter-count">@_selectedGenres.Count</span>
-                }
-                <span class="genre-filter-arrow">@(_genreDropdownOpen ? "▲" : "▼")</span>
-            </button>
-            @if (_genreDropdownOpen)
-            {
-                <div class="genre-dropdown">
-                    <div class="genre-search-container">
-                        <input type="text" class="genre-search-input" placeholder="Find a genre"
-                               @bind="_genreSearchText" @bind:event="oninput" />
-                    </div>
-                    @foreach (var genre in GetAvailableGenres())
-                    {
-                        <label class="genre-dropdown-item" @key="genre">
-                            <input type="checkbox" checked="@_selectedGenres.Contains(genre)"
-                                   @onchange="(e) => ToggleGenreFilter(genre, (bool)e.Value)" />
-                            <span>@genre (@GetGenreCount(genre))</span>
-                        </label>
-                    }
-                </div>
-            }
-        </div>
+        <FilterPill Label="Genres"
+                    SearchPlaceholder="Find a genre"
+                    Items="GetGenreItems()"
+                    SelectedItems="_selectedGenres"
+                    OnItemToggled="HandleGenreToggled"
+                    OnCleared="HandleGenreCleared" />
+        <FilterPill Label="Artists"
+                    SearchPlaceholder="Find an artist"
+                    Items="GetArtistItems()"
+                    SelectedItems="_selectedArtists"
+                    OnItemToggled="HandleArtistToggled"
+                    OnCleared="HandleArtistCleared" />
     </div>
 }
 
