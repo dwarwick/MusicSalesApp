@@ -61,8 +61,8 @@ namespace MusicSalesApp.Components.Pages
         protected bool _repeatEnabled;
         private List<int> _shuffledTrackOrder = new List<int>();
         private int _currentShufflePosition = 0;
-        protected double _volume = 1.0;
-        protected double _previousVolume = 1.0;
+        protected double _volume = 0.4;
+        protected double _previousVolume = 0.4;
         protected bool _isMuted;
         protected bool _isAuthenticated;
         protected int _currentTrackIndex;
@@ -204,11 +204,18 @@ namespace MusicSalesApp.Components.Pages
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
                 await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
 
+                // Load saved volume from localStorage
+                var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
+                _volume = savedVolume;
+                _previousVolume = savedVolume;
+
                 // Ensure an initial track source is set for the audio element
                 if (!string.IsNullOrWhiteSpace(_streamUrl))
                 {
                     await _jsModule.InvokeVoidAsync("setTrackSource", _audioElement, _streamUrl);
                 }
+
+                await InvokeAsync(StateHasChanged);
             }
         }
 

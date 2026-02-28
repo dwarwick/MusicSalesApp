@@ -37,9 +37,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Card player state for the currently active card
     private double _currentTime;
     private double _duration;
-    private double _volume = 1.0;
+    private double _volume = 0.4;
     private bool _isMuted;
-    private double _previousVolume = 1.0;
+    private double _previousVolume = 0.4;
 
     // Single set of element references for the active card
     protected ElementReference _activeAudioElement;
@@ -141,6 +141,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             {
                 _dotNetRef = DotNetObjectReference.Create(this);
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/MusicLibrary.razor.js");
+
+                // Load saved volume from localStorage
+                var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
+                _volume = savedVolume;
+                _previousVolume = savedVolume;
             }
 
             var isRestricted = IsCurrentPlayingTrackRestricted();
@@ -655,9 +660,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _isActuallyPlaying = false;
         _needsJsInit = true;
 
-        // Reset state for new card
-        _volume = 1.0;
-        _previousVolume = 1.0;
+        // Reset playback state for new card, but preserve volume
         _isMuted = false;
         _currentTime = 0;
         _duration = 0;
