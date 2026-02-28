@@ -49,11 +49,13 @@ export function initCardAudioPlayer(audioElement, cardId, dotNetRef, isRestricte
     audioElement.addEventListener('timeupdate', () => {
         const player = cardPlayers.get(cardId);
         // Enforce 60 second limit for restricted users
-        if (player && player.isRestricted && !player.hasReachedLimit && audioElement.currentTime >= player.maxDuration) {
-            player.hasReachedLimit = true;
+        if (player && player.isRestricted && audioElement.currentTime >= player.maxDuration) {
             audioElement.pause();
             audioElement.currentTime = player.maxDuration;
-            dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            if (!player.hasReachedLimit) {
+                player.hasReachedLimit = true;
+                dotNetRef.invokeMethodAsync('CardAudioEnded', cardId);
+            }
             return;
         }
 

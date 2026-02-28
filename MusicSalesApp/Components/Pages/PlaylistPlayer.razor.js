@@ -50,11 +50,13 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
 
     audioElement.addEventListener('timeupdate', () => {
         // Enforce 60 second limit for restricted users (uses current state)
-        if (playerState.isRestricted && !playerState.hasReachedLimit && audioElement.currentTime >= playerState.maxDuration) {
-            playerState.hasReachedLimit = true;
+        if (playerState.isRestricted && audioElement.currentTime >= playerState.maxDuration) {
             audioElement.pause();
             audioElement.currentTime = playerState.maxDuration;
-            dotNetRef.invokeMethodAsync('AudioEnded');
+            if (!playerState.hasReachedLimit) {
+                playerState.hasReachedLimit = true;
+                dotNetRef.invokeMethodAsync('AudioEnded');
+            }
         }
 
         // Track continuous playback time for stream counting
