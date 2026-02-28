@@ -69,7 +69,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Genre filter state
     protected HashSet<string> _selectedGenres = new HashSet<string>();
     protected bool _genreDropdownOpen;
-    private List<string> _activeGenreNames = new List<string>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -215,10 +214,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _loading = true; _error = null;
         try
         {
-            // Load active genres from database
-            var activeGenres = await GenreService.GetActiveGenresAsync();
-            _activeGenreNames = activeGenres.Select(g => g.Name).ToList();
-
             // Load metadata from database - SQL is the source of truth
             var allMetadata = await SongMetadataService.GetAllAsync();
             
@@ -432,15 +427,28 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets all active genres, sorted alphabetically with selected genres first.
+    /// Gets all unique genres from loaded songs, sorted alphabetically with selected genres first.
     /// </summary>
     protected List<string> GetAvailableGenres()
     {
+        var genres = _genreMap.Values
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         // Sort: selected genres first (alphabetically), then unselected (alphabetically)
-        return _activeGenreNames
+        return genres
             .OrderByDescending(g => _selectedGenres.Contains(g))
             .ThenBy(g => g, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Gets the count of songs matching a specific genre from the currently displayed files.
+    /// </summary>
+    protected int GetGenreCount(string genre)
+    {
+        return _genreMap.Count(kvp => string.Equals(kvp.Value, genre, StringComparison.OrdinalIgnoreCase));
     }
 
     protected void ToggleGenreDropdown()

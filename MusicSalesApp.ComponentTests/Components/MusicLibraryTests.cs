@@ -303,13 +303,6 @@ public class MusicLibraryTests : BUnitTestBase
                 }
             });
 
-        // Setup active genres from Genre table
-        MockGenreService.Setup(x => x.GetActiveGenresAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.Genre>
-            {
-                new MusicSalesApp.Models.Genre { Id = 1, Name = "Rock", IsActive = true }
-            });
-
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
@@ -319,9 +312,9 @@ public class MusicLibraryTests : BUnitTestBase
         // Act - click the pill to open dropdown
         cut.Find(".genre-filter-pill").Click();
 
-        // Assert - dropdown should now be visible with genres
+        // Assert - dropdown should now be visible with genres and count
         Assert.That(cut.Markup, Does.Contain("genre-dropdown"));
-        Assert.That(cut.Markup, Does.Contain("Rock"));
+        Assert.That(cut.Markup, Does.Contain("Rock (1)"));
     }
 
     [Test]
@@ -346,14 +339,6 @@ public class MusicLibraryTests : BUnitTestBase
 
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(metadata);
-
-        // Setup active genres from Genre table
-        MockGenreService.Setup(x => x.GetActiveGenresAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.Genre>
-            {
-                new MusicSalesApp.Models.Genre { Id = 1, Name = "Jazz", IsActive = true },
-                new MusicSalesApp.Models.Genre { Id = 2, Name = "Rock", IsActive = true }
-            });
 
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
@@ -398,14 +383,6 @@ public class MusicLibraryTests : BUnitTestBase
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(metadata);
 
-        // Setup active genres from Genre table
-        MockGenreService.Setup(x => x.GetActiveGenresAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.Genre>
-            {
-                new MusicSalesApp.Models.Genre { Id = 1, Name = "Jazz", IsActive = true },
-                new MusicSalesApp.Models.Genre { Id = 2, Name = "Rock", IsActive = true }
-            });
-
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
@@ -443,14 +420,6 @@ public class MusicLibraryTests : BUnitTestBase
 
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(metadata);
-
-        // Setup active genres from Genre table
-        MockGenreService.Setup(x => x.GetActiveGenresAsync())
-            .ReturnsAsync(new List<MusicSalesApp.Models.Genre>
-            {
-                new MusicSalesApp.Models.Genre { Id = 1, Name = "Jazz", IsActive = true },
-                new MusicSalesApp.Models.Genre { Id = 2, Name = "Rock", IsActive = true }
-            });
 
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
