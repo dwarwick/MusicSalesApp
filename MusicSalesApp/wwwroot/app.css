@@ -1182,39 +1182,33 @@ h1:focus {
     right: 0;
     top: 0;
     z-index: 1;
-    background: transparent !important;
     border-bottom: none !important;
 }
 
 .subscribe-cta-dialog-content {
     text-align: center;
     padding: 2.5rem 2rem;
-    background: #2d3748;
     border-radius: 8px;
 }
 
 .subscribe-cta-dialog-content .cta-title {
-    color: #fff;
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 0.75rem;
 }
 
 .subscribe-cta-dialog-content .cta-price-highlight {
-    color: #fff;
     font-size: 1.1rem;
     font-weight: 500;
     margin-bottom: 1.25rem;
 }
 
 .subscribe-cta-dialog-content .cta-price-highlight .price {
-    color: #1db954;
     font-size: 1.75rem;
     font-weight: 900;
 }
 
 .subscribe-cta-dialog-content .cta-auth-text {
-    color: #fff;
     font-weight: 600;
     margin-bottom: 1rem;
 }
@@ -1226,18 +1220,7 @@ h1:focus {
 }
 
 .subscribe-cta-dialog-content .cta-button {
-    background-color: #1db954 !important;
-    color: #fff !important;
-    border: none !important;
     min-width: 100px;
-}
-
-.subscribe-cta-dialog-content .cta-button:hover {
-    background-color: #1ed760 !important;
-}
-
-.subscribe-cta-dialog .e-dlg-closeicon-btn {
-    color: #fff !important;
 }
 
 /* Liked Songs Playlist Card */

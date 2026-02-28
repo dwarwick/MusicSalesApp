@@ -71,21 +71,24 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         _initialized = false;
     }
 
-    protected void NavigateToLogin()
+    protected async Task NavigateToLogin()
     {
-        _dialogRef?.HideAsync();
+        if (_dialogRef != null)
+            await _dialogRef.HideAsync();
         NavigationManager.NavigateTo("/login?returnUrl=" + Uri.EscapeDataString(NavigationManager.Uri), forceLoad: true);
     }
 
-    protected void NavigateToRegister()
+    protected async Task NavigateToRegister()
     {
-        _dialogRef?.HideAsync();
+        if (_dialogRef != null)
+            await _dialogRef.HideAsync();
         NavigationManager.NavigateTo("/register", forceLoad: true);
     }
 
-    protected void NavigateToSubscribe()
+    protected async Task NavigateToSubscribe()
     {
-        _dialogRef?.HideAsync();
+        if (_dialogRef != null)
+            await _dialogRef.HideAsync();
         NavigationManager.NavigateTo("/manage-account", forceLoad: true);
     }
 
