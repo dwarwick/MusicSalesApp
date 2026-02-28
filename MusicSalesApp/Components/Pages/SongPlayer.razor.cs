@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
@@ -45,6 +46,7 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     private int? _currentUserId;
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
+    protected SubscribeCtaDialogModel _subscribeCtaDialog;
 
     protected override async Task OnInitializedAsync()
     {
@@ -488,6 +490,12 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         else
         {
             _isPlaying = false;
+
+            // Show subscribe CTA when a restricted preview ends
+            if (IsProgressBarRestricted() && _subscribeCtaDialog != null)
+            {
+                await _subscribeCtaDialog.OnPreviewEndedAsync();
+            }
         }
         await InvokeAsync(StateHasChanged);
     }

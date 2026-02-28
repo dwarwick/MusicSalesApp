@@ -491,3 +491,9 @@ body {
     background-color: #9b59b6 !important;
 }
 
+/* Subscribe CTA Dialog */
+.subscribe-cta-dialog .e-dlg-header-content {
+    background: #fff;
+    border-bottom: none;
+}
+
