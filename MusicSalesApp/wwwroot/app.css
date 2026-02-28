@@ -157,12 +157,12 @@ h1:focus {
     margin: 0;
 }
 
-/* Genre Filter */
-.genre-filter-container {
+/* Filter Pill */
+.filter-pill-container {
     position: relative;
 }
 
-.genre-filter-pill {
+.filter-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -175,7 +175,7 @@ h1:focus {
     transition: background-color 0.2s, border-color 0.2s;
 }
 
-.genre-clear-x {
+.filter-pill-clear {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -185,7 +185,7 @@ h1:focus {
     line-height: 1;
 }
 
-.genre-filter-count {
+.filter-pill-count {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -196,11 +196,11 @@ h1:focus {
     font-weight: bold;
 }
 
-.genre-filter-arrow {
+.filter-pill-arrow {
     font-size: 10px;
 }
 
-.genre-dropdown {
+.filter-pill-dropdown {
     position: absolute;
     top: 100%;
     left: 0;
@@ -214,11 +214,11 @@ h1:focus {
     padding: 8px 0;
 }
 
-.genre-search-container {
+.filter-pill-search-container {
     padding: 4px 12px 8px;
 }
 
-.genre-search-input {
+.filter-pill-search-input {
     width: 100%;
     padding: 6px 10px;
     border: 1px solid;
@@ -228,7 +228,7 @@ h1:focus {
     box-sizing: border-box;
 }
 
-.genre-dropdown-item {
+.filter-pill-dropdown-item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -238,7 +238,7 @@ h1:focus {
     transition: background-color 0.15s;
 }
 
-.genre-dropdown-item input[type="checkbox"] {
+.filter-pill-dropdown-item input[type="checkbox"] {
     width: 16px;
     height: 16px;
     cursor: pointer;
