@@ -341,6 +341,33 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
+            // Check for duplicate song title (exclude the current song being edited)
+            if (int.TryParse(_editingSong.Id, out var editId))
+            {
+                var isDuplicateTitle = await SongMetadataService.IsSongTitleDuplicateAsync(_editSongTitle.Trim(), editId);
+                if (isDuplicateTitle)
+                {
+                    _validationErrors.Add($"A song with the title '{_editSongTitle.Trim()}' already exists.");
+                    return;
+                }
+            }
+
+            // Check for artist name uniqueness across creators
+            if (!string.IsNullOrWhiteSpace(_editArtistName))
+            {
+                var artistNameToCheck = _editArtistName.Trim();
+                if (artistNameToCheck.Contains('@'))
+                {
+                    artistNameToCheck = artistNameToCheck.Split('@')[0];
+                }
+                var isArtistNameTaken = await SongMetadataService.IsArtistNameTakenByAnotherCreatorAsync(artistNameToCheck, _creatorId);
+                if (isArtistNameTaken)
+                {
+                    _validationErrors.Add($"The artist name '{artistNameToCheck}' is already used by another creator.");
+                    return;
+                }
+            }
+
             // Get the metadata by ID directly (more reliable than blob path)
             if (int.TryParse(_editingSong.Id, out var metadataId))
             {
