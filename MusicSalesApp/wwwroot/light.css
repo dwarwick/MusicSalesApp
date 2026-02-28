@@ -102,6 +102,16 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.genre-search-input {
+    background-color: #fff;
+    border-color: #dee2e6;
+    color: #212529;
+}
+
+.genre-search-input:focus {
+    border-color: #1db954;
+}
+
 .genre-dropdown-item:hover {
     background-color: #f0f0f0;
 }

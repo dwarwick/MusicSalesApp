@@ -23,9 +23,13 @@
             @if (_genreDropdownOpen)
             {
                 <div class="genre-dropdown">
+                    <div class="genre-search-container">
+                        <input type="text" class="genre-search-input" placeholder="Find a genre"
+                               @bind="_genreSearchText" @bind:event="oninput" />
+                    </div>
                     @foreach (var genre in GetAvailableGenres())
                     {
-                        <label class="genre-dropdown-item">
+                        <label class="genre-dropdown-item" @key="genre">
                             <input type="checkbox" checked="@_selectedGenres.Contains(genre)"
                                    @onchange="(e) => ToggleGenreFilter(genre, (bool)e.Value)" />
                             <span>@genre (@GetGenreCount(genre))</span>

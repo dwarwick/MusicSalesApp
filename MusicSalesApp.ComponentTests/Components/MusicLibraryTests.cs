@@ -457,6 +457,56 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("genre-filter-pill"));
     }
 
+    [Test]
+    public void MusicLibrary_GenreFilter_SearchFiltersDropdownList()
+    {
+        // Arrange
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "RockSong.mp3",
+                Genre = "Rock",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "JazzSong.mp3",
+                Genre = "Jazz",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "CountrySong.mp3",
+                Genre = "Country",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Act - open dropdown
+        cut.Find(".genre-filter-pill").Click();
+
+        // Assert - search input should be present and all genres visible
+        Assert.That(cut.Markup, Does.Contain("genre-search-input"));
+        Assert.That(cut.Markup, Does.Contain("Rock"));
+        Assert.That(cut.Markup, Does.Contain("Jazz"));
+        Assert.That(cut.Markup, Does.Contain("Country"));
+
+        // Act - type in search to filter
+        cut.Find(".genre-search-input").Input("ro");
+
+        // Assert - only Rock should be visible in the dropdown list
+        var dropdownItems = cut.FindAll(".genre-dropdown-item");
+        Assert.That(dropdownItems, Has.Count.EqualTo(1));
+        Assert.That(dropdownItems[0].TextContent, Does.Contain("Rock"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

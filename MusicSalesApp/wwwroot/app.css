@@ -214,6 +214,20 @@ h1:focus {
     padding: 8px 0;
 }
 
+.genre-search-container {
+    padding: 4px 12px 8px;
+}
+
+.genre-search-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+}
+
 .genre-dropdown-item {
     display: flex;
     align-items: center;
