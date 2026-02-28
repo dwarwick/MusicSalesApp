@@ -41,6 +41,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     // Track upload state for navigation/close warnings and cleanup
     protected bool _isUploading = false;
+    private bool _isProcessingFiles = false;
     private readonly List<string> _uploadedBlobPaths = new();
     private readonly object _blobPathsLock = new();
     private bool _disposed = false;
@@ -106,6 +107,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     protected async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
+        // Guard against concurrent invocations — in .NET 9+ Blazor, a second change event
+        // on InputFile invalidates file references from the first event. Drop events can
+        // trigger multiple change events, so we must process only the first one.
+        if (_isProcessingFiles)
+            return;
+        _isProcessingFiles = true;
+
+        try
+        {
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
@@ -297,6 +307,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
             catch (JSDisconnectedException) { }
             await InvokeAsync(StateHasChanged);
+        }
+        }
+        finally
+        {
+            _isProcessingFiles = false;
         }
     }
 
