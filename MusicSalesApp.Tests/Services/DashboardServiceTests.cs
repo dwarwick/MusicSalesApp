@@ -295,4 +295,98 @@ public class DashboardServiceTests
         Assert.That(firstWeek, Is.Not.Null);
         Assert.That(firstWeek.StreamCount, Is.EqualTo(2));
     }
+
+    [Test]
+    public async Task GetStreamDataAsync_FiltersStreamsByGenre()
+    {
+        using var context = new AppDbContext(_contextOptions);
+
+        var user = new ApplicationUser
+        {
+            UserName = "genrecreator@test.com",
+            Email = "genrecreator@test.com",
+            NormalizedUserName = "GENRECREATOR@TEST.COM",
+            NormalizedEmail = "GENRECREATOR@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true, User = user };
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var rockSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/rock.mp3", Genre = "Rock" };
+        var popSong = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/pop.mp3", Genre = "Pop" };
+        context.SongMetadata.AddRange(rockSong, popSong);
+        await context.SaveChangesAsync();
+
+        var baseDate = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        context.SongStreams.AddRange(
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(1) },
+            new SongStream { SongMetadataId = rockSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(2) },
+            new SongStream { SongMetadataId = popSong.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(3) }
+        );
+        await context.SaveChangesAsync();
+
+        // Filter by Rock genre only
+        var result = await _service.GetStreamDataAsync(
+            creator.Id,
+            baseDate,
+            baseDate.AddDays(1),
+            StreamInterval.Day,
+            genres: new HashSet<string> { "Rock" });
+
+        var day1 = result.FirstOrDefault(dp => dp.PeriodStart == baseDate);
+        Assert.That(day1, Is.Not.Null);
+        Assert.That(day1.StreamCount, Is.EqualTo(2)); // Only Rock streams
+    }
+
+    [Test]
+    public async Task GetStreamDataAsync_FiltersStreamsBySongTitle()
+    {
+        using var context = new AppDbContext(_contextOptions);
+
+        var user = new ApplicationUser
+        {
+            UserName = "titlecreator@test.com",
+            Email = "titlecreator@test.com",
+            NormalizedUserName = "TITLECREATOR@TEST.COM",
+            NormalizedEmail = "TITLECREATOR@TEST.COM",
+            EmailConfirmed = true,
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true, User = user };
+        context.Creators.Add(creator);
+        await context.SaveChangesAsync();
+
+        var song1 = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/song1.mp3", SongTitle = "Awesome Song" };
+        var song2 = new SongMetadata { CreatorId = creator.Id, Mp3BlobPath = "test/song2.mp3", SongTitle = "Other Song" };
+        context.SongMetadata.AddRange(song1, song2);
+        await context.SaveChangesAsync();
+
+        var baseDate = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        context.SongStreams.AddRange(
+            new SongStream { SongMetadataId = song1.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(1) },
+            new SongStream { SongMetadataId = song2.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(2) },
+            new SongStream { SongMetadataId = song2.Id, CreatorId = creator.Id, CreatedDate = baseDate.AddHours(3) }
+        );
+        await context.SaveChangesAsync();
+
+        // Filter by "Other Song" title only
+        var result = await _service.GetStreamDataAsync(
+            creator.Id,
+            baseDate,
+            baseDate.AddDays(1),
+            StreamInterval.Day,
+            songTitles: new HashSet<string> { "Other Song" });
+
+        var day1 = result.FirstOrDefault(dp => dp.PeriodStart == baseDate);
+        Assert.That(day1, Is.Not.Null);
+        Assert.That(day1.StreamCount, Is.EqualTo(2)); // Only "Other Song" streams
+    }
 }

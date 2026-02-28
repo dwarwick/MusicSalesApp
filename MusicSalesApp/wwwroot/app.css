@@ -1448,6 +1448,13 @@ h1:focus {
     flex-direction: column;
 }
 
+.dashboard-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
 .dashboard-timezone-note {
     margin-top: 0.25rem;
     margin-bottom: 0.5rem;

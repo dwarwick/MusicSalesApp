@@ -12,8 +12,12 @@ public interface IDashboardService
     /// <param name="startUtc">Start of the time range (UTC).</param>
     /// <param name="endUtc">End of the time range (UTC).</param>
     /// <param name="interval">The grouping interval (Year, Month, Week, Day, Hour).</param>
+    /// <param name="genres">Optional set of genres to filter by.</param>
+    /// <param name="artists">Optional set of artist names to filter by.</param>
+    /// <param name="songTitles">Optional set of song titles to filter by.</param>
     /// <returns>A list of data points with period start and stream count.</returns>
-    Task<List<StreamDataPoint>> GetStreamDataAsync(int creatorId, DateTime startUtc, DateTime endUtc, StreamInterval interval);
+    Task<List<StreamDataPoint>> GetStreamDataAsync(int creatorId, DateTime startUtc, DateTime endUtc, StreamInterval interval,
+        HashSet<string> genres = null, HashSet<string> artists = null, HashSet<string> songTitles = null);
 }
 
 /// <summary>

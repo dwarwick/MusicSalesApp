@@ -143,6 +143,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
         MockSongMetadataService.Setup(x => x.FindExistingSongTitlesAsync(It.IsAny<IEnumerable<string>>()))
             .ReturnsAsync(new HashSet<string>());
+        MockSongMetadataService.Setup(x => x.GetByCreatorIdAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
 
         // Setup default returns for IThemeService methods
         MockThemeService.Setup(x => x.CurrentTheme).Returns("Light");
@@ -275,7 +277,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync((int?)null);
 
         // Setup default returns for IDashboardService methods
-        MockDashboardService.Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>()))
+        MockDashboardService.Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
             .ReturnsAsync(new List<StreamDataPoint>());
 
         // Setup default returns for ISongStatusService methods

@@ -1,5 +1,6 @@
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
+using MusicSalesApp.Models;
 using Microsoft.JSInterop;
 
 namespace MusicSalesApp.Components.Pages;
@@ -22,6 +23,14 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected string _userTimeZoneDisplayName = "UTC";
 
     private TimeZoneInfo _userTimeZone = TimeZoneInfo.Utc;
+
+    // Filter pill state
+    protected Dictionary<string, int> _genreItems = new();
+    protected HashSet<string> _selectedGenres = new();
+    protected Dictionary<string, int> _artistItems = new();
+    protected HashSet<string> _selectedArtists = new();
+    protected Dictionary<string, int> _songTitleItems = new();
+    protected HashSet<string> _selectedSongTitles = new();
 
     protected List<IntervalOption> _intervalOptions = new()
     {
@@ -135,6 +144,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                     return;
                 }
 
+                await LoadFilterData();
                 await LoadChartData();
 
                 // Subscribe to real-time stream updates
@@ -200,13 +210,59 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         var startUtc = ConvertUserLocalToUtc(_startDate);
         var endUtc = ConvertUserLocalToUtc(_endDate);
 
-        _chartData = await DashboardService.GetStreamDataAsync(_creatorId.Value, startUtc, endUtc, _selectedInterval);
+        var genres = _selectedGenres.Count > 0 ? _selectedGenres : null;
+        var artists = _selectedArtists.Count > 0 ? _selectedArtists : null;
+        var titles = _selectedSongTitles.Count > 0 ? _selectedSongTitles : null;
+
+        _chartData = await DashboardService.GetStreamDataAsync(_creatorId.Value, startUtc, endUtc, _selectedInterval, genres, artists, titles);
 
         // Convert UTC data points to the user's timezone for display
         foreach (var point in _chartData)
         {
             point.PeriodStart = ConvertUtcToUserLocal(point.PeriodStart);
         }
+    }
+
+    private async Task LoadFilterData()
+    {
+        if (_creatorId == null) return;
+
+        var songs = await SongMetadataService.GetByCreatorIdAsync(_creatorId.Value);
+
+        // Only include MP3 songs (not album covers)
+        var mp3Songs = songs.Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath)).ToList();
+
+        // Build genre items with counts
+        _genreItems = mp3Songs
+            .Where(s => !string.IsNullOrEmpty(s.Genre))
+            .GroupBy(s => s.Genre)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Build artist items with counts using the same derivation as song cards
+        _artistItems = mp3Songs
+            .Select(s => s.GetEffectiveArtistName())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .GroupBy(a => a)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Build song title items with counts using the same derivation as song cards
+        _songTitleItems = mp3Songs
+            .Select(s => GetEffectiveSongTitle(s))
+            .Where(t => !string.IsNullOrEmpty(t))
+            .GroupBy(t => t)
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>
+    /// Gets the effective display title for a song.
+    /// Priority: SongTitle > filename derived from Mp3BlobPath
+    /// </summary>
+    private static string GetEffectiveSongTitle(SongMetadata sm)
+    {
+        if (!string.IsNullOrEmpty(sm.SongTitle))
+            return sm.SongTitle;
+
+        return Path.GetFileNameWithoutExtension(sm.Mp3BlobPath ?? sm.ImageBlobPath ?? sm.BlobPath ?? "Unknown");
     }
 
     protected async Task OnStartDateChanged(Syncfusion.Blazor.Calendars.ChangedEventArgs<DateTime> args)
@@ -249,6 +305,60 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             _selectedIntervalStr = value;
         }
 
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnGenreToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedGenres.Add(args.item);
+        else
+            _selectedGenres.Remove(args.item);
+
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnGenreCleared()
+    {
+        _selectedGenres.Clear();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnArtistToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedArtists.Add(args.item);
+        else
+            _selectedArtists.Remove(args.item);
+
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnArtistCleared()
+    {
+        _selectedArtists.Clear();
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnSongTitleToggled((string item, bool isChecked) args)
+    {
+        if (args.isChecked)
+            _selectedSongTitles.Add(args.item);
+        else
+            _selectedSongTitles.Remove(args.item);
+
+        await LoadChartData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected async Task OnSongTitleCleared()
+    {
+        _selectedSongTitles.Clear();
         await LoadChartData();
         await InvokeAsync(StateHasChanged);
     }

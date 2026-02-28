@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
 
@@ -16,14 +17,39 @@ public class DashboardService : IDashboardService
     }
 
     /// <inheritdoc />
-    public async Task<List<StreamDataPoint>> GetStreamDataAsync(int creatorId, DateTime startUtc, DateTime endUtc, StreamInterval interval)
+    public async Task<List<StreamDataPoint>> GetStreamDataAsync(int creatorId, DateTime startUtc, DateTime endUtc, StreamInterval interval,
+        HashSet<string> genres = null, HashSet<string> artists = null, HashSet<string> songTitles = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var streams = await context.SongStreams
-            .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc)
-            .Select(s => s.CreatedDate)
-            .ToListAsync();
+        var hasFilters = (genres != null && genres.Count > 0) ||
+                         (artists != null && artists.Count > 0) ||
+                         (songTitles != null && songTitles.Count > 0);
+
+        List<DateTime> streams;
+
+        if (hasFilters)
+        {
+            // Need to join with SongMetadata to apply filters
+            var query = context.SongStreams
+                .Include(s => s.SongMetadata)
+                    .ThenInclude(sm => sm.Creator)
+                        .ThenInclude(c => c.User)
+                .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc);
+
+            // Get the matching SongMetadataIds first, then filter streams
+            var metadataIds = await GetFilteredSongMetadataIdsAsync(context, creatorId, genres, artists, songTitles);
+            query = query.Where(s => metadataIds.Contains(s.SongMetadataId));
+
+            streams = await query.Select(s => s.CreatedDate).ToListAsync();
+        }
+        else
+        {
+            streams = await context.SongStreams
+                .Where(s => s.CreatorId == creatorId && s.CreatedDate >= startUtc && s.CreatedDate <= endUtc)
+                .Select(s => s.CreatedDate)
+                .ToListAsync();
+        }
 
         var grouped = streams
             .GroupBy(d => TruncateToInterval(d, interval))
@@ -46,6 +72,53 @@ public class DashboardService : IDashboardService
         }).ToList();
 
         return result;
+    }
+
+    private static async Task<HashSet<int>> GetFilteredSongMetadataIdsAsync(AppDbContext context, int creatorId,
+        HashSet<string> genres, HashSet<string> artists, HashSet<string> songTitles)
+    {
+        var query = context.SongMetadata
+            .Include(sm => sm.Creator)
+                .ThenInclude(c => c.User)
+            .Where(sm => sm.CreatorId == creatorId && !string.IsNullOrEmpty(sm.Mp3BlobPath));
+
+        var songs = await query.ToListAsync();
+
+        // Apply filters in memory to use the same artist name / song title derivation logic
+        var filtered = songs.AsEnumerable();
+
+        if (genres != null && genres.Count > 0)
+        {
+            filtered = filtered.Where(sm => !string.IsNullOrEmpty(sm.Genre) && genres.Contains(sm.Genre));
+        }
+
+        if (artists != null && artists.Count > 0)
+        {
+            filtered = filtered.Where(sm => artists.Contains(sm.GetEffectiveArtistName()));
+        }
+
+        if (songTitles != null && songTitles.Count > 0)
+        {
+            filtered = filtered.Where(sm =>
+            {
+                var title = GetEffectiveSongTitle(sm);
+                return songTitles.Contains(title);
+            });
+        }
+
+        return filtered.Select(sm => sm.Id).ToHashSet();
+    }
+
+    /// <summary>
+    /// Gets the effective display title for a song.
+    /// Priority: SongTitle > filename derived from Mp3BlobPath
+    /// </summary>
+    internal static string GetEffectiveSongTitle(SongMetadata sm)
+    {
+        if (!string.IsNullOrEmpty(sm.SongTitle))
+            return sm.SongTitle;
+
+        return Path.GetFileNameWithoutExtension(sm.Mp3BlobPath ?? sm.ImageBlobPath ?? sm.BlobPath ?? "Unknown");
     }
 
     private static DateTime TruncateToInterval(DateTime date, StreamInterval interval)
