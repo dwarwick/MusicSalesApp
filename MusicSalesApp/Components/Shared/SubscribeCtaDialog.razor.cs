@@ -5,6 +5,9 @@ namespace MusicSalesApp.Components.Shared;
 
 public partial class SubscribeCtaDialogModel : BlazorBase
 {
+    private const int MinPreviewInterval = 2;
+    private const int MaxPreviewIntervalExclusive = 5; // Random.Next upper bound is exclusive, so this gives 2-4
+
     protected bool _showDialog;
     private int _previewCount;
     private int _nextShowAtCount;
@@ -41,7 +44,7 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         if (_previewCount >= _nextShowAtCount)
         {
             // Set next show count (2-4 previews from now)
-            _nextShowAtCount = _previewCount + Random.Shared.Next(2, 5);
+            _nextShowAtCount = _previewCount + Random.Shared.Next(MinPreviewInterval, MaxPreviewIntervalExclusive);
             await ShowDialogAsync();
         }
     }
