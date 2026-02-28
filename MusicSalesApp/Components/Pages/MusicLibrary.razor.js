@@ -1,11 +1,10 @@
 // MusicLibrary card audio player module
-
 // Volume persistence via localStorage
 const VOLUME_STORAGE_KEY = 'streamtunes_volume';
 const DEFAULT_VOLUME = 0.4;
 
 function saveVolume(volume) {
-    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString()); } catch (e) { console.warn('Failed to save volume:', e); }
 }
 
 export function getSavedVolume() {
