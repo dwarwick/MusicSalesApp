@@ -273,6 +273,190 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("RegularSong"));
     }
 
+    [Test]
+    public void MusicLibrary_ShowsGenreFilterPill()
+    {
+        // Arrange - Set up empty metadata list
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - should have genre filter pill
+        Assert.That(cut.Markup, Does.Contain("genre-filter-pill"));
+        Assert.That(cut.Markup, Does.Contain("Genres"));
+    }
+
+    [Test]
+    public void MusicLibrary_GenreFilterDropdown_TogglesOnClick()
+    {
+        // Arrange
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>
+            {
+                new MusicSalesApp.Models.SongMetadata
+                {
+                    Mp3BlobPath = "Song1.mp3",
+                    Genre = "Rock",
+                    UpdatedAt = DateTime.Now
+                }
+            });
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - dropdown should not be visible initially
+        Assert.That(cut.Markup, Does.Not.Contain("genre-dropdown"));
+
+        // Act - click the pill to open dropdown
+        cut.Find(".genre-filter-pill").Click();
+
+        // Assert - dropdown should now be visible with genres
+        Assert.That(cut.Markup, Does.Contain("genre-dropdown"));
+        Assert.That(cut.Markup, Does.Contain("Rock"));
+    }
+
+    [Test]
+    public void MusicLibrary_GenreFilter_FiltersSongsByGenre()
+    {
+        // Arrange - Set up metadata with multiple genres
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "RockSong.mp3",
+                Genre = "Rock",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "JazzSong.mp3",
+                Genre = "Jazz",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - both songs should be visible initially
+        Assert.That(cut.Markup, Does.Contain("RockSong"));
+        Assert.That(cut.Markup, Does.Contain("JazzSong"));
+
+        // Act - open dropdown and check Rock
+        cut.Find(".genre-filter-pill").Click();
+        var checkboxes = cut.FindAll(".genre-dropdown-item input[type='checkbox']");
+        // Find the Rock checkbox
+        var rockCheckbox = checkboxes.FirstOrDefault(cb =>
+            cb.ParentElement.TextContent.Contains("Rock"));
+        rockCheckbox?.Change(true);
+
+        // Assert - only Rock song should be visible
+        Assert.That(cut.Markup, Does.Contain("RockSong"));
+        Assert.That(cut.Markup, Does.Not.Contain("JazzSong"));
+    }
+
+    [Test]
+    public void MusicLibrary_GenreFilter_ShowsCountWhenActive()
+    {
+        // Arrange
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "RockSong.mp3",
+                Genre = "Rock",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "JazzSong.mp3",
+                Genre = "Jazz",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Act - open dropdown and select a genre
+        cut.Find(".genre-filter-pill").Click();
+        var checkboxes = cut.FindAll(".genre-dropdown-item input[type='checkbox']");
+        var rockCheckbox = checkboxes.FirstOrDefault(cb =>
+            cb.ParentElement.TextContent.Contains("Rock"));
+        rockCheckbox?.Change(true);
+
+        // Assert - should show count badge
+        Assert.That(cut.Markup, Does.Contain("genre-filter-count"));
+        Assert.That(cut.Find(".genre-filter-count").TextContent, Is.EqualTo("1"));
+    }
+
+    [Test]
+    public void MusicLibrary_GenreFilter_ClearResetsFilter()
+    {
+        // Arrange
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "RockSong.mp3",
+                Genre = "Rock",
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "JazzSong.mp3",
+                Genre = "Jazz",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Act - select a genre to filter
+        cut.Find(".genre-filter-pill").Click();
+        var checkboxes = cut.FindAll(".genre-dropdown-item input[type='checkbox']");
+        var rockCheckbox = checkboxes.FirstOrDefault(cb =>
+            cb.ParentElement.TextContent.Contains("Rock"));
+        rockCheckbox?.Change(true);
+
+        // Verify filter is active
+        Assert.That(cut.Markup, Does.Not.Contain("JazzSong"));
+
+        // Act - click clear button
+        cut.Find(".genre-clear-x").Click();
+
+        // Assert - all songs should be visible again
+        Assert.That(cut.Markup, Does.Contain("RockSong"));
+        Assert.That(cut.Markup, Does.Contain("JazzSong"));
+    }
+
+    [Test]
+    public void MusicLibrary_GenreFilter_HiddenWhenShowHomePageFeatured()
+    {
+        // Arrange
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert - genre filter should not be shown
+        Assert.That(cut.Markup, Does.Not.Contain("genre-filter-pill"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

@@ -66,6 +66,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     // Map file names to genre
     private Dictionary<string, string> _genreMap = new Dictionary<string, string>();
 
+    // Genre filter state
+    protected HashSet<string> _selectedGenres = new HashSet<string>();
+    protected bool _genreDropdownOpen;
+
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
@@ -422,6 +426,47 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return $"/genre/{Uri.EscapeDataString(genre)}";
     }
 
+    /// <summary>
+    /// Gets all unique genres from loaded songs, sorted alphabetically with selected genres first.
+    /// </summary>
+    protected List<string> GetAvailableGenres()
+    {
+        var genres = _genreMap.Values
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Sort: selected genres first (alphabetically), then unselected (alphabetically)
+        return genres
+            .OrderByDescending(g => _selectedGenres.Contains(g))
+            .ThenBy(g => g, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    protected void ToggleGenreDropdown()
+    {
+        _genreDropdownOpen = !_genreDropdownOpen;
+    }
+
+    protected void ToggleGenreFilter(string genre, object checkedValue)
+    {
+        var isChecked = (bool)checkedValue;
+        if (isChecked)
+        {
+            _selectedGenres.Add(genre);
+        }
+        else
+        {
+            _selectedGenres.Remove(genre);
+        }
+    }
+
+    protected void ClearGenreFilter()
+    {
+        _selectedGenres.Clear();
+        _genreDropdownOpen = false;
+    }
+
     private async Task LoadSubscriptionStatus()
     {
         try
@@ -444,6 +489,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (ShowHomePageFeatured)
         {
             files = files.Where(f => _homePageSongs.Contains(f.Name));
+        }
+        
+        // Apply genre filter
+        if (_selectedGenres.Count > 0)
+        {
+            files = files.Where(f =>
+            {
+                var genre = GetSongGenre(f.Name);
+                return _selectedGenres.Contains(genre);
+            });
         }
         
         return files;
