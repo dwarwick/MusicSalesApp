@@ -5,16 +5,16 @@ namespace MusicSalesApp.Components.Shared;
 
 public partial class FilterPillModel : BlazorBase
 {
-    [Parameter]
+    [Parameter, EditorRequired]
     public string Label { get; set; } = string.Empty;
 
     [Parameter]
     public string SearchPlaceholder { get; set; } = string.Empty;
 
-    [Parameter]
+    [Parameter, EditorRequired]
     public Dictionary<string, int> Items { get; set; } = new();
 
-    [Parameter]
+    [Parameter, EditorRequired]
     public HashSet<string> SelectedItems { get; set; } = new();
 
     [Parameter]

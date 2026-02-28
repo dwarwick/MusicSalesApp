@@ -24,7 +24,7 @@
             {
                 <label class="filter-pill-dropdown-item" @key="item">
                     <input type="checkbox" checked="@SelectedItems.Contains(item)"
-                           @onchange="(e) => HandleToggle(item, (bool)e.Value)" />
+                           @onchange="(e) => HandleToggle(item, (bool)(e.Value ?? false))" />
                     <span>@item (@GetItemCount(item))</span>
                 </label>
             }
