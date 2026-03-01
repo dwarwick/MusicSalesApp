@@ -215,15 +215,26 @@
                 If you're building original music &mdash; whether studio-recorded or AI-generated &mdash; and you control
                 the rights to it, you can publish today.
             </p>
-            <div class="cta-button-group" style="margin-top: 1.5rem;">
-                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
-                    Create Free Account
-                </SfButton>
-                <p style="margin-top: 1rem;">Already registered?</p>
-                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
-                    Log In
-                </SfButton>
-            </div>
+            @if (!_isAuthenticated)
+            {
+                <div class="cta-button-group" style="margin-top: 1.5rem;">
+                    <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                        Create Free Account
+                    </SfButton>
+                    <p style="margin-top: 1rem;">Already registered?</p>
+                    <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                        Log In
+                    </SfButton>
+                </div>
+            }
+            else if (!_isActiveCreator)
+            {
+                <div class="cta-button-group" style="margin-top: 1.5rem;">
+                    <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                        Get Started
+                    </SfButton>
+                </div>
+            }
         </section>
 
         <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
