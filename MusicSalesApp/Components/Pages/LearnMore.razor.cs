@@ -1,3 +1,4 @@
+using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages;
@@ -10,18 +11,23 @@ public partial class LearnMoreModel : BlazorBase
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_hasLoadedData)
+        if (firstRender)
         {
-            _hasLoadedData = true;
-            try
+            await JS.InvokeVoidAsync("eval", "document.querySelector('main').scrollTop = 0");
+
+            if (!_hasLoadedData)
             {
-                var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
-                _streamPayRateDisplay = streamPayRate.ToString("0.###");
-                _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-            }
-            finally
-            {
-                await InvokeAsync(StateHasChanged);
+                _hasLoadedData = true;
+                try
+                {
+                    var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
+                    _streamPayRateDisplay = streamPayRate.ToString("0.###");
+                    _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+                }
+                finally
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
             }
         }
     }
