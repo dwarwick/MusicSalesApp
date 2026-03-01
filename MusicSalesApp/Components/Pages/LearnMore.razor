@@ -1,0 +1,231 @@
+@page "/LearnMore"
+@using Syncfusion.Blazor.Buttons
+@inherits LearnMoreModel
+
+<PageTitle>Learn More - Streamtunes</PageTitle>
+
+<div class="container my-5">
+    <h1 class="mb-4">🎵 Turn Your Creativity Into Streaming Revenue</h1>
+
+    <div class="terms-content">
+        <p>
+            Streamtunes is built for modern independent creators &mdash; from traditional musicians to AI-assisted producers.
+        </p>
+        <p>
+            Music creation has evolved. Today's artists use microphones, DAWs, synthesizers, and generative AI tools.
+            Streamtunes embraces that evolution.
+        </p>
+        <p>
+            If you create original music &mdash; human-made, AI-generated, or hybrid &mdash; and you control the rights to it,
+            you can publish it here and earn from it.
+        </p>
+
+        <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
+
+        <section class="mb-4">
+            <h2>🚀 Why Streamtunes Exists</h2>
+            <p>
+                Most major streaming platforms were not built with independent creators in mind &mdash; especially AI-native creators.
+            </p>
+            <p>Streamtunes was built differently.</p>
+            <p>We believe:</p>
+            <ul>
+                <li>Independent creators deserve transparent earnings.</li>
+                <li>AI is a legitimate creative tool.</li>
+                <li>You should not need a distributor or label to monetize your work.</li>
+                <li>Innovation should be supported &mdash; responsibly.</li>
+            </ul>
+        </section>
+
+        <section class="mb-4">
+            <h2>💰 How You Earn</h2>
+            <p>
+                Creators earn <strong>$@_streamPayRateDisplay per qualified stream</strong>
+                (as defined in the <a href="/creator-agreement">Creator Agreement</a>).
+            </p>
+            <p>
+                A qualified stream counts after <strong>@_streamQualifyingSeconds seconds</strong> of continuous playback.
+            </p>
+            <p>There are:</p>
+            <ul>
+                <li>No upload fees</li>
+                <li>No hosting fees</li>
+                <li>No distributor required</li>
+            </ul>
+            <p>Your dashboard shows stream performance across:</p>
+            <ul>
+                <li>All tracks</li>
+                <li>Individual tracks</li>
+                <li>Genres</li>
+                <li>Artist personas</li>
+            </ul>
+            <p>As your streams grow, your earnings grow.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>🤖 AI Music Is Strongly Supported</h2>
+            <p>Some platforms are unclear about AI-generated music. Streamtunes is not.</p>
+            <p>We strongly support:</p>
+            <ul>
+                <li>Fully AI-generated tracks</li>
+                <li>AI-assisted songwriting</li>
+                <li>AI-generated vocals (legally created)</li>
+                <li>Hybrid human + AI projects</li>
+                <li>Virtual artist brands</li>
+            </ul>
+            <p>AI is simply another creative instrument.</p>
+            <p>
+                However, all content must comply with our <a href="/creator-agreement">Creator Agreement</a>:
+            </p>
+            <ul>
+                <li>You must legally own or control the rights</li>
+                <li>No copyright infringement</li>
+                <li>No unauthorized voice cloning</li>
+                <li>No impersonation of real artists</li>
+                <li>No misleading identity practices</li>
+            </ul>
+            <p>Innovation is welcome. Abuse is not.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>🎭 Build Multiple Artist Personas</h2>
+            <p>You are not limited to a single identity.</p>
+            <p>Under one creator account, you can create multiple Artist Personas.</p>
+            <p>This allows you to:</p>
+            <ul>
+                <li>Run multiple creative brands</li>
+                <li>Separate genres</li>
+                <li>Create male/female vocal identities</li>
+                <li>Launch experimental AI projects</li>
+            </ul>
+            <p>Artist names must be unique across the platform to maintain clarity for listeners.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>⚖️ How Streamtunes Differs from Major Platforms</h2>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Streamtunes</th>
+                        <th>Traditional Platforms</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Direct Upload</td>
+                        <td>✔ Yes</td>
+                        <td>Often requires distributor</td>
+                    </tr>
+                    <tr>
+                        <td>AI-Friendly</td>
+                        <td>✔ Explicitly supported</td>
+                        <td>Often unclear or restricted</td>
+                    </tr>
+                    <tr>
+                        <td>Multiple Personas</td>
+                        <td>✔ Supported</td>
+                        <td>Typically single artist account</td>
+                    </tr>
+                    <tr>
+                        <td>Transparent Per-Stream Rate</td>
+                        <td>✔ Clearly defined</td>
+                        <td>Often opaque</td>
+                    </tr>
+                    <tr>
+                        <td>Independent-Focused</td>
+                        <td>✔ Core mission</td>
+                        <td>Compete with major labels</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>Streamtunes is designed for creators building something new &mdash; not just competing for playlist scraps.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>🔒 Transparency &amp; Trust</h2>
+            <p>We take platform integrity seriously.</p>
+
+            <h3>Clear Agreements</h3>
+            <p>All rules are outlined in:</p>
+            <ul>
+                <li><a href="/terms-of-use">Terms of Use</a></li>
+                <li><a href="/creator-agreement">Creator Agreement</a></li>
+            </ul>
+            <p>No hidden clauses.</p>
+
+            <h3>Rights Protection</h3>
+            <p>You must own or control the rights to your uploads. This protects:</p>
+            <ul>
+                <li>You</li>
+                <li>Other creators</li>
+                <li>The platform</li>
+            </ul>
+
+            <h3>Control</h3>
+            <ul>
+                <li>You retain ownership of your music.</li>
+                <li>You may remove your tracks at any time.</li>
+                <li>You control what remains live.</li>
+            </ul>
+
+            <h3>Compliance</h3>
+            <p>
+                Creators must complete required tax and payment information before receiving payouts.
+            </p>
+        </section>
+
+        <section class="mb-4">
+            <h2>🌎 Who Can Join?</h2>
+            <p>You can join if:</p>
+            <ul>
+                <li>You own or control your music rights</li>
+                <li>Your content complies with our policies</li>
+                <li>You complete required onboarding information</li>
+            </ul>
+            <p>Eligibility details are provided during signup.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>🎬 The Process Is Simple</h2>
+            <ul style="list-style: none; padding-left: 0;">
+                <li>1️⃣ Create a free account</li>
+                <li>2️⃣ Upload original music</li>
+                <li>3️⃣ Go live and start earning</li>
+            </ul>
+            <p>No gatekeepers. No label approval. No distributor.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>📈 Early Creator Advantage</h2>
+            <p>Streamtunes is growing.</p>
+            <p>Early creators have the opportunity to:</p>
+            <ul>
+                <li>Establish unique artist names</li>
+                <li>Build early listener momentum</li>
+                <li>Shape the culture of a next-generation platform</li>
+            </ul>
+            <p>This is not a saturated legacy system.</p>
+            <p>It's a modern one.</p>
+        </section>
+
+        <section class="mb-4">
+            <h2>Ready to Get Started?</h2>
+            <p>
+                If you're building original music &mdash; whether studio-recorded or AI-generated &mdash; and you control
+                the rights to it, you can publish today.
+            </p>
+            <div class="cta-button-group" style="margin-top: 1.5rem;">
+                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                    Create Free Account
+                </SfButton>
+                <p style="margin-top: 1rem;">Already registered?</p>
+                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                    Log In
+                </SfButton>
+            </div>
+        </section>
+
+        <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
+    </div>
+</div>

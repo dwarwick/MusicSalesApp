@@ -659,11 +659,11 @@
         gap: 2rem;
         max-width: 1400px;
         margin: 0 auto;
-        padding: 0 2rem;
+        padding: 15px 10px 15px 2rem;
     }
 
     .cta-card {
-        padding: 3rem;
+        padding: 2rem;
         min-height: 500px;
     }
 
@@ -718,6 +718,15 @@
 
     .cta-button-group .cta-button {
         min-width: 150px;
+    }
+
+    .cta-learn-row {
+        margin-bottom: 1.5rem;
+    }
+
+    .cta-learn-row .cta-button {
+        min-width: auto;
+        padding: 0.75rem 1.5rem;
     }
 }
 

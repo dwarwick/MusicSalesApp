@@ -484,7 +484,7 @@ body {
 /* CTA Split Section Colors */
 .cta-card {
     background: #fff;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px #b3b3b3;
 }
 
 .cta-card:hover {
@@ -523,6 +523,10 @@ body {
 
 .cta-free-notice {
     color: #8e44ad;
+}
+
+.cta-learn-link {
+    color: #1a1a2e;
 }
 
 .cta-price-highlight {

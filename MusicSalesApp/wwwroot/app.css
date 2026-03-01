@@ -1244,9 +1244,34 @@ h1:focus {
     flex-shrink: 0;
 }
 
+.cta-subheading {
+    text-align: left;
+    margin: 0 auto;
+}
+
 .cta-free-notice {
     text-align: center;
     font-weight: 500;
+}
+
+.cta-learn-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.cta-learn-link {
+    font-weight: 600;
+    cursor: default;
+}
+
+.cta-button-learn {
+    min-width: auto !important;
+    width: auto !important;
+    padding: 0.5rem 1.5rem !important;
 }
 
 .cta-price-highlight {

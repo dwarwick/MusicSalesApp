@@ -444,4 +444,10 @@
         gap: 12px;
         margin-bottom: 0.875rem;
     }
+
+    .cta-icon {
+        width: 75px;
+        height: 75px;
+        margin: 0 auto 1.5rem;
+    }
 }

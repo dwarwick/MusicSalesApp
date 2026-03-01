@@ -770,6 +770,18 @@
 
     .cta-button-group .cta-button {
         width: 100%;
+        min-width: auto;
+    }
+
+    .cta-learn-row {
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
+
+    .cta-learn-row .cta-button {
+        width: auto !important;
+        min-width: auto;
+        padding: 0.5rem 1.25rem;
     }
 
     /* Dashboard responsive */
