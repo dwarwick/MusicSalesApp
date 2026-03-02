@@ -154,9 +154,14 @@ public class AdminNotificationService : IAdminNotificationService
 
         // Look up the recently uploaded songs for this creator to build the summary email
         var creatorSongs = await _songMetadataService.GetByCreatorIdAsync(creatorId);
-        var recentCutoff = DateTime.UtcNow.AddMinutes(-30);
+        // Match uploaded songs by comparing normalized filenames against uploaded file list
+        var normalizedUploadedNames = uploadedFileNames
+            .Select(f => Path.GetFileNameWithoutExtension(f).ToLowerInvariant())
+            .ToHashSet();
         var recentSongs = creatorSongs
-            .Where(s => s.CreatedAt >= recentCutoff)
+            .Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath) &&
+                        normalizedUploadedNames.Contains(
+                            Path.GetFileNameWithoutExtension(s.Mp3BlobPath).ToLowerInvariant()))
             .ToList();
 
         // Send admin email

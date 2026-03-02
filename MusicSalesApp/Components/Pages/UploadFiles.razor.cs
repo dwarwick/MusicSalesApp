@@ -301,7 +301,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             try
             {
                 var completedFiles = _uploadItems
-                    .Where(i => i.Status == UploadStatus.Completed)
+                    .Where(i => i.Status == UploadStatus.Completed && !string.IsNullOrEmpty(i.AudioFileName))
                     .Select(i => i.AudioFileName)
                     .ToList();
                 if (completedFiles.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
