@@ -390,51 +390,80 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     {
         if (_creatorId == null) return;
 
-        var payouts = await StreamPayoutService.GetPayoutHistoryAsync(_creatorId.Value);
-
-        _payoutHistory = payouts.Select(p => new PayoutHistoryViewModel
+        try
         {
-            PaymentDate = ConvertUtcToUserLocal(p.PaymentDate),
-            SongTitle = Services.DashboardService.GetEffectiveSongTitle(p.SongMetadata),
-            NumberOfStreams = p.NumberOfStreams,
-            GrossAmount = p.GrossAmount,
-            WithheldAmount = p.WithheldAmount,
-            NetAmount = p.NetAmount,
-            PayPalTransactionId = p.PayPalTransactionId ?? string.Empty
-        }).ToList();
+            var payouts = await StreamPayoutService.GetPayoutHistoryAsync(_creatorId.Value);
+
+            _payoutHistory = payouts.Select(p => new PayoutHistoryViewModel
+            {
+                PaymentDate = ConvertUtcToUserLocal(p.PaymentDate),
+                SongTitle = Services.DashboardService.GetEffectiveSongTitle(p.SongMetadata),
+                NumberOfStreams = p.NumberOfStreams,
+                GrossAmount = p.GrossAmount,
+                WithheldAmount = p.WithheldAmount,
+                NetAmount = p.NetAmount,
+                PayPalTransactionId = p.PayPalTransactionId ?? string.Empty
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading payout history for creator {CreatorId}", _creatorId);
+            _payoutHistory = new();
+        }
     }
 
     protected async Task ExportPayoutsToExcel()
     {
         if (_payoutGrid == null) return;
 
-        var excelExportProperties = new ExcelExportProperties
+        try
         {
-            FileName = $"PayoutHistory_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
-            ExportType = ExportType.AllPages
-        };
+            var excelExportProperties = new ExcelExportProperties
+            {
+                FileName = $"PayoutHistory_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx",
+                ExportType = ExportType.AllPages
+            };
 
-        await _payoutGrid.ExportToExcelAsync(excelExportProperties);
+            await _payoutGrid.ExportToExcelAsync(excelExportProperties);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting payout history to Excel");
+        }
     }
 
     protected async Task ExportPayoutsToCsv()
     {
         if (_payoutGrid == null) return;
 
-        var excelExportProperties = new ExcelExportProperties
+        try
         {
-            FileName = $"PayoutHistory_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
-            ExportType = ExportType.AllPages
-        };
+            var excelExportProperties = new ExcelExportProperties
+            {
+                FileName = $"PayoutHistory_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv",
+                ExportType = ExportType.AllPages
+            };
 
-        await _payoutGrid.ExportToCsvAsync(excelExportProperties);
+            await _payoutGrid.ExportToCsvAsync(excelExportProperties);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting payout history to CSV");
+        }
     }
 
     protected async Task PrintPayouts()
     {
         if (_payoutGrid == null) return;
 
-        await _payoutGrid.PrintAsync();
+        try
+        {
+            await _payoutGrid.PrintAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error printing payout history");
+        }
     }
 
     public void Dispose()
