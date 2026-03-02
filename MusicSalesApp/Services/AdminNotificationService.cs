@@ -204,8 +204,7 @@ public class AdminNotificationService : IAdminNotificationService
                 EventType = eventType,
                 Description = description,
                 OldValue = oldValue,
-                NewValue = newValue,
-                OccurredAt = DateTime.UtcNow
+                NewValue = newValue
             };
             context.UserHistories.Add(history);
             await context.SaveChangesAsync();

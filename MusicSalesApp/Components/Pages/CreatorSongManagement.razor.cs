@@ -463,11 +463,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     // Send admin notifications for rename and art update
                     try
                     {
-                        var titleChanged = !string.Equals(originalTitle, _editSongTitle, StringComparison.Ordinal);
+                        var titleChanged = !string.IsNullOrEmpty(originalTitle)
+                            && !string.Equals(originalTitle, _editSongTitle, StringComparison.Ordinal);
                         if (titleChanged && !string.IsNullOrEmpty(_currentUserEmail))
                         {
                             await AdminNotificationService.NotifySongRenamedAsync(
-                                _currentUserEmail, originalTitle ?? string.Empty, _editSongTitle);
+                                _currentUserEmail, originalTitle!, _editSongTitle);
                         }
                         if (artChanged && !string.IsNullOrEmpty(_currentUserEmail))
                         {
