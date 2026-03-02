@@ -4,6 +4,7 @@
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Services
 @using Syncfusion.Blazor.Charts
+@using Syncfusion.Blazor.Grids
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
 
 <PageTitle>Creator Dashboard</PageTitle>
@@ -100,6 +101,54 @@
                     <p class="text-muted">No stream data available for the selected period.</p>
                 </div>
             }
+        </div>
+
+        <div class="dashboard-payout-section mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="fas fa-money-bill-wave me-2"></i>Payout History</h4>
+                <div class="d-flex gap-2">
+                    <SfButton CssClass="e-info" OnClick="ExportPayoutsToExcel">
+                        <i class="bi bi-file-earmark-excel me-1"></i> Excel
+                    </SfButton>
+                    <SfButton CssClass="e-info" OnClick="ExportPayoutsToCsv">
+                        <i class="bi bi-filetype-csv me-1"></i> CSV
+                    </SfButton>
+                    <SfButton CssClass="e-primary" OnClick="PrintPayouts">
+                        <i class="bi bi-printer me-1"></i> Print
+                    </SfButton>
+                </div>
+            </div>
+
+            @if (_payoutHistory.Count > 0)
+            {
+                <SfGrid @ref="_payoutGrid"
+                        TValue="PayoutHistoryViewModel"
+                        DataSource="@_payoutHistory"
+                        AllowPaging="true"
+                        AllowSorting="true"
+                        AllowFiltering="true"
+                        AllowExcelExport="true"
+                        Height="400px">
+                    <GridPageSettings PageSize="10"></GridPageSettings>
+                    <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                    <GridColumns>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PaymentDate)" HeaderText="Date" Width="180" Format="g"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.SongTitle)" HeaderText="Song" Width="200"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NumberOfStreams)" HeaderText="Streams" Width="120" Format="N0"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.GrossAmount)" HeaderText="Gross (USD)" Width="130" Format="C2"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.WithheldAmount)" HeaderText="Withheld (USD)" Width="140" Format="C2"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NetAmount)" HeaderText="Net (USD)" Width="130" Format="C2"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PayPalTransactionId)" HeaderText="PayPal Transaction ID" Width="220"></GridColumn>
+                    </GridColumns>
+                </SfGrid>
+            }
+            else
+            {
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 100px;">
+                    <p class="text-muted">No payout history available.</p>
+                </div>
+            }
+            <p class="text-muted mt-2"><small>All dates shown in @(_userTimeZoneDisplayName) time zone. Amounts are in USD as processed by PayPal.</small></p>
         </div>
     }
 </div>

@@ -1,6 +1,7 @@
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
 using Microsoft.JSInterop;
+using Syncfusion.Blazor.Grids;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -30,6 +31,10 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected HashSet<string> _selectedArtists = new();
     protected Dictionary<string, int> _songTitleItems = new();
     protected HashSet<string> _selectedSongTitles = new();
+
+    // Payout history state
+    protected List<PayoutHistoryViewModel> _payoutHistory = new();
+    protected SfGrid<PayoutHistoryViewModel> _payoutGrid;
 
     protected List<IntervalOption> _intervalOptions = new()
     {
@@ -145,6 +150,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
 
                 await LoadFilterData();
                 await LoadChartData();
+                await LoadPayoutHistory();
 
                 // Subscribe to real-time stream updates
                 StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
@@ -380,6 +386,57 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         InvokeAsync(StateHasChanged);
     }
 
+    private async Task LoadPayoutHistory()
+    {
+        if (_creatorId == null) return;
+
+        var payouts = await StreamPayoutService.GetPayoutHistoryAsync(_creatorId.Value);
+
+        _payoutHistory = payouts.Select(p => new PayoutHistoryViewModel
+        {
+            PaymentDate = ConvertUtcToUserLocal(p.PaymentDate),
+            SongTitle = Services.DashboardService.GetEffectiveSongTitle(p.SongMetadata),
+            NumberOfStreams = p.NumberOfStreams,
+            GrossAmount = p.GrossAmount,
+            WithheldAmount = p.WithheldAmount,
+            NetAmount = p.NetAmount,
+            PayPalTransactionId = p.PayPalTransactionId ?? string.Empty
+        }).ToList();
+    }
+
+    protected async Task ExportPayoutsToExcel()
+    {
+        if (_payoutGrid == null) return;
+
+        var excelExportProperties = new ExcelExportProperties
+        {
+            FileName = $"PayoutHistory_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
+            ExportType = ExportType.AllPages
+        };
+
+        await _payoutGrid.ExportToExcelAsync(excelExportProperties);
+    }
+
+    protected async Task ExportPayoutsToCsv()
+    {
+        if (_payoutGrid == null) return;
+
+        var excelExportProperties = new ExcelExportProperties
+        {
+            FileName = $"PayoutHistory_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
+            ExportType = ExportType.AllPages
+        };
+
+        await _payoutGrid.ExportToCsvAsync(excelExportProperties);
+    }
+
+    protected async Task PrintPayouts()
+    {
+        if (_payoutGrid == null) return;
+
+        await _payoutGrid.PrintAsync();
+    }
+
     public void Dispose()
     {
         if (!_disposed)
@@ -389,6 +446,20 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             _disposed = true;
         }
     }
+}
+
+/// <summary>
+/// View model for payout history grid rows.
+/// </summary>
+public class PayoutHistoryViewModel
+{
+    public DateTime PaymentDate { get; set; }
+    public string SongTitle { get; set; } = string.Empty;
+    public int NumberOfStreams { get; set; }
+    public decimal GrossAmount { get; set; }
+    public decimal WithheldAmount { get; set; }
+    public decimal NetAmount { get; set; }
+    public string PayPalTransactionId { get; set; } = string.Empty;
 }
 
 /// <summary>
