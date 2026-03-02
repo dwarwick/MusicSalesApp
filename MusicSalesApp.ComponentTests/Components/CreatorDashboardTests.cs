@@ -248,4 +248,169 @@ public class CreatorDashboardTests : BUnitTestBase
         MockDashboardService.Verify(x => x.GetStreamFilterOptionsAsync(creatorId, It.IsAny<DateTime>(), It.IsAny<DateTime>(),
             It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()), Times.Once);
     }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsPayoutHistorySection()
+    {
+        // Arrange
+        SetupAuthenticatedCreator();
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Payout History"));
+    }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsNoPayoutMessage_WhenNoPayouts()
+    {
+        // Arrange
+        SetupAuthenticatedCreator();
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        MockStreamPayoutService
+            .Setup(x => x.GetPayoutHistoryAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<StreamPayout>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("No payout history available."));
+    }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsPayoutGrid_WhenPayoutsExist()
+    {
+        // Arrange
+        int creatorId = 10;
+        SetupAuthenticatedCreator(creatorId: creatorId);
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        var payouts = new List<StreamPayout>
+        {
+            new StreamPayout
+            {
+                Id = 1,
+                CreatorId = creatorId,
+                PaymentDate = DateTime.UtcNow.AddDays(-5),
+                NumberOfStreams = 1000,
+                RatePerStream = 0.005m,
+                GrossAmount = 5.00m,
+                WithheldAmount = 0m,
+                NetAmount = 5.00m,
+                PayPalTransactionId = "PAYPAL-TX-001",
+                SongMetadata = new SongMetadata { SongTitle = "Test Song" }
+            }
+        };
+
+        MockStreamPayoutService
+            .Setup(x => x.GetPayoutHistoryAsync(creatorId))
+            .ReturnsAsync(payouts);
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert - Grid should be rendered with payout data
+        Assert.That(cut.Markup, Does.Not.Contain("No payout history available."));
+        Assert.That(cut.Markup, Does.Contain("Payout History"));
+    }
+
+    [Test]
+    public async Task CreatorDashboard_CallsGetPayoutHistoryAsync_WithCorrectCreatorId()
+    {
+        // Arrange
+        int creatorId = 10;
+        SetupAuthenticatedCreator(creatorId: creatorId);
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        MockStreamPayoutService
+            .Setup(x => x.GetPayoutHistoryAsync(creatorId))
+            .ReturnsAsync(new List<StreamPayout>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+
+        // Assert
+        MockStreamPayoutService.Verify(x => x.GetPayoutHistoryAsync(creatorId), Times.Once);
+    }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsExportButtons_WhenLoaded()
+    {
+        // Arrange
+        SetupAuthenticatedCreator();
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert - Export buttons should be visible
+        Assert.That(cut.Markup, Does.Contain("Excel"));
+        Assert.That(cut.Markup, Does.Contain("CSV"));
+        Assert.That(cut.Markup, Does.Contain("Print"));
+    }
+
+    [Test]
+    public async Task CreatorDashboard_ShowsPayoutTimezoneNote()
+    {
+        // Arrange
+        SetupAuthenticatedCreator();
+
+        MockDashboardService
+            .Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
+                It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>(), It.IsAny<HashSet<string>>()))
+            .ReturnsAsync(new List<StreamDataPoint>());
+
+        // Act
+        var cut = TestContext.Render<CreatorDashboard>();
+
+        // Wait for async loading
+        await Task.Delay(100);
+        cut.Render();
+
+        // Assert - Should show timezone and currency info
+        Assert.That(cut.Markup, Does.Contain("Amounts are in USD as processed by PayPal"));
+    }
 }

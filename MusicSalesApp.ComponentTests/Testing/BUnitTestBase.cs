@@ -56,6 +56,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
+    protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -91,6 +92,7 @@ public abstract class BUnitTestBase
         MockSongStatusService = new Mock<ISongStatusService>();
         MockGenreService = new Mock<IGenreService>();
         MockFileMatchingService = new Mock<IFileMatchingService>();
+        MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -319,6 +321,12 @@ public abstract class BUnitTestBase
                 It.IsAny<IReadOnlyDictionary<string, (byte[] Data, string ContentType)>>()))
             .ReturnsAsync(new FileMatchingResult());
 
+        // Setup default returns for IStreamPayoutService methods
+        MockStreamPayoutService.Setup(x => x.GetPayoutHistoryAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MusicSalesApp.Models.StreamPayout>());
+        MockStreamPayoutService.Setup(x => x.GetUnpaidEarningsAsync(It.IsAny<int>()))
+            .ReturnsAsync(0m);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -357,6 +365,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
+        TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it
