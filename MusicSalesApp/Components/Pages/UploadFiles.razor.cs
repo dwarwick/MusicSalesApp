@@ -296,6 +296,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             // Process uploads in chunks
             await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+
+            // Send batch upload notification after all uploads complete
+            try
+            {
+                var completedFiles = _uploadItems
+                    .Where(i => i.Status == UploadStatus.Completed)
+                    .Select(i => i.AudioFileName)
+                    .ToList();
+                if (completedFiles.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
+                {
+                    await AdminNotificationService.NotifyUploadBatchCompletedAsync(
+                        _currentUserEmail, _currentCreatorId.Value, completedFiles);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send batch upload notification");
+            }
         }
         finally
         {
@@ -428,19 +446,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Status = UploadStatus.Completed;
             uploadItem.StatusMessage = $"Uploaded to {folderPath}";
             uploadItem.ErrorMessage = null;
-
-            // Notify admin about the upload
-            try
-            {
-                if (!string.IsNullOrEmpty(_currentUserEmail))
-                {
-                    await AdminNotificationService.NotifyUploadCompletedAsync(_currentUserEmail, audioFile.Name, false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to send admin upload notification for {FileName}", audioFile.Name);
-            }
         }
         catch (InvalidDataException ex)
         {
@@ -574,19 +579,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Status = UploadStatus.Completed;
             uploadItem.StatusMessage = $"Uploaded to {folderPath}";
             uploadItem.ErrorMessage = null;
-
-            // Notify admin about the upload (song + cover art)
-            try
-            {
-                if (!string.IsNullOrEmpty(_currentUserEmail))
-                {
-                    await AdminNotificationService.NotifyUploadCompletedAsync(_currentUserEmail, audioFile.Name, true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to send admin upload notification for {FileName}", audioFile.Name);
-            }
         }
         catch (InvalidDataException ex)
         {

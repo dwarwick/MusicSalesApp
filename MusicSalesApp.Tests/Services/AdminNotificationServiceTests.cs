@@ -12,6 +12,8 @@ public class AdminNotificationServiceTests
 {
     private Mock<IEmailService> _mockEmailService;
     private Mock<IAppSettingsService> _mockAppSettingsService;
+    private Mock<IAzureStorageService> _mockAzureStorageService;
+    private Mock<ISongMetadataService> _mockSongMetadataService;
     private Mock<ILogger<AdminNotificationService>> _mockLogger;
     private IDbContextFactory<AppDbContext> _contextFactory;
     private DbContextOptions<AppDbContext> _dbOptions;
@@ -22,12 +24,18 @@ public class AdminNotificationServiceTests
     {
         _mockEmailService = new Mock<IEmailService>();
         _mockAppSettingsService = new Mock<IAppSettingsService>();
+        _mockAzureStorageService = new Mock<IAzureStorageService>();
+        _mockSongMetadataService = new Mock<ISongMetadataService>();
         _mockLogger = new Mock<ILogger<AdminNotificationService>>();
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         _mockEmailService.Setup(x => x.GetLogoUrl())
             .Returns("https://streamtunes.net/images/logo-light-small.png");
+        _mockEmailService.Setup(x => x.GetAppBaseUrl())
+            .Returns("https://streamtunes.net");
+        _mockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<SongMetadata>());
 
         _dbOptions = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -52,6 +60,8 @@ public class AdminNotificationServiceTests
             _mockEmailService.Object,
             _mockAppSettingsService.Object,
             _contextFactory,
+            _mockAzureStorageService.Object,
+            _mockSongMetadataService.Object,
             _mockLogger.Object);
     }
 
@@ -191,28 +201,44 @@ public class AdminNotificationServiceTests
     }
 
     [Test]
-    public async Task NotifyUploadCompletedAsync_IncludesFileNameAndType()
+    public async Task NotifyUploadBatchCompletedAsync_SendsSummaryEmailToAdminAndCreator()
     {
         // Arrange
         _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyUploadCompletedKey))
             .ReturnsAsync((string)null);
 
-        // Act
-        await _service.NotifyUploadCompletedAsync("test@example.com", "my_song.mp3", true);
+        var uploadedSongs = new List<SongMetadata>
+        {
+            new SongMetadata { Id = 1, CreatorId = 42, Mp3BlobPath = "song1/song1.mp3", ImageBlobPath = "song1/song1.jpg", SongTitle = "My Song", CreatedAt = DateTime.UtcNow },
+            new SongMetadata { Id = 2, CreatorId = 42, Mp3BlobPath = "song2/song2.mp3", ImageBlobPath = "song2/song2.jpg", SongTitle = "My Other Song", CreatedAt = DateTime.UtcNow }
+        };
+        _mockSongMetadataService.Setup(x => x.GetByCreatorIdAsync(42)).ReturnsAsync(uploadedSongs);
 
-        // Assert
+        // Act
+        await _service.NotifyUploadBatchCompletedAsync("test@example.com", 42, new List<string> { "song1.mp3", "song2.mp3" });
+
+        // Assert - admin email sent with summary
         _mockEmailService.Verify(
             x => x.SendEmailAsync(
                 AdminNotificationService.AdminEmail,
-                It.Is<string>(s => s.Contains("Upload")),
-                It.Is<string>(body => body.Contains("test@example.com") && body.Contains("my_song.mp3") && body.Contains("Song + Cover Art"))),
+                It.Is<string>(s => s.Contains("Upload") && s.Contains("test@example.com")),
+                It.Is<string>(body => body.Contains("test@example.com") && body.Contains("My Song") && body.Contains("My Other Song"))),
             Times.Once);
 
+        // Assert - creator confirmation email sent
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(s => s.Contains("Uploaded")),
+                It.Is<string>(body => body.Contains("Manage My Songs") && body.Contains("My Song"))),
+            Times.Once);
+
+        // Assert - history recorded
         using var context = new AppDbContext(_dbOptions);
         var history = await context.UserHistories.FirstOrDefaultAsync();
         Assert.That(history, Is.Not.Null);
         Assert.That(history.EventType, Is.EqualTo("UploadCompleted"));
-        Assert.That(history.Description, Does.Contain("song and cover art"));
+        Assert.That(history.Description, Does.Contain("2 file(s)"));
     }
 
     [Test]

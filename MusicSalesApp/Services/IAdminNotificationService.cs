@@ -33,10 +33,14 @@ public interface IAdminNotificationService
     Task NotifyCreatorStatusLostAsync(string userEmail);
 
     /// <summary>
-    /// Notifies admin about a song upload. Uses the same format as new song notifications
-    /// but includes the uploader's email address.
+    /// Sends a batch upload summary email to admin with song titles and cover art images,
+    /// similar to the daily new song digest. Also sends a confirmation email to the creator.
+    /// Called once after all uploads in a session complete.
     /// </summary>
-    Task NotifyUploadCompletedAsync(string userEmail, string fileName, bool hasCoverArt);
+    /// <param name="userEmail">The creator's email address.</param>
+    /// <param name="creatorId">The creator's ID for looking up uploaded songs.</param>
+    /// <param name="uploadedFileNames">List of file names that were uploaded (for history tracking).</param>
+    Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedFileNames);
 
     /// <summary>
     /// Notifies admin about a song rename.

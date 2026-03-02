@@ -14,6 +14,8 @@ public class AdminNotificationService : IAdminNotificationService
     private readonly IEmailService _emailService;
     private readonly IAppSettingsService _appSettingsService;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
+    private readonly IAzureStorageService _azureStorageService;
+    private readonly ISongMetadataService _songMetadataService;
     private readonly ILogger<AdminNotificationService> _logger;
 
     public const string AdminEmail = "admin@streamtunes.net";
@@ -32,11 +34,15 @@ public class AdminNotificationService : IAdminNotificationService
         IEmailService emailService,
         IAppSettingsService appSettingsService,
         IDbContextFactory<AppDbContext> dbContextFactory,
+        IAzureStorageService azureStorageService,
+        ISongMetadataService songMetadataService,
         ILogger<AdminNotificationService> logger)
     {
         _emailService = emailService;
         _appSettingsService = appSettingsService;
         _dbContextFactory = dbContextFactory;
+        _azureStorageService = azureStorageService;
+        _songMetadataService = songMetadataService;
         _logger = logger;
     }
 
@@ -136,21 +142,42 @@ public class AdminNotificationService : IAdminNotificationService
     }
 
     /// <inheritdoc />
-    public async Task NotifyUploadCompletedAsync(string userEmail, string fileName, bool hasCoverArt)
+    public async Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedFileNames)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        var uploadType = hasCoverArt ? "song and cover art" : "song";
-        await RecordUserHistoryAsync(userId, userEmail, "UploadCompleted", $"User uploaded {uploadType}: {fileName}");
+        // Record history for each uploaded file
+        var fileList = string.Join(", ", uploadedFileNames);
+        await RecordUserHistoryAsync(userId, userEmail, "UploadCompleted", $"User uploaded {uploadedFileNames.Count} file(s): {fileList}");
 
-        if (!await IsNotificationEnabledAsync(NotifyUploadCompletedKey))
-            return;
+        // Look up the recently uploaded songs for this creator to build the summary email
+        var creatorSongs = await _songMetadataService.GetByCreatorIdAsync(creatorId);
+        var recentCutoff = DateTime.UtcNow.AddMinutes(-30);
+        var recentSongs = creatorSongs
+            .Where(s => s.CreatedAt >= recentCutoff)
+            .ToList();
 
-        var subject = "StreamTunes Admin - New Upload";
-        var body = BuildUploadEmailBody(userEmail, fileName, hasCoverArt);
-        await SendAdminEmailAsync(subject, body);
+        // Send admin email
+        if (await IsNotificationEnabledAsync(NotifyUploadCompletedKey))
+        {
+            var adminSubject = $"StreamTunes Admin - New Upload from {userEmail}";
+            var adminBody = BuildUploadSummaryEmailBody(userEmail, recentSongs, isAdminEmail: true);
+            await SendAdminEmailAsync(adminSubject, adminBody);
+        }
+
+        // Send creator confirmation email
+        try
+        {
+            var creatorSubject = "StreamTunes - Your Songs Have Been Uploaded!";
+            var creatorBody = BuildUploadSummaryEmailBody(userEmail, recentSongs, isAdminEmail: false);
+            await _emailService.SendEmailAsync(userEmail, creatorSubject, creatorBody);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send upload confirmation email to creator {Email}", userEmail);
+        }
     }
 
     /// <inheritdoc />
@@ -277,30 +304,142 @@ public class AdminNotificationService : IAdminNotificationService
         </div>";
     }
 
-    private string BuildUploadEmailBody(string userEmail, string fileName, bool hasCoverArt)
+    private string BuildUploadSummaryEmailBody(string creatorEmail, List<SongMetadata> uploadedSongs, bool isAdminEmail)
     {
         var logoUrl = _emailService.GetLogoUrl();
+        var baseUrl = _emailService.GetAppBaseUrl();
         var utcNow = DateTime.UtcNow;
-        var uploadType = hasCoverArt ? "Song + Cover Art" : "Song Only";
 
-        return $@"
+        // Separate standalone songs (with MP3) from album cover entries
+        var standaloneSongs = uploadedSongs
+            .Where(s => !s.IsAlbumCover && !string.IsNullOrEmpty(s.Mp3BlobPath))
+            .ToList();
+
+        var body = new StringBuilder();
+
+        // Email header with logo
+        var title = isAdminEmail ? "New Upload" : "Your Songs Have Been Uploaded!";
+        body.Append($@"
         <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
             <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
                 <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>New Upload</h1>
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>{title}</h1>
             </div>
             <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
-                <p style='font-size: 16px; color: #333;'>A new file has been uploaded to StreamTunes.</p>
+        ");
+
+        if (isAdminEmail)
+        {
+            body.Append($@"
+                <p style='font-size: 16px; color: #333;'>A creator has uploaded new music to StreamTunes.</p>
                 <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
-                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>User Email:</strong> {System.Web.HttpUtility.HtmlEncode(userEmail)}</p>
-                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>File Name:</strong> {System.Web.HttpUtility.HtmlEncode(fileName)}</p>
-                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Upload Type:</strong> {uploadType}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Creator Email:</strong> {System.Web.HttpUtility.HtmlEncode(creatorEmail)}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Songs Uploaded:</strong> {standaloneSongs.Count}</p>
                     <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {utcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
                 </div>
+            ");
+        }
+        else
+        {
+            body.Append($@"
+                <p style='font-size: 16px; color: #333;'>Great news! Your music has been successfully uploaded to StreamTunes.</p>
+                <p style='font-size: 14px; color: #666;'>You uploaded {standaloneSongs.Count} song(s). You can manage your songs, update titles, and change cover art from your song management page.</p>
+            ");
+        }
+
+        // Songs table with thumbnails
+        if (standaloneSongs.Any())
+        {
+            body.Append(@"
+                <h2 style='color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; margin-top: 30px;'>Uploaded Songs</h2>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tbody>
+            ");
+
+            foreach (var song in standaloneSongs)
+            {
+                var songTitle = !string.IsNullOrEmpty(song.SongTitle)
+                    ? song.SongTitle
+                    : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                var songImageUrl = GetImageUrl(song.ImageBlobPath);
+
+                body.Append($@"
+                <tr>
+                    <td style='padding: 10px; border-bottom: 1px solid #eee;'>
+                        <table style='border-collapse: collapse;'>
+                            <tr>
+                                <td style='width: 60px; vertical-align: top;'>
+                                    {GetImageHtml(songImageUrl, 60, 60, "Cover Art")}
+                                </td>
+                                <td style='padding-left: 10px; vertical-align: middle;'>
+                                    <span style='color: #333; font-size: 14px; font-weight: bold;'>{System.Web.HttpUtility.HtmlEncode(songTitle)}</span>
+                                    {(!string.IsNullOrEmpty(song.Genre) ? $"<br/><span style='color: #666; font-size: 12px;'>{System.Web.HttpUtility.HtmlEncode(song.Genre)}</span>" : "")}
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                ");
+            }
+
+            body.Append(@"
+                    </tbody>
+                </table>
+            ");
+        }
+
+        // Call to action
+        if (!isAdminEmail)
+        {
+            var manageSongsUrl = $"{baseUrl.TrimEnd('/')}/creator/songs";
+            body.Append($@"
+                <div style='text-align: center; margin: 30px 0;'>
+                    <a href='{manageSongsUrl}' style='display: inline-block; padding: 15px 30px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px;'>Manage My Songs</a>
+                </div>
+            ");
+        }
+
+        // Footer
+        body.Append($@"
                 <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;'>
-                    <p style='color: #999; font-size: 12px;'>This is an automated admin notification from StreamTunes.</p>
+                    <p style='color: #999; font-size: 12px;'>{(isAdminEmail ? "This is an automated admin notification from StreamTunes." : "Thank you for being a creator on StreamTunes!")}</p>
                 </div>
             </div>
-        </div>";
+        </div>
+        ");
+
+        return body.ToString();
+    }
+
+    private string? GetImageUrl(string? imageBlobPath)
+    {
+        if (string.IsNullOrEmpty(imageBlobPath))
+            return null;
+
+        try
+        {
+            var sasUri = _azureStorageService.GetReadSasUri(imageBlobPath, TimeSpan.FromDays(7));
+            return sasUri.AbsoluteUri;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate SAS URL for image {ImagePath}", imageBlobPath);
+            return null;
+        }
+    }
+
+    private static string GetImageHtml(string? imageUrl, int width, int height, string altText)
+    {
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            return $"<img src='{imageUrl}' alt='{altText}' style='width: {width}px; height: {height}px; object-fit: cover; border-radius: 4px;' />";
+        }
+
+        var fontSize = Math.Max(16, (int)(width * 0.5));
+        return $@"<table cellpadding='0' cellspacing='0' border='0' style='width: {width}px; height: {height}px; border-radius: 4px; background-color: #667eea;'>
+            <tr>
+                <td align='center' valign='middle' style='width: {width}px; height: {height}px; color: #ffffff; font-size: {fontSize}px; font-family: Arial, sans-serif;'>&#9835;</td>
+            </tr>
+        </table>";
     }
 }
