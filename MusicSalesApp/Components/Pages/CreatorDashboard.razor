@@ -128,17 +128,17 @@
                         AllowSorting="true"
                         AllowFiltering="true"
                         AllowExcelExport="true"
-                        Height="400px">
+                        Height="400px" AllowResizing="true">
                     <GridPageSettings PageSize="10"></GridPageSettings>
                     <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
-                    <GridColumns>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PaymentDate)" HeaderText="Date" Width="180" Format="g"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.SongTitle)" HeaderText="Song" Width="200"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NumberOfStreams)" HeaderText="Streams" Width="120" Format="N0"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.GrossAmount)" HeaderText="Gross (USD)" Width="130" Format="C2"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.WithheldAmount)" HeaderText="Withheld (USD)" Width="140" Format="C2"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NetAmount)" HeaderText="Net (USD)" Width="130" Format="C2"></GridColumn>
-                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PayPalTransactionId)" HeaderText="PayPal Transaction ID" Width="220"></GridColumn>
+                    <GridColumns >
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PaymentDate)" HeaderText="Date" Width="180" Format="g" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.SongTitle)" HeaderText="Song" Width="200" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NumberOfStreams)" HeaderText="Streams" Width="120" Format="N0" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.GrossAmount)" HeaderText="Gross (USD)" Width="130" Format="C2" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.WithheldAmount)" HeaderText="Withheld (USD)" Width="140" Format="C2" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.NetAmount)" HeaderText="Net (USD)" Width="130" Format="C2" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(PayoutHistoryViewModel.PayPalTransactionId)" HeaderText="PayPal Transaction ID" Width="220" AllowResizing="true"></GridColumn>
                     </GridColumns>
                 </SfGrid>
             }
