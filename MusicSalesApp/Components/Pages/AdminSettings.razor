@@ -122,4 +122,69 @@ else
             </div>
         </div>
     </div>
+
+    <div class="card settings-card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Admin Email Notifications</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Configure which events trigger admin notification emails to admin@streamtunes.net.</p>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyRegistration" id="notifyRegistration" />
+                        <label class="form-check-label" for="notifyRegistration">User Registration</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyEmailConfirmed" id="notifyEmailConfirmed" />
+                        <label class="form-check-label" for="notifyEmailConfirmed">Email Confirmed</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyTaxFormCompleted" id="notifyTaxFormCompleted" />
+                        <label class="form-check-label" for="notifyTaxFormCompleted">W8/W9 Tax Form Completed</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyCreatorStatusGained" id="notifyCreatorStatusGained" />
+                        <label class="form-check-label" for="notifyCreatorStatusGained">Creator Status Gained</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyCreatorStatusLost" id="notifyCreatorStatusLost" />
+                        <label class="form-check-label" for="notifyCreatorStatusLost">Creator Status Lost</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyUploadCompleted" id="notifyUploadCompleted" />
+                        <label class="form-check-label" for="notifyUploadCompleted">Song / Cover Art Upload</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifySongRenamed" id="notifySongRenamed" />
+                        <label class="form-check-label" for="notifySongRenamed">Song Renamed</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifySongArtUpdated" id="notifySongArtUpdated" />
+                        <label class="form-check-label" for="notifySongArtUpdated">Song Art Updated</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <SfButton OnClick="CancelNotificationChanges" 
+                          Content="Cancel" 
+                          CssClass="e-btn e-outline" 
+                          Disabled="@(!_hasNotificationChanges || _isSavingNotifications)" />
+                <SfButton OnClick="SaveNotificationSettings" 
+                          IsPrimary="true" 
+                          Disabled="@(!_hasNotificationChanges || _isSavingNotifications)" 
+                          CssClass="e-btn e-primary">
+                    @if (_isSavingNotifications)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Save Notification Settings
+                </SfButton>
+            </div>
+        </div>
+    </div>
 }

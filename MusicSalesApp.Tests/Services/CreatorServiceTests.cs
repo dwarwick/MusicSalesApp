@@ -16,6 +16,7 @@ public class CreatorServiceTests
     private Mock<ILogger<CreatorService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<IAppSettingsService> _mockAppSettingsService;
+    private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private IDbContextFactory<AppDbContext> _contextFactory;
     private AppDbContext _context;
@@ -30,6 +31,7 @@ public class CreatorServiceTests
         _mockAppSettingsService = new Mock<IAppSettingsService>();
         _mockAppSettingsService.Setup(x => x.GetStreamPayRateAsync()).ReturnsAsync(0.005m);
         _mockAppSettingsService.Setup(x => x.GetStreamQualifyingSecondsAsync()).ReturnsAsync(30);
+        _mockAdminNotificationService = new Mock<IAdminNotificationService>();
 
         var store = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
@@ -48,7 +50,8 @@ public class CreatorServiceTests
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
-            _mockAppSettingsService.Object);
+            _mockAppSettingsService.Object,
+            _mockAdminNotificationService.Object);
     }
 
     [TearDown]

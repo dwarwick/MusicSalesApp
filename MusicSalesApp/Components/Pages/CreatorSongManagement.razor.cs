@@ -373,6 +373,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
                 if (metadata != null)
                 {
+                    var originalTitle = metadata.SongTitle;
+                    var artChanged = false;
+
                     // Handle cropped image (already uploaded to blob storage by JS)
                     if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
                     {
@@ -389,6 +392,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         _editingSong.JpegFileName = newFileName;
                         metadata.ImageWidth = CropOutputSize;
                         metadata.ImageHeight = CropOutputSize;
+                        artChanged = true;
 
                         _cropApplied = false;
                         _cropTargetBlobPath = null;
@@ -440,6 +444,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         // Update metadata with new image path
                         metadata.ImageBlobPath = newFileName;
                         _editingSong.JpegFileName = newFileName;
+                        artChanged = true;
                     }
 
                     // Always update the title, genre, and artist name
@@ -454,6 +459,26 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
 
                     await SongMetadataService.UpsertAsync(metadata);
+
+                    // Send admin notifications for rename and art update
+                    try
+                    {
+                        var titleChanged = !string.Equals(originalTitle, _editSongTitle, StringComparison.Ordinal);
+                        if (titleChanged && !string.IsNullOrEmpty(_currentUserEmail))
+                        {
+                            await AdminNotificationService.NotifySongRenamedAsync(
+                                _currentUserEmail, originalTitle ?? string.Empty, _editSongTitle);
+                        }
+                        if (artChanged && !string.IsNullOrEmpty(_currentUserEmail))
+                        {
+                            await AdminNotificationService.NotifySongArtUpdatedAsync(
+                                _currentUserEmail, _editSongTitle);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Failed to send admin notification for song edit");
+                    }
                     
                     _successMessage = $"'{_editSongTitle}' has been updated successfully.";
                     await LoadSongsAsync();

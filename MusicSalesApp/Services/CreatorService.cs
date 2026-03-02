@@ -18,6 +18,7 @@ public class CreatorService : ICreatorService
     private readonly IConfiguration _configuration;
     private readonly ILogger<CreatorService> _logger;
     private readonly IAppSettingsService _appSettingsService;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     public CreatorService(
         IDbContextFactory<AppDbContext> dbContextFactory,
@@ -25,7 +26,8 @@ public class CreatorService : ICreatorService
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<CreatorService> logger,
-        IAppSettingsService appSettingsService)
+        IAppSettingsService appSettingsService,
+        IAdminNotificationService adminNotificationService)
     {
         _dbContextFactory = dbContextFactory;
         _storageService = storageService;
@@ -33,6 +35,7 @@ public class CreatorService : ICreatorService
         _configuration = configuration;
         _logger = logger;
         _appSettingsService = appSettingsService;
+        _adminNotificationService = adminNotificationService;
     }
 
     /// <inheritdoc />
@@ -294,6 +297,21 @@ public class CreatorService : ICreatorService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Activated creator {CreatorId}", creatorId);
+
+        // Notify admin about creator activation
+        try
+        {
+            var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+            if (user?.Email != null)
+            {
+                await _adminNotificationService.NotifyCreatorStatusGainedAsync(user.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send admin notification for creator activation {CreatorId}", creatorId);
+        }
+
         return creator;
     }
 
@@ -315,6 +333,21 @@ public class CreatorService : ICreatorService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Deactivated creator {CreatorId}", creatorId);
+
+        // Notify admin about creator deactivation
+        try
+        {
+            var user = await _userManager.FindByIdAsync(creator.UserId.ToString());
+            if (user?.Email != null)
+            {
+                await _adminNotificationService.NotifyCreatorStatusLostAsync(user.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send admin notification for creator deactivation {CreatorId}", creatorId);
+        }
+
         return creator;
     }
 
@@ -360,6 +393,20 @@ public class CreatorService : ICreatorService
         }
 
         _logger.LogInformation("User {UserId} stopped being a creator", userId);
+
+        // Notify admin about creator status loss
+        try
+        {
+            if (user?.Email != null)
+            {
+                await _adminNotificationService.NotifyCreatorStatusLostAsync(user.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send admin notification for user {UserId} stopping being a creator", userId);
+        }
+
         return true;
     }
 
