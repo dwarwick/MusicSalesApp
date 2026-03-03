@@ -156,38 +156,24 @@ public class NewSongNotificationService : INewSongNotificationService
         return newItems;
     }
 
-    private string BuildEmailBody(List<SongMetadata> newSongs, string baseUrl)
+    /// <inheritdoc />
+    public string BuildSongListHtml(List<SongMetadata> songs, string sectionTitle = "New Songs")
     {
-        var logoUrl = _emailService.GetLogoUrl();
-        var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
-
         // Group into albums and standalone songs
-        var albumCovers = newSongs
+        var albumCovers = songs
             .Where(s => s.IsAlbumCover && !string.IsNullOrEmpty(s.AlbumName))
             .ToList();
 
-        var albumTracks = newSongs
+        var albumTracks = songs
             .Where(s => !s.IsAlbumCover && !string.IsNullOrEmpty(s.AlbumName) && !string.IsNullOrEmpty(s.Mp3BlobPath))
             .GroupBy(s => s.AlbumName)
             .ToDictionary(g => g.Key, g => g.OrderBy(t => t.TrackNumber ?? 0).ToList());
 
-        var standaloneSongs = newSongs
+        var standaloneSongs = songs
             .Where(s => !s.IsAlbumCover && string.IsNullOrEmpty(s.AlbumName) && !string.IsNullOrEmpty(s.Mp3BlobPath))
             .ToList();
 
         var body = new StringBuilder();
-
-        // Email header with logo
-        body.Append($@"
-        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
-            <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
-                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>New Music Alert!</h1>
-            </div>
-            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
-                <p style='font-size: 16px; color: #333;'>Hello {{USER_NAME}},</p>
-                <p style='font-size: 16px; color: #333;'>Great news! New music has been added to StreamTunes. Check out what's new:</p>
-        ");
 
         // Albums section
         if (albumCovers.Any())
@@ -249,15 +235,17 @@ public class NewSongNotificationService : INewSongNotificationService
         // Standalone songs section
         if (standaloneSongs.Any())
         {
-            body.Append(@"
-                <h2 style='color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; margin-top: 30px;'>New Songs</h2>
+            body.Append($@"
+                <h2 style='color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; margin-top: 30px;'>{System.Web.HttpUtility.HtmlEncode(sectionTitle)}</h2>
                 <table style='width: 100%; border-collapse: collapse;'>
                     <tbody>
             ");
 
             foreach (var song in standaloneSongs)
             {
-                var songTitle = Path.GetFileNameWithoutExtension(song.Mp3BlobPath);
+                var songTitle = !string.IsNullOrEmpty(song.SongTitle)
+                    ? song.SongTitle
+                    : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
                 var songImageUrl = GetImageUrl(song.ImageBlobPath);
 
                 body.Append($@"
@@ -284,6 +272,31 @@ public class NewSongNotificationService : INewSongNotificationService
                 </table>
             ");
         }
+
+        return body.ToString();
+    }
+
+    private string BuildEmailBody(List<SongMetadata> newSongs, string baseUrl)
+    {
+        var logoUrl = _emailService.GetLogoUrl();
+        var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+
+        var body = new StringBuilder();
+
+        // Email header with logo
+        body.Append($@"
+        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+            <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>New Music Alert!</h1>
+            </div>
+            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                <p style='font-size: 16px; color: #333;'>Hello {{USER_NAME}},</p>
+                <p style='font-size: 16px; color: #333;'>Great news! New music has been added to StreamTunes. Check out what's new:</p>
+        ");
+
+        // Reuse shared song list builder
+        body.Append(BuildSongListHtml(newSongs));
 
         // Call to action
         body.Append($@"

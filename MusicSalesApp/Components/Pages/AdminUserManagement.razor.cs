@@ -262,8 +262,26 @@ public class AdminUserManagementModel : BlazorBase
                     
                     if (creator.IsActive != _editCreatorIsActive)
                     {
+                        var wasActive = creator.IsActive;
                         creator.IsActive = _editCreatorIsActive;
                         statusChanged = true;
+
+                        // Notify admin about creator status change
+                        try
+                        {
+                            if (_editCreatorIsActive && !wasActive)
+                            {
+                                await AdminNotificationService.NotifyCreatorStatusGainedAsync(_editEmail);
+                            }
+                            else if (!_editCreatorIsActive && wasActive)
+                            {
+                                await AdminNotificationService.NotifyCreatorStatusLostAsync(_editEmail);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogError(ex, "Failed to send admin notification for creator status change of {Email}", _editEmail);
+                        }
                     }
                     
                     if (statusChanged)

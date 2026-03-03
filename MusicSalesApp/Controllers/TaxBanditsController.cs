@@ -32,6 +32,7 @@ public class TaxBanditsController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly ILogger<TaxBanditsController> _logger;
     private readonly IHubContext<WebhookStatusHub> _hubContext;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     // W-9/W-8 completion status
     private const string StatusCompleted = "COMPLETED";
@@ -61,7 +62,8 @@ public class TaxBanditsController : ControllerBase
         ITaxBanditsService taxBanditsService,
         IConfiguration configuration,
         ILogger<TaxBanditsController> logger,
-        IHubContext<WebhookStatusHub> hubContext)
+        IHubContext<WebhookStatusHub> hubContext,
+        IAdminNotificationService adminNotificationService)
     {
         _dbContextFactory = dbContextFactory;
         _userManager = userManager;
@@ -72,6 +74,7 @@ public class TaxBanditsController : ControllerBase
         _configuration = configuration;
         _logger = logger;
         _hubContext = hubContext;
+        _adminNotificationService = adminNotificationService;
     }
 
     /// <summary>
@@ -259,6 +262,7 @@ public class TaxBanditsController : ControllerBase
                     if (!string.IsNullOrWhiteSpace(userEmail))
                     {
                         await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-9");
+                        await _adminNotificationService.NotifyTaxFormCompletedAsync(userEmail, "W-9");
                     }
                 }
                 else if (string.Equals(tinStatusCode, TinStatusCodeFailed, StringComparison.OrdinalIgnoreCase))
@@ -947,6 +951,7 @@ public class TaxBanditsController : ControllerBase
                 if (!string.IsNullOrWhiteSpace(userEmail))
                 {
                     await _creatorEmailService.SendTaxFormSuccessEmailAsync(userEmail, baseUrl, "W-8", taxData.TaxResidencyCountry);
+                    await _adminNotificationService.NotifyTaxFormCompletedAsync(userEmail, "W-8");
                 }
             }
             else if (isFormStatusFailure)

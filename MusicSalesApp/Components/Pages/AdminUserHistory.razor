@@ -1,0 +1,111 @@
+@page "/admin/user-history"
+@inherits AdminUserHistoryModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>User History</PageTitle>
+
+<div class="container-fluid my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-clock-history me-2"></i>User History</h3>
+            <p class="text-muted mb-0">View history of user events and changes</p>
+        </div>
+        <div class="d-flex gap-2">
+            <SfButton CssClass="e-info" OnClick="ExportToExcel">
+                <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+            </SfButton>
+            <SfButton CssClass="e-primary" OnClick="ExportToPdf">
+                <i class="bi bi-file-earmark-pdf me-1"></i> Export to PDF
+            </SfButton>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading user history...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        <div id="grid-container">
+            <SfGrid @ref="_grid" 
+                    TValue="UserHistoryViewModel"
+                    DataSource="@_userHistory"
+                    AllowPaging="true" 
+                    AllowSorting="true" 
+                    AllowFiltering="true"
+                    AllowExcelExport="true"
+                    AllowPdfExport="true"
+                    Height="500px">
+                <GridPageSettings PageSize="15"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.UserEmail)" HeaderText="User Email" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.EventType)" HeaderText="Event Type" Width="160"></GridColumn>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.Description)" HeaderText="Description" Width="300">
+                        <Template>
+                            @{
+                                var item = (context as UserHistoryViewModel);
+                                <small class="text-break">@item.Description</small>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.OldValue)" HeaderText="Old Value" Width="150">
+                        <Template>
+                            @{
+                                var item = (context as UserHistoryViewModel);
+                                if (!string.IsNullOrEmpty(item.OldValue))
+                                {
+                                    <small class="text-break">@item.OldValue</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.NewValue)" HeaderText="New Value" Width="150">
+                        <Template>
+                            @{
+                                var item = (context as UserHistoryViewModel);
+                                if (!string.IsNullOrEmpty(item.NewValue))
+                                {
+                                    <small class="text-break">@item.NewValue</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(UserHistoryViewModel.OccurredAt)" HeaderText="Date (UTC)" Width="180" Format="g">
+                        <Template>
+                            @{
+                                var item = (context as UserHistoryViewModel);
+                                <span>@item.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                </GridColumns>
+            </SfGrid>
+
+            <div class="mt-3">
+                <p class="text-muted">Total: @_userHistory.Count records</p>
+            </div>
+        </div>
+    }
+</div>

@@ -27,6 +27,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
+    public DbSet<UserHistory> UserHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -378,5 +379,24 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             new Genre { Id = 7, Name = "R&B", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" },
             new Genre { Id = 8, Name = "Rock", IsActive = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), CreatedByEmail = "admin@app.com" }
         );
+
+        // Configure UserHistory entity
+        builder.Entity<UserHistory>()
+            .HasOne(uh => uh.User)
+            .WithMany()
+            .HasForeignKey(uh => uh.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Index on UserId for efficient lookups
+        builder.Entity<UserHistory>()
+            .HasIndex(uh => uh.UserId);
+
+        // Index on OccurredAt for efficient querying of recent events
+        builder.Entity<UserHistory>()
+            .HasIndex(uh => uh.OccurredAt);
+
+        // Index on EventType for filtering
+        builder.Entity<UserHistory>()
+            .HasIndex(uh => uh.EventType);
     }
 }

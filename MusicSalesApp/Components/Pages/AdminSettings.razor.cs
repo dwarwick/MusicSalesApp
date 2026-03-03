@@ -1,4 +1,5 @@
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Services;
 
 #nullable enable
 
@@ -21,9 +22,39 @@ public class AdminSettingsModel : BlazorBase
     protected int _streamQualifyingSeconds = 30;
     protected int _originalStreamQualifyingSeconds = 30;
 
+    // Admin notification settings
+    protected bool _notifyRegistration = true;
+    protected bool _notifyEmailConfirmed = true;
+    protected bool _notifyTaxFormCompleted = true;
+    protected bool _notifyCreatorStatusGained = true;
+    protected bool _notifyCreatorStatusLost = true;
+    protected bool _notifyUploadCompleted = true;
+    protected bool _notifySongRenamed = true;
+    protected bool _notifySongArtUpdated = true;
+
+    // Original values for change tracking
+    protected bool _originalNotifyRegistration = true;
+    protected bool _originalNotifyEmailConfirmed = true;
+    protected bool _originalNotifyTaxFormCompleted = true;
+    protected bool _originalNotifyCreatorStatusGained = true;
+    protected bool _originalNotifyCreatorStatusLost = true;
+    protected bool _originalNotifyUploadCompleted = true;
+    protected bool _originalNotifySongRenamed = true;
+    protected bool _originalNotifySongArtUpdated = true;
+    protected bool _isSavingNotifications = false;
+
     protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
                                    || _streamPayRateDisplay != _originalStreamPayRateDisplay
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds;
+
+    protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
+                                           || _notifyEmailConfirmed != _originalNotifyEmailConfirmed
+                                           || _notifyTaxFormCompleted != _originalNotifyTaxFormCompleted
+                                           || _notifyCreatorStatusGained != _originalNotifyCreatorStatusGained
+                                           || _notifyCreatorStatusLost != _originalNotifyCreatorStatusLost
+                                           || _notifyUploadCompleted != _originalNotifyUploadCompleted
+                                           || _notifySongRenamed != _originalNotifySongRenamed
+                                           || _notifySongArtUpdated != _originalNotifySongArtUpdated;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -58,6 +89,31 @@ public class AdminSettingsModel : BlazorBase
 
         _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
         _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
+
+        // Load admin notification settings
+        _notifyRegistration = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyRegistrationKey);
+        _originalNotifyRegistration = _notifyRegistration;
+
+        _notifyEmailConfirmed = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyEmailConfirmedKey);
+        _originalNotifyEmailConfirmed = _notifyEmailConfirmed;
+
+        _notifyTaxFormCompleted = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyTaxFormCompletedKey);
+        _originalNotifyTaxFormCompleted = _notifyTaxFormCompleted;
+
+        _notifyCreatorStatusGained = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyCreatorStatusGainedKey);
+        _originalNotifyCreatorStatusGained = _notifyCreatorStatusGained;
+
+        _notifyCreatorStatusLost = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyCreatorStatusLostKey);
+        _originalNotifyCreatorStatusLost = _notifyCreatorStatusLost;
+
+        _notifyUploadCompleted = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyUploadCompletedKey);
+        _originalNotifyUploadCompleted = _notifyUploadCompleted;
+
+        _notifySongRenamed = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifySongRenamedKey);
+        _originalNotifySongRenamed = _notifySongRenamed;
+
+        _notifySongArtUpdated = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifySongArtUpdatedKey);
+        _originalNotifySongArtUpdated = _notifySongArtUpdated;
     }
 
     protected void CancelChanges()
@@ -141,6 +197,57 @@ public class AdminSettingsModel : BlazorBase
         finally
         {
             _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    protected void CancelNotificationChanges()
+    {
+        _notifyRegistration = _originalNotifyRegistration;
+        _notifyEmailConfirmed = _originalNotifyEmailConfirmed;
+        _notifyTaxFormCompleted = _originalNotifyTaxFormCompleted;
+        _notifyCreatorStatusGained = _originalNotifyCreatorStatusGained;
+        _notifyCreatorStatusLost = _originalNotifyCreatorStatusLost;
+        _notifyUploadCompleted = _originalNotifyUploadCompleted;
+        _notifySongRenamed = _originalNotifySongRenamed;
+        _notifySongArtUpdated = _originalNotifySongArtUpdated;
+        StateHasChanged();
+    }
+
+    protected async Task SaveNotificationSettings()
+    {
+        _isSavingNotifications = true;
+        try
+        {
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyRegistrationKey, _notifyRegistration);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyEmailConfirmedKey, _notifyEmailConfirmed);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyTaxFormCompletedKey, _notifyTaxFormCompleted);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyCreatorStatusGainedKey, _notifyCreatorStatusGained);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyCreatorStatusLostKey, _notifyCreatorStatusLost);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyUploadCompletedKey, _notifyUploadCompleted);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifySongRenamedKey, _notifySongRenamed);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifySongArtUpdatedKey, _notifySongArtUpdated);
+
+            _originalNotifyRegistration = _notifyRegistration;
+            _originalNotifyEmailConfirmed = _notifyEmailConfirmed;
+            _originalNotifyTaxFormCompleted = _notifyTaxFormCompleted;
+            _originalNotifyCreatorStatusGained = _notifyCreatorStatusGained;
+            _originalNotifyCreatorStatusLost = _notifyCreatorStatusLost;
+            _originalNotifyUploadCompleted = _notifyUploadCompleted;
+            _originalNotifySongRenamed = _notifySongRenamed;
+            _originalNotifySongArtUpdated = _notifySongArtUpdated;
+
+            _successMessage = "Admin notification settings saved successfully.";
+            Logger.LogInformation("Admin notification settings updated");
+        }
+        catch (Exception ex)
+        {
+            _validationErrors.Add($"Error saving notification settings: {ex.Message}");
+            Logger.LogError(ex, "Failed to save notification settings");
+        }
+        finally
+        {
+            _isSavingNotifications = false;
             StateHasChanged();
         }
     }

@@ -27,6 +27,7 @@ public class TaxBanditsControllerTests
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<TaxBanditsController>> _mockLogger;
     private Mock<IHubContext<WebhookStatusHub>> _mockHubContext;
+    private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private TaxBanditsController _controller;
 
     [SetUp]
@@ -49,6 +50,7 @@ public class TaxBanditsControllerTests
         _mockTaxBanditsService = new Mock<ITaxBanditsService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<TaxBanditsController>>();
+        _mockAdminNotificationService = new Mock<IAdminNotificationService>();
         
         // Setup HubContext mock
         _mockHubContext = new Mock<IHubContext<WebhookStatusHub>>();
@@ -66,7 +68,8 @@ public class TaxBanditsControllerTests
             _mockTaxBanditsService.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
-            _mockHubContext.Object);
+            _mockHubContext.Object,
+            _mockAdminNotificationService.Object);
     }
 
     [Test]
@@ -306,7 +309,8 @@ public class TaxBanditsControllerTests
             _mockTaxBanditsService.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
-            _mockHubContext.Object);
+            _mockHubContext.Object,
+            _mockAdminNotificationService.Object);
 
         // W-9 webhook body with FormData for TIN matching
         var webhookBody = @"{
@@ -423,7 +427,8 @@ public class TaxBanditsControllerTests
             _mockTaxBanditsService.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
-            _mockHubContext.Object);
+            _mockHubContext.Object,
+            _mockAdminNotificationService.Object);
 
         // W-8BEN webhook body
         var webhookBody = @"{

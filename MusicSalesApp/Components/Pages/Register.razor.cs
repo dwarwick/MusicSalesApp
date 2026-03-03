@@ -172,6 +172,17 @@ public partial class RegisterModel : BlazorBase, IDisposable
             NewEmail = Email;
             showVerificationSection = true;
             successMessage = "Registration successful! Please check your email to verify your account.";
+
+            // Notify admin about new registration
+            try
+            {
+                await AdminNotificationService.NotifyUserRegisteredAsync(Email);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send admin notification for registration of {Email}", Email);
+            }
+
             await CheckResendAvailability();
             StartCountdownTimer();
         }

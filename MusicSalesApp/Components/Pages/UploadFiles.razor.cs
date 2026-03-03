@@ -296,6 +296,28 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             // Process uploads in chunks
             await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+
+            // Send batch upload notification after all uploads complete
+            try
+            {
+                // Use the actual MP3 blob paths tracked during upload for reliable matching
+                List<string> uploadedMp3Paths;
+                lock (_blobPathsLock)
+                {
+                    uploadedMp3Paths = _uploadedBlobPaths
+                        .Where(p => p.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+                if (uploadedMp3Paths.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
+                {
+                    await AdminNotificationService.NotifyUploadBatchCompletedAsync(
+                        _currentUserEmail, _currentCreatorId.Value, uploadedMp3Paths);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send batch upload notification");
+            }
         }
         finally
         {

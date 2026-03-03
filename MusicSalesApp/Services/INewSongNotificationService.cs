@@ -21,4 +21,13 @@ public interface INewSongNotificationService
     /// <param name="since">The start date/time to check for new songs.</param>
     /// <returns>A list of song metadata for newly added content.</returns>
     Task<List<SongMetadata>> GetNewSongsAsync(DateTime since);
+
+    /// <summary>
+    /// Builds the HTML for a song list section (albums with tracks + standalone songs with thumbnails).
+    /// Reusable by other services that need to render song summaries in emails.
+    /// </summary>
+    /// <param name="songs">The songs to include in the list.</param>
+    /// <param name="sectionTitle">The heading above the song list (e.g., "New Songs", "Uploaded Songs").</param>
+    /// <returns>HTML string for the song list section.</returns>
+    string BuildSongListHtml(List<SongMetadata> songs, string sectionTitle = "New Songs");
 }

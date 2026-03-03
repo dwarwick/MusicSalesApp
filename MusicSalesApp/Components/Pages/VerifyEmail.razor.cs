@@ -49,6 +49,20 @@ public partial class VerifyEmailModel : BlazorBase
         {
             // Send welcome email after successful verification
             await SendWelcomeEmailAsync();
+
+            // Notify admin about email confirmation
+            try
+            {
+                var verifiedUser = await UserManager.FindByIdAsync(UserId);
+                if (verifiedUser?.Email != null)
+                {
+                    await AdminNotificationService.NotifyEmailConfirmedAsync(verifiedUser.Email);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send admin notification for email confirmation of user {UserId}", UserId);
+            }
         }
         else if (!string.IsNullOrEmpty(error))
         {
