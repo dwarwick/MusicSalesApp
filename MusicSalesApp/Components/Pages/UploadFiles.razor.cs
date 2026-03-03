@@ -300,14 +300,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // Send batch upload notification after all uploads complete
             try
             {
-                var completedFiles = _uploadItems
-                    .Where(i => i.Status == UploadStatus.Completed && !string.IsNullOrEmpty(i.AudioFileName))
-                    .Select(i => i.AudioFileName)
-                    .ToList();
-                if (completedFiles.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
+                // Use the actual MP3 blob paths tracked during upload for reliable matching
+                List<string> uploadedMp3Paths;
+                lock (_blobPathsLock)
+                {
+                    uploadedMp3Paths = _uploadedBlobPaths
+                        .Where(p => p.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+                if (uploadedMp3Paths.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
                 {
                     await AdminNotificationService.NotifyUploadBatchCompletedAsync(
-                        _currentUserEmail, _currentCreatorId.Value, completedFiles);
+                        _currentUserEmail, _currentCreatorId.Value, uploadedMp3Paths);
                 }
             }
             catch (Exception ex)

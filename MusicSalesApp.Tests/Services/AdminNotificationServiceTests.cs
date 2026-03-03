@@ -4,6 +4,7 @@ using Moq;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using System.IO;
 
 namespace MusicSalesApp.Tests.Services;
 
@@ -12,8 +13,8 @@ public class AdminNotificationServiceTests
 {
     private Mock<IEmailService> _mockEmailService;
     private Mock<IAppSettingsService> _mockAppSettingsService;
-    private Mock<IAzureStorageService> _mockAzureStorageService;
     private Mock<ISongMetadataService> _mockSongMetadataService;
+    private Mock<INewSongNotificationService> _mockNewSongNotificationService;
     private Mock<ILogger<AdminNotificationService>> _mockLogger;
     private IDbContextFactory<AppDbContext> _contextFactory;
     private DbContextOptions<AppDbContext> _dbOptions;
@@ -24,8 +25,8 @@ public class AdminNotificationServiceTests
     {
         _mockEmailService = new Mock<IEmailService>();
         _mockAppSettingsService = new Mock<IAppSettingsService>();
-        _mockAzureStorageService = new Mock<IAzureStorageService>();
         _mockSongMetadataService = new Mock<ISongMetadataService>();
+        _mockNewSongNotificationService = new Mock<INewSongNotificationService>();
         _mockLogger = new Mock<ILogger<AdminNotificationService>>();
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -34,8 +35,15 @@ public class AdminNotificationServiceTests
             .Returns("https://streamtunes.net/images/logo-light-small.png");
         _mockEmailService.Setup(x => x.GetAppBaseUrl())
             .Returns("https://streamtunes.net");
-        _mockSongMetadataService.Setup(x => x.GetAllAsync())
-            .ReturnsAsync(new List<SongMetadata>());
+        _mockNewSongNotificationService.Setup(x => x.BuildSongListHtml(It.IsAny<List<SongMetadata>>(), It.IsAny<string>()))
+            .Returns<List<SongMetadata>, string>((songs, title) =>
+            {
+                // Return a simple HTML representation that includes song titles for assertions
+                var songHtml = string.Join("", songs
+                    .Where(s => !s.IsAlbumCover && !string.IsNullOrEmpty(s.Mp3BlobPath))
+                    .Select(s => $"<tr><td>{System.Web.HttpUtility.HtmlEncode(s.SongTitle ?? Path.GetFileNameWithoutExtension(s.Mp3BlobPath))}</td></tr>"));
+                return $"<h2>{title}</h2><table>{songHtml}</table>";
+            });
 
         _dbOptions = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -60,8 +68,8 @@ public class AdminNotificationServiceTests
             _mockEmailService.Object,
             _mockAppSettingsService.Object,
             _contextFactory,
-            _mockAzureStorageService.Object,
             _mockSongMetadataService.Object,
+            _mockNewSongNotificationService.Object,
             _mockLogger.Object);
     }
 
@@ -214,8 +222,8 @@ public class AdminNotificationServiceTests
         };
         _mockSongMetadataService.Setup(x => x.GetByCreatorIdAsync(42)).ReturnsAsync(uploadedSongs);
 
-        // Act
-        await _service.NotifyUploadBatchCompletedAsync("test@example.com", 42, new List<string> { "song1.mp3", "song2.mp3" });
+        // Act — pass the actual MP3 blob paths (same as in database)
+        await _service.NotifyUploadBatchCompletedAsync("test@example.com", 42, new List<string> { "song1/song1.mp3", "song2/song2.mp3" });
 
         // Assert - admin email sent with summary
         _mockEmailService.Verify(

@@ -39,8 +39,8 @@ public interface IAdminNotificationService
     /// </summary>
     /// <param name="userEmail">The creator's email address.</param>
     /// <param name="creatorId">The creator's ID for looking up uploaded songs.</param>
-    /// <param name="uploadedFileNames">List of file names that were uploaded (for history tracking).</param>
-    Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedFileNames);
+    /// <param name="uploadedBlobPaths">List of MP3 blob paths that were uploaded (for exact matching).</param>
+    Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedBlobPaths);
 
     /// <summary>
     /// Notifies admin about a song rename.

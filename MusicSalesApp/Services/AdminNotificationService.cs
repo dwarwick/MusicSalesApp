@@ -14,8 +14,8 @@ public class AdminNotificationService : IAdminNotificationService
     private readonly IEmailService _emailService;
     private readonly IAppSettingsService _appSettingsService;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
-    private readonly IAzureStorageService _azureStorageService;
     private readonly ISongMetadataService _songMetadataService;
+    private readonly INewSongNotificationService _newSongNotificationService;
     private readonly ILogger<AdminNotificationService> _logger;
 
     public const string AdminEmail = "admin@streamtunes.net";
@@ -34,15 +34,15 @@ public class AdminNotificationService : IAdminNotificationService
         IEmailService emailService,
         IAppSettingsService appSettingsService,
         IDbContextFactory<AppDbContext> dbContextFactory,
-        IAzureStorageService azureStorageService,
         ISongMetadataService songMetadataService,
+        INewSongNotificationService newSongNotificationService,
         ILogger<AdminNotificationService> logger)
     {
         _emailService = emailService;
         _appSettingsService = appSettingsService;
         _dbContextFactory = dbContextFactory;
-        _azureStorageService = azureStorageService;
         _songMetadataService = songMetadataService;
+        _newSongNotificationService = newSongNotificationService;
         _logger = logger;
     }
 
@@ -142,33 +142,27 @@ public class AdminNotificationService : IAdminNotificationService
     }
 
     /// <inheritdoc />
-    public async Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedFileNames)
+    public async Task NotifyUploadBatchCompletedAsync(string userEmail, int creatorId, List<string> uploadedBlobPaths)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        // Record history for each uploaded file
-        var fileList = string.Join(", ", uploadedFileNames);
-        await RecordUserHistoryAsync(userId, userEmail, "UploadCompleted", $"User uploaded {uploadedFileNames.Count} file(s): {fileList}");
+        // Record history
+        await RecordUserHistoryAsync(userId, userEmail, "UploadCompleted", $"User uploaded {uploadedBlobPaths.Count} file(s)");
 
-        // Look up the recently uploaded songs for this creator to build the summary email
+        // Look up the uploaded songs by matching exact MP3 blob paths
         var creatorSongs = await _songMetadataService.GetByCreatorIdAsync(creatorId);
-        // Match uploaded songs by comparing normalized filenames against uploaded file list
-        var normalizedUploadedNames = uploadedFileNames
-            .Select(f => Path.GetFileNameWithoutExtension(f).ToLowerInvariant())
-            .ToHashSet();
-        var recentSongs = creatorSongs
-            .Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath) &&
-                        normalizedUploadedNames.Contains(
-                            Path.GetFileNameWithoutExtension(s.Mp3BlobPath).ToLowerInvariant()))
+        var uploadedPathSet = uploadedBlobPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var uploadedSongs = creatorSongs
+            .Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath) && uploadedPathSet.Contains(s.Mp3BlobPath))
             .ToList();
 
         // Send admin email
         if (await IsNotificationEnabledAsync(NotifyUploadCompletedKey))
         {
             var adminSubject = $"StreamTunes Admin - New Upload from {userEmail}";
-            var adminBody = BuildUploadSummaryEmailBody(userEmail, recentSongs, isAdminEmail: true);
+            var adminBody = BuildUploadSummaryEmailBody(userEmail, uploadedSongs, isAdminEmail: true);
             await SendAdminEmailAsync(adminSubject, adminBody);
         }
 
@@ -176,7 +170,7 @@ public class AdminNotificationService : IAdminNotificationService
         try
         {
             var creatorSubject = "StreamTunes - Your Songs Have Been Uploaded!";
-            var creatorBody = BuildUploadSummaryEmailBody(userEmail, recentSongs, isAdminEmail: false);
+            var creatorBody = BuildUploadSummaryEmailBody(userEmail, uploadedSongs, isAdminEmail: false);
             await _emailService.SendEmailAsync(userEmail, creatorSubject, creatorBody);
         }
         catch (Exception ex)
@@ -315,10 +309,8 @@ public class AdminNotificationService : IAdminNotificationService
         var baseUrl = _emailService.GetAppBaseUrl();
         var utcNow = DateTime.UtcNow;
 
-        // Separate standalone songs (with MP3) from album cover entries
-        var standaloneSongs = uploadedSongs
-            .Where(s => !s.IsAlbumCover && !string.IsNullOrEmpty(s.Mp3BlobPath))
-            .ToList();
+        var songCount = uploadedSongs
+            .Count(s => !s.IsAlbumCover && !string.IsNullOrEmpty(s.Mp3BlobPath));
 
         var body = new StringBuilder();
 
@@ -339,7 +331,7 @@ public class AdminNotificationService : IAdminNotificationService
                 <p style='font-size: 16px; color: #333;'>A creator has uploaded new music to StreamTunes.</p>
                 <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
                     <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Creator Email:</strong> {System.Web.HttpUtility.HtmlEncode(creatorEmail)}</p>
-                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Songs Uploaded:</strong> {standaloneSongs.Count}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Songs Uploaded:</strong> {songCount}</p>
                     <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {utcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
                 </div>
             ");
@@ -348,50 +340,12 @@ public class AdminNotificationService : IAdminNotificationService
         {
             body.Append($@"
                 <p style='font-size: 16px; color: #333;'>Great news! Your music has been successfully uploaded to StreamTunes.</p>
-                <p style='font-size: 14px; color: #666;'>You uploaded {standaloneSongs.Count} song(s). You can manage your songs, update titles, and change cover art from your song management page.</p>
+                <p style='font-size: 14px; color: #666;'>You uploaded {songCount} song(s). You can manage your songs, update titles, and change cover art from your song management page.</p>
             ");
         }
 
-        // Songs table with thumbnails
-        if (standaloneSongs.Any())
-        {
-            body.Append(@"
-                <h2 style='color: #1a1a2e; border-bottom: 2px solid #1a1a2e; padding-bottom: 10px; margin-top: 30px;'>Uploaded Songs</h2>
-                <table style='width: 100%; border-collapse: collapse;'>
-                    <tbody>
-            ");
-
-            foreach (var song in standaloneSongs)
-            {
-                var songTitle = !string.IsNullOrEmpty(song.SongTitle)
-                    ? song.SongTitle
-                    : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
-                var songImageUrl = GetImageUrl(song.ImageBlobPath);
-
-                body.Append($@"
-                <tr>
-                    <td style='padding: 10px; border-bottom: 1px solid #eee;'>
-                        <table style='border-collapse: collapse;'>
-                            <tr>
-                                <td style='width: 60px; vertical-align: top;'>
-                                    {GetImageHtml(songImageUrl, 60, 60, "Cover Art")}
-                                </td>
-                                <td style='padding-left: 10px; vertical-align: middle;'>
-                                    <span style='color: #333; font-size: 14px; font-weight: bold;'>{System.Web.HttpUtility.HtmlEncode(songTitle)}</span>
-                                    {(!string.IsNullOrEmpty(song.Genre) ? $"<br/><span style='color: #666; font-size: 12px;'>{System.Web.HttpUtility.HtmlEncode(song.Genre)}</span>" : "")}
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-                ");
-            }
-
-            body.Append(@"
-                    </tbody>
-                </table>
-            ");
-        }
+        // Reuse the daily digest's song list builder for thumbnails + song titles
+        body.Append(_newSongNotificationService.BuildSongListHtml(uploadedSongs, "Uploaded Songs"));
 
         // Call to action
         if (!isAdminEmail)
@@ -414,37 +368,5 @@ public class AdminNotificationService : IAdminNotificationService
         ");
 
         return body.ToString();
-    }
-
-    private string? GetImageUrl(string? imageBlobPath)
-    {
-        if (string.IsNullOrEmpty(imageBlobPath))
-            return null;
-
-        try
-        {
-            var sasUri = _azureStorageService.GetReadSasUri(imageBlobPath, TimeSpan.FromDays(7));
-            return sasUri.AbsoluteUri;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to generate SAS URL for image {ImagePath}", imageBlobPath);
-            return null;
-        }
-    }
-
-    private static string GetImageHtml(string? imageUrl, int width, int height, string altText)
-    {
-        if (!string.IsNullOrEmpty(imageUrl))
-        {
-            return $"<img src='{imageUrl}' alt='{altText}' style='width: {width}px; height: {height}px; object-fit: cover; border-radius: 4px;' />";
-        }
-
-        var fontSize = Math.Max(16, (int)(width * 0.5));
-        return $@"<table cellpadding='0' cellspacing='0' border='0' style='width: {width}px; height: {height}px; border-radius: 4px; background-color: #667eea;'>
-            <tr>
-                <td align='center' valign='middle' style='width: {width}px; height: {height}px; color: #ffffff; font-size: {fontSize}px; font-family: Arial, sans-serif;'>&#9835;</td>
-            </tr>
-        </table>";
     }
 }
