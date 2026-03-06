@@ -150,5 +150,55 @@
             }
             <p class="text-muted mt-2"><small>All dates shown in @(_userTimeZoneDisplayName) time zone. Amounts are in USD as processed by PayPal.</small></p>
         </div>
+
+        <!-- Tips Section -->
+        <div class="tip-dashboard-section mt-4">
+            <h4><i class="fas fa-heart me-2"></i>Tips</h4>
+
+            <div class="tip-buckets">
+                <div class="tip-bucket">
+                    <h5>On Hold</h5>
+                    <div class="tip-bucket-amount">$@(_tipsOnHoldAmount.ToString("F2"))</div>
+                    <div class="tip-bucket-count">@_tipsOnHoldCount tip(s)</div>
+                </div>
+                <div class="tip-bucket">
+                    <h5>Pending Payout</h5>
+                    <div class="tip-bucket-amount">$@(_tipsPendingPayoutAmount.ToString("F2"))</div>
+                    <div class="tip-bucket-count">@_tipsPendingPayoutCount tip(s)</div>
+                </div>
+                <div class="tip-bucket">
+                    <h5>Paid</h5>
+                    <div class="tip-bucket-amount">$@(_tipsPaidAmount.ToString("F2"))</div>
+                    <div class="tip-bucket-count">@_tipsPaidCount tip(s)</div>
+                </div>
+            </div>
+
+            @if (_tipHistory.Count > 0)
+            {
+                <SfGrid @ref="_tipGrid"
+                        TValue="TipHistoryViewModel"
+                        DataSource="@_tipHistory"
+                        AllowPaging="true"
+                        AllowSorting="true"
+                        AllowFiltering="true"
+                        Height="300px" AllowResizing="true">
+                    <GridPageSettings PageSize="10"></GridPageSettings>
+                    <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                    <GridColumns>
+                        <GridColumn Field="@nameof(TipHistoryViewModel.Date)" HeaderText="Date" Width="180" Format="g" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(TipHistoryViewModel.Amount)" HeaderText="Amount (USD)" Width="130" Format="C2" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(TipHistoryViewModel.SongTitle)" HeaderText="Song" Width="200" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(TipHistoryViewModel.Status)" HeaderText="Status" Width="140" AllowResizing="true"></GridColumn>
+                        <GridColumn Field="@nameof(TipHistoryViewModel.PaidDate)" HeaderText="Paid Date" Width="180" Format="g" AllowResizing="true"></GridColumn>
+                    </GridColumns>
+                </SfGrid>
+            }
+            else
+            {
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 100px;">
+                    <p class="text-muted">No tips received yet.</p>
+                </div>
+            }
+        </div>
     }
 </div>
