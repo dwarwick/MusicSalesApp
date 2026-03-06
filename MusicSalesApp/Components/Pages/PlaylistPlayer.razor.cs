@@ -139,14 +139,14 @@ namespace MusicSalesApp.Components.Pages
             {
                 try
                 {
-                    var (success, errorMessage) = await TipService.CaptureTipAsync(TipPayPalToken);
+                    var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
                     if (success)
                     {
                         if (_tipDialog != null)
                         {
-                            await _tipDialog.ShowSuccessAsync(0);
+                            await _tipDialog.ShowSuccessAsync(tipAmount);
                         }
-                        _tipSuccessMessage = "Your tip was sent successfully! Thank you for supporting this creator.";
+                        _tipSuccessMessage = $"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.";
                     }
                     else
                     {
@@ -164,7 +164,8 @@ namespace MusicSalesApp.Components.Pages
                 _tipErrorMessage = "Tip payment was cancelled.";
             }
 
-            // Clear query parameters from URL without reloading
+            // Clear tip-related query parameters from URL without reloading
+            // PlaylistId, ArtistName, etc. are route parameters, not query parameters, so the base path is safe
             var uri = NavigationManager.Uri;
             var baseUri = uri.Split('?')[0];
             NavigationManager.NavigateTo(baseUri, replace: true);

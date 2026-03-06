@@ -337,7 +337,7 @@ public abstract class BUnitTestBase
         MockTipService.Setup(x => x.CreateTipOrderAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, (string)null!, "https://paypal.com/approve"));
         MockTipService.Setup(x => x.CaptureTipAsync(It.IsAny<string>()))
-            .ReturnsAsync((true, (string)null!));
+            .ReturnsAsync((true, (string)null!, 5.00m));
         MockTipService.Setup(x => x.GetTipsForCreatorAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
         MockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(It.IsAny<int>()))

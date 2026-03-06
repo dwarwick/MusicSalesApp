@@ -390,11 +390,12 @@ public class TipServiceTests
         await SeedUserAndCreator();
 
         // Act - try to capture an order that doesn't exist
-        var (success, error) = await _service.CaptureTipAsync("NON-EXISTENT-ORDER");
+        var (success, error, amount) = await _service.CaptureTipAsync("NON-EXISTENT-ORDER");
 
         // Assert
         Assert.That(success, Is.False);
         Assert.That(error, Does.Contain("not found"));
+        Assert.That(amount, Is.EqualTo(0));
     }
 
     [Test]
@@ -416,10 +417,11 @@ public class TipServiceTests
         await _context.SaveChangesAsync();
 
         // Act
-        var (success, error) = await _service.CaptureTipAsync("ALREADY-CAPTURED");
+        var (success, error, amount) = await _service.CaptureTipAsync("ALREADY-CAPTURED");
 
         // Assert
         Assert.That(success, Is.False);
         Assert.That(error, Does.Contain("not found"));
+        Assert.That(amount, Is.EqualTo(0));
     }
 }

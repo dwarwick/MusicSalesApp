@@ -151,7 +151,7 @@ public class TipService : ITipService
     }
 
     /// <inheritdoc />
-    public async Task<(bool Success, string? ErrorMessage)> CaptureTipAsync(string payPalOrderId)
+    public async Task<(bool Success, string? ErrorMessage, decimal Amount)> CaptureTipAsync(string payPalOrderId)
     {
         try
         {
@@ -163,7 +163,7 @@ public class TipService : ITipService
             if (tip == null)
             {
                 _logger.LogWarning("No pending tip found for PayPal order {OrderId}", payPalOrderId);
-                return (false, "Tip not found or already processed.");
+                return (false, "Tip not found or already processed.", 0);
             }
 
             // Capture the PayPal order
@@ -173,23 +173,21 @@ public class TipService : ITipService
                 // Remove the uncaptured tip record
                 context.Tips.Remove(tip);
                 await context.SaveChangesAsync();
-                return (false, captureError ?? "Failed to capture payment.");
+                return (false, captureError ?? "Failed to capture payment.", 0);
             }
 
-            // Update the tip with the capture timestamp
-            tip.CreatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Tip captured: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
                 tip.Amount, tip.TipperUserId, tip.CreatorId, payPalOrderId);
 
-            return (true, null);
+            return (true, null, tip.Amount);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error capturing tip for PayPal order {OrderId}", payPalOrderId);
-            return (false, "An error occurred processing the payment.");
+            return (false, "An error occurred processing the payment.", 0);
         }
     }
 

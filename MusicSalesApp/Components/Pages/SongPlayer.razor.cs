@@ -135,16 +135,14 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
         {
             try
             {
-                var (success, errorMessage) = await TipService.CaptureTipAsync(TipPayPalToken);
+                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
                 if (success)
                 {
-                    // Show success in the tip dialog
                     if (_tipDialog != null)
                     {
-                        // Find the tip to get the amount for the success message
-                        await _tipDialog.ShowSuccessAsync(0); // Amount will show from the dialog
+                        await _tipDialog.ShowSuccessAsync(tipAmount);
                     }
-                    _tipSuccessMessage = "Your tip was sent successfully! Thank you for supporting this creator.";
+                    _tipSuccessMessage = $"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.";
                 }
                 else
                 {
@@ -162,10 +160,10 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             _tipErrorMessage = "Tip payment was cancelled.";
         }
 
-        // Clear query parameters from URL without reloading
+        // Clear tip-related query parameters from URL without reloading
+        // SongTitle is a route parameter (/song/{SongTitle}), not a query parameter, so the base path is safe
         var uri = NavigationManager.Uri;
         var baseUri = uri.Split('?')[0];
-        // Get the song title parameter back
         NavigationManager.NavigateTo(baseUri, replace: true);
     }
 

@@ -24,9 +24,9 @@ public interface ITipService
     /// <summary>
     /// Captures a PayPal order after buyer approval and updates the tip record.
     /// Called when the user returns from PayPal with the token (order ID).
-    /// Returns (success, errorMessage).
+    /// Returns (success, errorMessage, tipAmount).
     /// </summary>
-    Task<(bool Success, string? ErrorMessage)> CaptureTipAsync(string payPalOrderId);
+    Task<(bool Success, string? ErrorMessage, decimal Amount)> CaptureTipAsync(string payPalOrderId);
 
     /// <summary>
     /// Gets tips for a creator grouped by status for the dashboard.
