@@ -14,12 +14,19 @@ public interface ITipService
     Task<(bool CanTip, string? ErrorMessage)> ValidateTipAsync(int tipperUserId, int creatorId, decimal amount, string? ipAddress, string? fingerprint);
 
     /// <summary>
-    /// Creates a PayPal order for a tip and captures it, then records the tip.
-    /// Returns (success, errorMessage, tipId).
+    /// Creates a PayPal order for a tip and saves a pending tip record.
+    /// Returns (success, errorMessage, approvalUrl) so the caller can redirect to PayPal.
     /// </summary>
-    Task<(bool Success, string? ErrorMessage, int TipId)> ProcessTipAsync(
+    Task<(bool Success, string? ErrorMessage, string? ApprovalUrl)> CreateTipOrderAsync(
         int tipperUserId, int creatorId, int? songMetadataId,
-        decimal amount, string? ipAddress, string? fingerprint);
+        decimal amount, string? ipAddress, string? fingerprint, string returnUrl);
+
+    /// <summary>
+    /// Captures a PayPal order after buyer approval and updates the tip record.
+    /// Called when the user returns from PayPal with the token (order ID).
+    /// Returns (success, errorMessage).
+    /// </summary>
+    Task<(bool Success, string? ErrorMessage)> CaptureTipAsync(string payPalOrderId);
 
     /// <summary>
     /// Gets tips for a creator grouped by status for the dashboard.

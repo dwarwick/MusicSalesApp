@@ -90,6 +90,15 @@ namespace MusicSalesApp.Components.Pages
         protected SubscribeCtaDialogModel _subscribeCtaDialog;
         protected TipDialogModel _tipDialog;
 
+        [SupplyParameterFromQuery(Name = "tip_status")]
+        public string TipStatus { get; set; }
+
+        [SupplyParameterFromQuery(Name = "token")]
+        public string TipPayPalToken { get; set; }
+
+        protected string _tipSuccessMessage = string.Empty;
+        protected string _tipErrorMessage = string.Empty;
+
         protected int GetCurrentTrackCreatorId()
         {
             if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return 0;
@@ -122,6 +131,43 @@ namespace MusicSalesApp.Components.Pages
             {
                 await _tipDialog.ShowAsync();
             }
+        }
+
+        private async Task HandleTipReturnAsync()
+        {
+            if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+            {
+                try
+                {
+                    var (success, errorMessage) = await TipService.CaptureTipAsync(TipPayPalToken);
+                    if (success)
+                    {
+                        if (_tipDialog != null)
+                        {
+                            await _tipDialog.ShowSuccessAsync(0);
+                        }
+                        _tipSuccessMessage = "Your tip was sent successfully! Thank you for supporting this creator.";
+                    }
+                    else
+                    {
+                        _tipErrorMessage = errorMessage ?? "Failed to process your tip. Please try again.";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                    _tipErrorMessage = "An error occurred processing your tip.";
+                }
+            }
+            else if (TipStatus == "cancelled")
+            {
+                _tipErrorMessage = "Tip payment was cancelled.";
+            }
+
+            // Clear query parameters from URL without reloading
+            var uri = NavigationManager.Uri;
+            var baseUri = uri.Split('?')[0];
+            NavigationManager.NavigateTo(baseUri, replace: true);
         }
 
         protected override async Task OnInitializedAsync()
@@ -248,6 +294,12 @@ namespace MusicSalesApp.Components.Pages
                 if (!string.IsNullOrWhiteSpace(_streamUrl))
                 {
                     await _jsModule.InvokeVoidAsync("setTrackSource", _audioElement, _streamUrl);
+                }
+
+                // Handle return from PayPal tip approval
+                if (!string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+                {
+                    await HandleTipReturnAsync();
                 }
 
                 await InvokeAsync(StateHasChanged);

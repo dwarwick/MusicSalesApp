@@ -17,6 +17,15 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     [Parameter]
     public string SongTitle { get; set; }
 
+    [SupplyParameterFromQuery(Name = "tip_status")]
+    public string TipStatus { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string TipPayPalToken { get; set; }
+
+    protected string _tipSuccessMessage = string.Empty;
+    protected string _tipErrorMessage = string.Empty;
+
     protected bool _loading = true;
     protected string _error;
     protected StorageFileInfo _songInfo;
@@ -109,8 +118,55 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
             _volume = savedVolume;
             _previousVolume = savedVolume;
+
+            // Handle return from PayPal tip approval
+            if (!string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+            {
+                await HandleTipReturnAsync();
+            }
+
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task HandleTipReturnAsync()
+    {
+        if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            try
+            {
+                var (success, errorMessage) = await TipService.CaptureTipAsync(TipPayPalToken);
+                if (success)
+                {
+                    // Show success in the tip dialog
+                    if (_tipDialog != null)
+                    {
+                        // Find the tip to get the amount for the success message
+                        await _tipDialog.ShowSuccessAsync(0); // Amount will show from the dialog
+                    }
+                    _tipSuccessMessage = "Your tip was sent successfully! Thank you for supporting this creator.";
+                }
+                else
+                {
+                    _tipErrorMessage = errorMessage ?? "Failed to process your tip. Please try again.";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                _tipErrorMessage = "An error occurred processing your tip.";
+            }
+        }
+        else if (TipStatus == "cancelled")
+        {
+            _tipErrorMessage = "Tip payment was cancelled.";
+        }
+
+        // Clear query parameters from URL without reloading
+        var uri = NavigationManager.Uri;
+        var baseUri = uri.Split('?')[0];
+        // Get the song title parameter back
+        NavigationManager.NavigateTo(baseUri, replace: true);
     }
 
     public async ValueTask DisposeAsync()

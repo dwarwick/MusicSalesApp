@@ -58,6 +58,7 @@ public abstract class BUnitTestBase
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
+    protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -95,6 +96,7 @@ public abstract class BUnitTestBase
         MockFileMatchingService = new Mock<IFileMatchingService>();
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockTipService = new Mock<ITipService>();
+        MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -332,8 +334,10 @@ public abstract class BUnitTestBase
         // Setup default returns for ITipService methods
         MockTipService.Setup(x => x.ValidateTipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, (string)null!));
-        MockTipService.Setup(x => x.ProcessTipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync((true, (string)null!, 1));
+        MockTipService.Setup(x => x.CreateTipOrderAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, (string)null!, "https://paypal.com/approve"));
+        MockTipService.Setup(x => x.CaptureTipAsync(It.IsAny<string>()))
+            .ReturnsAsync((true, (string)null!));
         MockTipService.Setup(x => x.GetTipsForCreatorAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
         MockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(It.IsAny<int>()))
@@ -381,6 +385,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
+        TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it

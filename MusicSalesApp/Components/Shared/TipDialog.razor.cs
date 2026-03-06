@@ -50,6 +50,19 @@ public partial class TipDialogModel : BlazorBase
         await InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>
+    /// Shows the tip success state (called after returning from PayPal).
+    /// </summary>
+    public async Task ShowSuccessAsync(decimal amount)
+    {
+        _tipAmount = amount;
+        _tipSuccess = true;
+        _tipProcessing = false;
+        _errorMessage = string.Empty;
+        _showDialog = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
     protected void OnDialogClosing(BeforeCloseEventArgs args)
     {
         _showDialog = false;
@@ -89,31 +102,33 @@ public partial class TipDialogModel : BlazorBase
 
         try
         {
-            // Call the service directly - this is Blazor Server, no need for HTTP
-            var (success, errorMessage, tipId) = await TipService.ProcessTipAsync(
+            // Get the current page URL to use as the return URL after PayPal approval
+            var currentUrl = NavigationManager.Uri;
+
+            // Create a PayPal order and get the approval URL
+            var (success, errorMessage, approvalUrl) = await TipService.CreateTipOrderAsync(
                 _currentUserId,
                 CreatorId,
                 SongMetadataId,
                 amount,
                 ipAddress: null,
-                fingerprint: null);
+                fingerprint: null,
+                returnUrl: currentUrl);
 
-            if (!success)
+            if (!success || string.IsNullOrEmpty(approvalUrl))
             {
-                _errorMessage = errorMessage ?? "Unable to process tip. Please try again.";
+                _errorMessage = errorMessage ?? "Unable to create tip payment. Please try again.";
                 _tipProcessing = false;
                 await InvokeAsync(StateHasChanged);
                 return;
             }
 
-            // Success!
-            _tipProcessing = false;
-            _tipSuccess = true;
-            await InvokeAsync(StateHasChanged);
+            // Redirect to PayPal for buyer approval
+            NavigationManager.NavigateTo(approvalUrl, forceLoad: true);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error processing tip");
+            Logger.LogError(ex, "Error creating tip order");
             _errorMessage = "An unexpected error occurred. Please try again.";
             _tipProcessing = false;
             await InvokeAsync(StateHasChanged);

@@ -382,4 +382,44 @@ public class TipServiceTests
         // Assert
         Assert.That(canTip, Is.True);
     }
+
+    [Test]
+    public async Task CaptureTipAsync_NonExistentOrder_ReturnsFalse()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Act - try to capture an order that doesn't exist
+        var (success, error) = await _service.CaptureTipAsync("NON-EXISTENT-ORDER");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Does.Contain("not found"));
+    }
+
+    [Test]
+    public async Task CaptureTipAsync_AlreadyCapturedTip_ReturnsFalse()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Add a tip that's already cleared (captured)
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Cleared,
+            PayPalOrderId = "ALREADY-CAPTURED",
+            CreatedAt = DateTime.UtcNow.AddDays(-10)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (success, error) = await _service.CaptureTipAsync("ALREADY-CAPTURED");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Does.Contain("not found"));
+    }
 }
