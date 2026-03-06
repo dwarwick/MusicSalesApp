@@ -1,4 +1,7 @@
 #nullable enable
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -11,6 +14,7 @@ namespace MusicSalesApp.Services;
 public class TipService : ITipService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<TipService> _logger;
 
     private const decimal MinTipAmount = 1.00m;
@@ -22,9 +26,11 @@ public class TipService : ITipService
 
     public TipService(
         IDbContextFactory<AppDbContext> contextFactory,
+        IConfiguration configuration,
         ILogger<TipService> logger)
     {
         _contextFactory = contextFactory;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -45,18 +51,12 @@ public class TipService : ITipService
         if (user == null)
             return (false, "User not found.");
 
-        // Use LockoutEnd as proxy or CreatedAt - ApplicationUser may not have CreatedAt,
-        // so we check if the user has been around long enough using their security stamp or registration
-        // For simplicity, check if user was created at least 7 days ago
-        // We'll need to check a proxy - the earliest tip or another indicator
-        // Actually, check the UserHistory for account creation or use a different approach
         var accountCreated = await context.UserHistories
             .Where(uh => uh.UserId == tipperUserId && uh.EventType == "AccountCreated")
             .Select(uh => uh.OccurredAt)
             .FirstOrDefaultAsync();
 
-        // If no AccountCreated history, fall back to checking if email is confirmed
-        // (old accounts won't have history but should be fine)
+        // If no AccountCreated history, fall back (old accounts won't have history but should be fine)
         if (accountCreated != default && (DateTime.UtcNow - accountCreated).TotalDays < MinAccountAgeDays)
             return (false, "Your account must be at least 7 days old to send tips.");
 
@@ -102,33 +102,57 @@ public class TipService : ITipService
     }
 
     /// <inheritdoc />
-    public async Task<Tip> RecordTipAsync(
+    public async Task<(bool Success, string? ErrorMessage, int TipId)> ProcessTipAsync(
         int tipperUserId, int creatorId, int? songMetadataId,
-        decimal amount, string payPalOrderId, string? ipAddress, string? fingerprint)
+        decimal amount, string? ipAddress, string? fingerprint)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        // Validate first
+        var (canTip, validationError) = await ValidateTipAsync(tipperUserId, creatorId, amount, ipAddress, fingerprint);
+        if (!canTip)
+            return (false, validationError, 0);
 
-        var tip = new Tip
+        try
         {
-            TipperUserId = tipperUserId,
-            CreatorId = creatorId,
-            SongMetadataId = songMetadataId,
-            Amount = amount,
-            Status = TipStatus.Pending,
-            PayPalOrderId = payPalOrderId,
-            IpAddress = ipAddress,
-            MachineFingerprint = fingerprint,
-            CreatedAt = DateTime.UtcNow
-        };
+            // Create PayPal order
+            var (orderId, createError) = await CreatePayPalOrderAsync(amount);
+            if (string.IsNullOrEmpty(orderId))
+                return (false, createError ?? "Failed to create payment.", 0);
 
-        context.Tips.Add(tip);
-        await context.SaveChangesAsync();
+            // Capture the PayPal order
+            var (captured, captureError) = await CapturePayPalOrderAsync(orderId);
+            if (!captured)
+                return (false, captureError ?? "Failed to capture payment.", 0);
 
-        _logger.LogInformation(
-            "Tip recorded: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
-            amount, tipperUserId, creatorId, payPalOrderId);
+            // Record the tip
+            await using var context = await _contextFactory.CreateDbContextAsync();
 
-        return tip;
+            var tip = new Tip
+            {
+                TipperUserId = tipperUserId,
+                CreatorId = creatorId,
+                SongMetadataId = songMetadataId,
+                Amount = amount,
+                Status = TipStatus.Pending,
+                PayPalOrderId = orderId,
+                IpAddress = ipAddress,
+                MachineFingerprint = fingerprint,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            context.Tips.Add(tip);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Tip recorded: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
+                amount, tipperUserId, creatorId, orderId);
+
+            return (true, null, tip.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing tip from user {UserId} to creator {CreatorId}", tipperUserId, creatorId);
+            return (false, "An error occurred processing the payment.", 0);
+        }
     }
 
     /// <inheritdoc />
@@ -198,5 +222,132 @@ public class TipService : ITipService
 
         await context.SaveChangesAsync();
         _logger.LogInformation("Marked {Count} tips as paid with transaction {TxId}", tips.Count, payPalPayoutTransactionId);
+    }
+
+    private async Task<(string? OrderId, string? Error)> CreatePayPalOrderAsync(decimal amount)
+    {
+        try
+        {
+            var accessToken = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrEmpty(accessToken))
+                return (null, "Failed to authenticate with PayPal.");
+
+            var payPalBaseUrl = _configuration["PayPal:BaseUrl"] ?? "https://api-m.sandbox.paypal.com";
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            var orderPayload = new
+            {
+                intent = "CAPTURE",
+                purchase_units = new[]
+                {
+                    new
+                    {
+                        amount = new
+                        {
+                            currency_code = "USD",
+                            value = amount.ToString("F2")
+                        },
+                        description = "Tip for creator on StreamTunes"
+                    }
+                }
+            };
+
+            var content = new StringContent(
+                JsonSerializer.Serialize(orderPayload),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await httpClient.PostAsync($"{payPalBaseUrl}/v2/checkout/orders", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal create order failed: {Status} {Body}", response.StatusCode, responseBody);
+                return (null, "Failed to create PayPal order.");
+            }
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var orderId = doc.RootElement.GetProperty("id").GetString();
+            return (orderId, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating PayPal tip order");
+            return (null, "An error occurred creating the payment.");
+        }
+    }
+
+    private async Task<(bool Captured, string? Error)> CapturePayPalOrderAsync(string orderId)
+    {
+        try
+        {
+            var accessToken = await GetPayPalAccessTokenAsync();
+            if (string.IsNullOrEmpty(accessToken))
+                return (false, "Failed to authenticate with PayPal.");
+
+            var payPalBaseUrl = _configuration["PayPal:BaseUrl"] ?? "https://api-m.sandbox.paypal.com";
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            var captureResponse = await httpClient.PostAsync(
+                $"{payPalBaseUrl}/v2/checkout/orders/{orderId}/capture",
+                new StringContent("{}", Encoding.UTF8, "application/json"));
+
+            var captureBody = await captureResponse.Content.ReadAsStringAsync();
+
+            if (!captureResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal capture failed: {Status} {Body}", captureResponse.StatusCode, captureBody);
+                return (false, "Failed to capture payment.");
+            }
+
+            using var doc = JsonDocument.Parse(captureBody);
+            var captureStatus = doc.RootElement.GetProperty("status").GetString();
+
+            if (captureStatus != "COMPLETED")
+                return (false, $"Payment not completed. Status: {captureStatus}");
+
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error capturing PayPal tip order {OrderId}", orderId);
+            return (false, "An error occurred processing the payment.");
+        }
+    }
+
+    private async Task<string> GetPayPalAccessTokenAsync()
+    {
+        try
+        {
+            var clientId = _configuration["PayPal:ClientId"];
+            var secret = _configuration["PayPal:Secret"];
+            var payPalBaseUrl = _configuration["PayPal:BaseUrl"] ?? "https://api-m.sandbox.paypal.com";
+
+            using var client = new HttpClient();
+            client.BaseAddress = new Uri(payPalBaseUrl);
+
+            var authBytes = Encoding.ASCII.GetBytes($"{clientId}:{secret}");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+            var content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("grant_type", "client_credentials") });
+            var response = await client.PostAsync("v1/oauth2/token", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("PayPal token request failed: {Status} {Body}", response.StatusCode, body);
+                return string.Empty;
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.GetProperty("access_token").GetString() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting PayPal access token for tips");
+            return string.Empty;
+        }
     }
 }

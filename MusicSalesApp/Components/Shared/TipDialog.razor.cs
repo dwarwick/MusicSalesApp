@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
-using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -14,6 +13,7 @@ public partial class TipDialogModel : BlazorBase
     protected decimal _tipAmount;
     protected decimal _customAmount;
     protected string _errorMessage = string.Empty;
+    private int _currentUserId;
 
     [Parameter]
     public int CreatorId { get; set; }
@@ -34,6 +34,12 @@ public partial class TipDialogModel : BlazorBase
             NavigationManager.NavigateTo("/login?returnUrl=" + Uri.EscapeDataString(NavigationManager.Uri), forceLoad: true);
             return;
         }
+
+        // Get current user ID
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user == null) return;
+        _currentUserId = user.Id;
 
         _errorMessage = string.Empty;
         _tipSuccess = false;
@@ -83,60 +89,18 @@ public partial class TipDialogModel : BlazorBase
 
         try
         {
-            // Step 1: Validate
-            var validateResponse = await Http.PostAsJsonAsync("/api/tip/validate", new
-            {
-                CreatorId = CreatorId,
-                Amount = amount
-            });
+            // Call the service directly - this is Blazor Server, no need for HTTP
+            var (success, errorMessage, tipId) = await TipService.ProcessTipAsync(
+                _currentUserId,
+                CreatorId,
+                SongMetadataId,
+                amount,
+                ipAddress: null,
+                fingerprint: null);
 
-            if (!validateResponse.IsSuccessStatusCode)
+            if (!success)
             {
-                var error = await validateResponse.Content.ReadFromJsonAsync<ErrorResponse>();
-                _errorMessage = error?.Error ?? "Unable to process tip. Please try again.";
-                _tipProcessing = false;
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            // Step 2: Create PayPal order
-            var createResponse = await Http.PostAsJsonAsync("/api/tip/create-order", new
-            {
-                CreatorId = CreatorId,
-                Amount = amount
-            });
-
-            if (!createResponse.IsSuccessStatusCode)
-            {
-                var error = await createResponse.Content.ReadFromJsonAsync<ErrorResponse>();
-                _errorMessage = error?.Error ?? "Failed to create payment. Please try again.";
-                _tipProcessing = false;
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            var orderResult = await createResponse.Content.ReadFromJsonAsync<CreateOrderResponse>();
-            if (orderResult == null || string.IsNullOrEmpty(orderResult.OrderId))
-            {
-                _errorMessage = "Failed to create payment order.";
-                _tipProcessing = false;
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            // Step 3: Capture the order
-            var captureResponse = await Http.PostAsJsonAsync("/api/tip/capture-order", new
-            {
-                CreatorId = CreatorId,
-                SongMetadataId = SongMetadataId,
-                Amount = amount,
-                PayPalOrderId = orderResult.OrderId
-            });
-
-            if (!captureResponse.IsSuccessStatusCode)
-            {
-                var error = await captureResponse.Content.ReadFromJsonAsync<ErrorResponse>();
-                _errorMessage = error?.Error ?? "Payment failed. Please try again.";
+                _errorMessage = errorMessage ?? "Unable to process tip. Please try again.";
                 _tipProcessing = false;
                 await InvokeAsync(StateHasChanged);
                 return;
@@ -154,15 +118,5 @@ public partial class TipDialogModel : BlazorBase
             _tipProcessing = false;
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    private class ErrorResponse
-    {
-        public string Error { get; set; } = string.Empty;
-    }
-
-    private class CreateOrderResponse
-    {
-        public string OrderId { get; set; } = string.Empty;
     }
 }

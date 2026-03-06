@@ -332,6 +332,8 @@ public abstract class BUnitTestBase
         // Setup default returns for ITipService methods
         MockTipService.Setup(x => x.ValidateTipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync((true, (string)null!));
+        MockTipService.Setup(x => x.ProcessTipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, (string)null!, 1));
         MockTipService.Setup(x => x.GetTipsForCreatorAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
         MockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(It.IsAny<int>()))
