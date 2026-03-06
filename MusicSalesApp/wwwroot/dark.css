@@ -577,3 +577,17 @@ body {
     background-color: #3a3a3a;
 }
 
+/* Tip Jar - Dark Theme */
+.tip-button.control-button {
+    color: #ff6b9d;
+}
+
+.tip-bucket {
+    background-color: #2d2d2d;
+    border: 1px solid #444;
+}
+
+.tip-bucket-amount {
+    color: #4caf50;
+}
+

@@ -1484,3 +1484,173 @@ h1:focus {
     margin-top: 0.25rem;
     margin-bottom: 0.5rem;
 }
+
+/* Tip Dialog Styles */
+.tip-dialog .e-dlg-content {
+    padding: 0;
+}
+
+.tip-dialog-content {
+    padding: 24px;
+    text-align: center;
+}
+
+.tip-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.tip-heart-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.tip-preset-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.tip-amount-btn {
+    padding: 12px 24px;
+    border: 2px solid #1b6ec2;
+    border-radius: 8px;
+    background: transparent;
+    color: #1b6ec2;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 70px;
+}
+
+.tip-amount-btn:hover {
+    background: #1b6ec2;
+    color: #fff;
+}
+
+.tip-custom-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.tip-custom-btn:hover {
+    border-color: #1b6ec2;
+    color: #1b6ec2;
+}
+
+.tip-custom-input {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    align-items: stretch;
+}
+
+.tip-custom-input .input-group {
+    flex: 1;
+}
+
+.tip-submit-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #1b6ec2;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.2s;
+}
+
+.tip-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tip-submit-btn:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.tip-info {
+    margin-top: 12px;
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+.tip-error {
+    text-align: left;
+    margin-bottom: 16px;
+}
+
+.tip-success {
+    padding: 20px 0;
+}
+
+.tip-success-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+}
+
+.tip-success h3 {
+    margin-bottom: 8px;
+}
+
+.tip-processing {
+    padding: 30px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.tip-button.control-button {
+    position: relative;
+}
+
+/* Tip Dashboard Styles */
+.tip-dashboard-section {
+    margin-top: 1.5rem;
+}
+
+.tip-buckets {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.tip-bucket {
+    flex: 1;
+    min-width: 150px;
+    padding: 16px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.tip-bucket h5 {
+    margin-bottom: 4px;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.tip-bucket .tip-bucket-amount {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.tip-bucket .tip-bucket-count {
+    font-size: 12px;
+    opacity: 0.6;
+}

@@ -47,6 +47,26 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
     protected SubscribeCtaDialogModel _subscribeCtaDialog;
+    protected TipDialogModel _tipDialog;
+
+    protected int GetCreatorIdForTip()
+    {
+        return _songMetadata?.CreatorId ?? 0;
+    }
+
+    protected bool CanShowTipButton()
+    {
+        // Show tip button when: user is authenticated, song has a creator, and user is not the creator
+        return _isAuthenticated && _songMetadata?.CreatorId != null && _songMetadata.CreatorId > 0 && !_isCreatorOfSong;
+    }
+
+    protected async Task ShowTipDialog()
+    {
+        if (_tipDialog != null)
+        {
+            await _tipDialog.ShowAsync();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {

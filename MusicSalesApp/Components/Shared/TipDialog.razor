@@ -1,0 +1,71 @@
+@inherits TipDialogModel
+
+<SfDialog @bind-Visible="_showDialog" Width="420px" IsModal="true" ShowCloseIcon="true" CssClass="tip-dialog">
+    <DialogEvents OnClose="@OnDialogClosing" />
+    <DialogTemplates>
+        <Content>
+            <div class="tip-dialog-content">
+                @if (_tipSuccess)
+                {
+                    <div class="tip-success">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#28a745" class="tip-success-icon">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                        </svg>
+                        <h3>Tip Sent!</h3>
+                        <p>Thank you for supporting this creator with a $@(_tipAmount.ToString("F2")) tip!</p>
+                    </div>
+                }
+                else if (_tipProcessing)
+                {
+                    <div class="tip-processing">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Processing...</span>
+                        </div>
+                        <p>Processing your tip...</p>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="tip-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="tip-heart-icon">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                        Tip Creator
+                    </h3>
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-danger tip-error">@_errorMessage</div>
+                    }
+
+                    <div class="tip-preset-buttons">
+                        <button class="tip-amount-btn" @onclick="() => SubmitPresetTip(1.00m)">$1</button>
+                        <button class="tip-amount-btn" @onclick="() => SubmitPresetTip(5.00m)">$5</button>
+                        <button class="tip-amount-btn" @onclick="() => SubmitPresetTip(10.00m)">$10</button>
+                    </div>
+
+                    @if (_showCustomInput)
+                    {
+                        <div class="tip-custom-input">
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" min="1" max="50" step="0.01"
+                                       @bind="_customAmount" @bind:event="oninput"
+                                       placeholder="1.00 - 50.00" />
+                            </div>
+                            <button class="tip-submit-btn" @onclick="SubmitCustomTip" disabled="@(!IsCustomAmountValid())">
+                                Send Tip
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <button class="tip-custom-btn" @onclick="ShowCustomInput">Custom Amount</button>
+                    }
+
+                    <p class="tip-info">Tips are processed via PayPal. Minimum $1, maximum $50.</p>
+                }
+            </div>
+        </Content>
+    </DialogTemplates>
+</SfDialog>

@@ -88,6 +88,41 @@ namespace MusicSalesApp.Components.Pages
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
         protected SubscribeCtaDialogModel _subscribeCtaDialog;
+        protected TipDialogModel _tipDialog;
+
+        protected int GetCurrentTrackCreatorId()
+        {
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return 0;
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                return metadata.CreatorId ?? 0;
+            }
+            return 0;
+        }
+
+        protected bool CanShowTipButton()
+        {
+            if (!_isAuthenticated) return false;
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return false;
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
+                // Check if current user is the creator
+                if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                return true;
+            }
+            return false;
+        }
+
+        protected async Task ShowTipDialog()
+        {
+            if (_tipDialog != null)
+            {
+                await _tipDialog.ShowAsync();
+            }
+        }
 
         protected override async Task OnInitializedAsync()
         {
