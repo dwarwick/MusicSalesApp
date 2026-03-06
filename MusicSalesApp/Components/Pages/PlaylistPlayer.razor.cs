@@ -98,6 +98,8 @@ namespace MusicSalesApp.Components.Pages
 
         protected string _tipSuccessMessage = string.Empty;
         protected string _tipErrorMessage = string.Empty;
+        protected int _tipCreatorId;
+        protected int? _tipSongMetadataId;
 
         protected int GetCurrentTrackCreatorId()
         {
@@ -127,9 +129,40 @@ namespace MusicSalesApp.Components.Pages
 
         protected async Task ShowTipDialog()
         {
+            _tipCreatorId = GetCurrentTrackCreatorId();
+            _tipSongMetadataId = GetCurrentTrackMetadataId();
             if (_tipDialog != null)
             {
                 await _tipDialog.ShowAsync();
+            }
+        }
+
+        protected bool CanShowTipButtonForTrack(int trackIndex)
+        {
+            if (!_isAuthenticated) return false;
+            if (_playlistInfo == null || trackIndex >= _playlistInfo.Tracks.Count) return false;
+            var track = _playlistInfo.Tracks[trackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
+                if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                return true;
+            }
+            return false;
+        }
+
+        protected async Task ShowTipDialogForTrack(int trackIndex)
+        {
+            if (_playlistInfo == null || trackIndex >= _playlistInfo.Tracks.Count) return;
+            var track = _playlistInfo.Tracks[trackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                _tipCreatorId = metadata.CreatorId ?? 0;
+                _tipSongMetadataId = metadata.Id;
+                if (_tipDialog != null)
+                {
+                    await _tipDialog.ShowAsync();
+                }
             }
         }
 

@@ -582,6 +582,11 @@ body {
     color: #ff6b9d;
 }
 
+.tip-heart-button .tip-heart-icon {
+    color: #ff6b9d;
+    fill: #ff6b9d;
+}
+
 .tip-bucket {
     background-color: #2d2d2d;
     border: 1px solid #444;

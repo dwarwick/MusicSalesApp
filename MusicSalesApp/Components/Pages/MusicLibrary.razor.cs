@@ -80,6 +80,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private bool _isAdmin;
     private int? _currentUserId;
     private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
+    private Dictionary<string, int?> _creatorIdMap = new Dictionary<string, int?>();
+    protected TipDialogModel _tipDialog;
+    protected int _tipCreatorId;
+    protected int? _tipSongMetadataId;
     private int _defaultStreamQualifyingSeconds = 30;
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
@@ -344,6 +348,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
                     // Store creator user ID for stream recording guard
                     _creatorUserIdMap[songMeta.Id] = songMeta.Creator?.UserId;
+                    // Store creator ID for tip functionality
+                    _creatorIdMap[audioFile.Name] = songMeta.CreatorId;
                 }
             }
         }
@@ -566,6 +572,30 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return count;
         }
         return 0;
+    }
+
+    protected bool CanShowTipButton(string fileName)
+    {
+        if (!_isAuthenticated) return false;
+        if (!_creatorIdMap.TryGetValue(fileName, out var creatorId) || creatorId == null || creatorId <= 0) return false;
+        // Don't show tip button for own songs
+        var metadataId = GetSongMetadataId(fileName);
+        if (metadataId > 0 && _creatorUserIdMap.TryGetValue(metadataId, out var creatorUserId) && creatorUserId == _currentUserId)
+            return false;
+        return true;
+    }
+
+    protected async Task ShowTipForSong(string fileName)
+    {
+        if (_creatorIdMap.TryGetValue(fileName, out var creatorId) && creatorId.HasValue)
+        {
+            _tipCreatorId = creatorId.Value;
+            _tipSongMetadataId = GetSongMetadataId(fileName);
+            if (_tipDialog != null)
+            {
+                await _tipDialog.ShowAsync();
+            }
+        }
     }
 
     private class StreamUrlResponseDto

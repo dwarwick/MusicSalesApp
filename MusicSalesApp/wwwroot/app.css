@@ -1619,6 +1619,43 @@ h1:focus {
     position: relative;
 }
 
+/* Tip Heart Button - used next to like/dislike and in track lists */
+.tip-heart-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.tip-heart-button:hover {
+    transform: scale(1.2);
+}
+
+.tip-heart-button .tip-heart-icon {
+    width: 20px;
+    height: 20px;
+}
+
+/* Tip heart inline in track list */
+.tip-heart-inline {
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* Tip heart in song card */
+.tip-heart-card {
+    margin-left: 4px;
+}
+
+.tip-heart-card .tip-heart-icon {
+    width: 16px;
+    height: 16px;
+}
+
 /* Tip Dashboard Styles */
 .tip-dashboard-section {
     margin-top: 1.5rem;

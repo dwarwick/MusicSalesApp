@@ -302,12 +302,13 @@ public class StreamPayoutService : IStreamPayoutService
         var clearedTips = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
         var totalTipAmount = clearedTips.Sum(t => t.Amount);
 
-        // Check if total gross (streams + tips) meets minimum threshold.
-        var combinedGross = totalGrossAmount + totalTipAmount;
-        if (combinedGross < MinimumPayoutThreshold)
+        // Check if payout should proceed:
+        // - If there are cleared tips, always pay (tips held 7+ days should be released)
+        // - Otherwise, apply the minimum threshold to stream earnings
+        if (clearedTips.Count == 0 && totalGrossAmount < MinimumPayoutThreshold)
         {
-            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams + tips, below ${Threshold:F2} threshold",
-                creator.Id, combinedGross, MinimumPayoutThreshold);
+            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold and no cleared tips",
+                creator.Id, totalGrossAmount, MinimumPayoutThreshold);
             return null;
         }
 

@@ -165,7 +165,17 @@
                                     }
                                 </div>
                             </td>
-                            <td class="track-artist">@GetTrackArtistName(index)</td>
+                            <td class="track-artist">
+                                <span>@GetTrackArtistName(index)</span>
+                                @if (CanShowTipButtonForTrack(index))
+                                {
+                                    <button class="tip-heart-button tip-heart-inline" @onclick="() => ShowTipDialogForTrack(index)" @onclick:stopPropagation="true" title="Tip Creator">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="tip-heart-icon">
+                                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                        </svg>
+                                    </button>
+                                }
+                            </td>
                             <td class="track-genre">
                                 @{
                                     var trackGenre = GetTrackGenre(index);
@@ -230,14 +240,6 @@
                                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
                             </svg>
                         </button>
-                        @if (CanShowTipButton())
-                        {
-                            <button class="control-button tip-button" @onclick="ShowTipDialog" title="Tip Creator">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                </svg>
-                            </button>
-                        }
                     </div>
                     <div class="volume-controls">
                         <button class="control-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
@@ -301,4 +303,4 @@
 }
 
 <SubscribeCtaDialog @ref="_subscribeCtaDialog" IsAuthenticated="_isAuthenticated" HasActiveSubscription="_hasActiveSubscription" />
-<TipDialog @ref="_tipDialog" CreatorId="GetCurrentTrackCreatorId()" SongMetadataId="GetCurrentTrackMetadataId()" IsAuthenticated="_isAuthenticated" />
+<TipDialog @ref="_tipDialog" CreatorId="_tipCreatorId" SongMetadataId="_tipSongMetadataId" IsAuthenticated="_isAuthenticated" />
