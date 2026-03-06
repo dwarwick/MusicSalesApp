@@ -17,6 +17,7 @@ public class StreamPayoutService : IStreamPayoutService
     private readonly IConfiguration _configuration;
     private readonly ILogger<StreamPayoutService> _logger;
     private readonly ITaxBanditsService _taxBanditsService;
+    private readonly ITipService _tipService;
 
     // Minimum payout threshold in USD
     private const decimal MinimumPayoutThreshold = 5.00m;
@@ -29,20 +30,36 @@ public class StreamPayoutService : IStreamPayoutService
         IEmailService emailService,
         IConfiguration configuration,
         ILogger<StreamPayoutService> logger,
-        ITaxBanditsService taxBanditsService)
+        ITaxBanditsService taxBanditsService,
+        ITipService tipService)
     {
         _contextFactory = contextFactory;
         _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
         _taxBanditsService = taxBanditsService;
+        _tipService = tipService;
     }
 
     /// <inheritdoc />
     public async Task<int> ProcessPendingPayoutsAsync()
     {
         _logger.LogInformation("Starting stream payout processing job");
-        
+
+        // First, process pending tips to cleared status
+        try
+        {
+            var clearedCount = await _tipService.ProcessPendingToClearedAsync();
+            if (clearedCount > 0)
+            {
+                _logger.LogInformation("Cleared {Count} tips that passed the 7-day hold period", clearedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing pending tips, continuing with payout processing");
+        }
+
         await using var context = await _contextFactory.CreateDbContextAsync();
         
         var creatorsProcessed = 0;
@@ -235,8 +252,13 @@ public class StreamPayoutService : IStreamPayoutService
 
         if (!creatorSongs.Any())
         {
-            _logger.LogDebug("No unpaid streams for creator {CreatorId}", creator.Id);
-            return null;
+            // Even without streams, check if there are cleared tips
+            var tipsOnly = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
+            if (!tipsOnly.Any())
+            {
+                _logger.LogDebug("No unpaid streams or cleared tips for creator {CreatorId}", creator.Id);
+                return null;
+            }
         }
 
         // Calculate total earnings for this payout
@@ -276,17 +298,21 @@ public class StreamPayoutService : IStreamPayoutService
 
         var totalNetAmount = totalGrossAmount - totalWithheldAmount;
 
-        // Check if total gross meets minimum threshold.
-        // Using GROSS amount because:
-        // 1. The threshold represents minimum earnings to process a payout
-        // 2. Even with withholding, the creator has earned this amount
-        // 3. For 1099-NEC reporting, the gross amount is what gets reported
-        if (totalGrossAmount < MinimumPayoutThreshold)
+        // Get cleared tips for this creator (held for at least 7 days)
+        var clearedTips = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
+        var totalTipAmount = clearedTips.Sum(t => t.Amount);
+
+        // Check if total gross (streams + tips) meets minimum threshold.
+        var combinedGross = totalGrossAmount + totalTipAmount;
+        if (combinedGross < MinimumPayoutThreshold)
         {
-            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
-                creator.Id, totalGrossAmount, MinimumPayoutThreshold);
+            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams + tips, below ${Threshold:F2} threshold",
+                creator.Id, combinedGross, MinimumPayoutThreshold);
             return null;
         }
+
+        // Total to send via PayPal = net stream amount + tips (tips have no withholding)
+        var totalPayPalAmount = totalNetAmount + totalTipAmount;
 
         // Detailed logging for development/sandbox mode - Calculated data before PayPal call
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
@@ -303,6 +329,11 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("Total Gross Amount: ${Amount:F2} USD", totalGrossAmount);
             _logger.LogInformation("Total Withheld Amount: ${Amount:F2} USD", totalWithheldAmount);
             _logger.LogInformation("Total Net Amount (to PayPal): ${Amount:F2} USD", totalNetAmount);
+            if (totalTipAmount > 0)
+            {
+                _logger.LogInformation("Tips Amount: ${Amount:F2} USD ({Count} tips)", totalTipAmount, clearedTips.Count);
+                _logger.LogInformation("Total PayPal Amount (streams + tips): ${Amount:F2} USD", totalPayPalAmount);
+            }
             
             _logger.LogInformation("--- Per-Song Breakdown ---");
             foreach (var record in payoutRecords.OrderByDescending(p => p.GrossAmount))
@@ -314,8 +345,8 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("=== END Calculation Summary ===");
         }
 
-        // Process PayPal payout - send the NET amount (after withholding)
-        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalNetAmount);
+        // Process PayPal payout - send the NET stream amount + tips
+        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalPayPalAmount);
 
         if (string.IsNullOrEmpty(payPalTransactionId))
         {
@@ -341,11 +372,18 @@ public class StreamPayoutService : IStreamPayoutService
         // Collect payout IDs after save (they're now assigned)
         payoutIds.AddRange(payoutRecords.Select(p => p.Id));
 
-        // Send receipt email with gross amount for tax reporting purposes
-        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId);
+        // Mark cleared tips as paid
+        if (clearedTips.Count > 0)
+        {
+            var tipIds = clearedTips.Select(t => t.Id).ToList();
+            await _tipService.MarkTipsAsPaidAsync(tipIds, payPalTransactionId);
+        }
 
-        _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2} for {Songs} songs",
-            creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, payoutRecords.Count);
+        // Send receipt email with gross amount for tax reporting purposes (include tips)
+        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId, totalTipAmount);
+
+        _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2}, Tips ${TipAmount:F2} for {Songs} songs",
+            creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, totalTipAmount, payoutRecords.Count);
 
         return new PayoutResult
         {
@@ -527,7 +565,8 @@ public class StreamPayoutService : IStreamPayoutService
         decimal totalGrossAmount,
         decimal totalWithheldAmount,
         decimal totalNetAmount,
-        string payPalTransactionId)
+        string payPalTransactionId,
+        decimal totalTipAmount = 0m)
     {
         try
         {
@@ -558,6 +597,8 @@ public class StreamPayoutService : IStreamPayoutService
             var baseUrl = _emailService.GetAppBaseUrl();
             var logoUrl = _emailService.GetLogoUrl();
 
+            var totalPayoutAmount = totalNetAmount + totalTipAmount;
+
             var body = BuildPayoutReceiptEmail(
                 creator,
                 payoutRecords,
@@ -567,9 +608,10 @@ public class StreamPayoutService : IStreamPayoutService
                 totalNetAmount,
                 payPalTransactionId,
                 logoUrl,
-                baseUrl);
+                baseUrl,
+                totalTipAmount);
 
-            var subject = $"StreamTunes - Stream Payout Receipt (${totalNetAmount:F2})";
+            var subject = $"StreamTunes - Payout Receipt (${totalPayoutAmount:F2})";
             
             return await _emailService.SendEmailAsync(creator.User.Email, subject, body);
         }
@@ -592,9 +634,11 @@ public class StreamPayoutService : IStreamPayoutService
         decimal totalNetAmount,
         string payPalTransactionId,
         string logoUrl,
-        string baseUrl)
+        string baseUrl,
+        decimal totalTipAmount = 0m)
     {
         var body = new StringBuilder();
+        var totalPayoutAmount = totalNetAmount + totalTipAmount;
 
         // HTML encode user-provided data for security
         var encodedUserName = HtmlEncoder.Default.Encode(creator.User.UserName ?? "");
@@ -607,9 +651,9 @@ public class StreamPayoutService : IStreamPayoutService
         <div style='text-align: center; margin-bottom: 20px;'>
             <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
         </div>
-        <h2>Stream Payout Receipt</h2>
+        <h2>Payout Receipt</h2>
         <p>Hi {encodedUserName},</p>
-        <p>You've received a payout for streams of your music on StreamTunes!</p>
+        <p>You've received a payout from StreamTunes!</p>
         ");
 
         // Payout summary with withholding information
@@ -618,7 +662,7 @@ public class StreamPayoutService : IStreamPayoutService
             <h3 style='margin-top: 0;'>Payout Summary</h3>
             <p><strong>Payment Date:</strong> {DateTime.UtcNow:MMMM dd, yyyy}</p>
             <p><strong>PayPal Transaction ID:</strong> {encodedTransactionId}</p>
-            <p><strong>Gross Amount:</strong> ${totalGrossAmount:F2}</p>");
+            <p><strong>Stream Earnings (Gross):</strong> ${totalGrossAmount:F2}</p>");
 
         // Only show withholding if applicable
         if (totalWithheldAmount > 0)
@@ -627,10 +671,20 @@ public class StreamPayoutService : IStreamPayoutService
             <p><strong>Tax Withheld:</strong> <span style='color: #dc3545;'>-${totalWithheldAmount:F2}</span></p>");
         }
 
+        body.Append($@"
+            <p><strong>Stream Earnings (Net):</strong> ${totalNetAmount:F2}</p>");
+
+        // Show tips as a separate line item
+        if (totalTipAmount > 0)
+        {
+            body.Append($@"
+            <p><strong>Tips Received:</strong> <span style='color: #28a745;'>${totalTipAmount:F2}</span></p>");
+        }
+
         var payRatePer1000 = creator.StreamPayRate * 1000;
 
         body.Append($@"
-            <p><strong>Net Amount Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalNetAmount:F2}</span></p>
+            <p><strong>Total Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalPayoutAmount:F2}</span></p>
             <hr style='border: none; border-top: 1px solid #dee2e6; margin: 15px 0;' />
             <p><strong>Stream Definition:</strong> {creator.StreamQualifyingSeconds} seconds of continuous playback</p>
             <p><strong>Pay Rate:</strong> ${payRatePer1000:F2} USD per 1,000 streams</p>
