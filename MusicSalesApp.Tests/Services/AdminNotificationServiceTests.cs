@@ -15,6 +15,7 @@ public class AdminNotificationServiceTests
     private Mock<IAppSettingsService> _mockAppSettingsService;
     private Mock<ISongMetadataService> _mockSongMetadataService;
     private Mock<INewSongNotificationService> _mockNewSongNotificationService;
+    private Mock<IAzureStorageService> _mockAzureStorageService;
     private Mock<ILogger<AdminNotificationService>> _mockLogger;
     private IDbContextFactory<AppDbContext> _contextFactory;
     private DbContextOptions<AppDbContext> _dbOptions;
@@ -27,6 +28,7 @@ public class AdminNotificationServiceTests
         _mockAppSettingsService = new Mock<IAppSettingsService>();
         _mockSongMetadataService = new Mock<ISongMetadataService>();
         _mockNewSongNotificationService = new Mock<INewSongNotificationService>();
+        _mockAzureStorageService = new Mock<IAzureStorageService>();
         _mockLogger = new Mock<ILogger<AdminNotificationService>>();
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -70,6 +72,7 @@ public class AdminNotificationServiceTests
             _contextFactory,
             _mockSongMetadataService.Object,
             _mockNewSongNotificationService.Object,
+            _mockAzureStorageService.Object,
             _mockLogger.Object);
     }
 
@@ -290,6 +293,50 @@ public class AdminNotificationServiceTests
         var history = await context.UserHistories.FirstOrDefaultAsync();
         Assert.That(history, Is.Not.Null);
         Assert.That(history.EventType, Is.EqualTo("SongArtUpdated"));
+    }
+
+    [Test]
+    public async Task NotifySongArtUpdatedAsync_EmailIncludesSongArtImage()
+    {
+        // Arrange
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifySongArtUpdatedKey))
+            .ReturnsAsync((string)null);
+
+        // Seed a creator and song with image
+        using (var seedContext = new AppDbContext(_dbOptions))
+        {
+            var creator = new Creator { Id = 1, UserId = 1, IsActive = true, DisplayName = "Test Creator" };
+            seedContext.Creators.Add(creator);
+
+            seedContext.SongMetadata.Add(new SongMetadata
+            {
+                Id = 1,
+                CreatorId = 1,
+                SongTitle = "My Song",
+                Mp3BlobPath = "music/my-song.mp3",
+                ImageBlobPath = "music/my-song.jpg",
+                IsActive = true,
+                IsEnabled = true
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        _mockAzureStorageService.Setup(x => x.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(new Uri("https://storage.blob.core.windows.net/music/my-song.jpg?sv=2021-01-01&se=2026-03-13"));
+
+        string capturedBody = null!;
+        _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Callback<string, string, string>((to, subject, body) => capturedBody = body)
+            .ReturnsAsync(true);
+
+        // Act
+        await _service.NotifySongArtUpdatedAsync("test@example.com", "My Song");
+
+        // Assert - email was sent with the image
+        Assert.That(capturedBody, Is.Not.Null);
+        Assert.That(capturedBody, Does.Contain("Updated Cover Art"));
+        Assert.That(capturedBody, Does.Contain("storage.blob.core.windows.net/music/my-song.jpg"));
+        Assert.That(capturedBody, Does.Contain("<img"));
     }
 
     [Test]

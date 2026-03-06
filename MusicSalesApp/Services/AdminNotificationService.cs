@@ -16,6 +16,7 @@ public class AdminNotificationService : IAdminNotificationService
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ISongMetadataService _songMetadataService;
     private readonly INewSongNotificationService _newSongNotificationService;
+    private readonly IAzureStorageService _azureStorageService;
     private readonly ILogger<AdminNotificationService> _logger;
 
     public const string AdminEmail = "admin@streamtunes.net";
@@ -36,6 +37,7 @@ public class AdminNotificationService : IAdminNotificationService
         IDbContextFactory<AppDbContext> dbContextFactory,
         ISongMetadataService songMetadataService,
         INewSongNotificationService newSongNotificationService,
+        IAzureStorageService azureStorageService,
         ILogger<AdminNotificationService> logger)
     {
         _emailService = emailService;
@@ -43,6 +45,7 @@ public class AdminNotificationService : IAdminNotificationService
         _dbContextFactory = dbContextFactory;
         _songMetadataService = songMetadataService;
         _newSongNotificationService = newSongNotificationService;
+        _azureStorageService = azureStorageService;
         _logger = logger;
     }
 
@@ -210,10 +213,32 @@ public class AdminNotificationService : IAdminNotificationService
         if (!await IsNotificationEnabledAsync(NotifySongArtUpdatedKey))
             return;
 
+        // Find the song metadata to get the updated art image
+        string? imageHtml = null;
+        if (userId > 0)
+        {
+            var creator = await context.Creators.FirstOrDefaultAsync(c => c.UserId == userId);
+            if (creator != null)
+            {
+                // Find songs matching this title for this creator that have an image
+                var songWithImage = await context.SongMetadata
+                    .Where(s => s.CreatorId == creator.Id
+                        && s.SongTitle == songTitle
+                        && !string.IsNullOrEmpty(s.ImageBlobPath))
+                    .FirstOrDefaultAsync();
+
+                if (songWithImage != null)
+                {
+                    imageHtml = GetSongArtImageHtml(songWithImage.ImageBlobPath!);
+                }
+            }
+        }
+
         var subject = "StreamTunes Admin - Song Art Updated";
-        var body = BuildAdminEmailBody("Song Art Updated",
-            $"A user has updated the cover art for song '{System.Web.HttpUtility.HtmlEncode(songTitle)}'.",
-            userEmail);
+        var body = BuildSongArtUpdatedEmailBody(
+            System.Web.HttpUtility.HtmlEncode(songTitle),
+            userEmail,
+            imageHtml);
         await SendAdminEmailAsync(subject, body);
     }
 
@@ -301,6 +326,69 @@ public class AdminNotificationService : IAdminNotificationService
                 </div>
             </div>
         </div>";
+    }
+
+    private string BuildSongArtUpdatedEmailBody(string encodedSongTitle, string userEmail, string? imageHtml)
+    {
+        var logoUrl = _emailService.GetLogoUrl();
+        var utcNow = DateTime.UtcNow;
+
+        var body = new StringBuilder();
+        body.Append($@"
+        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+            <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>Song Art Updated</h1>
+            </div>
+            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                <p style='font-size: 16px; color: #333;'>A user has updated the cover art for song '{encodedSongTitle}'.</p>
+                <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>User Email:</strong> {System.Web.HttpUtility.HtmlEncode(userEmail)}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {utcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                </div>");
+
+        if (!string.IsNullOrEmpty(imageHtml))
+        {
+            body.Append($@"
+                <div style='margin: 20px 0;'>
+                    <p style='font-size: 14px; color: #333; margin-bottom: 10px;'><strong>Updated Cover Art:</strong></p>
+                    <div style='text-align: center;'>
+                        {imageHtml}
+                    </div>
+                </div>");
+        }
+
+        body.Append($@"
+                <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;'>
+                    <p style='color: #999; font-size: 12px;'>This is an automated admin notification from StreamTunes.</p>
+                </div>
+            </div>
+        </div>");
+
+        return body.ToString();
+    }
+
+    /// <summary>
+    /// Gets the HTML for displaying a song art image using a SAS URL, or a placeholder if unavailable.
+    /// </summary>
+    private string GetSongArtImageHtml(string imageBlobPath)
+    {
+        try
+        {
+            var sasUri = _azureStorageService.GetReadSasUri(imageBlobPath, TimeSpan.FromDays(7));
+            var imageUrl = sasUri.AbsoluteUri;
+            return $"<img src='{imageUrl}' alt='Song Cover Art' style='width: 200px; height: 200px; object-fit: cover; border-radius: 8px;' />";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate SAS URL for song art image {ImagePath}", imageBlobPath);
+            // Return a placeholder with a music note symbol
+            return @"<table cellpadding='0' cellspacing='0' border='0' style='width: 200px; height: 200px; border-radius: 8px; background-color: #667eea; margin: 0 auto;'>
+                <tr>
+                    <td align='center' valign='middle' style='width: 200px; height: 200px; color: #ffffff; font-size: 80px; font-family: Arial, sans-serif;'>&#9835;</td>
+                </tr>
+            </table>";
+        }
     }
 
     private string BuildUploadSummaryEmailBody(string creatorEmail, List<SongMetadata> uploadedSongs, bool isAdminEmail)
