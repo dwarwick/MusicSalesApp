@@ -288,9 +288,18 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _currentUserId = user?.Id;
 
                 // Check if user is the creator of this song
-                if (_songMetadata.Creator != null && user != null)
+                if (user != null)
                 {
-                    _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                    if (_songMetadata.Creator != null)
+                    {
+                        _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                    }
+                    else if (_songMetadata.CreatorId.HasValue && _songMetadata.CreatorId > 0)
+                    {
+                        // Fallback: look up creator by ID if navigation property wasn't loaded
+                        var creator = await CreatorService.GetCreatorByUserIdAsync(user.Id);
+                        _isCreatorOfSong = creator != null && creator.Id == _songMetadata.CreatorId.Value;
+                    }
                 }
 
                 Logger.LogInformation("SongPlayer: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}, _isCreatorOfSong={IsCreatorOfSong}", 

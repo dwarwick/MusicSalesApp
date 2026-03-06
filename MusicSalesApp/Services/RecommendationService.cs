@@ -89,6 +89,8 @@ public class RecommendationService : IRecommendationService
                 await using var context = await _contextFactory.CreateDbContextAsync();
                 return await context.RecommendedPlaylists
                     .Include(rp => rp.SongMetadata)
+                        .ThenInclude(sm => sm.Creator)
+                            .ThenInclude(c => c.User)
                     .Where(rp => rp.UserId == userId)
                     .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled) // Filter out disabled songs
                     .OrderBy(rp => rp.DisplayOrder)
@@ -179,6 +181,8 @@ public class RecommendationService : IRecommendationService
                 // Reload with navigation properties
                 return await context.RecommendedPlaylists
                     .Include(rp => rp.SongMetadata)
+                        .ThenInclude(sm => sm.Creator)
+                            .ThenInclude(c => c.User)
                     .Where(rp => rp.UserId == userId)
                     .OrderBy(rp => rp.DisplayOrder)
                     .ToListAsync();

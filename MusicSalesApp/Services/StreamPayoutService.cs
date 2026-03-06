@@ -96,15 +96,20 @@ public class StreamPayoutService : IStreamPayoutService
                     {
                         creatorsProcessed++;
                         
-                        // If this is a US creator with a valid PayeeRef, collect for Form 1099 reporting
-                        if (payoutResult.Value.IsUsCreator && !string.IsNullOrWhiteSpace(payoutResult.Value.PayeeRef))
+                        // For Form 1099 reporting, include both stream earnings and tips as gross income
+                        var totalReportableAmount = payoutResult.Value.GrossAmount + payoutResult.Value.TipAmount;
+                        
+                        // If this is a US creator with a valid PayeeRef and non-zero reportable amount, collect for Form 1099 reporting
+                        // Skip $0 amounts to avoid TaxBandits validation errors (TxnAmt must be > $0)
+                        if (payoutResult.Value.IsUsCreator && !string.IsNullOrWhiteSpace(payoutResult.Value.PayeeRef)
+                            && totalReportableAmount > 0)
                         {
                             form1099Transactions.Add(new Form1099Transaction
                             {
                                 PayeeRef = payoutResult.Value.PayeeRef,
                                 SequenceId = payoutResult.Value.PayPalTransactionId,
                                 TransactionDate = TransactionDate,
-                                GrossAmount = payoutResult.Value.GrossAmount,
+                                GrossAmount = totalReportableAmount,
                                 WithheldAmount = payoutResult.Value.WithheldAmount
                             });
                             
@@ -212,6 +217,7 @@ public class StreamPayoutService : IStreamPayoutService
         public string? PayeeRef { get; init; }
         public string PayPalTransactionId { get; init; }
         public decimal GrossAmount { get; init; }
+        public decimal TipAmount { get; init; }
         public decimal WithheldAmount { get; init; }
         public List<int> StreamPayoutIds { get; init; }
     }
@@ -392,6 +398,7 @@ public class StreamPayoutService : IStreamPayoutService
             PayeeRef = creator.TaxBanditsPayeeRef,
             PayPalTransactionId = payPalTransactionId,
             GrossAmount = totalGrossAmount,
+            TipAmount = totalTipAmount,
             WithheldAmount = totalWithheldAmount,
             StreamPayoutIds = payoutIds
         };

@@ -105,13 +105,16 @@ public partial class TipDialogModel : BlazorBase
             // Get the current page URL to use as the return URL after PayPal approval
             var currentUrl = NavigationManager.Uri;
 
+            // Capture client IP address from the HTTP connection for fraud detection
+            var ipAddress = HttpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+
             // Create a PayPal order and get the approval URL
             var (success, errorMessage, approvalUrl) = await TipService.CreateTipOrderAsync(
                 _currentUserId,
                 CreatorId,
                 SongMetadataId,
                 amount,
-                ipAddress: null,
+                ipAddress: ipAddress,
                 fingerprint: null,
                 returnUrl: currentUrl);
 

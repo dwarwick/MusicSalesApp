@@ -84,6 +84,7 @@ namespace MusicSalesApp.Components.Pages
         protected bool _hasActiveSubscription;
         protected bool _isAdmin;
         private int? _currentUserId;
+        private int? _currentUserCreatorId;
         private int _defaultStreamQualifyingSeconds = 30;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
@@ -120,8 +121,9 @@ namespace MusicSalesApp.Components.Pages
             if (_metadataLookup.TryGetValue(track.Name, out var metadata))
             {
                 if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
-                // Check if current user is the creator
+                // Check if current user is the creator (via nav prop or creator ID lookup)
                 if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                if (_currentUserCreatorId.HasValue && metadata.CreatorId == _currentUserCreatorId.Value) return false;
                 return true;
             }
             return false;
@@ -146,6 +148,7 @@ namespace MusicSalesApp.Components.Pages
             {
                 if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
                 if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                if (_currentUserCreatorId.HasValue && metadata.CreatorId == _currentUserCreatorId.Value) return false;
                 return true;
             }
             return false;
@@ -388,6 +391,13 @@ namespace MusicSalesApp.Components.Pages
             _isAdmin = claimsPrincipal.IsInRole(Common.Helpers.Roles.Admin);
             var appUser = await UserManager.GetUserAsync(claimsPrincipal);
             _currentUserId = appUser?.Id;
+
+            // Look up the current user's creator ID for self-tip prevention
+            if (_currentUserId.HasValue)
+            {
+                var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUserId.Value);
+                _currentUserCreatorId = creator?.Id;
+            }
         }
 
         private async Task LoadPlaylistInfo()
