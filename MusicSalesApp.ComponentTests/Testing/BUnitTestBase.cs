@@ -57,6 +57,7 @@ public abstract class BUnitTestBase
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
+    protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
 
     [SetUp]
@@ -93,6 +94,7 @@ public abstract class BUnitTestBase
         MockGenreService = new Mock<IGenreService>();
         MockFileMatchingService = new Mock<IFileMatchingService>();
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
+        MockTipService = new Mock<ITipService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         
         // UserManager requires IUserStore in its constructor
@@ -327,6 +329,16 @@ public abstract class BUnitTestBase
         MockStreamPayoutService.Setup(x => x.GetUnpaidEarningsAsync(It.IsAny<int>()))
             .ReturnsAsync(0m);
 
+        // Setup default returns for ITipService methods
+        MockTipService.Setup(x => x.ValidateTipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, (string)null!));
+        MockTipService.Setup(x => x.GetTipsForCreatorAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
+        MockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
+        MockTipService.Setup(x => x.ProcessPendingToClearedAsync())
+            .ReturnsAsync(0);
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -366,6 +378,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
+        TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
 
         // Add IConfiguration for components that need it
