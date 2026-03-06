@@ -156,7 +156,7 @@ public class TipServiceTests
 
         // Assert
         Assert.That(canTip, Is.False);
-        Assert.That(error, Does.Contain("7 days old"));
+        Assert.That(error, Does.Contain("days old"));
     }
 
     [Test]
@@ -185,7 +185,7 @@ public class TipServiceTests
 
         // Assert
         Assert.That(canTip, Is.False);
-        Assert.That(error, Does.Contain("5 tips per hour"));
+        Assert.That(error, Does.Contain("tips per hour"));
     }
 
     [Test]

@@ -253,8 +253,8 @@ public class StreamPayoutService : IStreamPayoutService
         if (!creatorSongs.Any())
         {
             // Even without streams, check if there are cleared tips
-            var tipsOnly = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
-            if (!tipsOnly.Any())
+            var tipsOnlyCheck = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
+            if (!tipsOnlyCheck.Any())
             {
                 _logger.LogDebug("No unpaid streams or cleared tips for creator {CreatorId}", creator.Id);
                 return null;

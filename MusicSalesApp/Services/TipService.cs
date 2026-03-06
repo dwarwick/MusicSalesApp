@@ -58,7 +58,7 @@ public class TipService : ITipService
 
         // If no AccountCreated history, fall back (old accounts won't have history but should be fine)
         if (accountCreated != default && (DateTime.UtcNow - accountCreated).TotalDays < MinAccountAgeDays)
-            return (false, "Your account must be at least 7 days old to send tips.");
+            return (false, $"Your account must be at least {MinAccountAgeDays} days old to send tips.");
 
         // Check self-tipping
         var creator = await context.Creators.FindAsync(creatorId);
@@ -72,7 +72,7 @@ public class TipService : ITipService
         var recentTipCount = await context.Tips
             .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo);
         if (recentTipCount >= MaxTipsPerHour)
-            return (false, "You can send a maximum of 5 tips per hour. Please try again later.");
+            return (false, $"You can send a maximum of {MaxTipsPerHour} tips per hour. Please try again later.");
 
         // Rate limit: max 10 tips from a user to the same creator (lifetime)
         var tipsToCreator = await context.Tips
