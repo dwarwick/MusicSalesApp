@@ -362,6 +362,26 @@ try
     app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
     app.UseHttpsRedirection();
 
+    // Prevent CDN/browser caching of HTML responses so the import map (which contains
+    // fingerprinted JS URLs) is always fresh after deployments. Fingerprinted static
+    // assets served by MapStaticAssets already have long-lived cache headers.
+    app.Use(async (context, next) =>
+    {
+        // Register a callback that fires just before response headers are sent,
+        // so we can safely set Cache-Control before the response starts streaming.
+        context.Response.OnStarting(() =>
+        {
+            var contentType = context.Response.ContentType;
+            if (contentType != null && contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
+            }
+            return Task.CompletedTask;
+        });
+
+        await next();
+    });
+
     // required for /.well-known/* to be served from wwwroot
     app.UseStaticFiles();
 
