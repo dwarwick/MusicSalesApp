@@ -29,6 +29,7 @@ public class TipService : ITipService
     private const int ReciprocalTipWindowDays = 30;
     private const int MinAccountAgeDays = 7;
     private const int HoldPeriodDays = 7;
+    private const int StaleUncapturedTipHours = 24;
 
     public TipService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -300,8 +301,8 @@ public class TipService : ITipService
             tip.Status = TipStatus.Cleared;
         }
 
-        // Clean up stale uncaptured tips (pending for more than 24 hours without capture)
-        var staleCutoff = DateTime.UtcNow.AddHours(-24);
+        // Clean up stale uncaptured tips (pending without capture for too long - buyer abandoned PayPal checkout)
+        var staleCutoff = DateTime.UtcNow.AddHours(-StaleUncapturedTipHours);
         var staleTips = await context.Tips
             .Where(t => t.Status == TipStatus.Pending && t.CapturedAt == null && t.CreatedAt <= staleCutoff)
             .ToListAsync();

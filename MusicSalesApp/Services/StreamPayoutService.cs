@@ -409,7 +409,8 @@ public class StreamPayoutService : IStreamPayoutService
         {
             payoutRecord.PayPalTransactionId = payPalTransactionId;
             payoutRecord.PaymentDate = DateTime.UtcNow;
-            // Store the total tip amount on the first payout record for 1099 retry purposes
+            // Tips are a batch-level amount (not per-song), so store the total tip amount
+            // on just the first payout record to avoid duplication in 1099 tax reporting retries.
             if (isFirstRecord && totalTipAmount > 0)
             {
                 payoutRecord.TipAmount = totalTipAmount;
