@@ -95,6 +95,13 @@ public class Tip
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// When the PayPal order was captured (payment confirmed).
+    /// Null means the tip was created but the buyer hasn't completed PayPal checkout yet.
+    /// Only captured tips should be promoted to Cleared status.
+    /// </summary>
+    public DateTime? CapturedAt { get; set; }
+
+    /// <summary>
     /// When the tip was paid out to the creator (if paid).
     /// </summary>
     public DateTime? PaidAt { get; set; }

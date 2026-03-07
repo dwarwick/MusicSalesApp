@@ -270,8 +270,8 @@ public class TipServiceTests
         await SeedUserAndCreator();
 
         _context.Tips.AddRange(
-            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-8) }, // Old enough
-            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 3.00m, Status = TipStatus.Pending, PayPalOrderId = "O2", CreatedAt = DateTime.UtcNow.AddDays(-2) }  // Too new
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-8), CapturedAt = DateTime.UtcNow.AddDays(-8) }, // Old enough and captured
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 3.00m, Status = TipStatus.Pending, PayPalOrderId = "O2", CreatedAt = DateTime.UtcNow.AddDays(-2), CapturedAt = DateTime.UtcNow.AddDays(-2) }  // Too new
         );
         await _context.SaveChangesAsync();
 
@@ -286,6 +286,53 @@ public class TipServiceTests
         var tips = await verifyContext.Tips.ToListAsync();
         Assert.That(tips.Count(t => t.Status == TipStatus.Cleared), Is.EqualTo(1));
         Assert.That(tips.Count(t => t.Status == TipStatus.Pending), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_SkipsUncapturedTips()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.AddRange(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-8), CapturedAt = DateTime.UtcNow.AddDays(-8) }, // Captured - should clear
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 3.00m, Status = TipStatus.Pending, PayPalOrderId = "O2", CreatedAt = DateTime.UtcNow.AddDays(-8), CapturedAt = null }  // Uncaptured - should NOT clear
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert - only the captured tip should be cleared
+        Assert.That(clearedCount, Is.EqualTo(1));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.ToListAsync();
+        Assert.That(tips.Count(t => t.Status == TipStatus.Cleared), Is.EqualTo(1));
+        // Uncaptured tip older than 24h should be removed
+        Assert.That(tips.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_RemovesStaleTips()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-2), CapturedAt = null } // Uncaptured, older than 24h
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert - no tips cleared, but stale uncaptured tip should be removed
+        Assert.That(clearedCount, Is.EqualTo(0));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.ToListAsync();
+        Assert.That(tips.Count, Is.EqualTo(0));
     }
 
     [Test]

@@ -404,10 +404,17 @@ public class StreamPayoutService : IStreamPayoutService
 
         // Save payout records and update StreamsAtLastPayout
         var payoutIds = new List<int>();
+        var isFirstRecord = true;
         foreach (var payoutRecord in payoutRecords)
         {
             payoutRecord.PayPalTransactionId = payPalTransactionId;
             payoutRecord.PaymentDate = DateTime.UtcNow;
+            // Store the total tip amount on the first payout record for 1099 retry purposes
+            if (isFirstRecord && totalTipAmount > 0)
+            {
+                payoutRecord.TipAmount = totalTipAmount;
+                isFirstRecord = false;
+            }
             context.StreamPayouts.Add(payoutRecord);
 
             // Update the song's StreamsAtLastPayout
@@ -948,13 +955,14 @@ public class StreamPayoutService : IStreamPayoutService
                 if (string.IsNullOrWhiteSpace(payout.Creator.TaxBanditsPayeeRef))
                     continue;
 
-                // Calculate total reportable amount (gross + any associated tips would have been included in original)
+                // Include tip amounts stored on the payout record (GrossAmount + TipAmount = total reportable)
+                var totalReportableAmount = payout.GrossAmount + payout.TipAmount;
                 transactions.Add(new Form1099Transaction
                 {
                     PayeeRef = payout.Creator.TaxBanditsPayeeRef,
                     SequenceId = payout.PayPalTransactionId ?? $"RETRY-{payout.Id}",
                     TransactionDate = payout.PaymentDate,
-                    GrossAmount = payout.GrossAmount,
+                    GrossAmount = totalReportableAmount,
                     WithheldAmount = payout.WithheldAmount
                 });
             }

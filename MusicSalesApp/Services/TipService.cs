@@ -98,7 +98,7 @@ public class TipService : ITipService
             return (false, "You have reached the maximum number of tips to this creator.");
         }
 
-        // Fraud detection: check fingerprint patterns (strict – same device, different accounts)
+        // Fraud detection: check fingerprint patterns (strict ï¿½ same device, different accounts)
         if (!string.IsNullOrEmpty(fingerprint))
         {
             var fingerprintTips = await context.Tips
@@ -117,7 +117,7 @@ public class TipService : ITipService
             }
         }
 
-        // Fraud detection: check IP patterns (lenient – shared networks are common)
+        // Fraud detection: check IP patterns (lenient ï¿½ shared networks are common)
         if (!string.IsNullOrEmpty(ipAddress))
         {
             var ipTips = await context.Tips
@@ -239,6 +239,8 @@ public class TipService : ITipService
                 return (false, captureError ?? "Failed to capture payment.", 0);
             }
 
+            // Mark as captured so ProcessPendingToClearedAsync knows this tip was paid
+            tip.CapturedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
@@ -285,11 +287,12 @@ public class TipService : ITipService
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        // Tips that have been pending for at least 7 full days
+        // Tips that have been pending for at least 7 full days AND were captured (payment confirmed).
+        // Tips without CapturedAt are uncaptured (buyer abandoned PayPal checkout) and should not be promoted.
         var cutoff = DateTime.UtcNow.AddDays(-HoldPeriodDays);
 
         var pendingTips = await context.Tips
-            .Where(t => t.Status == TipStatus.Pending && t.CreatedAt <= cutoff)
+            .Where(t => t.Status == TipStatus.Pending && t.CapturedAt != null && t.CreatedAt <= cutoff)
             .ToListAsync();
 
         foreach (var tip in pendingTips)
@@ -297,8 +300,20 @@ public class TipService : ITipService
             tip.Status = TipStatus.Cleared;
         }
 
+        // Clean up stale uncaptured tips (pending for more than 24 hours without capture)
+        var staleCutoff = DateTime.UtcNow.AddHours(-24);
+        var staleTips = await context.Tips
+            .Where(t => t.Status == TipStatus.Pending && t.CapturedAt == null && t.CreatedAt <= staleCutoff)
+            .ToListAsync();
+
+        if (staleTips.Count > 0)
+        {
+            context.Tips.RemoveRange(staleTips);
+            _logger.LogInformation("Removed {Count} stale uncaptured tip records older than 24 hours", staleTips.Count);
+        }
+
         var count = await context.SaveChangesAsync();
-        if (count > 0)
+        if (pendingTips.Count > 0)
         {
             _logger.LogInformation("Cleared {Count} tips that passed the 7-day hold period", pendingTips.Count);
         }

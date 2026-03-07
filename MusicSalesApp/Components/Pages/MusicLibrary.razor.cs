@@ -75,6 +75,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
+    private bool _tipReturnHandled;
     protected bool _isAuthenticated;
     protected bool _hasActiveSubscription;
     private bool _isAdmin;
@@ -84,6 +85,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected TipDialogModel _tipDialog;
     protected int _tipCreatorId;
     protected int? _tipSongMetadataId;
+    protected string _tipSuccessMessage = string.Empty;
+    protected string _tipErrorMessage = string.Empty;
+
+    [SupplyParameterFromQuery(Name = "tip_status")]
+    public string TipStatus { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string TipPayPalToken { get; set; }
     private int _defaultStreamQualifyingSeconds = 30;
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
@@ -143,6 +152,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Handle return from PayPal tip approval (once only)
+        if (firstRender && !_tipReturnHandled && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            _tipReturnHandled = true;
+            await HandleTipReturnAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+
         if (_needsJsInit && !string.IsNullOrEmpty(_playingCardId))
         {
             _needsJsInit = false;
@@ -596,6 +613,43 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 await _tipDialog.ShowAsync();
             }
         }
+    }
+
+    private async Task HandleTipReturnAsync()
+    {
+        if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            try
+            {
+                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                if (success)
+                {
+                    if (_tipDialog != null)
+                    {
+                        await _tipDialog.ShowSuccessAsync(tipAmount);
+                    }
+                    _tipSuccessMessage = $"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.";
+                }
+                else
+                {
+                    _tipErrorMessage = errorMessage ?? "Failed to process your tip. Please try again.";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                _tipErrorMessage = "An error occurred processing your tip.";
+            }
+        }
+        else if (TipStatus == "cancelled")
+        {
+            _tipErrorMessage = "Tip payment was cancelled.";
+        }
+
+        // Clear tip-related query parameters from URL without reloading
+        var uri = NavigationManager.Uri;
+        var baseUri = uri.Split('?')[0];
+        NavigationManager.NavigateTo(baseUri, replace: true);
     }
 
     private class StreamUrlResponseDto
