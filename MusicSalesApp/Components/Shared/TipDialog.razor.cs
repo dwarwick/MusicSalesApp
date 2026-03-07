@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
 
-public partial class TipDialogModel : BlazorBase
+public partial class TipDialogModel : BlazorBase, IAsyncDisposable
 {
     protected bool _showDialog;
     protected bool _tipProcessing;
@@ -14,6 +15,7 @@ public partial class TipDialogModel : BlazorBase
     protected decimal _customAmount;
     protected string _errorMessage = string.Empty;
     private int _currentUserId;
+    private IJSObjectReference _jsModule;
 
     [Parameter]
     public int CreatorId { get; set; }
@@ -108,6 +110,19 @@ public partial class TipDialogModel : BlazorBase
             // Capture client IP address from the HTTP connection for fraud detection
             var ipAddress = HttpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
+            // Capture machine fingerprint via JS interop for fraud detection
+            string fingerprint = null;
+            try
+            {
+                if (_jsModule == null)
+                    _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/TipDialog.razor.js");
+                fingerprint = await _jsModule.InvokeAsync<string>("getMachineFingerprint");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to capture machine fingerprint");
+            }
+
             // Create a PayPal order and get the approval URL
             var (success, errorMessage, approvalUrl) = await TipService.CreateTipOrderAsync(
                 _currentUserId,
@@ -115,7 +130,7 @@ public partial class TipDialogModel : BlazorBase
                 SongMetadataId,
                 amount,
                 ipAddress: ipAddress,
-                fingerprint: null,
+                fingerprint: fingerprint,
                 returnUrl: currentUrl);
 
             if (!success || string.IsNullOrEmpty(approvalUrl))
@@ -135,6 +150,21 @@ public partial class TipDialogModel : BlazorBase
             _errorMessage = "An unexpected error occurred. Please try again.";
             _tipProcessing = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_jsModule != null)
+        {
+            try
+            {
+                await _jsModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit already disconnected, safe to ignore
+            }
         }
     }
 }
