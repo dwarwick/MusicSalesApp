@@ -45,19 +45,36 @@ public class AdminSettingsModel : BlazorBase
     protected bool _originalNotifyTipFraudPrevented = true;
     protected bool _isSavingNotifications = false;
 
+    // Tax Bandits maintenance window fields
+    protected bool _maintenanceEnabled = false;
+    protected bool _originalMaintenanceEnabled = false;
+    protected DateTime? _maintenanceStartEastern = null;
+    protected DateTime? _originalMaintenanceStartEastern = null;
+    protected DateTime? _maintenanceEndEastern = null;
+    protected DateTime? _originalMaintenanceEndEastern = null;
+    protected bool _isSavingMaintenance = false;
+    protected string? _maintenanceSuccessMessage = null;
+    protected List<string> _maintenanceValidationErrors = new();
+
+    private static readonly TimeZoneInfo EasternTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+
     protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
                                    || _streamPayRateDisplay != _originalStreamPayRateDisplay
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
-                                            || _notifyEmailConfirmed != _originalNotifyEmailConfirmed
-                                            || _notifyTaxFormCompleted != _originalNotifyTaxFormCompleted
-                                            || _notifyCreatorStatusGained != _originalNotifyCreatorStatusGained
-                                            || _notifyCreatorStatusLost != _originalNotifyCreatorStatusLost
-                                            || _notifyUploadCompleted != _originalNotifyUploadCompleted
-                                            || _notifySongRenamed != _originalNotifySongRenamed
-                                            || _notifySongArtUpdated != _originalNotifySongArtUpdated
-                                            || _notifyTipFraudPrevented != _originalNotifyTipFraudPrevented;
+                                             || _notifyEmailConfirmed != _originalNotifyEmailConfirmed
+                                             || _notifyTaxFormCompleted != _originalNotifyTaxFormCompleted
+                                             || _notifyCreatorStatusGained != _originalNotifyCreatorStatusGained
+                                             || _notifyCreatorStatusLost != _originalNotifyCreatorStatusLost
+                                             || _notifyUploadCompleted != _originalNotifyUploadCompleted
+                                             || _notifySongRenamed != _originalNotifySongRenamed
+                                             || _notifySongArtUpdated != _originalNotifySongArtUpdated
+                                             || _notifyTipFraudPrevented != _originalNotifyTipFraudPrevented;
+
+    protected bool _hasMaintenanceChanges => _maintenanceEnabled != _originalMaintenanceEnabled
+                                              || _maintenanceStartEastern != _originalMaintenanceStartEastern
+                                              || _maintenanceEndEastern != _originalMaintenanceEndEastern;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -120,6 +137,26 @@ public class AdminSettingsModel : BlazorBase
 
         _notifyTipFraudPrevented = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyTipFraudPreventedKey);
         _originalNotifyTipFraudPrevented = _notifyTipFraudPrevented;
+
+        // Load Tax Bandits maintenance window settings
+        _maintenanceEnabled = await AppSettingsService.GetTaxBanditsMaintenanceEnabledAsync();
+        _originalMaintenanceEnabled = _maintenanceEnabled;
+
+        var startUtc = await AppSettingsService.GetTaxBanditsMaintenanceStartUtcAsync();
+        if (startUtc.HasValue)
+        {
+            _maintenanceStartEastern = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(startUtc.Value, DateTimeKind.Utc), EasternTimeZone);
+        }
+        _originalMaintenanceStartEastern = _maintenanceStartEastern;
+
+        var endUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
+        if (endUtc.HasValue)
+        {
+            _maintenanceEndEastern = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(endUtc.Value, DateTimeKind.Utc), EasternTimeZone);
+        }
+        _originalMaintenanceEndEastern = _maintenanceEndEastern;
     }
 
     protected void CancelChanges()
@@ -257,6 +294,85 @@ public class AdminSettingsModel : BlazorBase
         finally
         {
             _isSavingNotifications = false;
+            StateHasChanged();
+        }
+    }
+
+    protected void CancelMaintenanceChanges()
+    {
+        _maintenanceEnabled = _originalMaintenanceEnabled;
+        _maintenanceStartEastern = _originalMaintenanceStartEastern;
+        _maintenanceEndEastern = _originalMaintenanceEndEastern;
+        _maintenanceValidationErrors.Clear();
+        _maintenanceSuccessMessage = null;
+        StateHasChanged();
+    }
+
+    protected async Task SaveMaintenanceSettings()
+    {
+        _maintenanceValidationErrors.Clear();
+        _maintenanceSuccessMessage = null;
+        _isSavingMaintenance = true;
+
+        try
+        {
+            if (_maintenanceEnabled)
+            {
+                if (!_maintenanceStartEastern.HasValue)
+                {
+                    _maintenanceValidationErrors.Add("Maintenance start date/time is required when enabled.");
+                }
+
+                if (!_maintenanceEndEastern.HasValue)
+                {
+                    _maintenanceValidationErrors.Add("Maintenance end date/time is required when enabled.");
+                }
+
+                if (_maintenanceStartEastern.HasValue && _maintenanceEndEastern.HasValue
+                    && _maintenanceEndEastern.Value <= _maintenanceStartEastern.Value)
+                {
+                    _maintenanceValidationErrors.Add("End date/time must be after start date/time.");
+                }
+            }
+
+            if (_maintenanceValidationErrors.Any())
+            {
+                StateHasChanged();
+                return;
+            }
+
+            await AppSettingsService.SetTaxBanditsMaintenanceEnabledAsync(_maintenanceEnabled);
+
+            if (_maintenanceStartEastern.HasValue)
+            {
+                var startUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(_maintenanceStartEastern.Value, DateTimeKind.Unspecified), EasternTimeZone);
+                await AppSettingsService.SetTaxBanditsMaintenanceStartUtcAsync(startUtc);
+            }
+
+            if (_maintenanceEndEastern.HasValue)
+            {
+                var endUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(_maintenanceEndEastern.Value, DateTimeKind.Unspecified), EasternTimeZone);
+                await AppSettingsService.SetTaxBanditsMaintenanceEndUtcAsync(endUtc);
+            }
+
+            _originalMaintenanceEnabled = _maintenanceEnabled;
+            _originalMaintenanceStartEastern = _maintenanceStartEastern;
+            _originalMaintenanceEndEastern = _maintenanceEndEastern;
+
+            _maintenanceSuccessMessage = "Tax Bandits maintenance window settings saved successfully.";
+            Logger.LogInformation("Tax Bandits maintenance window settings updated - Enabled: {Enabled}, Start (ET): {Start}, End (ET): {End}",
+                _maintenanceEnabled, _maintenanceStartEastern, _maintenanceEndEastern);
+        }
+        catch (Exception ex)
+        {
+            _maintenanceValidationErrors.Add($"Error saving maintenance settings: {ex.Message}");
+            Logger.LogError(ex, "Failed to save Tax Bandits maintenance window settings");
+        }
+        finally
+        {
+            _isSavingMaintenance = false;
             StateHasChanged();
         }
     }

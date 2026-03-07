@@ -54,4 +54,11 @@ public interface IStreamPayoutService
     /// Gets all stream payouts in the system for admin reporting.
     /// </summary>
     Task<List<Models.StreamPayout>> GetAllPayoutsAsync();
+
+    /// <summary>
+    /// Retries reporting pending 1099 transactions to TaxBandits.
+    /// This processes StreamPayout records with TaxBanditsStatus of "Pending" that belong to US creators.
+    /// </summary>
+    /// <returns>The number of payout records successfully reported.</returns>
+    Task<int> RetryPending1099TransactionsAsync();
 }

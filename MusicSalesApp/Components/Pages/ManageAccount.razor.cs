@@ -87,6 +87,12 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     // Creator stream definition display values
     protected int _creatorStreamQualifyingSeconds = 30;
     protected decimal _creatorStreamPayRateDisplay = 5.00m;
+
+    // Tax Bandits maintenance window
+    protected bool _showMaintenanceWarning = false;
+    protected string _maintenanceStartLocal = string.Empty;
+    protected string _maintenanceEndLocal = string.Empty;
+    protected string _maintenanceTimeZoneAbbreviation = string.Empty;
     
     /// <summary>
     /// Returns true if the user can start the creator onboarding process.
@@ -731,6 +737,28 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     {
         try
         {
+            // Check maintenance window for Tax Bandits
+            _showMaintenanceWarning = await AppSettingsService.ShouldShowTaxBanditsMaintenanceWarningAsync();
+            if (_showMaintenanceWarning)
+            {
+                var startUtc = await AppSettingsService.GetTaxBanditsMaintenanceStartUtcAsync();
+                var endUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
+                try
+                {
+                    var localInfo = await JS.InvokeAsync<ManageAccountMaintenanceInfo>("getMaintenanceLocalTime",
+                        startUtc?.ToString("O"), endUtc?.ToString("O"));
+                    _maintenanceStartLocal = localInfo.StartLocal;
+                    _maintenanceEndLocal = localInfo.EndLocal;
+                    _maintenanceTimeZoneAbbreviation = localInfo.TimeZoneAbbreviation;
+                }
+                catch
+                {
+                    _maintenanceStartLocal = startUtc?.ToString("g") ?? "";
+                    _maintenanceEndLocal = endUtc?.ToString("g") ?? "";
+                    _maintenanceTimeZoneAbbreviation = "UTC";
+                }
+            }
+
             var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
             if (creator != null)
             {
@@ -1262,4 +1290,11 @@ public class CompleteCreatorOnboardingResponse
     public bool IsActive { get; set; }
     public bool PaymentsReceivable { get; set; }
     public bool PrimaryEmailConfirmed { get; set; }
+}
+
+public class ManageAccountMaintenanceInfo
+{
+    public string StartLocal { get; set; } = string.Empty;
+    public string EndLocal { get; set; } = string.Empty;
+    public string TimeZoneAbbreviation { get; set; } = string.Empty;
 }

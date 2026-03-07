@@ -18,6 +18,7 @@ public class StreamPayoutService : IStreamPayoutService
     private readonly ILogger<StreamPayoutService> _logger;
     private readonly ITaxBanditsService _taxBanditsService;
     private readonly ITipService _tipService;
+    private readonly IAppSettingsService _appSettingsService;
 
     // Minimum payout threshold in USD
     private const decimal MinimumPayoutThreshold = 5.00m;
@@ -31,7 +32,8 @@ public class StreamPayoutService : IStreamPayoutService
         IConfiguration configuration,
         ILogger<StreamPayoutService> logger,
         ITaxBanditsService taxBanditsService,
-        ITipService tipService)
+        ITipService tipService,
+        IAppSettingsService appSettingsService)
     {
         _contextFactory = contextFactory;
         _emailService = emailService;
@@ -39,6 +41,7 @@ public class StreamPayoutService : IStreamPayoutService
         _logger = logger;
         _taxBanditsService = taxBanditsService;
         _tipService = tipService;
+        _appSettingsService = appSettingsService;
     }
 
     /// <inheritdoc />
@@ -128,6 +131,37 @@ public class StreamPayoutService : IStreamPayoutService
             // Report all US creator transactions to TaxBandits in a single batch
             if (form1099Transactions.Count > 0)
             {
+                // Check if Tax Bandits is currently in a maintenance window
+                var isMaintenanceActive = await _appSettingsService.IsTaxBanditsMaintenanceActiveAsync();
+                if (isMaintenanceActive)
+                {
+                    _logger.LogInformation("Tax Bandits maintenance window is active. Marking {Count} payout records as Pending for later retry",
+                        usCreatorPayoutIds.Count);
+
+                    if (usCreatorPayoutIds.Count > 0)
+                    {
+                        try
+                        {
+                            await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                            var payoutsToUpdate = await updateContext.StreamPayouts
+                                .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
+                                .ToListAsync();
+
+                            foreach (var payout in payoutsToUpdate)
+                            {
+                                payout.TaxBanditsStatus = "Pending";
+                            }
+
+                            await updateContext.SaveChangesAsync();
+                        }
+                        catch (Exception updateEx)
+                        {
+                            _logger.LogError(updateEx, "Failed to update StreamPayout records with Pending status during maintenance");
+                        }
+                    }
+                }
+                else
+                {
                 try
                 {
                     var form1099Response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(form1099Transactions);
@@ -143,13 +177,19 @@ public class StreamPayoutService : IStreamPayoutService
                         foreach (var payout in payoutsToUpdate)
                         {
                             payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
-                            payout.TaxBanditsStatus = form1099Response.StatusMessage ?? 
-                                (form1099Response.Success ? "Success" : (form1099Response.ErrorMessage ?? "Unknown Error"));
+                            if (form1099Response.Success)
+                            {
+                                payout.TaxBanditsStatus = "Success";
+                            }
+                            else
+                            {
+                                payout.TaxBanditsStatus = "Pending";
+                            }
                         }
 
                         await updateContext.SaveChangesAsync();
                         _logger.LogInformation("Updated {Count} StreamPayout records with TaxBandits status: {Status}", 
-                            payoutsToUpdate.Count, form1099Response.StatusMessage ?? "N/A");
+                            payoutsToUpdate.Count, form1099Response.Success ? "Success" : "Pending");
                     }
 
                     if (form1099Response.Success)
@@ -159,19 +199,19 @@ public class StreamPayoutService : IStreamPayoutService
                     }
                     else
                     {
-                        // Log warning but don't fail - the transactions can be reported manually if needed
+                        // Log warning but don't fail - the transactions will be retried as they are marked Pending
                         // Admin email notification is already sent by TaxBanditsService
-                        _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}",
+                        _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}. Marked as Pending for retry.",
                             form1099Response.ErrorMessage, form1099Transactions.Count);
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log error but don't fail - the transactions can be reported manually if needed
-                    _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}",
+                    // Log error but don't fail - mark as Pending for retry
+                    _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}. Marking as Pending for retry.",
                         form1099Transactions.Count);
                     
-                    // Update StreamPayout records with failure status
+                    // Update StreamPayout records with Pending status for retry
                     if (usCreatorPayoutIds.Count > 0)
                     {
                         try
@@ -183,16 +223,17 @@ public class StreamPayoutService : IStreamPayoutService
 
                             foreach (var payout in payoutsToUpdate)
                             {
-                                payout.TaxBanditsStatus = $"Exception: {ex.Message}";
+                                payout.TaxBanditsStatus = "Pending";
                             }
 
                             await updateContext.SaveChangesAsync();
                         }
                         catch (Exception updateEx)
                         {
-                            _logger.LogError(updateEx, "Failed to update StreamPayout records with error status");
+                            _logger.LogError(updateEx, "Failed to update StreamPayout records with Pending status");
                         }
                     }
+                }
                 }
             }
 
@@ -862,5 +903,101 @@ public class StreamPayoutService : IStreamPayoutService
             .Include(sp => sp.SongMetadata)
             .OrderByDescending(sp => sp.PaymentDate)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RetryPending1099TransactionsAsync()
+    {
+        // Don't retry if Tax Bandits is still in maintenance
+        if (await _appSettingsService.IsTaxBanditsMaintenanceActiveAsync())
+        {
+            _logger.LogInformation("Tax Bandits maintenance window is still active. Skipping pending 1099 transaction retry.");
+            return 0;
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        // Get all pending payouts for US creators grouped by PayPal transaction ID
+        var pendingPayouts = await context.StreamPayouts
+            .Include(sp => sp.Creator)
+            .Where(sp => sp.TaxBanditsStatus == "Pending" && sp.Creator.TaxResidencyType == TaxResidencyType.US)
+            .ToListAsync();
+
+        if (pendingPayouts.Count == 0)
+        {
+            _logger.LogDebug("No pending 1099 transactions to retry");
+            return 0;
+        }
+
+        _logger.LogInformation("Found {Count} pending 1099 payout records to retry", pendingPayouts.Count);
+
+        // Group by PayPal transaction ID to batch them
+        var groupedByTransaction = pendingPayouts
+            .GroupBy(sp => sp.PayPalTransactionId)
+            .ToList();
+
+        var totalUpdated = 0;
+
+        foreach (var group in groupedByTransaction)
+        {
+            var transactions = new List<Form1099Transaction>();
+            var payoutIds = group.Select(sp => sp.Id).ToList();
+
+            foreach (var payout in group)
+            {
+                if (string.IsNullOrWhiteSpace(payout.Creator.TaxBanditsPayeeRef))
+                    continue;
+
+                // Calculate total reportable amount (gross + any associated tips would have been included in original)
+                transactions.Add(new Form1099Transaction
+                {
+                    PayeeRef = payout.Creator.TaxBanditsPayeeRef,
+                    SequenceId = payout.PayPalTransactionId ?? $"RETRY-{payout.Id}",
+                    TransactionDate = payout.PaymentDate,
+                    GrossAmount = payout.GrossAmount,
+                    WithheldAmount = payout.WithheldAmount
+                });
+            }
+
+            if (transactions.Count == 0)
+                continue;
+
+            try
+            {
+                var response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(transactions);
+
+                await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                var payoutsToUpdate = await updateContext.StreamPayouts
+                    .Where(sp => payoutIds.Contains(sp.Id))
+                    .ToListAsync();
+
+                foreach (var payout in payoutsToUpdate)
+                {
+                    payout.TaxBandits1099TransactionId = response.TransactionId;
+                    payout.TaxBanditsStatus = response.Success ? "Success" : "Pending";
+                }
+
+                await updateContext.SaveChangesAsync();
+
+                if (response.Success)
+                {
+                    totalUpdated += payoutsToUpdate.Count;
+                    _logger.LogInformation("Successfully retried {Count} pending 1099 transactions for PayPal transaction {TransactionId}",
+                        payoutsToUpdate.Count, group.Key);
+                }
+                else
+                {
+                    _logger.LogWarning("Retry of 1099 transactions failed for PayPal transaction {TransactionId}. Error: {Error}. Will retry later.",
+                        group.Key, response.ErrorMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception retrying 1099 transactions for PayPal transaction {TransactionId}",
+                    group.Key);
+            }
+        }
+
+        return totalUpdated;
     }
 }

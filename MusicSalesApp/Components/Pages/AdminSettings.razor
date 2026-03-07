@@ -2,6 +2,7 @@
 @inherits AdminSettingsModel
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
+@using Syncfusion.Blazor.Calendars
 @attribute [Authorize(Policy = Permissions.ManageUsers)]
 
 <PageTitle>Application Settings</PageTitle>
@@ -187,6 +188,83 @@ else
                         <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                     }
                     Save Notification Settings
+                </SfButton>
+            </div>
+        </div>
+    </div>
+
+    <div class="card settings-card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Tax Bandits Maintenance Window</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Configure an upcoming Tax Bandits maintenance window. When enabled and the end time is in the future, new creators will see a warning that tax form submission is unavailable during this period, and 1099 transaction reporting will be delayed until after the window ends.</p>
+
+            @if (_maintenanceSuccessMessage != null)
+            {
+                <SfMessage Severity="MessageSeverity.Success" ShowCloseIcon="true" Closed="() => _maintenanceSuccessMessage = null">
+                    @_maintenanceSuccessMessage
+                </SfMessage>
+            }
+
+            @if (_maintenanceValidationErrors.Any())
+            {
+                <SfMessage Severity="MessageSeverity.Error">
+                    <strong>Validation Errors:</strong>
+                    <ul class="mb-0">
+                        @foreach (var error in _maintenanceValidationErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </SfMessage>
+            }
+
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" @bind="_maintenanceEnabled" id="maintenanceEnabled" />
+                <label class="form-check-label" for="maintenanceEnabled"><strong>Enable Maintenance Window</strong></label>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Start Date/Time (Eastern) <span class="text-danger">*</span></label>
+                    <SfDateTimePicker TValue="DateTime?" @bind-Value="_maintenanceStartEastern"
+                                     Placeholder="Select start date/time"
+                                     CssClass="e-outline"
+                                     Enabled="@_maintenanceEnabled" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">End Date/Time (Eastern) <span class="text-danger">*</span></label>
+                    <SfDateTimePicker TValue="DateTime?" @bind-Value="_maintenanceEndEastern"
+                                     Placeholder="Select end date/time"
+                                     CssClass="e-outline"
+                                     Enabled="@_maintenanceEnabled" />
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Note:</strong> All times are entered in Eastern Time (ET) and stored as UTC internally.
+                <ul class="mb-0">
+                    <li>When enabled and the end time is in the future, creators will see a warning about tax form unavailability during this window, displayed in their local time zone.</li>
+                    <li>1099 transaction reporting to Tax Bandits will be automatically delayed until the maintenance window ends.</li>
+                    <li>The warning will automatically stop displaying once the end time has passed.</li>
+                </ul>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <SfButton OnClick="CancelMaintenanceChanges" 
+                          Content="Cancel" 
+                          CssClass="e-btn e-outline" 
+                          Disabled="@(!_hasMaintenanceChanges || _isSavingMaintenance)" />
+                <SfButton OnClick="SaveMaintenanceSettings" 
+                          IsPrimary="true" 
+                          Disabled="@(!_hasMaintenanceChanges || _isSavingMaintenance)" 
+                          CssClass="e-btn e-primary">
+                    @if (_isSavingMaintenance)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Save Maintenance Settings
                 </SfButton>
             </div>
         </div>
