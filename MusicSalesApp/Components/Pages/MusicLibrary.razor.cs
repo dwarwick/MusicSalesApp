@@ -9,6 +9,7 @@ using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using Syncfusion.Blazor.Notifications;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -75,11 +76,24 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
+    protected bool _tipReturnHandled;
+    protected bool IsProcessingTipReturn => !string.IsNullOrEmpty(TipStatus) && !_tipReturnHandled;
     protected bool _isAuthenticated;
     protected bool _hasActiveSubscription;
     private bool _isAdmin;
     private int? _currentUserId;
     private Dictionary<int, int?> _creatorUserIdMap = new Dictionary<int, int?>();
+    private Dictionary<string, int?> _creatorIdMap = new Dictionary<string, int?>();
+    protected TipDialogModel _tipDialog;
+    protected int _tipCreatorId;
+    protected int? _tipSongMetadataId;
+    protected SfToast _toastRef;
+
+    [SupplyParameterFromQuery(Name = "tip_status")]
+    public string TipStatus { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string TipPayPalToken { get; set; }
     private int _defaultStreamQualifyingSeconds = 30;
     private Dictionary<string, int> _streamQualifyingSecondsMap = new Dictionary<string, int>();
     private Action<int, int> _streamCountUpdatedHandler;
@@ -139,6 +153,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Handle return from PayPal tip approval (once only)
+        if (firstRender && !_tipReturnHandled && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            _tipReturnHandled = true;
+            await HandleTipReturnAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+
         if (_needsJsInit && !string.IsNullOrEmpty(_playingCardId))
         {
             _needsJsInit = false;
@@ -344,6 +366,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     _streamQualifyingSecondsMap[audioFile.Name] = songMeta.Creator?.StreamQualifyingSeconds ?? _defaultStreamQualifyingSeconds;
                     // Store creator user ID for stream recording guard
                     _creatorUserIdMap[songMeta.Id] = songMeta.Creator?.UserId;
+                    // Store creator ID for tip functionality
+                    _creatorIdMap[audioFile.Name] = songMeta.CreatorId;
                 }
             }
         }
@@ -566,6 +590,78 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             return count;
         }
         return 0;
+    }
+
+    protected bool CanShowTipButton(string fileName)
+    {
+        if (!_isAuthenticated) return false;
+        if (!_creatorIdMap.TryGetValue(fileName, out var creatorId) || creatorId == null || creatorId <= 0) return false;
+        // Don't show tip button for own songs
+        var metadataId = GetSongMetadataId(fileName);
+        if (metadataId > 0 && _creatorUserIdMap.TryGetValue(metadataId, out var creatorUserId) && creatorUserId == _currentUserId)
+            return false;
+        return true;
+    }
+
+    protected async Task ShowTipForSong(string fileName)
+    {
+        if (_creatorIdMap.TryGetValue(fileName, out var creatorId) && creatorId.HasValue)
+        {
+            _tipCreatorId = creatorId.Value;
+            _tipSongMetadataId = GetSongMetadataId(fileName);
+            if (_tipDialog != null)
+            {
+                await _tipDialog.ShowAsync();
+            }
+        }
+    }
+
+    private async Task HandleTipReturnAsync()
+    {
+        if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            try
+            {
+                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                if (success)
+                {
+                    await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
+                }
+                else
+                {
+                    await ShowTipToastAsync(errorMessage ?? "Failed to process your tip. Please try again.", false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                await ShowTipToastAsync("An error occurred processing your tip.", false);
+            }
+        }
+        else if (TipStatus == "cancelled")
+        {
+            await ShowTipToastAsync("Tip payment was cancelled.", false);
+        }
+
+        // Clear tip-related query parameters from the browser URL without triggering
+        // Blazor's navigation lifecycle (avoids re-running OnAfterRenderAsync / data reload)
+        var uri = NavigationManager.Uri;
+        var baseUri = uri.Split('?')[0];
+        await JS.InvokeVoidAsync("history.replaceState", null, "", baseUri);
+    }
+
+    private async Task ShowTipToastAsync(string message, bool isSuccess)
+    {
+        if (_toastRef != null)
+        {
+            await _toastRef.ShowAsync(new ToastModel
+            {
+                Title = isSuccess ? "Tip Sent!" : "Tip Error",
+                Content = message,
+                CssClass = isSuccess ? "e-toast-success" : "e-toast-danger",
+                Icon = isSuccess ? "e-success" : "e-error"
+            });
+        }
     }
 
     private class StreamUrlResponseDto

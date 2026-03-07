@@ -6,6 +6,7 @@ using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using Syncfusion.Blazor.Notifications;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages
@@ -76,6 +77,8 @@ namespace MusicSalesApp.Components.Pages
         private bool invokedJs = false;
 
         private bool _hasLoadedData = false;
+        protected bool _tipReturnHandled;
+        protected bool IsProcessingTipReturn => !string.IsNullOrEmpty(TipStatus) && !_tipReturnHandled;
         private int? _lastLoadedPlaylistId;
         private int? _lastLoadedRecommendedUserId;
         private string _lastLoadedArtistName;
@@ -84,13 +87,145 @@ namespace MusicSalesApp.Components.Pages
         protected bool _hasActiveSubscription;
         protected bool _isAdmin;
         private int? _currentUserId;
+        private int? _currentUserCreatorId;
         private int _defaultStreamQualifyingSeconds = 30;
         private Action<int, int> _streamCountUpdatedHandler;
         private Action<int, int> _hubStreamCountHandler;
         protected SubscribeCtaDialogModel _subscribeCtaDialog;
+        protected TipDialogModel _tipDialog;
+
+        [SupplyParameterFromQuery(Name = "tip_status")]
+        public string TipStatus { get; set; }
+
+        [SupplyParameterFromQuery(Name = "token")]
+        public string TipPayPalToken { get; set; }
+
+        protected SfToast _toastRef;
+        protected int _tipCreatorId;
+        protected int? _tipSongMetadataId;
+
+        protected int GetCurrentTrackCreatorId()
+        {
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return 0;
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                return metadata.CreatorId ?? 0;
+            }
+            return 0;
+        }
+
+        protected bool CanShowTipButton()
+        {
+            if (!_isAuthenticated) return false;
+            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return false;
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
+                // Check if current user is the creator (via nav prop or creator ID lookup)
+                if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                if (_currentUserCreatorId.HasValue && metadata.CreatorId == _currentUserCreatorId.Value) return false;
+                return true;
+            }
+            return false;
+        }
+
+        protected async Task ShowTipDialog()
+        {
+            _tipCreatorId = GetCurrentTrackCreatorId();
+            _tipSongMetadataId = GetCurrentTrackMetadataId();
+            if (_tipDialog != null)
+            {
+                await _tipDialog.ShowAsync();
+            }
+        }
+
+        protected bool CanShowTipButtonForTrack(int trackIndex)
+        {
+            if (!_isAuthenticated) return false;
+            if (_playlistInfo == null || trackIndex >= _playlistInfo.Tracks.Count) return false;
+            var track = _playlistInfo.Tracks[trackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
+                if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
+                if (_currentUserCreatorId.HasValue && metadata.CreatorId == _currentUserCreatorId.Value) return false;
+                return true;
+            }
+            return false;
+        }
+
+        protected async Task ShowTipDialogForTrack(int trackIndex)
+        {
+            if (_playlistInfo == null || trackIndex >= _playlistInfo.Tracks.Count) return;
+            var track = _playlistInfo.Tracks[trackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+            {
+                _tipCreatorId = metadata.CreatorId ?? 0;
+                _tipSongMetadataId = metadata.Id;
+                if (_tipDialog != null)
+                {
+                    await _tipDialog.ShowAsync();
+                }
+            }
+        }
+
+        private async Task HandleTipReturnAsync()
+        {
+            if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+            {
+                try
+                {
+                    var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                    if (success)
+                    {
+                        await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
+                    }
+                    else
+                    {
+                        await ShowTipToastAsync(errorMessage ?? "Failed to process your tip. Please try again.", false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                    await ShowTipToastAsync("An error occurred processing your tip.", false);
+                }
+            }
+            else if (TipStatus == "cancelled")
+            {
+                await ShowTipToastAsync("Tip payment was cancelled.", false);
+            }
+
+            // Clear tip-related query parameters from the browser URL without triggering
+            // Blazor's navigation lifecycle (avoids re-running OnParametersSet / data reload)
+            var uri = NavigationManager.Uri;
+            var baseUri = uri.Split('?')[0];
+            await JS.InvokeVoidAsync("history.replaceState", null, "", baseUri);
+        }
+
+        private async Task ShowTipToastAsync(string message, bool isSuccess)
+        {
+            if (_toastRef != null)
+            {
+                await _toastRef.ShowAsync(new ToastModel
+                {
+                    Title = isSuccess ? "Tip Sent!" : "Tip Error",
+                    Content = message,
+                    CssClass = isSuccess ? "e-toast-success" : "e-toast-danger",
+                    Icon = isSuccess ? "e-success" : "e-error"
+                });
+            }
+        }
 
         protected override async Task OnInitializedAsync()
         {
+            // Set mode flags before any await so they are available when
+            // OnAfterRenderAsync fires (which happens before OnParametersSet
+            // when OnInitializedAsync is truly async).
+            SetModeFlags();
+
             // Subscribe to stream count updates (local in-process events)
             _streamCountUpdatedHandler = OnStreamCountUpdated;
             StreamCountService.OnStreamCountUpdated += _streamCountUpdatedHandler;
@@ -111,13 +246,18 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
-        protected override void OnParametersSet()
+        private void SetModeFlags()
         {
-            // Set the mode flags based on which parameter is provided
             _isRecommendedMode = RecommendedUserId.HasValue;
             _isArtistMode = !string.IsNullOrEmpty(ArtistName);
             _isCreatorMode = CreatorId.HasValue;
             _isGenreMode = !string.IsNullOrEmpty(GenreName);
+        }
+
+        protected override void OnParametersSet()
+        {
+            // Set the mode flags based on which parameter is provided
+            SetModeFlags();
             
             // Check if parameters have changed and reset the flag if needed
             bool parametersChanged;
@@ -191,10 +331,24 @@ namespace MusicSalesApp.Components.Pages
                 {
                     await InvokeAsync(StateHasChanged);
                 }
+
+                return; // Force a new render cycle so the DOM is updated before tip handling or JS init
             }
 
-            // Initialize JS after data is loaded
-            if (!invokedJs && !_loading && _playlistInfo != null && _playlistInfo.Tracks.Any())
+            // Handle return from PayPal tip approval before JS init.
+            // IsProcessingTipReturn keeps the page in loading state (audio element not rendered),
+            // so we must process the tip first, then re-render to get the audio element in the DOM.
+            if (!_tipReturnHandled && !_loading && _playlistInfo != null
+                && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+            {
+                _tipReturnHandled = true;
+                await HandleTipReturnAsync();
+                await InvokeAsync(StateHasChanged);
+                return; // Re-render will now show content with audio element; JS init happens on next cycle
+            }
+
+            // Initialize JS after data is loaded and the content (including audio element) is rendered
+            if (!invokedJs && !_loading && !IsProcessingTipReturn && _playlistInfo != null && _playlistInfo.Tracks.Any())
             {
                 invokedJs = true;
                 _dotNetRef = DotNetObjectReference.Create(this);
@@ -267,6 +421,13 @@ namespace MusicSalesApp.Components.Pages
             _isAdmin = claimsPrincipal.IsInRole(Common.Helpers.Roles.Admin);
             var appUser = await UserManager.GetUserAsync(claimsPrincipal);
             _currentUserId = appUser?.Id;
+
+            // Look up the current user's creator ID for self-tip prevention
+            if (_currentUserId.HasValue)
+            {
+                var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUserId.Value);
+                _currentUserCreatorId = creator?.Id;
+            }
         }
 
         private async Task LoadPlaylistInfo()

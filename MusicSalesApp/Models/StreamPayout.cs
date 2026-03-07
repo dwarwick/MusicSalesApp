@@ -84,6 +84,14 @@ public class StreamPayout
     public decimal NetAmount { get; set; }
 
     /// <summary>
+    /// The tip amount included in this payout batch.
+    /// Tips are tracked separately from stream earnings for 1099 reporting.
+    /// This amount is added to GrossAmount when reporting to TaxBandits.
+    /// </summary>
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal TipAmount { get; set; }
+
+    /// <summary>
     /// The PayPal transaction ID for this payout.
     /// This is the payout_batch_id returned from PayPal's Payouts API.
     /// </summary>

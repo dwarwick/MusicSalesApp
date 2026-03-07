@@ -6,13 +6,13 @@
 <PageTitle>@GetDisplayTitle()</PageTitle>
 
 <div class="song-player-container">
-    @if (_loading)
-    {
-        <div class="loading-state">
-            <p>Loading...</p>
-        </div>
-    }
-    else if (!string.IsNullOrEmpty(_error))
+@if (_loading || IsProcessingTipReturn)
+{
+    <div class="loading-state">
+        <p>Loading...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_error))
     {
         <div class="error-state">
             <div class="alert alert-danger">@_error</div>
@@ -102,8 +102,16 @@
                 <!-- Like/Dislike Buttons -->
                 @if (GetSongMetadataId() > 0)
                 {
-                    <div class="song-like-dislike">
+                    <div class="d-flex">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
+                        @if (CanShowTipButton())
+                        {
+                            <button class="tip-heart-button" @onclick="ShowTipDialog" title="Tip Creator">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="tip-heart-icon">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                </svg>
+                            </button>
+                        }
                     </div>
                 }
             </div>
@@ -206,4 +214,9 @@
     }
 </div>
 
+<SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
+    <ToastPosition X="Right" Y="Top"></ToastPosition>
+</SfToast>
+
 <SubscribeCtaDialog @ref="_subscribeCtaDialog" IsAuthenticated="_isAuthenticated" HasActiveSubscription="_hasActiveSubscription" />
+<TipDialog @ref="_tipDialog" CreatorId="GetCreatorIdForTip()" SongMetadataId="GetSongMetadataId()" IsAuthenticated="_isAuthenticated" />

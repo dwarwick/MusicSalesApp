@@ -167,6 +167,8 @@ public class PlaylistService : IPlaylistService
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.UserPlaylists
                 .Include(up => up.SongMetadata)
+                    .ThenInclude(sm => sm.Creator)
+                        .ThenInclude(c => c.User)
                 .Where(up => up.PlaylistId == playlistId)
                 .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled) // Filter out disabled songs
                 .OrderBy(up => up.AddedAt)

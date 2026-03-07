@@ -44,4 +44,11 @@ public interface ISongLikeService
     /// <param name="userId">The user ID</param>
     /// <returns>List of SongMetadata IDs that the user has liked</returns>
     Task<List<int>> GetUserLikedSongIdsAsync(int userId);
+
+    /// <summary>
+    /// Get like counts for multiple songs in a single query
+    /// </summary>
+    /// <param name="songMetadataIds">The song metadata IDs</param>
+    /// <returns>Dictionary mapping songMetadataId to likeCount</returns>
+    Task<Dictionary<int, int>> GetBulkLikeCountsAsync(IEnumerable<int> songMetadataIds);
 }

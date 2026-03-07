@@ -217,6 +217,14 @@
         <!-- Become a Creator Section (only shown if user is not already an active creator) -->
         @if (!_isActiveCreator)
         {
+            @if (_showMaintenanceWarning)
+            {
+                <div class="alert alert-warning mb-4">
+                    <h5>🔧 Tax Bandits Scheduled Maintenance</h5>
+                    <p>New creators will not be able to submit their tax forms during the upcoming Tax Bandits maintenance window.</p>
+                    <p><strong>Maintenance Window:</strong> @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation</p>
+                </div>
+            }
             <SfCard CssClass="mb-4">
                 <CardHeader Title="Become a Creator" />
                 <CardContent>
@@ -470,6 +478,13 @@
                             See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.
                             </p>
                             
+                            @if (_showMaintenanceWarning)
+                            {
+                                <div class="alert alert-warning mb-3">
+                                    <strong>🔧 Tax Bandits Maintenance:</strong> Tax form updates are unavailable during the maintenance window (@_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation).
+                                </div>
+                            }
+
                             @if (!_stoppingCreatorStatus)
                             {
                                 <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" />

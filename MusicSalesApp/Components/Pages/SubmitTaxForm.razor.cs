@@ -13,6 +13,12 @@ public partial class SubmitTaxFormModel : BlazorBase
     protected string _errorMessage = string.Empty;
     private bool _hasLoadedData = false;
     private IJSObjectReference? _jsModule;
+    protected bool _isMaintenanceActive = false;
+    protected DateTime? _maintenanceStartUtc = null;
+    protected DateTime? _maintenanceEndUtc = null;
+    protected string _maintenanceStartLocal = string.Empty;
+    protected string _maintenanceEndLocal = string.Empty;
+    protected string _maintenanceTimeZoneAbbreviation = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -27,6 +33,35 @@ public partial class SubmitTaxFormModel : BlazorBase
                 if (user.Identity?.IsAuthenticated != true)
                 {
                     NavigationManager.NavigateTo("/login");
+                    return;
+                }
+
+                // Check if Tax Bandits is currently in a maintenance window
+                if (await AppSettingsService.IsTaxBanditsMaintenanceActiveAsync())
+                {
+                    _isMaintenanceActive = true;
+                    _maintenanceStartUtc = await AppSettingsService.GetTaxBanditsMaintenanceStartUtcAsync();
+                    _maintenanceEndUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
+
+                    // Get user's local time zone info via JS interop
+                    try
+                    {
+                        var localInfo = await JS.InvokeAsync<MaintenanceLocalTimeInfo>("getMaintenanceLocalTime",
+                            _maintenanceStartUtc?.ToString("O"), _maintenanceEndUtc?.ToString("O"));
+                        _maintenanceStartLocal = localInfo.StartLocal;
+                        _maintenanceEndLocal = localInfo.EndLocal;
+                        _maintenanceTimeZoneAbbreviation = localInfo.TimeZoneAbbreviation;
+                    }
+                    catch
+                    {
+                        // Fallback to UTC display
+                        _maintenanceStartLocal = _maintenanceStartUtc?.ToString("g") ?? "";
+                        _maintenanceEndLocal = _maintenanceEndUtc?.ToString("g") ?? "";
+                        _maintenanceTimeZoneAbbreviation = "UTC";
+                    }
+
+                    _loading = false;
+                    await InvokeAsync(StateHasChanged);
                     return;
                 }
 
@@ -109,4 +144,11 @@ public class TaxFormTokenResponse
     public string? BusinessId { get; set; }
     public bool UseSandbox { get; set; }
     public string? ErrorMessage { get; set; }
+}
+
+public class MaintenanceLocalTimeInfo
+{
+    public string StartLocal { get; set; } = string.Empty;
+    public string EndLocal { get; set; } = string.Empty;
+    public string TimeZoneAbbreviation { get; set; } = string.Empty;
 }

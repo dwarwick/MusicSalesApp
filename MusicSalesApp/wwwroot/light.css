@@ -598,3 +598,22 @@ body {
     color: #fff !important;
 }
 
+/* Tip Jar - Light Theme */
+.tip-button.control-button {
+    color: #e91e63;
+}
+
+.tip-heart-button .tip-heart-icon {
+    color: #e91e63;
+    fill: #e91e63;
+}
+
+.tip-bucket {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+}
+
+.tip-bucket-amount {
+    color: #28a745;
+}
+

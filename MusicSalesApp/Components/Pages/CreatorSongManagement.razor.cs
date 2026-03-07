@@ -130,12 +130,24 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             IsImageSquare = m.IsImageSquare
         }).ToList();
 
-        // Generate SAS URLs for images
+        // Generate SAS URLs for images and load like counts
+        var songIds = _songs
+            .Select(s => int.TryParse(s.Id, out var id) ? id : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+        var likeCounts = await SongLikeService.GetBulkLikeCountsAsync(songIds);
+
         foreach (var song in _songs)
         {
             if (!string.IsNullOrEmpty(song.JpegFileName))
             {
                 song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+            }
+
+            if (int.TryParse(song.Id, out var songId))
+            {
+                song.LikeCount = likeCounts.GetValueOrDefault(songId, 0);
             }
         }
     }

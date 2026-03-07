@@ -130,6 +130,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     Genre = m.Genre ?? string.Empty,
                     ArtistName = m.GetEffectiveArtistNameFull(),
                     RawArtistName = m.ArtistName ?? string.Empty,
+                    CreatorEmail = m.Creator?.User?.Email ?? string.Empty,
                     TrackLength = m.TrackLength,
                     DisplayOnHomePage = m.DisplayOnHomePage,
                     IsEnabled = m.IsEnabled,

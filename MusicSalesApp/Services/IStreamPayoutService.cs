@@ -25,6 +25,7 @@ public interface IStreamPayoutService
     /// <param name="totalWithheldAmount">Total amount withheld for taxes</param>
     /// <param name="totalNetAmount">Total net amount paid to creator</param>
     /// <param name="payPalTransactionId">PayPal transaction ID</param>
+    /// <param name="totalTipAmount">Total tip amount included in this payout</param>
     /// <returns>True if email sent successfully</returns>
     Task<bool> SendPayoutReceiptEmailAsync(
         int creatorId,
@@ -32,7 +33,8 @@ public interface IStreamPayoutService
         decimal totalGrossAmount,
         decimal totalWithheldAmount,
         decimal totalNetAmount,
-        string payPalTransactionId);
+        string payPalTransactionId,
+        decimal totalTipAmount = 0m);
 
     /// <summary>
     /// Gets the total unpaid earnings for a creator across all their songs.
@@ -47,4 +49,16 @@ public interface IStreamPayoutService
     /// <param name="creatorId">The creator ID</param>
     /// <returns>List of payout records</returns>
     Task<List<Models.StreamPayout>> GetPayoutHistoryAsync(int creatorId);
+
+    /// <summary>
+    /// Gets all stream payouts in the system for admin reporting.
+    /// </summary>
+    Task<List<Models.StreamPayout>> GetAllPayoutsAsync();
+
+    /// <summary>
+    /// Retries reporting pending 1099 transactions to TaxBandits.
+    /// This processes StreamPayout records with TaxBanditsStatus of "Pending" that belong to US creators.
+    /// </summary>
+    /// <returns>The number of payout records successfully reported.</returns>
+    Task<int> RetryPending1099TransactionsAsync();
 }

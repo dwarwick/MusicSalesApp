@@ -57,4 +57,46 @@ public interface IAppSettingsService
     /// </summary>
     /// <param name="seconds">The number of seconds.</param>
     Task SetStreamQualifyingSecondsAsync(int seconds);
+
+    /// <summary>
+    /// Gets whether the Tax Bandits maintenance window display is enabled.
+    /// </summary>
+    Task<bool> GetTaxBanditsMaintenanceEnabledAsync();
+
+    /// <summary>
+    /// Sets whether the Tax Bandits maintenance window display is enabled.
+    /// </summary>
+    Task SetTaxBanditsMaintenanceEnabledAsync(bool enabled);
+
+    /// <summary>
+    /// Gets the Tax Bandits maintenance window start time in UTC.
+    /// </summary>
+    Task<DateTime?> GetTaxBanditsMaintenanceStartUtcAsync();
+
+    /// <summary>
+    /// Sets the Tax Bandits maintenance window start time in UTC.
+    /// </summary>
+    Task SetTaxBanditsMaintenanceStartUtcAsync(DateTime startUtc);
+
+    /// <summary>
+    /// Gets the Tax Bandits maintenance window end time in UTC.
+    /// </summary>
+    Task<DateTime?> GetTaxBanditsMaintenanceEndUtcAsync();
+
+    /// <summary>
+    /// Sets the Tax Bandits maintenance window end time in UTC.
+    /// </summary>
+    Task SetTaxBanditsMaintenanceEndUtcAsync(DateTime endUtc);
+
+    /// <summary>
+    /// Checks if Tax Bandits is currently in a maintenance window.
+    /// Returns true if maintenance is enabled and the current UTC time falls within the start/end range.
+    /// </summary>
+    Task<bool> IsTaxBanditsMaintenanceActiveAsync();
+
+    /// <summary>
+    /// Checks if the Tax Bandits maintenance window should be displayed to users.
+    /// Returns true if maintenance is enabled and the end time is in the future.
+    /// </summary>
+    Task<bool> ShouldShowTaxBanditsMaintenanceWarningAsync();
 }

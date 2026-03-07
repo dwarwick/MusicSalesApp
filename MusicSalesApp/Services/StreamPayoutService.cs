@@ -17,6 +17,8 @@ public class StreamPayoutService : IStreamPayoutService
     private readonly IConfiguration _configuration;
     private readonly ILogger<StreamPayoutService> _logger;
     private readonly ITaxBanditsService _taxBanditsService;
+    private readonly ITipService _tipService;
+    private readonly IAppSettingsService _appSettingsService;
 
     // Minimum payout threshold in USD
     private const decimal MinimumPayoutThreshold = 5.00m;
@@ -29,20 +31,38 @@ public class StreamPayoutService : IStreamPayoutService
         IEmailService emailService,
         IConfiguration configuration,
         ILogger<StreamPayoutService> logger,
-        ITaxBanditsService taxBanditsService)
+        ITaxBanditsService taxBanditsService,
+        ITipService tipService,
+        IAppSettingsService appSettingsService)
     {
         _contextFactory = contextFactory;
         _emailService = emailService;
         _configuration = configuration;
         _logger = logger;
         _taxBanditsService = taxBanditsService;
+        _tipService = tipService;
+        _appSettingsService = appSettingsService;
     }
 
     /// <inheritdoc />
     public async Task<int> ProcessPendingPayoutsAsync()
     {
         _logger.LogInformation("Starting stream payout processing job");
-        
+
+        // First, process pending tips to cleared status
+        try
+        {
+            var clearedCount = await _tipService.ProcessPendingToClearedAsync();
+            if (clearedCount > 0)
+            {
+                _logger.LogInformation("Cleared {Count} tips that passed the 7-day hold period", clearedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing pending tips, continuing with payout processing");
+        }
+
         await using var context = await _contextFactory.CreateDbContextAsync();
         
         var creatorsProcessed = 0;
@@ -79,15 +99,20 @@ public class StreamPayoutService : IStreamPayoutService
                     {
                         creatorsProcessed++;
                         
-                        // If this is a US creator with a valid PayeeRef, collect for Form 1099 reporting
-                        if (payoutResult.Value.IsUsCreator && !string.IsNullOrWhiteSpace(payoutResult.Value.PayeeRef))
+                        // For Form 1099 reporting, include both stream earnings and tips as gross income
+                        var totalReportableAmount = payoutResult.Value.GrossAmount + payoutResult.Value.TipAmount;
+                        
+                        // If this is a US creator with a valid PayeeRef and non-zero reportable amount, collect for Form 1099 reporting
+                        // Skip $0 amounts to avoid TaxBandits validation errors (TxnAmt must be > $0)
+                        if (payoutResult.Value.IsUsCreator && !string.IsNullOrWhiteSpace(payoutResult.Value.PayeeRef)
+                            && totalReportableAmount > 0)
                         {
                             form1099Transactions.Add(new Form1099Transaction
                             {
                                 PayeeRef = payoutResult.Value.PayeeRef,
                                 SequenceId = payoutResult.Value.PayPalTransactionId,
                                 TransactionDate = TransactionDate,
-                                GrossAmount = payoutResult.Value.GrossAmount,
+                                GrossAmount = totalReportableAmount,
                                 WithheldAmount = payoutResult.Value.WithheldAmount
                             });
                             
@@ -106,6 +131,37 @@ public class StreamPayoutService : IStreamPayoutService
             // Report all US creator transactions to TaxBandits in a single batch
             if (form1099Transactions.Count > 0)
             {
+                // Check if Tax Bandits is currently in a maintenance window
+                var isMaintenanceActive = await _appSettingsService.IsTaxBanditsMaintenanceActiveAsync();
+                if (isMaintenanceActive)
+                {
+                    _logger.LogInformation("Tax Bandits maintenance window is active. Marking {Count} payout records as Pending for later retry",
+                        usCreatorPayoutIds.Count);
+
+                    if (usCreatorPayoutIds.Count > 0)
+                    {
+                        try
+                        {
+                            await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                            var payoutsToUpdate = await updateContext.StreamPayouts
+                                .Where(sp => usCreatorPayoutIds.Contains(sp.Id))
+                                .ToListAsync();
+
+                            foreach (var payout in payoutsToUpdate)
+                            {
+                                payout.TaxBanditsStatus = "Pending";
+                            }
+
+                            await updateContext.SaveChangesAsync();
+                        }
+                        catch (Exception updateEx)
+                        {
+                            _logger.LogError(updateEx, "Failed to update StreamPayout records with Pending status during maintenance");
+                        }
+                    }
+                }
+                else
+                {
                 try
                 {
                     var form1099Response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(form1099Transactions);
@@ -121,13 +177,19 @@ public class StreamPayoutService : IStreamPayoutService
                         foreach (var payout in payoutsToUpdate)
                         {
                             payout.TaxBandits1099TransactionId = form1099Response.TransactionId;
-                            payout.TaxBanditsStatus = form1099Response.StatusMessage ?? 
-                                (form1099Response.Success ? "Success" : (form1099Response.ErrorMessage ?? "Unknown Error"));
+                            if (form1099Response.Success)
+                            {
+                                payout.TaxBanditsStatus = "Success";
+                            }
+                            else
+                            {
+                                payout.TaxBanditsStatus = "Pending";
+                            }
                         }
 
                         await updateContext.SaveChangesAsync();
                         _logger.LogInformation("Updated {Count} StreamPayout records with TaxBandits status: {Status}", 
-                            payoutsToUpdate.Count, form1099Response.StatusMessage ?? "N/A");
+                            payoutsToUpdate.Count, form1099Response.Success ? "Success" : "Pending");
                     }
 
                     if (form1099Response.Success)
@@ -137,19 +199,19 @@ public class StreamPayoutService : IStreamPayoutService
                     }
                     else
                     {
-                        // Log warning but don't fail - the transactions can be reported manually if needed
+                        // Log warning but don't fail - the transactions will be retried as they are marked Pending
                         // Admin email notification is already sent by TaxBanditsService
-                        _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}",
+                        _logger.LogWarning("Failed to report Form 1099 transactions to TaxBandits. Error: {Error}. Count: {Count}. Marked as Pending for retry.",
                             form1099Response.ErrorMessage, form1099Transactions.Count);
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log error but don't fail - the transactions can be reported manually if needed
-                    _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}",
+                    // Log error but don't fail - mark as Pending for retry
+                    _logger.LogError(ex, "Exception while reporting Form 1099 transactions to TaxBandits. Count: {Count}. Marking as Pending for retry.",
                         form1099Transactions.Count);
                     
-                    // Update StreamPayout records with failure status
+                    // Update StreamPayout records with Pending status for retry
                     if (usCreatorPayoutIds.Count > 0)
                     {
                         try
@@ -161,16 +223,17 @@ public class StreamPayoutService : IStreamPayoutService
 
                             foreach (var payout in payoutsToUpdate)
                             {
-                                payout.TaxBanditsStatus = $"Exception: {ex.Message}";
+                                payout.TaxBanditsStatus = "Pending";
                             }
 
                             await updateContext.SaveChangesAsync();
                         }
                         catch (Exception updateEx)
                         {
-                            _logger.LogError(updateEx, "Failed to update StreamPayout records with error status");
+                            _logger.LogError(updateEx, "Failed to update StreamPayout records with Pending status");
                         }
                     }
+                }
                 }
             }
 
@@ -195,6 +258,7 @@ public class StreamPayoutService : IStreamPayoutService
         public string? PayeeRef { get; init; }
         public string PayPalTransactionId { get; init; }
         public decimal GrossAmount { get; init; }
+        public decimal TipAmount { get; init; }
         public decimal WithheldAmount { get; init; }
         public List<int> StreamPayoutIds { get; init; }
     }
@@ -235,8 +299,13 @@ public class StreamPayoutService : IStreamPayoutService
 
         if (!creatorSongs.Any())
         {
-            _logger.LogDebug("No unpaid streams for creator {CreatorId}", creator.Id);
-            return null;
+            // Even without streams, check if there are cleared tips
+            var tipsOnlyCheck = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
+            if (!tipsOnlyCheck.Any())
+            {
+                _logger.LogDebug("No unpaid streams or cleared tips for creator {CreatorId}", creator.Id);
+                return null;
+            }
         }
 
         // Calculate total earnings for this payout
@@ -276,17 +345,22 @@ public class StreamPayoutService : IStreamPayoutService
 
         var totalNetAmount = totalGrossAmount - totalWithheldAmount;
 
-        // Check if total gross meets minimum threshold.
-        // Using GROSS amount because:
-        // 1. The threshold represents minimum earnings to process a payout
-        // 2. Even with withholding, the creator has earned this amount
-        // 3. For 1099-NEC reporting, the gross amount is what gets reported
-        if (totalGrossAmount < MinimumPayoutThreshold)
+        // Get cleared tips for this creator (held for at least 7 days)
+        var clearedTips = await _tipService.GetClearedTipsForPayoutAsync(creator.Id);
+        var totalTipAmount = clearedTips.Sum(t => t.Amount);
+
+        // Check if payout should proceed:
+        // - If there are cleared tips, always pay (tips held 7+ days should be released)
+        // - Otherwise, apply the minimum threshold to stream earnings
+        if (clearedTips.Count == 0 && totalGrossAmount < MinimumPayoutThreshold)
         {
-            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold",
+            _logger.LogDebug("Creator {CreatorId} has ${Amount:F2} in unpaid streams, below ${Threshold:F2} threshold and no cleared tips",
                 creator.Id, totalGrossAmount, MinimumPayoutThreshold);
             return null;
         }
+
+        // Total to send via PayPal = net stream amount + tips (tips have no withholding)
+        var totalPayPalAmount = totalNetAmount + totalTipAmount;
 
         // Detailed logging for development/sandbox mode - Calculated data before PayPal call
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
@@ -303,6 +377,11 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("Total Gross Amount: ${Amount:F2} USD", totalGrossAmount);
             _logger.LogInformation("Total Withheld Amount: ${Amount:F2} USD", totalWithheldAmount);
             _logger.LogInformation("Total Net Amount (to PayPal): ${Amount:F2} USD", totalNetAmount);
+            if (totalTipAmount > 0)
+            {
+                _logger.LogInformation("Tips Amount: ${Amount:F2} USD ({Count} tips)", totalTipAmount, clearedTips.Count);
+                _logger.LogInformation("Total PayPal Amount (streams + tips): ${Amount:F2} USD", totalPayPalAmount);
+            }
             
             _logger.LogInformation("--- Per-Song Breakdown ---");
             foreach (var record in payoutRecords.OrderByDescending(p => p.GrossAmount))
@@ -314,8 +393,8 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("=== END Calculation Summary ===");
         }
 
-        // Process PayPal payout - send the NET amount (after withholding)
-        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalNetAmount);
+        // Process PayPal payout - send the NET stream amount + tips
+        var payPalTransactionId = await ProcessPayPalPayoutAsync(creator, totalPayPalAmount);
 
         if (string.IsNullOrEmpty(payPalTransactionId))
         {
@@ -325,10 +404,18 @@ public class StreamPayoutService : IStreamPayoutService
 
         // Save payout records and update StreamsAtLastPayout
         var payoutIds = new List<int>();
+        var isFirstRecord = true;
         foreach (var payoutRecord in payoutRecords)
         {
             payoutRecord.PayPalTransactionId = payPalTransactionId;
             payoutRecord.PaymentDate = DateTime.UtcNow;
+            // Tips are a batch-level amount (not per-song), so store the total tip amount
+            // on just the first payout record to avoid duplication in 1099 tax reporting retries.
+            if (isFirstRecord && totalTipAmount > 0)
+            {
+                payoutRecord.TipAmount = totalTipAmount;
+                isFirstRecord = false;
+            }
             context.StreamPayouts.Add(payoutRecord);
 
             // Update the song's StreamsAtLastPayout
@@ -341,11 +428,18 @@ public class StreamPayoutService : IStreamPayoutService
         // Collect payout IDs after save (they're now assigned)
         payoutIds.AddRange(payoutRecords.Select(p => p.Id));
 
-        // Send receipt email with gross amount for tax reporting purposes
-        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId);
+        // Mark cleared tips as paid
+        if (clearedTips.Count > 0)
+        {
+            var tipIds = clearedTips.Select(t => t.Id).ToList();
+            await _tipService.MarkTipsAsPaidAsync(tipIds, payPalTransactionId);
+        }
 
-        _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2} for {Songs} songs",
-            creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, payoutRecords.Count);
+        // Send receipt email with gross amount for tax reporting purposes (include tips)
+        await SendPayoutReceiptEmailAsync(creator.Id, payoutRecords, totalGrossAmount, totalWithheldAmount, totalNetAmount, payPalTransactionId, totalTipAmount);
+
+        _logger.LogInformation("Processed payout for creator {CreatorId}: Gross ${GrossAmount:F2}, Withheld ${WithheldAmount:F2}, Net ${NetAmount:F2}, Tips ${TipAmount:F2} for {Songs} songs",
+            creator.Id, totalGrossAmount, totalWithheldAmount, totalNetAmount, totalTipAmount, payoutRecords.Count);
 
         return new PayoutResult
         {
@@ -353,6 +447,7 @@ public class StreamPayoutService : IStreamPayoutService
             PayeeRef = creator.TaxBanditsPayeeRef,
             PayPalTransactionId = payPalTransactionId,
             GrossAmount = totalGrossAmount,
+            TipAmount = totalTipAmount,
             WithheldAmount = totalWithheldAmount,
             StreamPayoutIds = payoutIds
         };
@@ -527,7 +622,8 @@ public class StreamPayoutService : IStreamPayoutService
         decimal totalGrossAmount,
         decimal totalWithheldAmount,
         decimal totalNetAmount,
-        string payPalTransactionId)
+        string payPalTransactionId,
+        decimal totalTipAmount = 0m)
     {
         try
         {
@@ -558,6 +654,8 @@ public class StreamPayoutService : IStreamPayoutService
             var baseUrl = _emailService.GetAppBaseUrl();
             var logoUrl = _emailService.GetLogoUrl();
 
+            var totalPayoutAmount = totalNetAmount + totalTipAmount;
+
             var body = BuildPayoutReceiptEmail(
                 creator,
                 payoutRecords,
@@ -567,9 +665,10 @@ public class StreamPayoutService : IStreamPayoutService
                 totalNetAmount,
                 payPalTransactionId,
                 logoUrl,
-                baseUrl);
+                baseUrl,
+                totalTipAmount);
 
-            var subject = $"StreamTunes - Stream Payout Receipt (${totalNetAmount:F2})";
+            var subject = $"StreamTunes - Payout Receipt (${totalPayoutAmount:F2})";
             
             return await _emailService.SendEmailAsync(creator.User.Email, subject, body);
         }
@@ -592,9 +691,11 @@ public class StreamPayoutService : IStreamPayoutService
         decimal totalNetAmount,
         string payPalTransactionId,
         string logoUrl,
-        string baseUrl)
+        string baseUrl,
+        decimal totalTipAmount = 0m)
     {
         var body = new StringBuilder();
+        var totalPayoutAmount = totalNetAmount + totalTipAmount;
 
         // HTML encode user-provided data for security
         var encodedUserName = HtmlEncoder.Default.Encode(creator.User.UserName ?? "");
@@ -607,9 +708,9 @@ public class StreamPayoutService : IStreamPayoutService
         <div style='text-align: center; margin-bottom: 20px;'>
             <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
         </div>
-        <h2>Stream Payout Receipt</h2>
+        <h2>Payout Receipt</h2>
         <p>Hi {encodedUserName},</p>
-        <p>You've received a payout for streams of your music on StreamTunes!</p>
+        <p>You've received a payout from StreamTunes!</p>
         ");
 
         // Payout summary with withholding information
@@ -618,7 +719,7 @@ public class StreamPayoutService : IStreamPayoutService
             <h3 style='margin-top: 0;'>Payout Summary</h3>
             <p><strong>Payment Date:</strong> {DateTime.UtcNow:MMMM dd, yyyy}</p>
             <p><strong>PayPal Transaction ID:</strong> {encodedTransactionId}</p>
-            <p><strong>Gross Amount:</strong> ${totalGrossAmount:F2}</p>");
+            <p><strong>Stream Earnings (Gross):</strong> ${totalGrossAmount:F2}</p>");
 
         // Only show withholding if applicable
         if (totalWithheldAmount > 0)
@@ -627,10 +728,20 @@ public class StreamPayoutService : IStreamPayoutService
             <p><strong>Tax Withheld:</strong> <span style='color: #dc3545;'>-${totalWithheldAmount:F2}</span></p>");
         }
 
+        body.Append($@"
+            <p><strong>Stream Earnings (Net):</strong> ${totalNetAmount:F2}</p>");
+
+        // Show tips as a separate line item
+        if (totalTipAmount > 0)
+        {
+            body.Append($@"
+            <p><strong>Tips Received:</strong> <span style='color: #28a745;'>${totalTipAmount:F2}</span></p>");
+        }
+
         var payRatePer1000 = creator.StreamPayRate * 1000;
 
         body.Append($@"
-            <p><strong>Net Amount Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalNetAmount:F2}</span></p>
+            <p><strong>Total Paid:</strong> <span style='font-size: 20px; color: #28a745;'>${totalPayoutAmount:F2}</span></p>
             <hr style='border: none; border-top: 1px solid #dee2e6; margin: 15px 0;' />
             <p><strong>Stream Definition:</strong> {creator.StreamQualifyingSeconds} seconds of continuous playback</p>
             <p><strong>Pay Rate:</strong> ${payRatePer1000:F2} USD per 1,000 streams</p>
@@ -787,5 +898,115 @@ public class StreamPayoutService : IStreamPayoutService
             .Where(sp => sp.CreatorId == creatorId)
             .OrderByDescending(sp => sp.PaymentDate)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<StreamPayout>> GetAllPayoutsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.StreamPayouts
+            .Include(sp => sp.Creator)
+                .ThenInclude(c => c.User)
+            .Include(sp => sp.SongMetadata)
+            .OrderByDescending(sp => sp.PaymentDate)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RetryPending1099TransactionsAsync()
+    {
+        // Don't retry if Tax Bandits is still in maintenance
+        if (await _appSettingsService.IsTaxBanditsMaintenanceActiveAsync())
+        {
+            _logger.LogInformation("Tax Bandits maintenance window is still active. Skipping pending 1099 transaction retry.");
+            return 0;
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        // Get all pending payouts for US creators grouped by PayPal transaction ID
+        var pendingPayouts = await context.StreamPayouts
+            .Include(sp => sp.Creator)
+            .Where(sp => sp.TaxBanditsStatus == "Pending" && sp.Creator.TaxResidencyType == TaxResidencyType.US)
+            .ToListAsync();
+
+        if (pendingPayouts.Count == 0)
+        {
+            _logger.LogDebug("No pending 1099 transactions to retry");
+            return 0;
+        }
+
+        _logger.LogInformation("Found {Count} pending 1099 payout records to retry", pendingPayouts.Count);
+
+        // Group by PayPal transaction ID to batch them
+        var groupedByTransaction = pendingPayouts
+            .GroupBy(sp => sp.PayPalTransactionId)
+            .ToList();
+
+        var totalUpdated = 0;
+
+        foreach (var group in groupedByTransaction)
+        {
+            var transactions = new List<Form1099Transaction>();
+            var payoutIds = group.Select(sp => sp.Id).ToList();
+
+            foreach (var payout in group)
+            {
+                if (string.IsNullOrWhiteSpace(payout.Creator.TaxBanditsPayeeRef))
+                    continue;
+
+                // Include tip amounts stored on the payout record (GrossAmount + TipAmount = total reportable)
+                var totalReportableAmount = payout.GrossAmount + payout.TipAmount;
+                transactions.Add(new Form1099Transaction
+                {
+                    PayeeRef = payout.Creator.TaxBanditsPayeeRef,
+                    SequenceId = payout.PayPalTransactionId ?? $"RETRY-{payout.Id}",
+                    TransactionDate = payout.PaymentDate,
+                    GrossAmount = totalReportableAmount,
+                    WithheldAmount = payout.WithheldAmount
+                });
+            }
+
+            if (transactions.Count == 0)
+                continue;
+
+            try
+            {
+                var response = await _taxBanditsService.ReportForm1099TransactionsBatchAsync(transactions);
+
+                await using var updateContext = await _contextFactory.CreateDbContextAsync();
+                var payoutsToUpdate = await updateContext.StreamPayouts
+                    .Where(sp => payoutIds.Contains(sp.Id))
+                    .ToListAsync();
+
+                foreach (var payout in payoutsToUpdate)
+                {
+                    payout.TaxBandits1099TransactionId = response.TransactionId;
+                    payout.TaxBanditsStatus = response.Success ? "Success" : "Pending";
+                }
+
+                await updateContext.SaveChangesAsync();
+
+                if (response.Success)
+                {
+                    totalUpdated += payoutsToUpdate.Count;
+                    _logger.LogInformation("Successfully retried {Count} pending 1099 transactions for PayPal transaction {TransactionId}",
+                        payoutsToUpdate.Count, group.Key);
+                }
+                else
+                {
+                    _logger.LogWarning("Retry of 1099 transactions failed for PayPal transaction {TransactionId}. Error: {Error}. Will retry later.",
+                        group.Key, response.ErrorMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception retrying 1099 transactions for PayPal transaction {TransactionId}",
+                    group.Key);
+            }
+        }
+
+        return totalUpdated;
     }
 }

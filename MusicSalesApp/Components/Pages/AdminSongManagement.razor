@@ -122,6 +122,14 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.CreatorEmail)" HeaderText="Artist Email" Width="200">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            <span>@(string.IsNullOrEmpty(song.CreatorEmail) ? "-" : song.CreatorEmail)</span>
+                        }
+                    </Template>
+                </GridColumn>
 
                 <GridColumn Field="@nameof(SongAdminViewModel.TrackLength)" HeaderText="Track Length" Width="120">
                     <Template>

@@ -6,6 +6,7 @@ using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Services;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using Syncfusion.Blazor.Notifications;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
@@ -16,6 +17,16 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     [Parameter]
     public string SongTitle { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tip_status")]
+    public string TipStatus { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string TipPayPalToken { get; set; }
+
+    protected SfToast _toastRef;
+    protected bool _tipReturnHandled;
+    protected bool IsProcessingTipReturn => !string.IsNullOrEmpty(TipStatus) && !_tipReturnHandled;
 
     protected bool _loading = true;
     protected string _error;
@@ -47,6 +58,26 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
     protected SubscribeCtaDialogModel _subscribeCtaDialog;
+    protected TipDialogModel _tipDialog;
+
+    protected int GetCreatorIdForTip()
+    {
+        return _songMetadata?.CreatorId ?? 0;
+    }
+
+    protected bool CanShowTipButton()
+    {
+        // Show tip button when: user is authenticated, song has a creator, and user is not the creator
+        return _isAuthenticated && _songMetadata?.CreatorId != null && _songMetadata.CreatorId > 0 && !_isCreatorOfSong;
+    }
+
+    protected async Task ShowTipDialog()
+    {
+        if (_tipDialog != null)
+        {
+            await _tipDialog.ShowAsync();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -76,7 +107,19 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!invokedJs && !_loading && _songInfo != null)
+        // Handle return from PayPal tip approval before JS init.
+        // IsProcessingTipReturn keeps the page in loading state (audio element not rendered),
+        // so we must process the tip first, then re-render to get the audio element in the DOM.
+        if (!_tipReturnHandled && !_loading && _songInfo != null
+            && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            _tipReturnHandled = true;
+            await HandleTipReturnAsync();
+            await InvokeAsync(StateHasChanged);
+            return; // Re-render will now show content with audio element; JS init happens on next cycle
+        }
+
+        if (!invokedJs && !_loading && !IsProcessingTipReturn && _songInfo != null)
         {
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
@@ -89,7 +132,56 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
             var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
             _volume = savedVolume;
             _previousVolume = savedVolume;
+
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleTipReturnAsync()
+    {
+        if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+        {
+            try
+            {
+                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                if (success)
+                {
+                    await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
+                }
+                else
+                {
+                    await ShowTipToastAsync(errorMessage ?? "Failed to process your tip. Please try again.", false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error capturing tip on return from PayPal");
+                await ShowTipToastAsync("An error occurred processing your tip.", false);
+            }
+        }
+        else if (TipStatus == "cancelled")
+        {
+            await ShowTipToastAsync("Tip payment was cancelled.", false);
+        }
+
+        // Clear tip-related query parameters from the browser URL without triggering
+        // Blazor's navigation lifecycle (avoids re-running OnParametersSet / data reload)
+        var uri = NavigationManager.Uri;
+        var baseUri = uri.Split('?')[0];
+        await JS.InvokeVoidAsync("history.replaceState", null, "", baseUri);
+    }
+
+    private async Task ShowTipToastAsync(string message, bool isSuccess)
+    {
+        if (_toastRef != null)
+        {
+            await _toastRef.ShowAsync(new ToastModel
+            {
+                Title = isSuccess ? "Tip Sent!" : "Tip Error",
+                Content = message,
+                CssClass = isSuccess ? "e-toast-success" : "e-toast-danger",
+                Icon = isSuccess ? "e-success" : "e-error"
+            });
         }
     }
 
@@ -214,9 +306,18 @@ public partial class SongPlayerModel : BlazorBase, IAsyncDisposable
                 _currentUserId = user?.Id;
 
                 // Check if user is the creator of this song
-                if (_songMetadata.Creator != null && user != null)
+                if (user != null)
                 {
-                    _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                    if (_songMetadata.Creator != null)
+                    {
+                        _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                    }
+                    else if (_songMetadata.CreatorId.HasValue && _songMetadata.CreatorId > 0)
+                    {
+                        // Fallback: look up creator by ID if navigation property wasn't loaded
+                        var creator = await CreatorService.GetCreatorByUserIdAsync(user.Id);
+                        _isCreatorOfSong = creator != null && creator.Id == _songMetadata.CreatorId.Value;
+                    }
                 }
 
                 Logger.LogInformation("SongPlayer: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}, _isCreatorOfSong={IsCreatorOfSong}", 

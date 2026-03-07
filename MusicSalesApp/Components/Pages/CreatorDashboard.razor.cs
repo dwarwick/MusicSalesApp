@@ -36,6 +36,16 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
     protected List<PayoutHistoryViewModel> _payoutHistory = new();
     protected SfGrid<PayoutHistoryViewModel> _payoutGrid;
 
+    // Tip history state
+    protected List<TipHistoryViewModel> _tipHistory = new();
+    protected SfGrid<TipHistoryViewModel> _tipGrid;
+    protected decimal _tipsOnHoldAmount;
+    protected int _tipsOnHoldCount;
+    protected decimal _tipsPendingPayoutAmount;
+    protected int _tipsPendingPayoutCount;
+    protected decimal _tipsPaidAmount;
+    protected int _tipsPaidCount;
+
     protected List<IntervalOption> _intervalOptions = new()
     {
         new IntervalOption { Label = "Hour" },
@@ -151,6 +161,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                 await LoadFilterData();
                 await LoadChartData();
                 await LoadPayoutHistory();
+                await LoadTipHistory();
 
                 // Subscribe to real-time stream updates
                 StreamCountHubClient.OnStreamCountReceived += HandleStreamCountReceived;
@@ -412,6 +423,44 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         }
     }
 
+    private async Task LoadTipHistory()
+    {
+        if (_creatorId == null) return;
+
+        try
+        {
+            var tips = await TipService.GetTipsForCreatorAsync(_creatorId.Value);
+
+            // Calculate bucket totals
+            var onHold = tips.Where(t => t.Status == Models.TipStatus.Pending).ToList();
+            var pendingPayout = tips.Where(t => t.Status == Models.TipStatus.Cleared).ToList();
+            var paid = tips.Where(t => t.Status == Models.TipStatus.Paid).ToList();
+
+            _tipsOnHoldAmount = onHold.Sum(t => t.Amount);
+            _tipsOnHoldCount = onHold.Count;
+            _tipsPendingPayoutAmount = pendingPayout.Sum(t => t.Amount);
+            _tipsPendingPayoutCount = pendingPayout.Count;
+            _tipsPaidAmount = paid.Sum(t => t.Amount);
+            _tipsPaidCount = paid.Count;
+
+            _tipHistory = tips.Select(t => new TipHistoryViewModel
+            {
+                Date = ConvertUtcToUserLocal(t.CreatedAt),
+                Amount = t.Amount,
+                SongTitle = t.SongMetadata != null
+                    ? Services.DashboardService.GetEffectiveSongTitle(t.SongMetadata)
+                    : "General",
+                Status = t.Status.ToString(),
+                PaidDate = t.PaidAt.HasValue ? ConvertUtcToUserLocal(t.PaidAt.Value) : null
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading tip history for creator {CreatorId}", _creatorId);
+            _tipHistory = new();
+        }
+    }
+
     protected async Task ExportPayoutsToExcel()
     {
         if (_payoutGrid == null) return;
@@ -497,4 +546,16 @@ public class PayoutHistoryViewModel
 public class IntervalOption
 {
     public string Label { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// View model for tip history grid rows.
+/// </summary>
+public class TipHistoryViewModel
+{
+    public DateTime Date { get; set; }
+    public decimal Amount { get; set; }
+    public string SongTitle { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTime? PaidDate { get; set; }
 }

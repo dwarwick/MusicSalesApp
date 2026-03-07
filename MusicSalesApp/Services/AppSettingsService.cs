@@ -44,6 +44,21 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const int DefaultStreamQualifyingSeconds = 30;
 
+    /// <summary>
+    /// The key used for storing whether the Tax Bandits maintenance window is enabled.
+    /// </summary>
+    public const string TaxBanditsMaintenanceEnabledKey = "TaxBanditsMaintenanceEnabled";
+
+    /// <summary>
+    /// The key used for storing the Tax Bandits maintenance window start time (UTC).
+    /// </summary>
+    public const string TaxBanditsMaintenanceStartUtcKey = "TaxBanditsMaintenanceStartUtc";
+
+    /// <summary>
+    /// The key used for storing the Tax Bandits maintenance window end time (UTC).
+    /// </summary>
+    public const string TaxBanditsMaintenanceEndUtcKey = "TaxBanditsMaintenanceEndUtc";
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -185,5 +200,88 @@ public class AppSettingsService : IAppSettingsService
             StreamQualifyingSecondsKey,
             seconds.ToString(),
             "Number of continuous seconds of playback that qualifies as a stream");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetTaxBanditsMaintenanceEnabledAsync()
+    {
+        var value = await GetSettingAsync(TaxBanditsMaintenanceEnabledKey);
+        return bool.TryParse(value, out var enabled) && enabled;
+    }
+
+    /// <inheritdoc />
+    public async Task SetTaxBanditsMaintenanceEnabledAsync(bool enabled)
+    {
+        await SetSettingAsync(
+            TaxBanditsMaintenanceEnabledKey,
+            enabled.ToString(),
+            "Whether the Tax Bandits maintenance window warning is enabled");
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetTaxBanditsMaintenanceStartUtcAsync()
+    {
+        var value = await GetSettingAsync(TaxBanditsMaintenanceStartUtcKey);
+        if (string.IsNullOrEmpty(value))
+            return null;
+        return DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetTaxBanditsMaintenanceStartUtcAsync(DateTime startUtc)
+    {
+        await SetSettingAsync(
+            TaxBanditsMaintenanceStartUtcKey,
+            startUtc.ToUniversalTime().ToString("O"),
+            "Tax Bandits maintenance window start time (UTC)");
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetTaxBanditsMaintenanceEndUtcAsync()
+    {
+        var value = await GetSettingAsync(TaxBanditsMaintenanceEndUtcKey);
+        if (string.IsNullOrEmpty(value))
+            return null;
+        return DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetTaxBanditsMaintenanceEndUtcAsync(DateTime endUtc)
+    {
+        await SetSettingAsync(
+            TaxBanditsMaintenanceEndUtcKey,
+            endUtc.ToUniversalTime().ToString("O"),
+            "Tax Bandits maintenance window end time (UTC)");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsTaxBanditsMaintenanceActiveAsync()
+    {
+        var enabled = await GetTaxBanditsMaintenanceEnabledAsync();
+        if (!enabled)
+            return false;
+
+        var start = await GetTaxBanditsMaintenanceStartUtcAsync();
+        var end = await GetTaxBanditsMaintenanceEndUtcAsync();
+
+        if (!start.HasValue || !end.HasValue)
+            return false;
+
+        var now = DateTime.UtcNow;
+        return now >= start.Value && now <= end.Value;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ShouldShowTaxBanditsMaintenanceWarningAsync()
+    {
+        var enabled = await GetTaxBanditsMaintenanceEnabledAsync();
+        if (!enabled)
+            return false;
+
+        var end = await GetTaxBanditsMaintenanceEndUtcAsync();
+        if (!end.HasValue)
+            return false;
+
+        return end.Value > DateTime.UtcNow;
     }
 }

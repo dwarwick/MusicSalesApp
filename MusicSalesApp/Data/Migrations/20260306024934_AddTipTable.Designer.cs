@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
 #nullable disable
 
-namespace MusicSalesApp.Migrations
+namespace MusicSalesApp.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260306024934_AddTipTable")]
+    partial class AddTipTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -428,53 +431,6 @@ namespace MusicSalesApp.Migrations
                             TwoFactorEnabled = false,
                             UserName = "user@app.com"
                         });
-                });
-
-            modelBuilder.Entity("MusicSalesApp.Models.BlockedTipAttempt", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("AttemptedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("CreatorId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FraudRule")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(45)
-                        .HasColumnType("nvarchar(45)");
-
-                    b.Property<string>("MachineFingerprint")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("TipperUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatorId");
-
-                    b.HasIndex("TipperUserId");
-
-                    b.ToTable("BlockedTipAttempts");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>
@@ -1038,9 +994,6 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<decimal>("TipAmount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("WithheldAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -1113,9 +1066,6 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("CapturedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -1353,25 +1303,6 @@ namespace MusicSalesApp.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("MusicSalesApp.Models.BlockedTipAttempt", b =>
-                {
-                    b.HasOne("MusicSalesApp.Models.Creator", "Creator")
-                        .WithMany()
-                        .HasForeignKey("CreatorId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "TipperUser")
-                        .WithMany()
-                        .HasForeignKey("TipperUserId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.Navigation("Creator");
-
-                    b.Navigation("TipperUser");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>

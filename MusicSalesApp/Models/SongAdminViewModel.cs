@@ -15,6 +15,11 @@ public class SongAdminViewModel
     public bool DisplayOnHomePage { get; set; }
     public int NumberOfStreams { get; set; }
 
+    /// <summary>
+    /// The number of likes this song has received.
+    /// </summary>
+    public int LikeCount { get; set; }
+
     // Creator-related properties
     public int? CreatorId { get; set; }
     public bool IsActive { get; set; } = true;
@@ -27,6 +32,11 @@ public class SongAdminViewModel
     /// The effective artist name for display (derived from ArtistName > DisplayName > Email).
     /// </summary>
     public string ArtistName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The creator's email address for admin reference.
+    /// </summary>
+    public string CreatorEmail { get; set; } = string.Empty;
 
     /// <summary>
     /// The raw artist name from the SongMetadata.ArtistName field for editing purposes.

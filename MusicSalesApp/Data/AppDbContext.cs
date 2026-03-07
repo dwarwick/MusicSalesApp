@@ -28,6 +28,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
     public DbSet<UserHistory> UserHistories { get; set; }
+    public DbSet<Tip> Tips { get; set; }
+    public DbSet<BlockedTipAttempt> BlockedTipAttempts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -398,5 +400,54 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on EventType for filtering
         builder.Entity<UserHistory>()
             .HasIndex(uh => uh.EventType);
+
+        // Configure Tip entity
+        builder.Entity<Tip>()
+            .HasOne(t => t.TipperUser)
+            .WithMany()
+            .HasForeignKey(t => t.TipperUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<Tip>()
+            .HasOne(t => t.Creator)
+            .WithMany()
+            .HasForeignKey(t => t.CreatorId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<Tip>()
+            .HasOne(t => t.SongMetadata)
+            .WithMany()
+            .HasForeignKey(t => t.SongMetadataId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Index on CreatorId for efficient payout queries
+        builder.Entity<Tip>()
+            .HasIndex(t => t.CreatorId);
+
+        // Index on TipperUserId for rate-limit queries
+        builder.Entity<Tip>()
+            .HasIndex(t => t.TipperUserId);
+
+        // Index on Status for payout processing
+        builder.Entity<Tip>()
+            .HasIndex(t => t.Status);
+
+        // Index on CreatedAt for hold-period queries
+        builder.Entity<Tip>()
+            .HasIndex(t => t.CreatedAt);
+
+        // Configure BlockedTipAttempt entity - same NoAction pattern as Tip to avoid
+        // multiple cascade paths through TipperUser -> AspNetUsers and Creator -> AspNetUsers
+        builder.Entity<BlockedTipAttempt>()
+            .HasOne(b => b.TipperUser)
+            .WithMany()
+            .HasForeignKey(b => b.TipperUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<BlockedTipAttempt>()
+            .HasOne(b => b.Creator)
+            .WithMany()
+            .HasForeignKey(b => b.CreatorId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }
