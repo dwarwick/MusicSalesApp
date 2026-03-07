@@ -118,7 +118,7 @@ public class TipService : ITipService
             }
         }
 
-        // Fraud detection: check IP patterns (lenient � shared networks are common)
+        // Fraud detection: check IP patterns (lenient - shared networks are common)
         if (!string.IsNullOrEmpty(ipAddress))
         {
             var ipTips = await context.Tips
@@ -170,6 +170,9 @@ public class TipService : ITipService
         int tipperUserId, int creatorId, int? songMetadataId,
         decimal amount, string? ipAddress, string? fingerprint, string returnUrl)
     {
+        if (string.IsNullOrEmpty(returnUrl))
+            return (false, "Return URL is required.", null);
+
         // Validate first
         var (canTip, validationError) = await ValidateTipAsync(tipperUserId, creatorId, amount, ipAddress, fingerprint);
         if (!canTip)

@@ -150,6 +150,10 @@ public partial class TipDialogModel : BlazorBase, IAsyncDisposable
             {
                 // Circuit already disconnected, safe to ignore
             }
+            catch (ObjectDisposedException)
+            {
+                // Module already disposed, safe to ignore
+            }
         }
     }
 }
