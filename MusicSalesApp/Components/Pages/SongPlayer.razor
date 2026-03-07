@@ -102,7 +102,7 @@
                 <!-- Like/Dislike Buttons -->
                 @if (GetSongMetadataId() > 0)
                 {
-                    <div class="song-like-dislike">
+                    <div class="d-flex">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
                         @if (CanShowTipButton())
                         {
