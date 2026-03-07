@@ -30,6 +30,7 @@ public class AdminNotificationService : IAdminNotificationService
     public const string NotifyUploadCompletedKey = "AdminNotify_UploadCompleted";
     public const string NotifySongRenamedKey = "AdminNotify_SongRenamed";
     public const string NotifySongArtUpdatedKey = "AdminNotify_SongArtUpdated";
+    public const string NotifyTipFraudPreventedKey = "AdminNotify_TipFraudPrevented";
 
     public AdminNotificationService(
         IEmailService emailService,
@@ -239,6 +240,41 @@ public class AdminNotificationService : IAdminNotificationService
             System.Web.HttpUtility.HtmlEncode(songTitle),
             userEmail,
             imageHtml);
+        await SendAdminEmailAsync(subject, body);
+    }
+
+    /// <inheritdoc />
+    public async Task NotifyTipFraudPreventedAsync(string tipperEmail, string creatorName, string creatorEmail, decimal amount, string fraudRule, string reason)
+    {
+        if (!await IsNotificationEnabledAsync(NotifyTipFraudPreventedKey))
+            return;
+
+        var subject = $"StreamTunes Admin - Tip Fraud Prevented (${amount:F2})";
+        var logoUrl = _emailService.GetLogoUrl();
+        var utcNow = DateTime.UtcNow;
+
+        var body = $@"
+        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+            <div style='text-align: center; padding: 20px; background-color: #8b0000; border-radius: 8px 8px 0 0;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>?? Tip Fraud Prevented</h1>
+            </div>
+            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                <p style='font-size: 16px; color: #333;'>A tip attempt was blocked by the fraud detection system.</p>
+                <div style='background-color: #fff3f3; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc3545;'>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Tipper:</strong> {System.Web.HttpUtility.HtmlEncode(tipperEmail)}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Intended Recipient:</strong> {System.Web.HttpUtility.HtmlEncode(creatorName)} ({System.Web.HttpUtility.HtmlEncode(creatorEmail)})</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Amount:</strong> <span style='font-size: 18px; font-weight: bold; color: #dc3545;'>${amount:F2}</span></p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Fraud Rule:</strong> <span style='background-color: #dc3545; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;'>{System.Web.HttpUtility.HtmlEncode(fraudRule)}</span></p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Reason:</strong> {System.Web.HttpUtility.HtmlEncode(reason)}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {utcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                </div>
+                <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;'>
+                    <p style='color: #999; font-size: 12px;'>This is an automated fraud alert from StreamTunes. Review blocked attempts at /admin/tip-fraud</p>
+                </div>
+            </div>
+        </div>";
+
         await SendAdminEmailAsync(subject, body);
     }
 

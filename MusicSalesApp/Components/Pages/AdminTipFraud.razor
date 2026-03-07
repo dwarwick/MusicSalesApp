@@ -1,0 +1,204 @@
+@page "/admin/tip-fraud"
+@inherits AdminTipFraudModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Tip Fraud Monitor</PageTitle>
+
+<div class="container-fluid my-4">
+    @if (_isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading tip data...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        @* Blocked Tip Attempts Section *@
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h3><i class="bi bi-shield-exclamation me-2" style="color: #dc3545;"></i>Blocked Tip Attempts</h3>
+                <p class="text-muted mb-0">Tip attempts that were prevented by fraud detection rules</p>
+            </div>
+            <div class="d-flex gap-2">
+                <SfButton CssClass="e-info" OnClick="ExportBlockedToExcel">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+                </SfButton>
+                <SfButton CssClass="e-primary" OnClick="ExportBlockedToPdf">
+                    <i class="bi bi-file-earmark-pdf me-1"></i> Export to PDF
+                </SfButton>
+            </div>
+        </div>
+
+        <div id="blocked-grid-container" class="mb-5">
+            <SfGrid @ref="_blockedGrid"
+                    TValue="BlockedTipAttemptViewModel"
+                    DataSource="@_blockedAttempts"
+                    AllowPaging="true"
+                    AllowSorting="true"
+                    AllowFiltering="true"
+                    AllowExcelExport="true"
+                    AllowPdfExport="true"
+                    Height="400px">
+                <GridPageSettings PageSize="15"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.AttemptedAt)" HeaderText="Date (UTC)" Width="180">
+                        <Template>
+                            @{
+                                var item = (context as BlockedTipAttemptViewModel);
+                                <span>@item?.AttemptedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.TipperEmail)" HeaderText="Tipper" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.CreatorName)" HeaderText="Intended Recipient" Width="160"></GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.CreatorEmail)" HeaderText="Recipient Email" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.Amount)" HeaderText="Amount" Width="100" Format="C2" TextAlign="Syncfusion.Blazor.Grids.TextAlign.Right"></GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.FraudRule)" HeaderText="Fraud Rule" Width="160">
+                        <Template>
+                            @{
+                                var item = (context as BlockedTipAttemptViewModel);
+                                var badgeClass = item?.FraudRule switch
+                                {
+                                    "FingerprintFraud" => "badge bg-danger",
+                                    "IpFraud" => "badge bg-warning text-dark",
+                                    "ReciprocalTipping" => "badge bg-info text-dark",
+                                    "HourlyRateLimit" => "badge bg-secondary",
+                                    "LifetimeCreatorLimit" => "badge bg-secondary",
+                                    _ => "badge bg-dark"
+                                };
+                                <span class="@badgeClass">@item?.FraudRule</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.Reason)" HeaderText="Reason" Width="300"></GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.IpAddress)" HeaderText="IP Address" Width="140">
+                        <Template>
+                            @{
+                                var item = (context as BlockedTipAttemptViewModel);
+                                <small>@(item?.IpAddress ?? "-")</small>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(BlockedTipAttemptViewModel.MachineFingerprint)" HeaderText="Fingerprint" Width="180">
+                        <Template>
+                            @{
+                                var item = (context as BlockedTipAttemptViewModel);
+                                if (!string.IsNullOrEmpty(item?.MachineFingerprint))
+                                {
+                                    <small class="text-break">@item.MachineFingerprint[..Math.Min(20, item.MachineFingerprint.Length)]…</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                </GridColumns>
+            </SfGrid>
+            <div class="mt-2">
+                <p class="text-muted">Total: @_blockedAttempts.Count blocked attempts</p>
+            </div>
+        </div>
+
+        @* Allowed Tips Section *@
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h3><i class="bi bi-heart-fill me-2" style="color: #28a745;"></i>Allowed Tips</h3>
+                <p class="text-muted mb-0">All successfully processed tip transactions</p>
+            </div>
+            <div class="d-flex gap-2">
+                <SfButton CssClass="e-info" OnClick="ExportAllowedToExcel">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Export to Excel
+                </SfButton>
+                <SfButton CssClass="e-primary" OnClick="ExportAllowedToPdf">
+                    <i class="bi bi-file-earmark-pdf me-1"></i> Export to PDF
+                </SfButton>
+            </div>
+        </div>
+
+        <div id="allowed-grid-container">
+            <SfGrid @ref="_allowedGrid"
+                    TValue="TipPayoutViewModel"
+                    DataSource="@_allowedTips"
+                    AllowPaging="true"
+                    AllowSorting="true"
+                    AllowFiltering="true"
+                    AllowExcelExport="true"
+                    AllowPdfExport="true"
+                    Height="400px">
+                <GridPageSettings PageSize="15"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.CreatedAt)" HeaderText="Date (UTC)" Width="180">
+                        <Template>
+                            @{
+                                var item = (context as TipPayoutViewModel);
+                                <span>@item?.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.TipperEmail)" HeaderText="Tipper" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.ArtistName)" HeaderText="Artist" Width="160"></GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.ArtistEmail)" HeaderText="Artist Email" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.SongTitle)" HeaderText="Song" Width="200">
+                        <Template>
+                            @{
+                                var item = (context as TipPayoutViewModel);
+                                <span>@(item?.SongTitle ?? "-")</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.Amount)" HeaderText="Amount" Width="100" Format="C2" TextAlign="Syncfusion.Blazor.Grids.TextAlign.Right"></GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.Status)" HeaderText="Status" Width="110">
+                        <Template>
+                            @{
+                                var item = (context as TipPayoutViewModel);
+                                var badgeClass = item?.Status switch
+                                {
+                                    "Pending" => "badge bg-warning text-dark",
+                                    "Cleared" => "badge bg-info text-dark",
+                                    "Paid" => "badge bg-success",
+                                    "Refunded" => "badge bg-secondary",
+                                    "Chargeback" => "badge bg-danger",
+                                    _ => "badge bg-secondary"
+                                };
+                                <span class="@badgeClass">@item?.Status</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.PayPalTransactionId)" HeaderText="PayPal Transaction" Width="220">
+                        <Template>
+                            @{
+                                var item = (context as TipPayoutViewModel);
+                                if (!string.IsNullOrEmpty(item?.PayPalTransactionId))
+                                {
+                                    <small class="text-break">@item.PayPalTransactionId</small>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                </GridColumns>
+            </SfGrid>
+            <div class="mt-2">
+                <p class="text-muted">Total: @_allowedTips.Count tips</p>
+            </div>
+        </div>
+    }
+</div>

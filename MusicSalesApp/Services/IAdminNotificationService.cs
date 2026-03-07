@@ -71,4 +71,9 @@ public interface IAdminNotificationService
     /// Sets whether a specific admin notification type is enabled.
     /// </summary>
     Task SetNotificationEnabledAsync(string settingKey, bool enabled);
+
+    /// <summary>
+    /// Notifies admin about a tip fraud prevention event.
+    /// </summary>
+    Task NotifyTipFraudPreventedAsync(string tipperEmail, string creatorName, string creatorEmail, decimal amount, string fraudRule, string reason);
 }

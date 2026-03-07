@@ -15,6 +15,7 @@ public class TipServiceTests
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<TipService>> _mockLogger;
     private Mock<IEmailService> _mockEmailService;
+    private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private TipService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -35,12 +36,14 @@ public class TipServiceTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<TipService>>();
         _mockEmailService = new Mock<IEmailService>();
+        _mockAdminNotificationService = new Mock<IAdminNotificationService>();
 
         _service = new TipService(
             _mockContextFactory.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
-            _mockEmailService.Object);
+            _mockEmailService.Object,
+            _mockAdminNotificationService.Object);
     }
 
     [TearDown]
@@ -384,6 +387,371 @@ public class TipServiceTests
 
         // Assert
         Assert.That(canTip, Is.True);
+    }
+
+    // ==================== Fingerprint Fraud Detection Tests ====================
+
+    [Test]
+    public async Task ValidateTipAsync_FingerprintFraud_DifferentAccountsSameFingerprint_ReturnsFalse()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Add a 3rd user who tipped recently from the same fingerprint
+        var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
+        _context.Users.Add(otherUser);
+
+        // 2 tips from different users with the same fingerprint in the last hour (meets threshold of 2)
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 3,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "FP-ORDER-1",
+            MachineFingerprint = "same-fingerprint-abc",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+        });
+
+        var otherUser2 = new ApplicationUser { Id = 4, UserName = "other2@test.com", Email = "other2@test.com", NormalizedEmail = "OTHER2@TEST.COM", NormalizedUserName = "OTHER2@TEST.COM" };
+        _context.Users.Add(otherUser2);
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 4,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "FP-ORDER-2",
+            MachineFingerprint = "same-fingerprint-abc",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+
+        await _context.SaveChangesAsync();
+
+        // Act - user 1 tries to tip from the same fingerprint
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, "same-fingerprint-abc");
+
+        // Assert
+        Assert.That(canTip, Is.False);
+        Assert.That(error, Does.Contain("Unusual activity detected"));
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_FingerprintFraud_BelowThreshold_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Only 1 tip from a different user with the same fingerprint (below threshold of 2)
+        var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
+        _context.Users.Add(otherUser);
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 3,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "FP-ORDER-1",
+            MachineFingerprint = "same-fingerprint-abc",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, "same-fingerprint-abc");
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_FingerprintFraud_OwnTipsDoNotCount_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // User 1's own previous tips with the same fingerprint should NOT trigger the fraud check
+        for (int i = 0; i < 3; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 1,
+                CreatorId = 1,
+                Amount = 1.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"OWN-FP-{i}",
+                MachineFingerprint = "my-fingerprint",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, "my-fingerprint");
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_FingerprintFraud_OldTipsOutsideWindow_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Tips from different users with the same fingerprint, but older than 1 hour
+        var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
+        _context.Users.Add(otherUser);
+
+        for (int i = 0; i < 3; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 3,
+                CreatorId = 1,
+                Amount = 5.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"OLD-FP-{i}",
+                MachineFingerprint = "same-fingerprint-abc",
+                CreatedAt = DateTime.UtcNow.AddHours(-2) // Outside 1-hour window
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, "same-fingerprint-abc");
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    // ==================== IP Address Fraud Detection Tests ====================
+
+    [Test]
+    public async Task ValidateTipAsync_IpFraud_DifferentAccountsSameIp_ReturnsFalse()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Add 5 tips from different users with the same IP in the last hour (meets threshold of 5)
+        for (int i = 0; i < 5; i++)
+        {
+            var otherUser = new ApplicationUser
+            {
+                Id = 100 + i,
+                UserName = $"ipuser{i}@test.com",
+                Email = $"ipuser{i}@test.com",
+                NormalizedEmail = $"IPUSER{i}@TEST.COM",
+                NormalizedUserName = $"IPUSER{i}@TEST.COM"
+            };
+            _context.Users.Add(otherUser);
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 100 + i,
+                CreatorId = 1,
+                Amount = 2.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"IP-ORDER-{i}",
+                IpAddress = "192.168.1.100",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act - user 1 tries to tip from the same IP
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, "192.168.1.100", null);
+
+        // Assert
+        Assert.That(canTip, Is.False);
+        Assert.That(error, Does.Contain("Unusual activity detected"));
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_IpFraud_BelowThreshold_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Only 4 tips from different users with the same IP (below threshold of 5)
+        for (int i = 0; i < 4; i++)
+        {
+            var otherUser = new ApplicationUser
+            {
+                Id = 100 + i,
+                UserName = $"ipuser{i}@test.com",
+                Email = $"ipuser{i}@test.com",
+                NormalizedEmail = $"IPUSER{i}@TEST.COM",
+                NormalizedUserName = $"IPUSER{i}@TEST.COM"
+            };
+            _context.Users.Add(otherUser);
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 100 + i,
+                CreatorId = 1,
+                Amount = 2.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"IP-ORDER-{i}",
+                IpAddress = "192.168.1.100",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, "192.168.1.100", null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_IpFraud_OwnTipsDoNotCount_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // User 1's own tips from the same IP should NOT trigger the fraud check
+        for (int i = 0; i < 4; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 1,
+                CreatorId = 1,
+                Amount = 1.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"OWN-IP-{i}",
+                IpAddress = "10.0.0.1",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, "10.0.0.1", null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    // ==================== Reciprocal Tipping (Collusion) Detection Tests ====================
+
+    [Test]
+    public async Task ValidateTipAsync_ReciprocalTipping_CollusionDetected_ReturnsFalse()
+    {
+        // Arrange - two users who are both creators, tipping each other
+        // User 1 (tipper) is also a creator (Creator 2)
+        // User 2 is Creator 1
+        await SeedUserAndCreator(); // User 1 tips Creator 1 (owned by User 2)
+
+        // Make User 1 also a creator
+        var tipperCreator = new Creator { Id = 2, UserId = 1, IsActive = true, DisplayName = "Tipper Creator", PayPalEmail = "tipper@test.com" };
+        _context.Creators.Add(tipperCreator);
+
+        // User 2 (the creator being tipped) has tipped back to User 1's creator profile 3 times in the last 30 days
+        for (int i = 0; i < 3; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 2, // Creator 1's owner tips back
+                CreatorId = 2,    // To User 1's creator profile
+                Amount = 5.00m,
+                Status = TipStatus.Cleared,
+                PayPalOrderId = $"RECIP-ORDER-{i}",
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act - User 1 tries to tip Creator 1 (owned by User 2, who has been tipping back)
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.False);
+        Assert.That(error, Does.Contain("Reciprocal tipping limit reached"));
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_ReciprocalTipping_BelowThreshold_ReturnsCanTip()
+    {
+        // Arrange - two users who are both creators, but below the reciprocal threshold
+        await SeedUserAndCreator();
+
+        // Make User 1 also a creator
+        var tipperCreator = new Creator { Id = 2, UserId = 1, IsActive = true, DisplayName = "Tipper Creator", PayPalEmail = "tipper@test.com" };
+        _context.Creators.Add(tipperCreator);
+
+        // Only 2 reciprocal tips (below threshold of 3)
+        for (int i = 0; i < 2; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 2,
+                CreatorId = 2,
+                Amount = 5.00m,
+                Status = TipStatus.Cleared,
+                PayPalOrderId = $"RECIP-ORDER-{i}",
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1))
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_ReciprocalTipping_OutsideWindow_ReturnsCanTip()
+    {
+        // Arrange - reciprocal tips exist but are older than 30 days
+        await SeedUserAndCreator();
+
+        var tipperCreator = new Creator { Id = 2, UserId = 1, IsActive = true, DisplayName = "Tipper Creator", PayPalEmail = "tipper@test.com" };
+        _context.Creators.Add(tipperCreator);
+
+        // 5 reciprocal tips, but all older than 30 days
+        for (int i = 0; i < 5; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 2,
+                CreatorId = 2,
+                Amount = 5.00m,
+                Status = TipStatus.Paid,
+                PayPalOrderId = $"OLD-RECIP-{i}",
+                CreatedAt = DateTime.UtcNow.AddDays(-(31 + i)) // Outside 30-day window
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_ReciprocalTipping_TipperNotCreator_SkipsCheck()
+    {
+        // Arrange - tipper is NOT a creator, so reciprocal tipping check should be skipped
+        await SeedUserAndCreator(); // User 1 is just a regular user, not a creator
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
     }
 
     [Test]

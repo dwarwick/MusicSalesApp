@@ -18,11 +18,15 @@ public class TipService : ITipService
     private readonly IConfiguration _configuration;
     private readonly ILogger<TipService> _logger;
     private readonly IEmailService _emailService;
+    private readonly IAdminNotificationService _adminNotificationService;
 
     private const decimal MinTipAmount = 1.00m;
     private const decimal MaxTipAmount = 50.00m;
     private const int MaxTipsPerHour = 5;
+    private const int MaxTipsPerHourSameFingerprint = 2;
     private const int MaxTipsToSameCreator = 10;
+    private const int MaxReciprocalTips = 3;
+    private const int ReciprocalTipWindowDays = 30;
     private const int MinAccountAgeDays = 7;
     private const int HoldPeriodDays = 7;
 
@@ -30,12 +34,14 @@ public class TipService : ITipService
         IDbContextFactory<AppDbContext> contextFactory,
         IConfiguration configuration,
         ILogger<TipService> logger,
-        IEmailService emailService)
+        IEmailService emailService,
+        IAdminNotificationService adminNotificationService)
     {
         _contextFactory = contextFactory;
         _configuration = configuration;
         _logger = logger;
         _emailService = emailService;
+        _adminNotificationService = adminNotificationService;
     }
 
     /// <inheritdoc />
@@ -76,29 +82,82 @@ public class TipService : ITipService
         var recentTipCount = await context.Tips
             .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo);
         if (recentTipCount >= MaxTipsPerHour)
+        {
+            await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "HourlyRateLimit",
+                $"Exceeded {MaxTipsPerHour} tips per hour.", ipAddress, fingerprint);
             return (false, $"You can send a maximum of {MaxTipsPerHour} tips per hour. Please try again later.");
+        }
 
         // Rate limit: max 10 tips from a user to the same creator (lifetime)
         var tipsToCreator = await context.Tips
             .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatorId == creatorId);
         if (tipsToCreator >= MaxTipsToSameCreator)
-            return (false, "You have reached the maximum number of tips to this creator.");
-
-        // Fraud detection: check IP and fingerprint patterns
-        if (!string.IsNullOrEmpty(ipAddress) || !string.IsNullOrEmpty(fingerprint))
         {
-            var suspiciousTips = await context.Tips
+            await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "LifetimeCreatorLimit",
+                $"Exceeded {MaxTipsToSameCreator} lifetime tips to the same creator.", ipAddress, fingerprint);
+            return (false, "You have reached the maximum number of tips to this creator.");
+        }
+
+        // Fraud detection: check fingerprint patterns (strict – same device, different accounts)
+        if (!string.IsNullOrEmpty(fingerprint))
+        {
+            var fingerprintTips = await context.Tips
                 .CountAsync(t => t.CreatedAt >= oneHourAgo &&
                     t.TipperUserId != tipperUserId &&
-                    ((ipAddress != null && t.IpAddress == ipAddress) ||
-                     (fingerprint != null && t.MachineFingerprint == fingerprint)));
+                    t.MachineFingerprint == fingerprint);
 
-            if (suspiciousTips >= MaxTipsPerHour)
+            if (fingerprintTips >= MaxTipsPerHourSameFingerprint)
             {
                 _logger.LogWarning(
-                    "Suspicious tipping activity detected. IP: {IP}, Fingerprint: {FP}, UserId: {UserId}",
-                    ipAddress, fingerprint, tipperUserId);
+                    "Suspicious tipping activity detected (fingerprint). Fingerprint: {FP}, UserId: {UserId}",
+                    fingerprint, tipperUserId);
+                await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "FingerprintFraud",
+                    $"Same device fingerprint used by {fingerprintTips} other accounts in the last hour.", ipAddress, fingerprint);
                 return (false, "Unusual activity detected. Please try again later.");
+            }
+        }
+
+        // Fraud detection: check IP patterns (lenient – shared networks are common)
+        if (!string.IsNullOrEmpty(ipAddress))
+        {
+            var ipTips = await context.Tips
+                .CountAsync(t => t.CreatedAt >= oneHourAgo &&
+                    t.TipperUserId != tipperUserId &&
+                    t.IpAddress == ipAddress);
+
+            if (ipTips >= MaxTipsPerHour)
+            {
+                _logger.LogWarning(
+                    "Suspicious tipping activity detected (IP). IP: {IP}, UserId: {UserId}",
+                    ipAddress, tipperUserId);
+                await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "IpFraud",
+                    $"Same IP address used by {ipTips} other accounts in the last hour.", ipAddress, fingerprint);
+                return (false, "Unusual activity detected. Please try again later.");
+            }
+        }
+
+        // Collusion detection: check for reciprocal tipping between two creator-users
+        var tipperCreator = await context.Creators
+            .Where(c => c.UserId == tipperUserId)
+            .Select(c => (int?)c.Id)
+            .FirstOrDefaultAsync();
+
+        if (tipperCreator != null)
+        {
+            var windowStart = DateTime.UtcNow.AddDays(-ReciprocalTipWindowDays);
+            var reciprocalTipCount = await context.Tips
+                .CountAsync(t => t.TipperUserId == creator.UserId &&
+                    t.CreatorId == tipperCreator.Value &&
+                    t.CreatedAt >= windowStart);
+
+            if (reciprocalTipCount >= MaxReciprocalTips)
+            {
+                _logger.LogWarning(
+                    "Reciprocal tipping detected. TipperUserId: {TipperId}, CreatorUserId: {CreatorUserId}, ReciprocalCount: {Count}",
+                    tipperUserId, creator.UserId, reciprocalTipCount);
+                await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "ReciprocalTipping",
+                    $"Reciprocal tipping detected: {reciprocalTipCount} tips back from creator's owner in last {ReciprocalTipWindowDays} days.", ipAddress, fingerprint);
+                return (false, "Reciprocal tipping limit reached. You and this creator have been tipping each other frequently.");
             }
         }
 
@@ -345,6 +404,64 @@ public class TipService : ITipService
             .Include(t => t.SongMetadata)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<BlockedTipAttempt>> GetAllBlockedTipAttemptsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.BlockedTipAttempts
+            .Include(b => b.TipperUser)
+            .Include(b => b.Creator)
+                .ThenInclude(c => c.User)
+            .OrderByDescending(b => b.AttemptedAt)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Records a blocked tip attempt and sends an admin notification email.
+    /// </summary>
+    private async Task RecordBlockedAttemptAsync(
+        int tipperUserId, int creatorId, decimal amount,
+        string fraudRule, string reason, string? ipAddress, string? fingerprint)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var attempt = new BlockedTipAttempt
+            {
+                TipperUserId = tipperUserId,
+                CreatorId = creatorId,
+                Amount = amount,
+                FraudRule = fraudRule,
+                Reason = reason,
+                IpAddress = ipAddress,
+                MachineFingerprint = fingerprint,
+                AttemptedAt = DateTime.UtcNow
+            };
+
+            context.BlockedTipAttempts.Add(attempt);
+            await context.SaveChangesAsync();
+
+            // Resolve emails for the admin notification (fire and forget)
+            var tipper = await context.Users.FindAsync(tipperUserId);
+            var creator = await context.Creators
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(c => c.Id == creatorId);
+
+            var tipperEmail = tipper?.Email ?? $"User #{tipperUserId}";
+            var creatorEmail = creator?.User?.Email ?? $"Creator #{creatorId}";
+            var creatorName = creator?.DisplayName ?? creatorEmail.Split('@')[0];
+
+            _ = _adminNotificationService.NotifyTipFraudPreventedAsync(
+                tipperEmail, creatorName, creatorEmail, amount, fraudRule, reason);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record blocked tip attempt for user {UserId}", tipperUserId);
+        }
     }
 
     private async Task<(string? OrderId, string? ApprovalUrl, string? Error)> CreatePayPalOrderAsync(decimal amount, string returnUrl)

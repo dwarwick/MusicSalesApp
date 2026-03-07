@@ -362,7 +362,7 @@ h1:focus {
     display: flex;
     justify-content: center;
     align-items: center;
-    border-radius: 25;
+    border-radius: 4px;
     overflow: hidden;
     border: #06acfc 4px solid;
 }

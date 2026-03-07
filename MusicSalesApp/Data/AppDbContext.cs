@@ -29,6 +29,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Genre> Genres { get; set; }
     public DbSet<UserHistory> UserHistories { get; set; }
     public DbSet<Tip> Tips { get; set; }
+    public DbSet<BlockedTipAttempt> BlockedTipAttempts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -434,5 +435,19 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on CreatedAt for hold-period queries
         builder.Entity<Tip>()
             .HasIndex(t => t.CreatedAt);
+
+        // Configure BlockedTipAttempt entity – same NoAction pattern as Tip to avoid
+        // multiple cascade paths through TipperUser ? AspNetUsers and Creator ? AspNetUsers
+        builder.Entity<BlockedTipAttempt>()
+            .HasOne(b => b.TipperUser)
+            .WithMany()
+            .HasForeignKey(b => b.TipperUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<BlockedTipAttempt>()
+            .HasOne(b => b.Creator)
+            .WithMany()
+            .HasForeignKey(b => b.CreatorId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

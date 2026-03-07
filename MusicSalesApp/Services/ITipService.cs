@@ -57,4 +57,9 @@ public interface ITipService
     /// Gets all tips in the system for admin reporting.
     /// </summary>
     Task<List<Tip>> GetAllTipsAsync();
+
+    /// <summary>
+    /// Gets all blocked tip attempts for admin fraud review.
+    /// </summary>
+    Task<List<BlockedTipAttempt>> GetAllBlockedTipAttemptsAsync();
 }
