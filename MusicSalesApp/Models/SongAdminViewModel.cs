@@ -15,6 +15,11 @@ public class SongAdminViewModel
     public bool DisplayOnHomePage { get; set; }
     public int NumberOfStreams { get; set; }
 
+    /// <summary>
+    /// The number of likes this song has received.
+    /// </summary>
+    public int LikeCount { get; set; }
+
     // Creator-related properties
     public int? CreatorId { get; set; }
     public bool IsActive { get; set; } = true;

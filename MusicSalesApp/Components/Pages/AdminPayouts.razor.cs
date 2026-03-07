@@ -80,7 +80,7 @@ public class AdminPayoutsModel : BlazorBase
         {
             Id = t.Id,
             TipperEmail = t.TipperUser?.Email ?? $"User #{t.TipperUserId}",
-            ArtistName = GetCreatorName(t.Creator, t.CreatorId),
+            ArtistName = GetArtistName(t.Creator, t.SongMetadata, t.CreatorId),
             ArtistEmail = t.Creator?.User?.Email ?? string.Empty,
             SongTitle = GetSongTitle(t.SongMetadata),
             Amount = t.Amount,
@@ -97,7 +97,7 @@ public class AdminPayoutsModel : BlazorBase
         _streamPayouts = payouts.Select(p => new StreamPayoutViewModel
         {
             Id = p.Id,
-            ArtistName = GetCreatorName(p.Creator, p.CreatorId),
+            ArtistName = GetArtistName(p.Creator, p.SongMetadata, p.CreatorId),
             ArtistEmail = p.Creator?.User?.Email ?? string.Empty,
             SongTitle = GetSongTitle(p.SongMetadata) ?? "Unknown",
             StreamCount = p.NumberOfStreams,
@@ -117,11 +117,16 @@ public class AdminPayoutsModel : BlazorBase
                 : null);
     }
 
-    private static string GetCreatorName(Creator? creator, int creatorId)
+    private static string GetArtistName(Creator? creator, SongMetadata? songMetadata, int creatorId)
     {
-        if (creator?.DisplayName != null)
+        // Priority 1: Artist name set on the song metadata
+        if (!string.IsNullOrWhiteSpace(songMetadata?.ArtistName))
+            return songMetadata.ArtistName;
+        // Priority 2: Creator display name
+        if (!string.IsNullOrWhiteSpace(creator?.DisplayName))
             return creator.DisplayName;
-        if (creator?.User?.Email != null)
+        // Priority 3: Creator email username
+        if (!string.IsNullOrWhiteSpace(creator?.User?.Email))
             return creator.User.Email.Split('@')[0];
         return $"Creator #{creatorId}";
     }
