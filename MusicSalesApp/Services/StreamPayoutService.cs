@@ -850,4 +850,17 @@ public class StreamPayoutService : IStreamPayoutService
             .OrderByDescending(sp => sp.PaymentDate)
             .ToListAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<List<StreamPayout>> GetAllPayoutsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.StreamPayouts
+            .Include(sp => sp.Creator)
+                .ThenInclude(c => c.User)
+            .Include(sp => sp.SongMetadata)
+            .OrderByDescending(sp => sp.PaymentDate)
+            .ToListAsync();
+    }
 }

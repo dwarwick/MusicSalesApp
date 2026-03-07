@@ -1,6 +1,7 @@
 #nullable enable
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
@@ -16,6 +17,7 @@ public class TipService : ITipService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TipService> _logger;
+    private readonly IEmailService _emailService;
 
     private const decimal MinTipAmount = 1.00m;
     private const decimal MaxTipAmount = 50.00m;
@@ -27,11 +29,13 @@ public class TipService : ITipService
     public TipService(
         IDbContextFactory<AppDbContext> contextFactory,
         IConfiguration configuration,
-        ILogger<TipService> logger)
+        ILogger<TipService> logger,
+        IEmailService emailService)
     {
         _contextFactory = contextFactory;
         _configuration = configuration;
         _logger = logger;
+        _emailService = emailService;
     }
 
     /// <inheritdoc />
@@ -182,6 +186,9 @@ public class TipService : ITipService
                 "Tip captured: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
                 tip.Amount, tip.TipperUserId, tip.CreatorId, payPalOrderId);
 
+            // Send receipt email to the tipper (fire and forget, don't block on email)
+            _ = SendTipReceiptEmailAsync(tip.TipperUserId, tip.CreatorId, tip.Amount, tip.SongMetadataId);
+
             return (true, null, tip.Amount);
         }
         catch (Exception ex)
@@ -258,6 +265,86 @@ public class TipService : ITipService
 
         await context.SaveChangesAsync();
         _logger.LogInformation("Marked {Count} tips as paid with transaction {TxId}", tips.Count, payPalPayoutTransactionId);
+    }
+
+    /// <inheritdoc />
+    public async Task SendTipReceiptEmailAsync(int tipperUserId, int creatorId, decimal amount, int? songMetadataId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            var tipper = await context.Users.FindAsync(tipperUserId);
+            if (tipper?.Email == null) return;
+
+            var creator = await context.Creators
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(c => c.Id == creatorId);
+            if (creator == null) return;
+
+            var artistName = creator.DisplayName ?? creator.User?.Email?.Split('@')[0] ?? "a creator";
+
+            string? songTitle = null;
+            if (songMetadataId.HasValue)
+            {
+                var song = await context.SongMetadata.FindAsync(songMetadataId.Value);
+                if (song != null)
+                    songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+            }
+
+            var logoUrl = _emailService.GetLogoUrl();
+            var baseUrl = _emailService.GetAppBaseUrl();
+            var encodedArtist = HtmlEncoder.Default.Encode(artistName);
+            var encodedLogo = HtmlEncoder.Default.Encode(logoUrl);
+            var encodedBase = HtmlEncoder.Default.Encode(baseUrl);
+
+            var body = new StringBuilder();
+            body.Append($@"
+            <div style='text-align: center; margin-bottom: 20px;'>
+                <img src='{encodedLogo}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+            </div>
+            <h2>Tip Receipt</h2>
+            <p>Hi {HtmlEncoder.Default.Encode(tipper.UserName ?? tipper.Email)},</p>
+            <p>Your tip has been successfully sent!</p>
+            <div style='background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                <p><strong>Amount:</strong> <span style='font-size: 20px; color: #28a745;'>${amount:F2}</span></p>
+                <p><strong>Artist:</strong> {encodedArtist}</p>");
+
+            if (!string.IsNullOrEmpty(songTitle))
+            {
+                body.Append($@"
+                <p><strong>Song:</strong> {HtmlEncoder.Default.Encode(songTitle)}</p>");
+            }
+
+            body.Append($@"
+                <p><strong>Date:</strong> {DateTime.UtcNow:MMMM dd, yyyy 'at' HH:mm} UTC</p>
+            </div>
+            <p>Tips are held for 7 days before being paid out to the creator. Thank you for supporting artists on StreamTunes!</p>
+            <p style='color: #999; font-size: 12px; margin-top: 30px;'>
+                <a href='{encodedBase}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+            </p>");
+
+            var subject = $"StreamTunes - Tip Receipt (${amount:F2} to {artistName})";
+            await _emailService.SendEmailAsync(tipper.Email, subject, body.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send tip receipt email to user {UserId}", tipperUserId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Tip>> GetAllTipsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.Tips
+            .Include(t => t.TipperUser)
+            .Include(t => t.Creator)
+                .ThenInclude(c => c.User)
+            .Include(t => t.SongMetadata)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
     }
 
     private async Task<(string? OrderId, string? ApprovalUrl, string? Error)> CreatePayPalOrderAsync(decimal amount, string returnUrl)

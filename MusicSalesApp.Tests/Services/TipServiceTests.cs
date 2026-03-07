@@ -14,6 +14,7 @@ public class TipServiceTests
     private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<TipService>> _mockLogger;
+    private Mock<IEmailService> _mockEmailService;
     private TipService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -33,11 +34,13 @@ public class TipServiceTests
 
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<TipService>>();
+        _mockEmailService = new Mock<IEmailService>();
 
         _service = new TipService(
             _mockContextFactory.Object,
             _mockConfiguration.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockEmailService.Object);
     }
 
     [TearDown]

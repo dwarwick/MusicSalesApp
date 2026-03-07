@@ -47,4 +47,14 @@ public interface ITipService
     /// Marks cleared tips as paid after they have been included in a payout.
     /// </summary>
     Task MarkTipsAsPaidAsync(List<int> tipIds, string payPalPayoutTransactionId);
+
+    /// <summary>
+    /// Sends a receipt confirmation email to the tipper after a successful tip.
+    /// </summary>
+    Task SendTipReceiptEmailAsync(int tipperUserId, int creatorId, decimal amount, int? songMetadataId);
+
+    /// <summary>
+    /// Gets all tips in the system for admin reporting.
+    /// </summary>
+    Task<List<Tip>> GetAllTipsAsync();
 }

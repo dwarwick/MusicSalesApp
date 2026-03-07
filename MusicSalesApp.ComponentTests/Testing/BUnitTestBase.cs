@@ -344,6 +344,10 @@ public abstract class BUnitTestBase
             .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
         MockTipService.Setup(x => x.ProcessPendingToClearedAsync())
             .ReturnsAsync(0);
+        MockTipService.Setup(x => x.GetAllTipsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
+        MockStreamPayoutService.Setup(x => x.GetAllPayoutsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.StreamPayout>());
 
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()

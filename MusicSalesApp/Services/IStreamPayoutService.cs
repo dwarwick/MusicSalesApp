@@ -49,4 +49,9 @@ public interface IStreamPayoutService
     /// <param name="creatorId">The creator ID</param>
     /// <returns>List of payout records</returns>
     Task<List<Models.StreamPayout>> GetPayoutHistoryAsync(int creatorId);
+
+    /// <summary>
+    /// Gets all stream payouts in the system for admin reporting.
+    /// </summary>
+    Task<List<Models.StreamPayout>> GetAllPayoutsAsync();
 }
