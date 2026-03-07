@@ -17,6 +17,16 @@ export function getSavedVolume() {
     return DEFAULT_VOLUME;
 }
 
+// Helper to validate an element reference and fall back to getElementById.
+// In Blazor Server, an ElementReference may arrive as an unresolved object
+// (e.g. after a PayPal redirect) when the render batch hasn't been applied yet.
+function resolveAudioElement(audioElement) {
+    if (audioElement && typeof audioElement.addEventListener === 'function') {
+        return audioElement;
+    }
+    return document.getElementById('playlist-audio-player');
+}
+
 // State object to store restriction settings (can be updated when tracks change)
 let playerState = {
     isRestricted: false,
@@ -36,6 +46,7 @@ let streamTracker = {
 };
 
 export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, maxDuration = 60, songMetadataId = 0, streamThresholdSeconds = 30) {
+    audioElement = resolveAudioElement(audioElement);
     if (!audioElement) return;
 
     // Store initial state
@@ -132,24 +143,28 @@ export function updateRestrictionState(isRestricted) {
 }
 
 export function play(audioElement) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         audioElement.play().catch(err => console.warn('Play failed:', err));
     }
 }
 
 export function pause(audioElement) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         audioElement.pause();
     }
 }
 
 export function seekTo(audioElement, time) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         audioElement.currentTime = time;
     }
 }
 
 export function seekToPosition(audioElement, offsetX, progressBarWidth, isRestricted = false, maxDuration = 60) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement && progressBarWidth > 0) {
         const percentage = offsetX / progressBarWidth;
         let newTime = audioElement.duration * percentage;
@@ -173,6 +188,7 @@ export function getElementWidth(element) {
 }
 
 export function getDuration(audioElement) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement && !isNaN(audioElement.duration) && isFinite(audioElement.duration)) {
         return audioElement.duration;
     }
@@ -181,6 +197,7 @@ export function getDuration(audioElement) {
 
 // Set the track source without auto-playing (for initial load)
 export function setTrackSource(audioElement, src) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement && src) {
         audioElement.src = src;
         audioElement.load();
@@ -191,6 +208,7 @@ export function setTrackSource(audioElement, src) {
 // isRestricted parameter updates the player state for the new track
 // songMetadataId updates the stream tracking for the new track
 export function changeTrack(audioElement, newSrc, isRestricted = null, songMetadataId = 0, streamThresholdSeconds = null) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         // Update restriction state if provided
         if (isRestricted !== null) {
@@ -239,6 +257,7 @@ export function changeTrack(audioElement, newSrc, isRestricted = null, songMetad
 // Setup progress bar drag functionality
 // Note: Uses playerState for restriction checking to stay in sync with current track
 export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetRef) {
+    audioElement = resolveAudioElement(audioElement);
     if (!progressBarContainer || !audioElement) return;
 
     let isDragging = false;
@@ -300,6 +319,7 @@ export function setupProgressBarDrag(progressBarContainer, audioElement, dotNetR
 
 // Volume control functions
 export function setVolume(audioElement, volume) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         audioElement.volume = Math.max(0, Math.min(1, volume));
         saveVolume(audioElement.volume);
@@ -307,6 +327,7 @@ export function setVolume(audioElement, volume) {
 }
 
 export function getVolume(audioElement) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         return audioElement.volume;
     }
@@ -314,12 +335,14 @@ export function getVolume(audioElement) {
 }
 
 export function setMuted(audioElement, muted) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         audioElement.muted = muted;
     }
 }
 
 export function isMuted(audioElement) {
+    audioElement = resolveAudioElement(audioElement);
     if (audioElement) {
         return audioElement.muted;
     }
@@ -328,6 +351,7 @@ export function isMuted(audioElement) {
 
 // Setup volume bar drag functionality
 export function setupVolumeBarDrag(volumeBarContainer, audioElement, dotNetRef) {
+    audioElement = resolveAudioElement(audioElement);
     if (!volumeBarContainer || !audioElement) return;
 
     let isDragging = false;
