@@ -81,8 +81,8 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
 
         // Assert - Verify Creator CTA is present for non-creators
-        Assert.That(cut.Markup, Does.Contain("Have Original Music?"));
-        Assert.That(cut.Markup, Does.Contain("Turn your music into"));
+        Assert.That(cut.Markup, Does.Contain("Monetize Your Music"));
+        Assert.That(cut.Markup, Does.Contain("Upload original tracks"));
         Assert.That(cut.Markup, Does.Contain("Get your songs heard worldwide"));
         Assert.That(cut.Markup, Does.Contain("Earn per stream"));
         Assert.That(cut.Markup, Does.Contain("Keep 100% control of your music rights"));
@@ -114,7 +114,7 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("cta-split-section"));
         Assert.That(cut.Markup, Does.Contain("creator-cta"));
         Assert.That(cut.Markup, Does.Contain("subscriber-cta"));
-        Assert.That(cut.Markup, Does.Contain("Have Original Music?"));
+        Assert.That(cut.Markup, Does.Contain("Monetize Your Music"));
         Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
     }
 

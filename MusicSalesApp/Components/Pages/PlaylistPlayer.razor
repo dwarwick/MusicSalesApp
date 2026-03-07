@@ -10,13 +10,13 @@
 <PageTitle>@GetDisplayTitle()</PageTitle>
 
 <div class="playlist-player-container">
-    @if (_loading)
-    {
-        <div class="loading-state">
-            <p>Loading...</p>
-        </div>
-    }
-    else if (!string.IsNullOrEmpty(_error))
+@if (_loading || IsProcessingTipReturn)
+{
+    <div class="loading-state">
+        <p>Loading...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_error))
     {
         <div class="error-state">
             <div class="alert alert-danger">@_error</div>
@@ -288,19 +288,9 @@
     }
 </div>
 
-@if (!string.IsNullOrEmpty(_tipSuccessMessage))
-{
-    <div class="alert alert-success mt-3" style="max-width: 600px; margin: 10px auto;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#28a745" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-        </svg>
-        @_tipSuccessMessage
-    </div>
-}
-@if (!string.IsNullOrEmpty(_tipErrorMessage))
-{
-    <div class="alert alert-danger mt-3" style="max-width: 600px; margin: 10px auto;">@_tipErrorMessage</div>
-}
+<SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
+    <ToastPosition X="Right" Y="Top"></ToastPosition>
+</SfToast>
 
 <SubscribeCtaDialog @ref="_subscribeCtaDialog" IsAuthenticated="_isAuthenticated" HasActiveSubscription="_hasActiveSubscription" />
 <TipDialog @ref="_tipDialog" CreatorId="_tipCreatorId" SongMetadataId="_tipSongMetadataId" IsAuthenticated="_isAuthenticated" />

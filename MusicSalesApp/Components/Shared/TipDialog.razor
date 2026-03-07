@@ -5,17 +5,7 @@
     <DialogTemplates>
         <Content>
             <div class="tip-dialog-content">
-                @if (_tipSuccess)
-                {
-                    <div class="tip-success">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#28a745" class="tip-success-icon">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                        </svg>
-                        <h3>Tip Sent!</h3>
-                        <p>Thank you for supporting this creator with a $@(_tipAmount.ToString("F2")) tip!</p>
-                    </div>
-                }
-                else if (_tipProcessing)
+                @if (_tipProcessing)
                 {
                     <div class="tip-processing">
                         <div class="spinner-border text-primary" role="status">

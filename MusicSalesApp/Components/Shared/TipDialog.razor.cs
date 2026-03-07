@@ -9,7 +9,6 @@ public partial class TipDialogModel : BlazorBase, IAsyncDisposable
 {
     protected bool _showDialog;
     protected bool _tipProcessing;
-    protected bool _tipSuccess;
     protected bool _showCustomInput;
     protected decimal _tipAmount;
     protected decimal _customAmount;
@@ -44,23 +43,9 @@ public partial class TipDialogModel : BlazorBase, IAsyncDisposable
         _currentUserId = user.Id;
 
         _errorMessage = string.Empty;
-        _tipSuccess = false;
         _tipProcessing = false;
         _showCustomInput = false;
         _customAmount = 0;
-        _showDialog = true;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    /// <summary>
-    /// Shows the tip success state (called after returning from PayPal).
-    /// </summary>
-    public async Task ShowSuccessAsync(decimal amount)
-    {
-        _tipAmount = amount;
-        _tipSuccess = true;
-        _tipProcessing = false;
-        _errorMessage = string.Empty;
         _showDialog = true;
         await InvokeAsync(StateHasChanged);
     }

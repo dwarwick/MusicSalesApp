@@ -9,6 +9,7 @@ using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using Syncfusion.Blazor.Notifications;
 
 namespace MusicSalesApp.Components.Pages;
 
@@ -75,7 +76,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
     private bool _needsJsInit;
-    private bool _tipReturnHandled;
+    protected bool _tipReturnHandled;
+    protected bool IsProcessingTipReturn => !string.IsNullOrEmpty(TipStatus) && !_tipReturnHandled;
     protected bool _isAuthenticated;
     protected bool _hasActiveSubscription;
     private bool _isAdmin;
@@ -85,8 +87,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected TipDialogModel _tipDialog;
     protected int _tipCreatorId;
     protected int? _tipSongMetadataId;
-    protected string _tipSuccessMessage = string.Empty;
-    protected string _tipErrorMessage = string.Empty;
+    protected SfToast _toastRef;
 
     [SupplyParameterFromQuery(Name = "tip_status")]
     public string TipStatus { get; set; }
@@ -624,32 +625,43 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
                 if (success)
                 {
-                    if (_tipDialog != null)
-                    {
-                        await _tipDialog.ShowSuccessAsync(tipAmount);
-                    }
-                    _tipSuccessMessage = $"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.";
+                    await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
                 }
                 else
                 {
-                    _tipErrorMessage = errorMessage ?? "Failed to process your tip. Please try again.";
+                    await ShowTipToastAsync(errorMessage ?? "Failed to process your tip. Please try again.", false);
                 }
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error capturing tip on return from PayPal");
-                _tipErrorMessage = "An error occurred processing your tip.";
+                await ShowTipToastAsync("An error occurred processing your tip.", false);
             }
         }
         else if (TipStatus == "cancelled")
         {
-            _tipErrorMessage = "Tip payment was cancelled.";
+            await ShowTipToastAsync("Tip payment was cancelled.", false);
         }
 
-        // Clear tip-related query parameters from URL without reloading
+        // Clear tip-related query parameters from the browser URL without triggering
+        // Blazor's navigation lifecycle (avoids re-running OnAfterRenderAsync / data reload)
         var uri = NavigationManager.Uri;
         var baseUri = uri.Split('?')[0];
-        NavigationManager.NavigateTo(baseUri, replace: true);
+        await JS.InvokeVoidAsync("history.replaceState", null, "", baseUri);
+    }
+
+    private async Task ShowTipToastAsync(string message, bool isSuccess)
+    {
+        if (_toastRef != null)
+        {
+            await _toastRef.ShowAsync(new ToastModel
+            {
+                Title = isSuccess ? "Tip Sent!" : "Tip Error",
+                Content = message,
+                CssClass = isSuccess ? "e-toast-success" : "e-toast-danger",
+                Icon = isSuccess ? "e-success" : "e-error"
+            });
+        }
     }
 
     private class StreamUrlResponseDto
