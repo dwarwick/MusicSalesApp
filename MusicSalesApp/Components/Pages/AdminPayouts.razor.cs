@@ -15,6 +15,7 @@ public class TipPayoutViewModel
     public string Type { get; set; } = "Tip";
     public string TipperEmail { get; set; } = string.Empty;
     public string ArtistName { get; set; } = string.Empty;
+    public string ArtistEmail { get; set; } = string.Empty;
     public string? SongTitle { get; set; }
     public decimal Amount { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -31,6 +32,7 @@ public class StreamPayoutViewModel
     public int Id { get; set; }
     public string Type { get; set; } = "Stream";
     public string ArtistName { get; set; } = string.Empty;
+    public string ArtistEmail { get; set; } = string.Empty;
     public string SongTitle { get; set; } = string.Empty;
     public int StreamCount { get; set; }
     public decimal PayoutAmount { get; set; }
@@ -79,6 +81,7 @@ public class AdminPayoutsModel : BlazorBase
             Id = t.Id,
             TipperEmail = t.TipperUser?.Email ?? $"User #{t.TipperUserId}",
             ArtistName = GetCreatorName(t.Creator, t.CreatorId),
+            ArtistEmail = t.Creator?.User?.Email ?? string.Empty,
             SongTitle = GetSongTitle(t.SongMetadata),
             Amount = t.Amount,
             Status = t.Status.ToString(),
@@ -95,6 +98,7 @@ public class AdminPayoutsModel : BlazorBase
         {
             Id = p.Id,
             ArtistName = GetCreatorName(p.Creator, p.CreatorId),
+            ArtistEmail = p.Creator?.User?.Email ?? string.Empty,
             SongTitle = GetSongTitle(p.SongMetadata) ?? "Unknown",
             StreamCount = p.NumberOfStreams,
             PayoutAmount = p.NetAmount,

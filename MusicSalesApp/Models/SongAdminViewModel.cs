@@ -29,6 +29,11 @@ public class SongAdminViewModel
     public string ArtistName { get; set; } = string.Empty;
 
     /// <summary>
+    /// The creator's email address for admin reference.
+    /// </summary>
+    public string CreatorEmail { get; set; } = string.Empty;
+
+    /// <summary>
     /// The raw artist name from the SongMetadata.ArtistName field for editing purposes.
     /// </summary>
     public string RawArtistName { get; set; } = string.Empty;

@@ -55,6 +55,7 @@
                 <GridColumns>
                     <GridColumn Field="@nameof(TipPayoutViewModel.TipperEmail)" HeaderText="Tipper" Width="200"></GridColumn>
                     <GridColumn Field="@nameof(TipPayoutViewModel.ArtistName)" HeaderText="Artist" Width="160"></GridColumn>
+                    <GridColumn Field="@nameof(TipPayoutViewModel.ArtistEmail)" HeaderText="Artist Email" Width="200"></GridColumn>
                     <GridColumn Field="@nameof(TipPayoutViewModel.SongTitle)" HeaderText="Song" Width="200">
                         <Template>
                             @{
@@ -163,6 +164,7 @@
                 <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
                 <GridColumns>
                     <GridColumn Field="@nameof(StreamPayoutViewModel.ArtistName)" HeaderText="Artist" Width="160"></GridColumn>
+                    <GridColumn Field="@nameof(StreamPayoutViewModel.ArtistEmail)" HeaderText="Artist Email" Width="200"></GridColumn>
                     <GridColumn Field="@nameof(StreamPayoutViewModel.SongTitle)" HeaderText="Song" Width="220"></GridColumn>
                     <GridColumn Field="@nameof(StreamPayoutViewModel.StreamCount)" HeaderText="Streams" Width="100" Format="N0" TextAlign="Syncfusion.Blazor.Grids.TextAlign.Right"></GridColumn>
                     <GridColumn Field="@nameof(StreamPayoutViewModel.PayoutAmount)" HeaderText="Payout Amount" Width="130" Format="C2" TextAlign="Syncfusion.Blazor.Grids.TextAlign.Right"></GridColumn>
