@@ -361,4 +361,87 @@ public class SongLikeServiceTests
         Assert.That(status2, Is.True);
         Assert.That(status3, Is.True);
     }
+
+    [Test]
+    public async Task GetBulkLikeCountsAsync_EmptyList_ReturnsEmptyDictionary()
+    {
+        // Act
+        var result = await _service.GetBulkLikeCountsAsync(new List<int>());
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetBulkLikeCountsAsync_NoLikes_ReturnsEmptyDictionary()
+    {
+        // Act
+        var result = await _service.GetBulkLikeCountsAsync(new List<int> { 1, 2, 3 });
+
+        // Assert
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetBulkLikeCountsAsync_WithLikes_ReturnsCorrectCounts()
+    {
+        // Arrange
+        await _context.SongLikes.AddRangeAsync(
+            new SongLike { UserId = 1, SongMetadataId = 10, IsLike = true },
+            new SongLike { UserId = 2, SongMetadataId = 10, IsLike = true },
+            new SongLike { UserId = 3, SongMetadataId = 10, IsLike = false },
+            new SongLike { UserId = 1, SongMetadataId = 20, IsLike = true },
+            new SongLike { UserId = 1, SongMetadataId = 30, IsLike = false }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetBulkLikeCountsAsync(new List<int> { 10, 20, 30 });
+
+        // Assert - only counts likes (IsLike=true), not dislikes
+        Assert.That(result[10], Is.EqualTo(2));
+        Assert.That(result[20], Is.EqualTo(1));
+        Assert.That(result.ContainsKey(30), Is.False); // no likes, only dislikes
+    }
+
+    [Test]
+    public async Task GetBulkLikeCountsAsync_OnlyCountsRequestedSongs()
+    {
+        // Arrange
+        await _context.SongLikes.AddRangeAsync(
+            new SongLike { UserId = 1, SongMetadataId = 100, IsLike = true },
+            new SongLike { UserId = 2, SongMetadataId = 200, IsLike = true },
+            new SongLike { UserId = 3, SongMetadataId = 300, IsLike = true }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act - only request songs 100 and 300
+        var result = await _service.GetBulkLikeCountsAsync(new List<int> { 100, 300 });
+
+        // Assert
+        Assert.That(result.Count, Is.EqualTo(2));
+        Assert.That(result[100], Is.EqualTo(1));
+        Assert.That(result[300], Is.EqualTo(1));
+        Assert.That(result.ContainsKey(200), Is.False);
+    }
+
+    [Test]
+    public async Task GetBulkLikeCountsAsync_MultipleLikesPerSong_CountsCorrectly()
+    {
+        // Arrange
+        await _context.SongLikes.AddRangeAsync(
+            new SongLike { UserId = 1, SongMetadataId = 50, IsLike = true },
+            new SongLike { UserId = 2, SongMetadataId = 50, IsLike = true },
+            new SongLike { UserId = 3, SongMetadataId = 50, IsLike = true },
+            new SongLike { UserId = 4, SongMetadataId = 50, IsLike = true },
+            new SongLike { UserId = 5, SongMetadataId = 50, IsLike = true }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetBulkLikeCountsAsync(new List<int> { 50 });
+
+        // Assert
+        Assert.That(result[50], Is.EqualTo(5));
+    }
 }

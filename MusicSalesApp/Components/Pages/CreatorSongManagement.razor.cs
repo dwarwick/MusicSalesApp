@@ -131,6 +131,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         }).ToList();
 
         // Generate SAS URLs for images and load like counts
+        var songIds = _songs
+            .Select(s => int.TryParse(s.Id, out var id) ? id : (int?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+        var likeCounts = await SongLikeService.GetBulkLikeCountsAsync(songIds);
+
         foreach (var song in _songs)
         {
             if (!string.IsNullOrEmpty(song.JpegFileName))
@@ -140,8 +147,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
             if (int.TryParse(song.Id, out var songId))
             {
-                var (likeCount, _) = await SongLikeService.GetLikeCountsAsync(songId);
-                song.LikeCount = likeCount;
+                song.LikeCount = likeCounts.GetValueOrDefault(songId, 0);
             }
         }
     }

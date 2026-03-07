@@ -97,7 +97,7 @@
                                 var item = (context as BlockedTipAttemptViewModel);
                                 if (!string.IsNullOrEmpty(item?.MachineFingerprint))
                                 {
-                                    <small class="text-break">@item.MachineFingerprint[..Math.Min(20, item.MachineFingerprint.Length)]…</small>
+                                    <small class="text-break">@item.MachineFingerprint[..Math.Min(20, item.MachineFingerprint.Length)]...</small>
                                 }
                                 else
                                 {

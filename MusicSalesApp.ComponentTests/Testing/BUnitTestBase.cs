@@ -207,6 +207,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync((0, 0));
         MockSongLikeService.Setup(x => x.GetUserLikeStatusAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((bool?)null);
+        MockSongLikeService.Setup(x => x.GetBulkLikeCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(new Dictionary<int, int>());
 
         // Setup default returns for IStreamCountService methods
         MockStreamCountService.Setup(x => x.GetStreamCountAsync(It.IsAny<int>()))

@@ -54,7 +54,7 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.GenerateSitemapAsync(),
                 Cron.Daily(5));
 
-            // Schedule hourly retry of pending 1099 transactions at 6 AM UTC
+            // Schedule hourly retry of pending 1099 transactions
             // This retries TaxBandits 1099 reports that were deferred due to maintenance or failures
             RecurringJob.AddOrUpdate<IStreamPayoutService>(
                 "retry-pending-1099-transactions",

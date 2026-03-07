@@ -99,7 +99,7 @@ public class TipService : ITipService
             return (false, "You have reached the maximum number of tips to this creator.");
         }
 
-        // Fraud detection: check fingerprint patterns (strict � same device, different accounts)
+        // Fraud detection: check fingerprint patterns (strict - same device, different accounts)
         if (!string.IsNullOrEmpty(fingerprint))
         {
             var fingerprintTips = await context.Tips
@@ -555,10 +555,14 @@ public class TipService : ITipService
             {
                 foreach (var link in links.EnumerateArray())
                 {
-                    if (link.TryGetProperty("rel", out var rel) && rel.GetString() == "payer-action")
+                    if (link.TryGetProperty("rel", out var rel))
                     {
-                        approvalUrl = link.GetProperty("href").GetString();
-                        break;
+                        var relValue = rel.GetString();
+                        if (relValue == "payer-action" || relValue == "approve")
+                        {
+                            approvalUrl = link.GetProperty("href").GetString();
+                            break;
+                        }
                     }
                 }
             }

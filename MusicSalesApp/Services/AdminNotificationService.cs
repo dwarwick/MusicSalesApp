@@ -257,7 +257,7 @@ public class AdminNotificationService : IAdminNotificationService
         <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
             <div style='text-align: center; padding: 20px; background-color: #8b0000; border-radius: 8px 8px 0 0;'>
                 <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
-                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>?? Tip Fraud Prevented</h1>
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>Tip Fraud Prevented</h1>
             </div>
             <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
                 <p style='font-size: 16px; color: #333;'>A tip attempt was blocked by the fraud detection system.</p>

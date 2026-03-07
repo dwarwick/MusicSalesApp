@@ -436,8 +436,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<Tip>()
             .HasIndex(t => t.CreatedAt);
 
-        // Configure BlockedTipAttempt entity – same NoAction pattern as Tip to avoid
-        // multiple cascade paths through TipperUser ? AspNetUsers and Creator ? AspNetUsers
+        // Configure BlockedTipAttempt entity - same NoAction pattern as Tip to avoid
+        // multiple cascade paths through TipperUser -> AspNetUsers and Creator -> AspNetUsers
         builder.Entity<BlockedTipAttempt>()
             .HasOne(b => b.TipperUser)
             .WithMany()
