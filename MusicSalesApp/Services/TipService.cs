@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -63,7 +64,7 @@ public class TipService : ITipService
             return (false, "User not found.");
 
         var accountCreated = await context.UserHistories
-            .Where(uh => uh.UserId == tipperUserId && uh.EventType == "AccountCreated")
+            .Where(uh => uh.UserId == tipperUserId && uh.EventType == UserHistoryEventTypes.Registration)
             .Select(uh => uh.OccurredAt)
             .FirstOrDefaultAsync();
 

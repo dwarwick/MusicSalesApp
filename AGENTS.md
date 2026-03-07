@@ -1,5 +1,35 @@
 # Agent Instructions - MusicSalesApp
 
+## String Constants and Magic Strings
+
+**CRITICAL:** Never use inline "magic" string literals for values that are written in one place and read/compared in another. Always define string constants in a shared class in the `MusicSalesApp.Common` project under the `Helpers` folder.
+
+**Why:** A mismatch between a writer (e.g., `RecordUserHistoryAsync(..., "Registration", ...)`) and a reader (e.g., `.Where(uh => uh.EventType == "AccountCreated")`) will silently fail with no compiler error. This class of bug is extremely hard to catch.
+
+**Rules:**
+1. **Event types, status names, setting keys, role names, and any string used as a lookup key** must be defined as `public const string` in a static class in `MusicSalesApp.Common\Helpers\`.
+2. Both the code that **writes** the value and the code that **reads/queries** it must reference the **same constant**.
+3. When adding a new event type or key, add the constant **first**, then use it everywhere.
+4. Existing constant classes to be aware of:
+   - `UserHistoryEventTypes` — event types for `UserHistory.EventType` (Registration, EmailConfirmed, etc.)
+   - `Roles` — user role names
+   - `Permissions` — authorization policy names
+   - `CustomClaimTypes` — custom claim type strings
+   - `PriceDefaults` — default pricing values
+   - `MusicFileExtensions` — file extension constants
+
+**Example:**
+```csharp
+// ✅ CORRECT — use the constant
+await RecordUserHistoryAsync(userId, email, UserHistoryEventTypes.Registration, ...);
+// query also uses the same constant
+.Where(uh => uh.EventType == UserHistoryEventTypes.Registration)
+
+// ❌ WRONG — inline string that can drift out of sync
+await RecordUserHistoryAsync(userId, email, "Registration", ...);
+.Where(uh => uh.EventType == "AccountCreated")  // silent bug!
+```
+
 ## UI Framework and Component Conventions
 
 ### Syncfusion Blazor Components

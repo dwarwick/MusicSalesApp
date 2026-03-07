@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -62,13 +63,13 @@ public class TipServiceTests
         var creator = new Creator { Id = 1, UserId = creatorUserId, IsActive = true, DisplayName = "Test Creator", PayPalEmail = "creator@test.com" };
         _context.Creators.Add(creator);
 
-        // Add AccountCreated history for user (30 days ago, so account is old enough)
+        // Add Registration history for user (30 days ago, so account is old enough)
         _context.UserHistories.Add(new UserHistory
         {
             UserId = userId,
             UserEmail = "tipper@test.com",
-            EventType = "AccountCreated",
-            Description = "Account created",
+            EventType = UserHistoryEventTypes.Registration,
+            Description = "User registered",
             OccurredAt = DateTime.UtcNow.AddDays(-30)
         });
 
@@ -150,8 +151,8 @@ public class TipServiceTests
         {
             UserId = 10,
             UserEmail = "newuser@test.com",
-            EventType = "AccountCreated",
-            Description = "Account created",
+            EventType = UserHistoryEventTypes.Registration,
+            Description = "User registered",
             OccurredAt = DateTime.UtcNow.AddDays(-2)
         });
 

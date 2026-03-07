@@ -1,6 +1,7 @@
 #nullable enable
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -57,7 +58,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "Registration", $"User registered: {userEmail}");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.Registration, $"User registered: {userEmail}");
 
         if (!await IsNotificationEnabledAsync(NotifyRegistrationKey))
             return;
@@ -76,7 +77,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "EmailConfirmed", $"User confirmed email: {userEmail}");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.EmailConfirmed, $"User confirmed email: {userEmail}");
 
         if (!await IsNotificationEnabledAsync(NotifyEmailConfirmedKey))
             return;
@@ -95,7 +96,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "TaxFormCompleted", $"User completed {formType} tax form: {userEmail}");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.TaxFormCompleted, $"User completed {formType} tax form: {userEmail}");
 
         if (!await IsNotificationEnabledAsync(NotifyTaxFormCompletedKey))
             return;
@@ -114,7 +115,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "CreatorStatusGained", $"User gained creator status: {userEmail}", "Non-Creator", "Creator");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.CreatorStatusGained, $"User gained creator status: {userEmail}", "Non-Creator", "Creator");
 
         if (!await IsNotificationEnabledAsync(NotifyCreatorStatusGainedKey))
             return;
@@ -133,7 +134,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "CreatorStatusLost", $"User lost creator status: {userEmail}", "Creator", "Non-Creator");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.CreatorStatusLost, $"User lost creator status: {userEmail}", "Creator", "Non-Creator");
 
         if (!await IsNotificationEnabledAsync(NotifyCreatorStatusLostKey))
             return;
@@ -153,7 +154,7 @@ public class AdminNotificationService : IAdminNotificationService
         var userId = user?.Id ?? 0;
 
         // Record history
-        await RecordUserHistoryAsync(userId, userEmail, "UploadCompleted", $"User uploaded {uploadedBlobPaths.Count} file(s)");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.UploadCompleted, $"User uploaded {uploadedBlobPaths.Count} file(s)");
 
         // Look up the uploaded songs by matching exact MP3 blob paths
         var creatorSongs = await _songMetadataService.GetByCreatorIdAsync(creatorId);
@@ -190,7 +191,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "SongRenamed", $"User renamed song from '{oldTitle}' to '{newTitle}'", oldTitle, newTitle);
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.SongRenamed, $"User renamed song from '{oldTitle}' to '{newTitle}'", oldTitle, newTitle);
 
         if (!await IsNotificationEnabledAsync(NotifySongRenamedKey))
             return;
@@ -209,7 +210,7 @@ public class AdminNotificationService : IAdminNotificationService
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
         var userId = user?.Id ?? 0;
 
-        await RecordUserHistoryAsync(userId, userEmail, "SongArtUpdated", $"User updated song art for: {songTitle}");
+        await RecordUserHistoryAsync(userId, userEmail, UserHistoryEventTypes.SongArtUpdated, $"User updated song art for: {songTitle}");
 
         if (!await IsNotificationEnabledAsync(NotifySongArtUpdatedKey))
             return;
