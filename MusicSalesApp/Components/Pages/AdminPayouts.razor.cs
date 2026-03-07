@@ -117,7 +117,7 @@ public class AdminPayoutsModel : BlazorBase
                 : null);
     }
 
-    private static string GetArtistName(Creator? creator, SongMetadata? songMetadata, int creatorId)
+    internal static string GetArtistName(Creator? creator, SongMetadata? songMetadata, int creatorId)
     {
         // Priority 1: Artist name set on the song metadata
         if (!string.IsNullOrWhiteSpace(songMetadata?.ArtistName))

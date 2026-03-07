@@ -336,6 +336,90 @@ public class TipServiceTests
     }
 
     [Test]
+    public async Task ProcessPendingToClearedAsync_KeepsRecentUncapturedTips()
+    {
+        // Arrange - uncaptured tip less than 24 hours old should be kept (user may still be in PayPal checkout)
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddMinutes(-30), CapturedAt = null }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert - tip should not be cleared (not captured) and not removed (still fresh)
+        Assert.That(clearedCount, Is.EqualTo(0));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.ToListAsync();
+        Assert.That(tips.Count, Is.EqualTo(1));
+        Assert.That(tips[0].Status, Is.EqualTo(TipStatus.Pending));
+    }
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_DoesNotClearRecentlyCapturedTips()
+    {
+        // Arrange - captured tip within 7-day hold period should stay Pending
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-3), CapturedAt = DateTime.UtcNow.AddDays(-3) }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert - tip should remain Pending (under 7-day hold)
+        Assert.That(clearedCount, Is.EqualTo(0));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.ToListAsync();
+        Assert.That(tips.Count, Is.EqualTo(1));
+        Assert.That(tips[0].Status, Is.EqualTo(TipStatus.Pending));
+    }
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_MixedScenario_HandlesAllCorrectly()
+    {
+        // Arrange - mix of captured/uncaptured, old/new tips
+        await SeedUserAndCreator();
+
+        _context.Tips.AddRange(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 1.00m, Status = TipStatus.Pending, PayPalOrderId = "O1", CreatedAt = DateTime.UtcNow.AddDays(-10), CapturedAt = DateTime.UtcNow.AddDays(-10) }, // Old + captured => clear
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 2.00m, Status = TipStatus.Pending, PayPalOrderId = "O2", CreatedAt = DateTime.UtcNow.AddDays(-10), CapturedAt = null },                       // Old + uncaptured => remove
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 3.00m, Status = TipStatus.Pending, PayPalOrderId = "O3", CreatedAt = DateTime.UtcNow.AddDays(-3), CapturedAt = DateTime.UtcNow.AddDays(-3) },  // Recent + captured => keep pending
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 4.00m, Status = TipStatus.Pending, PayPalOrderId = "O4", CreatedAt = DateTime.UtcNow.AddMinutes(-5), CapturedAt = null },                      // Fresh + uncaptured => keep pending
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Cleared, PayPalOrderId = "O5", CreatedAt = DateTime.UtcNow.AddDays(-15) }                                            // Already cleared => ignore
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert
+        Assert.That(clearedCount, Is.EqualTo(1)); // Only O1 should be cleared
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.OrderBy(t => t.Amount).ToListAsync();
+        Assert.That(tips.Count, Is.EqualTo(4)); // O2 was removed (stale uncaptured)
+
+        var clearedTip = tips.First(t => t.PayPalOrderId == "O1");
+        Assert.That(clearedTip.Status, Is.EqualTo(TipStatus.Cleared));
+
+        var recentCapturedTip = tips.First(t => t.PayPalOrderId == "O3");
+        Assert.That(recentCapturedTip.Status, Is.EqualTo(TipStatus.Pending)); // Still in hold period
+
+        var freshUncapturedTip = tips.First(t => t.PayPalOrderId == "O4");
+        Assert.That(freshUncapturedTip.Status, Is.EqualTo(TipStatus.Pending)); // Too fresh to remove
+
+        var alreadyCleared = tips.First(t => t.PayPalOrderId == "O5");
+        Assert.That(alreadyCleared.Status, Is.EqualTo(TipStatus.Cleared)); // Unchanged
+    }
+
+    [Test]
     public async Task MarkTipsAsPaidAsync_UpdatesStatusAndDate()
     {
         // Arrange
@@ -841,5 +925,84 @@ public class TipServiceTests
         Assert.That(success, Is.False);
         Assert.That(error, Does.Contain("not found"));
         Assert.That(amount, Is.EqualTo(0));
+    }
+
+    // ==================== Tip Model CapturedAt Tests ====================
+
+    [Test]
+    public void Tip_CapturedAt_DefaultsToNull()
+    {
+        // Act
+        var tip = new Tip();
+
+        // Assert
+        Assert.That(tip.CapturedAt, Is.Null);
+    }
+
+    [Test]
+    public void Tip_CapturedAt_CanBeSet()
+    {
+        // Arrange
+        var capturedTime = DateTime.UtcNow;
+
+        // Act
+        var tip = new Tip { CapturedAt = capturedTime };
+
+        // Assert
+        Assert.That(tip.CapturedAt, Is.EqualTo(capturedTime));
+    }
+
+    [Test]
+    public async Task Tip_CapturedAt_PersistsInDatabase()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+        var capturedTime = DateTime.UtcNow;
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "PERSIST-TEST",
+            CapturedAt = capturedTime,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - retrieve from a fresh context
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "PERSIST-TEST");
+
+        // Assert
+        Assert.That(tip.CapturedAt, Is.Not.Null);
+        Assert.That(tip.CapturedAt!.Value, Is.EqualTo(capturedTime).Within(TimeSpan.FromSeconds(1)));
+    }
+
+    [Test]
+    public async Task Tip_CapturedAt_NullPersistsInDatabase()
+    {
+        // Arrange - tip without capture (abandoned checkout)
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "NULL-CAPTURE-TEST",
+            CapturedAt = null,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "NULL-CAPTURE-TEST");
+
+        // Assert
+        Assert.That(tip.CapturedAt, Is.Null);
     }
 }
