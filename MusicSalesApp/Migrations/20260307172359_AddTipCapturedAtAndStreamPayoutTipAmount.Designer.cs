@@ -9,7 +9,7 @@ using MusicSalesApp.Data;
 
 #nullable disable
 
-namespace MusicSalesApp.Data.Migrations
+namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     [Migration("20260307172359_AddTipCapturedAtAndStreamPayoutTipAmount")]
