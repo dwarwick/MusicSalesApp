@@ -74,7 +74,8 @@ public class SubscriptionController : ControllerBase
             return Ok(new
             {
                 hasSubscription = false,
-                subscriptionPrice = subscriptionPrice.ToString("F2")
+                subscriptionPrice = subscriptionPrice.ToString("F2"),
+                isSubscriptionBlocked = user.IsSubscriptionBlocked
             });
         }
 
@@ -86,7 +87,8 @@ public class SubscriptionController : ControllerBase
             endDate = subscription.EndDate,
             nextBillingDate = subscription.NextBillingDate,
             monthlyPrice = subscription.MonthlyPrice,
-            paypalSubscriptionId = subscription.PayPalSubscriptionId
+            paypalSubscriptionId = subscription.PayPalSubscriptionId,
+            isSubscriptionBlocked = user.IsSubscriptionBlocked
         });
     }
 
@@ -95,6 +97,13 @@ public class SubscriptionController : ControllerBase
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
+
+        // Check if user is blocked from creating subscriptions (e.g., due to a previous chargeback)
+        if (user.IsSubscriptionBlocked)
+        {
+            _logger.LogWarning("User {UserId} attempted to create a subscription but is blocked due to a previous chargeback", user.Id);
+            return BadRequest("Your account is not eligible for a new subscription. Please contact support for assistance.");
+        }
 
         // Create subscription plan with PayPal
         var planId = await GetOrCreateSubscriptionPlanAsync();

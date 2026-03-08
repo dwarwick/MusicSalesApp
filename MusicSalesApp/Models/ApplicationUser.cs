@@ -16,6 +16,10 @@ public class ApplicationUser : IdentityUser<int>
     public bool IsSuspended { get; set; } = false;
     public DateTime? SuspendedAt { get; set; }
 
+    // Subscription block (set automatically when a chargeback cancels a subscription)
+    public bool IsSubscriptionBlocked { get; set; } = false;
+    public DateTime? SubscriptionBlockedAt { get; set; }
+
     // Email preferences - user opt-in to receive new song notification emails
     public bool ReceiveNewSongEmails { get; set; } = false;
 }

@@ -165,6 +165,21 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.IsSubscriptionBlocked)" HeaderText="Sub Blocked" Width="120">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.IsSubscriptionBlocked)
+                            {
+                                <span class="badge bg-danger">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
                 <GridColumn Field="@nameof(UserViewModel.PhoneNumber)" HeaderText="Phone Number" Width="140">
                     <Template>
                         @{
@@ -242,6 +257,21 @@ else
                             if (user!.SuspendedAt.HasValue)
                             {
                                 <span>@user.SuspendedAt.Value.ToString("g")</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.SubscriptionBlockedAt)" HeaderText="Sub Blocked At" Width="180">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.SubscriptionBlockedAt.HasValue)
+                            {
+                                <span>@user.SubscriptionBlockedAt.Value.ToString("g")</span>
                             }
                             else
                             {
@@ -333,6 +363,9 @@ else
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <SfCheckBox @bind-Checked="_editIsSuspended" Label="User Suspended" CssClass="e-outline"></SfCheckBox>
+                        </div>
+                        <div class="col-md-6">
+                            <SfCheckBox @bind-Checked="_editIsSubscriptionBlocked" Label="Subscription Blocked" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
 

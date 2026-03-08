@@ -348,6 +348,11 @@ public class PayPalWebhookController : ControllerBase
             {
                 userId = user.Id;
                 userEmail = user.Email;
+
+                // Block user from creating new subscriptions after chargeback
+                user.IsSubscriptionBlocked = true;
+                user.SubscriptionBlockedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync();
             }
         }
         catch (Exception ex)
@@ -419,6 +424,9 @@ public class PayPalWebhookController : ControllerBase
             await using var context = await _contextFactory.CreateDbContextAsync();
             var tip = await context.Tips
                 .Include(t => t.TipperUser)
+                .Include(t => t.Creator)
+                    .ThenInclude(c => c.User)
+                .Include(t => t.SongMetadata)
                 .FirstOrDefaultAsync(t => t.PayPalCaptureId == sellerTransactionId);
 
             if (tip == null)
@@ -487,6 +495,25 @@ public class PayPalWebhookController : ControllerBase
 
             await SendAdminChargebackNotificationAsync(disputeId, reason, stage, channel, amountStr,
                 sellerTransactionId, userEmail, "PROCESSED_TIP", adminAction);
+
+            // 6. If tip was already paid out, send email to creator/artist and admin about manual payout reversal
+            if (previousStatus == TipStatus.Paid)
+            {
+                try
+                {
+                    var creatorEmail = tip.Creator?.User?.Email;
+                    var creatorName = tip.Creator?.DisplayName ?? "Creator";
+                    var songTitle = tip.SongMetadata?.SongTitle ?? "Unknown Song";
+
+                    await SendChargebackPayoutReversalEmailAsync(
+                        creatorEmail, creatorName, songTitle, tip.Amount,
+                        disputeId, sellerTransactionId, reason);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send payout reversal email for tip {TipId}", tip.Id);
+                }
+            }
 
             return true;
         }
@@ -804,6 +831,58 @@ public class PayPalWebhookController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send chargeback notification email to {Email}", userEmail);
+        }
+    }
+
+    /// <summary>
+    /// Sends email to both the creator/artist and admin when a tip chargeback requires
+    /// a manual payout reversal because the tip was already paid out.
+    /// </summary>
+    private async Task SendChargebackPayoutReversalEmailAsync(
+        string? creatorEmail, string creatorName, string songTitle,
+        decimal tipAmount, string? disputeId, string? sellerTransactionId, string? reason)
+    {
+        try
+        {
+            var logoUrl = _emailService.GetLogoUrl();
+            var subject = "StreamTunes - Chargeback Requires Manual Payout Reversal";
+            var encodedCreatorName = System.Web.HttpUtility.HtmlEncode(creatorName);
+            var encodedSongTitle = System.Web.HttpUtility.HtmlEncode(songTitle);
+
+            var body = $@"
+            <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+                <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                    <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>Payout Reversal Required</h1>
+                </div>
+                <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                    <p style='font-size: 16px; color: #333;'>A chargeback has been received for a tip that was already paid out. A manual payout reversal is required.</p>
+                    <div style='background-color: #fff3f3; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc3545;'>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Artist/Creator:</strong> {encodedCreatorName}</p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Song:</strong> {encodedSongTitle}</p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Tip Amount:</strong> <span style='font-size: 18px; font-weight: bold; color: #dc3545;'>${tipAmount:F2}</span></p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Dispute ID:</strong> {System.Web.HttpUtility.HtmlEncode(disputeId ?? "N/A")}</p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Transaction ID:</strong> {System.Web.HttpUtility.HtmlEncode(sellerTransactionId ?? "N/A")}</p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Reason:</strong> {System.Web.HttpUtility.HtmlEncode(reason ?? "N/A")}</p>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                    </div>
+                    <p style='font-size: 16px; color: #333;'>The tip payment has been refunded to the tipper. Because the tip was already paid out to the creator, a manual reversal of the creator payout is needed.</p>
+                    <p style='font-size: 14px; color: #999;'>This is an automated notification from StreamTunes.</p>
+                </div>
+            </div>";
+
+            // Send to admin
+            await _emailService.SendEmailAsync(AdminNotificationService.AdminEmail, subject, body);
+
+            // Send to creator/artist
+            if (!string.IsNullOrEmpty(creatorEmail))
+            {
+                await _emailService.SendEmailAsync(creatorEmail, subject, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send payout reversal notification emails for dispute {DisputeId}", disputeId);
         }
     }
 }

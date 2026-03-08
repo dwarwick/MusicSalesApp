@@ -34,6 +34,7 @@ public class AdminUserManagementModel : BlazorBase
     protected bool _editLockoutEnabled = false;
     protected DateTimeOffset? _editLockoutEnd = null;
     protected bool _editIsSuspended = false;
+    protected bool _editIsSubscriptionBlocked = false;
     protected string _editTheme = string.Empty;
     protected List<string> _editSelectedRoles = new();
     protected List<string> _availableRoles = new();
@@ -99,6 +100,8 @@ public class AdminUserManagementModel : BlazorBase
                 Theme = u.Theme,
                 IsSuspended = u.IsSuspended,
                 SuspendedAt = u.SuspendedAt,
+                IsSubscriptionBlocked = u.IsSubscriptionBlocked,
+                SubscriptionBlockedAt = u.SubscriptionBlockedAt,
                 Roles = string.Join(RolesDelimiter, userRoles
                     .Where(ur => ur.UserId == u.Id)
                     .Join(roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
@@ -133,6 +136,7 @@ public class AdminUserManagementModel : BlazorBase
         _editLockoutEnabled = user.LockoutEnabled;
         _editLockoutEnd = user.LockoutEnd;
         _editIsSuspended = user.IsSuspended;
+        _editIsSubscriptionBlocked = user.IsSubscriptionBlocked;
         _editTheme = user.Theme ?? "Light";
         _editSelectedRoles = user.Roles.Split(RolesDelimiter, StringSplitOptions.RemoveEmptyEntries).ToList();
         _selectedRoleToAdd = null;
@@ -214,6 +218,8 @@ public class AdminUserManagementModel : BlazorBase
             user.LockoutEnd = _editLockoutEnd;
             user.IsSuspended = _editIsSuspended;
             user.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
+            user.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
+            user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? (user.SubscriptionBlockedAt ?? DateTime.UtcNow) : null;
             user.Theme = _editTheme;
 
             // Update roles
@@ -302,6 +308,8 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.LockoutEnd = _editLockoutEnd;
             _editingUser.IsSuspended = _editIsSuspended;
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
+            _editingUser.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
+            _editingUser.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? (_editingUser.SubscriptionBlockedAt ?? DateTime.UtcNow) : null;
             _editingUser.Theme = _editTheme;
             _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
 
@@ -345,6 +353,8 @@ public class AdminUserManagementModel : BlazorBase
         public string Theme { get; set; } = string.Empty;
         public bool IsSuspended { get; set; }
         public DateTime? SuspendedAt { get; set; }
+        public bool IsSubscriptionBlocked { get; set; }
+        public DateTime? SubscriptionBlockedAt { get; set; }
         public string Roles { get; set; } = string.Empty;
 
         // Creator status fields
