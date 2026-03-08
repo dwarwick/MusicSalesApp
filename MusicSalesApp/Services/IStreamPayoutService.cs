@@ -26,6 +26,7 @@ public interface IStreamPayoutService
     /// <param name="totalNetAmount">Total net amount paid to creator</param>
     /// <param name="payPalTransactionId">PayPal transaction ID</param>
     /// <param name="totalTipAmount">Total tip amount included in this payout</param>
+    /// <param name="tipWithheldAmount">Amount withheld from tips for tax purposes</param>
     /// <returns>True if email sent successfully</returns>
     Task<bool> SendPayoutReceiptEmailAsync(
         int creatorId,
@@ -34,7 +35,8 @@ public interface IStreamPayoutService
         decimal totalWithheldAmount,
         decimal totalNetAmount,
         string payPalTransactionId,
-        decimal totalTipAmount = 0m);
+        decimal totalTipAmount = 0m,
+        decimal tipWithheldAmount = 0m);
 
     /// <summary>
     /// Gets the total unpaid earnings for a creator across all their songs.
