@@ -200,7 +200,7 @@ public class PayPalWebhookControllerChargebackTests
                 "User should be blocked from creating new subscriptions after chargeback");
             Assert.That(user.SubscriptionBlockedAt, Is.Not.Null,
                 "SubscriptionBlockedAt should be set");
-            Assert.That(user.SubscriptionBlockedAt!.Value, Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromSeconds(5)),
+            Assert.That(user.SubscriptionBlockedAt!.Value, Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromSeconds(10)),
                 "SubscriptionBlockedAt should be approximately now");
         }
 

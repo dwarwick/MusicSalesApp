@@ -219,7 +219,7 @@ public class AdminUserManagementModel : BlazorBase
             user.IsSuspended = _editIsSuspended;
             user.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
             user.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
-            user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? (user.SubscriptionBlockedAt ?? DateTime.UtcNow) : null;
+            user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? DateTime.UtcNow : null;
             user.Theme = _editTheme;
 
             // Update roles
@@ -309,7 +309,7 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.IsSuspended = _editIsSuspended;
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
             _editingUser.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
-            _editingUser.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? (_editingUser.SubscriptionBlockedAt ?? DateTime.UtcNow) : null;
+            _editingUser.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? DateTime.UtcNow : null;
             _editingUser.Theme = _editTheme;
             _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
 
