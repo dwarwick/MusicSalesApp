@@ -613,7 +613,11 @@ public class PayPalWebhookController : ControllerBase
     {
         var token = await GetPayPalAccessTokenAsync();
         if (string.IsNullOrEmpty(token))
+        {
+            _logger.LogWarning("Cannot cancel PayPal subscription {SubscriptionId}: failed to get access token",
+                subscriptionId);
             return;
+        }
 
         var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
         var client = _httpClientFactory.CreateClient();
@@ -759,7 +763,7 @@ public class PayPalWebhookController : ControllerBase
                         <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Status:</strong> {System.Web.HttpUtility.HtmlEncode(status)}</p>
                         <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Action Taken:</strong> {System.Web.HttpUtility.HtmlEncode(action)}</p>
                     </div>
-                    <p style='font-size: 12px; color: #999;'>Received at: {receivedAt()}</p>
+                    <p style='font-size: 12px; color: #999;'>Received at: {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC")}</p>
                 </div>
             </div>";
 
@@ -770,8 +774,6 @@ public class PayPalWebhookController : ControllerBase
             // Notification failure must not block chargeback processing
             _logger.LogError(ex, "Failed to send chargeback admin notification for dispute {DisputeId}", disputeId);
         }
-
-        static string receivedAt() => DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
     }
 
     private async Task SendSubscriberChargebackEmailAsync(string userEmail, string? disputeId)
