@@ -15,4 +15,5 @@ public static class UserHistoryEventTypes
     public const string UploadCompleted = "UploadCompleted";
     public const string SongRenamed = "SongRenamed";
     public const string SongArtUpdated = "SongArtUpdated";
+    public const string ChargebackReceived = "ChargebackReceived";
 }

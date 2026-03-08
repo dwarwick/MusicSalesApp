@@ -72,6 +72,13 @@ public class Tip
     public string PayPalOrderId { get; set; } = string.Empty;
 
     /// <summary>
+    /// PayPal capture transaction ID from the capture response.
+    /// This is the same value PayPal reports as seller_transaction_id in dispute webhooks.
+    /// </summary>
+    [MaxLength(100)]
+    public string? PayPalCaptureId { get; set; }
+
+    /// <summary>
     /// PayPal payout transaction ID when tip is paid to creator.
     /// </summary>
     [MaxLength(100)]
