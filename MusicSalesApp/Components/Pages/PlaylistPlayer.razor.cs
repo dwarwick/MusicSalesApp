@@ -557,9 +557,8 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id // Use first track's metadata ID for playlists
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = await GetTrackStreamUrlsBatchAsync(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -703,9 +702,8 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = await GetTrackStreamUrlsBatchAsync(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -826,9 +824,8 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = await GetTrackStreamUrlsBatchAsync(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -953,9 +950,8 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = await GetTrackStreamUrlsBatchAsync(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -1079,9 +1075,8 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = await GetTrackStreamUrlsBatchAsync(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -1451,6 +1446,39 @@ namespace MusicSalesApp.Components.Pages
             }
 
             return $"api/music/{safePath}";
+        }
+
+        /// <summary>
+        /// Gets SAS URLs for all tracks in a single batch request to avoid 429 rate-limiting.
+        /// Falls back to controller streaming endpoints for any tracks that fail.
+        /// </summary>
+        private async Task<List<string>> GetTrackStreamUrlsBatchAsync(List<StorageFileInfo> tracks)
+        {
+            var fileNames = tracks.Select(t => t.Name).ToList();
+
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/music/urls", fileNames);
+                if (response.IsSuccessStatusCode)
+                {
+                    var urlMap = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+                    if (urlMap != null)
+                    {
+                        return tracks.Select(t =>
+                            urlMap.TryGetValue(t.Name, out var url) && !string.IsNullOrWhiteSpace(url)
+                                ? url
+                                : $"api/music/{SafeEncodePath(t.Name)}"
+                        ).ToList();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to batch-fetch SAS URLs; using fallback endpoints");
+            }
+
+            // Fallback: return controller proxy URLs for all tracks
+            return tracks.Select(t => $"api/music/{SafeEncodePath(t.Name)}").ToList();
         }
 
         protected string GetTrackAlbumArtUrl(int index)

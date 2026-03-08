@@ -55,6 +55,7 @@ namespace MusicSalesApp.Controllers
         // Non-subscribers and unauthenticated users get shorter-lived URLs (for preview only)
         // Subscribers get longer-lived URLs for full access
         [HttpGet("url/{*fileName}")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetStreamUrl(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))
@@ -75,6 +76,41 @@ namespace MusicSalesApp.Controllers
             var uri = _storageService.GetReadSasUri(fileName, lifetime);
 
             return Ok(new { url = uri.ToString() });
+        }
+
+        /// <summary>
+        /// Returns SAS URLs for multiple files in a single request to avoid 429 rate-limiting
+        /// when many tracks need to be pre-fetched (e.g. artist or genre playlists).
+        /// </summary>
+        [HttpPost("urls")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+        public async Task<IActionResult> GetStreamUrls([FromBody] List<string> fileNames)
+        {
+            if (fileNames == null || fileNames.Count == 0)
+                return BadRequest();
+
+            // Check if user is authenticated and has active subscription
+            var user = await _userManager.GetUserAsync(User);
+            bool hasAccess = false;
+
+            if (user != null)
+            {
+                hasAccess = await _subscriptionService.HasActiveSubscriptionAsync(user.Id);
+            }
+
+            var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
+
+            var urls = new Dictionary<string, string>();
+            foreach (var fileName in fileNames)
+            {
+                if (string.IsNullOrWhiteSpace(fileName))
+                    continue;
+
+                var uri = _storageService.GetReadSasUri(fileName, lifetime);
+                urls[fileName] = uri.ToString();
+            }
+
+            return Ok(urls);
         }
 
         /// <summary>

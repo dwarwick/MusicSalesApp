@@ -297,4 +297,99 @@ public class MusicControllerTests
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
+
+    [Test]
+    public async Task GetStreamUrls_WithValidFiles_ReturnsOkWithUrls()
+    {
+        // Arrange
+        var fileNames = new List<string> { "track1.mp3", "track2.mp3", "track3.mp3" };
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sig=signature");
+
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetStreamUrls(fileNames);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var urls = okResult.Value as Dictionary<string, string>;
+        Assert.That(urls, Is.Not.Null);
+        Assert.That(urls.Count, Is.EqualTo(3));
+        Assert.That(urls.ContainsKey("track1.mp3"), Is.True);
+        Assert.That(urls.ContainsKey("track2.mp3"), Is.True);
+        Assert.That(urls.ContainsKey("track3.mp3"), Is.True);
+    }
+
+    [Test]
+    public async Task GetStreamUrls_WithNullList_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.GetStreamUrls(null);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestResult>());
+    }
+
+    [Test]
+    public async Task GetStreamUrls_WithEmptyList_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.GetStreamUrls(new List<string>());
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestResult>());
+    }
+
+    [Test]
+    public async Task GetStreamUrls_ForSubscriber_UsesLongerLifetime()
+    {
+        // Arrange
+        var fileNames = new List<string> { "track1.mp3" };
+        var userId = 123;
+        var user = new ApplicationUser { Id = userId, UserName = "testuser" };
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sig=signature");
+
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSubscriptionService.Setup(s => s.HasActiveSubscriptionAsync(userId))
+            .ReturnsAsync(true);
+        _mockStorageService.Setup(s => s.GetReadSasUri("track1.mp3", TimeSpan.FromHours(24)))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetStreamUrls(fileNames);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockStorageService.Verify(s => s.GetReadSasUri("track1.mp3", TimeSpan.FromHours(24)), Times.Once);
+    }
+
+    [Test]
+    public async Task GetStreamUrls_SkipsBlankFileNames()
+    {
+        // Arrange
+        var fileNames = new List<string> { "track1.mp3", "", "  ", "track2.mp3" };
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/test.mp3?sig=signature");
+
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetStreamUrls(fileNames);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var urls = okResult.Value as Dictionary<string, string>;
+        Assert.That(urls, Is.Not.Null);
+        Assert.That(urls.Count, Is.EqualTo(2));
+        Assert.That(urls.ContainsKey("track1.mp3"), Is.True);
+        Assert.That(urls.ContainsKey("track2.mp3"), Is.True);
+    }
 }
