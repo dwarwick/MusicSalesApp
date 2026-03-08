@@ -406,13 +406,15 @@ namespace MusicSalesApp.Components.Pages
         {
             try
             {
-                // Check subscription status
-                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
+                // Check subscription status directly via service (Blazor Server runs on the server)
+                if (_currentUserId.HasValue)
+                {
+                    _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
+                }
             }
-            catch (HttpRequestException ex)
+            catch (Exception ex)
             {
-                Logger.LogDebug(ex, "Unable to load subscription status; user may not be authenticated");
+                Logger.LogDebug(ex, "Unable to load subscription status");
             }
         }
 
@@ -557,9 +559,11 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id // Use first track's metadata ID for playlists
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Check subscription status before generating SAS URLs (affects URL lifetime)
+                _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(appUser.Id);
+
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -577,10 +581,6 @@ namespace MusicSalesApp.Components.Pages
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status
-                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
             }
             catch (Exception ex)
             {
@@ -703,9 +703,11 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Check subscription status before generating SAS URLs (affects URL lifetime)
+                _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(appUser.Id);
+
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -723,10 +725,6 @@ namespace MusicSalesApp.Components.Pages
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status to determine if user can play full tracks
-                var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
             }
             catch (Exception ex)
             {
@@ -826,9 +824,14 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Check subscription status before generating SAS URLs (affects URL lifetime)
+                if (_isAuthenticated && _currentUserId.HasValue)
+                {
+                    _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
+                }
+
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -846,13 +849,6 @@ namespace MusicSalesApp.Components.Pages
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status to determine if user can play full tracks
-                if (_isAuthenticated)
-                {
-                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-                }
             }
             catch (Exception ex)
             {
@@ -953,9 +949,14 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Check subscription status before generating SAS URLs (affects URL lifetime)
+                if (_isAuthenticated && _currentUserId.HasValue)
+                {
+                    _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
+                }
+
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -973,13 +974,6 @@ namespace MusicSalesApp.Components.Pages
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status to determine if user can play full tracks
-                if (_isAuthenticated)
-                {
-                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-                }
             }
             catch (Exception ex)
             {
@@ -1079,9 +1073,14 @@ namespace MusicSalesApp.Components.Pages
                     MetadataId = firstTrackMeta.Id
                 };
 
-                // Pre-fetch all track SAS URLs in parallel for better performance
-                var trackUrlTasks = tracks.Select(t => GetTrackStreamUrlAsync(t.Name));
-                _trackStreamUrls = (await Task.WhenAll(trackUrlTasks)).ToList();
+                // Check subscription status before generating SAS URLs (affects URL lifetime)
+                if (_isAuthenticated && _currentUserId.HasValue)
+                {
+                    _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId.Value);
+                }
+
+                // Pre-fetch all track SAS URLs in a single batch request
+                _trackStreamUrls = GetTrackStreamUrlsBatch(tracks);
 
                 // Store track images from metadata
                 for (int i = 0; i < tracks.Count; i++)
@@ -1099,13 +1098,6 @@ namespace MusicSalesApp.Components.Pages
                 // Set up the first track
                 _currentTrackIndex = 0;
                 _streamUrl = _trackStreamUrls.Count > 0 ? _trackStreamUrls[0] : string.Empty;
-
-                // Check subscription status to determine if user can play full tracks
-                if (_isAuthenticated)
-                {
-                    var subscriptionResponse = await Http.GetFromJsonAsync<SubscriptionStatusDto>("api/subscription/status");
-                    _hasActiveSubscription = subscriptionResponse?.HasSubscription ?? false;
-                }
             }
             catch (Exception ex)
             {
@@ -1257,11 +1249,6 @@ namespace MusicSalesApp.Components.Pages
         protected double GetDisplayDuration()
         {
             return _duration;
-        }
-
-        private class StreamUrlResponseDto
-        {
-            public string Url { get; set; }
         }
 
         private bool IsImageFile(string fileName)
@@ -1416,33 +1403,34 @@ namespace MusicSalesApp.Components.Pages
         /// <summary>
         /// Gets a track stream URL by index. Uses pre-fetched URLs if available.
         /// </summary>
-        private async Task<string> GetTrackStreamUrlAsync(int index)
+        private Task<string> GetTrackStreamUrlAsync(int index)
         {
             // Use pre-fetched URL if available
             if (index >= 0 && _trackStreamUrls.Count > index && !string.IsNullOrWhiteSpace(_trackStreamUrls[index]))
             {
-                return _trackStreamUrls[index];
+                return Task.FromResult(_trackStreamUrls[index]);
             }
 
             // Fall back to fetching on-demand
-            if (_playlistInfo == null || index < 0 || index >= _playlistInfo.Tracks.Count) return string.Empty;
-            return await GetTrackStreamUrlAsync(_playlistInfo.Tracks[index].Name);
+            if (_playlistInfo == null || index < 0 || index >= _playlistInfo.Tracks.Count) return Task.FromResult(string.Empty);
+            return Task.FromResult(GetTrackStreamUrl(_playlistInfo.Tracks[index].Name));
         }
 
         /// <summary>
         /// Gets a direct SAS URL for streaming a track from blob storage.
-        /// Falls back to the controller streaming endpoint if SAS URL is unavailable.
+        /// Calls the storage service directly (Blazor Server runs on the server).
+        /// Falls back to the controller streaming endpoint if SAS URL generation fails.
         /// </summary>
-        private async Task<string> GetTrackStreamUrlAsync(string fileName)
+        private string GetTrackStreamUrl(string fileName)
         {
-            var safePath = SafeEncodePath(fileName);
-
             try
             {
-                var result = await Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{safePath}");
-                if (!string.IsNullOrWhiteSpace(result?.Url))
+                var hasAccess = _hasActiveSubscription;
+                var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
+                var uri = AzureStorageService.GetReadSasUri(fileName, lifetime);
+                if (uri != null)
                 {
-                    return result.Url;
+                    return uri.ToString();
                 }
             }
             catch (Exception ex)
@@ -1450,7 +1438,16 @@ namespace MusicSalesApp.Components.Pages
                 Logger.LogWarning(ex, "Failed to get SAS URL for track {FileName}; using fallback", fileName);
             }
 
-            return $"api/music/{safePath}";
+            return $"api/music/{SafeEncodePath(fileName)}";
+        }
+
+        /// <summary>
+        /// Gets SAS URLs for all tracks by calling the storage service directly.
+        /// No HTTP round-trips needed since Blazor Server runs on the server.
+        /// </summary>
+        private List<string> GetTrackStreamUrlsBatch(List<StorageFileInfo> tracks)
+        {
+            return tracks.Select(t => GetTrackStreamUrl(t.Name)).ToList();
         }
 
         protected string GetTrackAlbumArtUrl(int index)

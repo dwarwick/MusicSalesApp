@@ -55,6 +55,7 @@ namespace MusicSalesApp.Controllers
         // Non-subscribers and unauthenticated users get shorter-lived URLs (for preview only)
         // Subscribers get longer-lived URLs for full access
         [HttpGet("url/{*fileName}")]
+        [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
         public async Task<IActionResult> GetStreamUrl(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))

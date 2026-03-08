@@ -617,6 +617,60 @@ public partial class MyPageModel : BlazorBase
 }
 ```
 
+## Blazor Server: Prefer Direct Service Calls Over HTTP API Endpoints
+
+### Key Principle
+
+This is a **Blazor Server** application — all C# component code runs on the server. Components should call injected services directly instead of making HTTP requests to the app's own API controllers.
+
+### Why This Matters
+
+- **No HTTP round-trips needed**: Since component code already runs on the server, calling `Http.GetFromJsonAsync("api/...")` creates an unnecessary loopback HTTP request from the server to itself.
+- **Avoids CDN/rate-limiting issues**: HTTP calls from Blazor Server go through the full HTTP pipeline, including any CDN (e.g., Cloudflare). Firing many parallel HTTP requests can trigger 429 (Too Many Requests) rate limiting. Cached 429 responses then persist in the browser/CDN cache, requiring users to manually clear their cache.
+- **Better performance**: Direct service calls avoid HTTP serialization/deserialization overhead and network latency.
+- **Simpler error handling**: No need to handle HTTP-specific errors (status codes, network failures) for server-side operations.
+
+### Rules
+
+1. **Never use `Http.GetFromJsonAsync` or `Http.PostAsJsonAsync`** to call the app's own API endpoints from Blazor Server components when the equivalent service is available in `BlazorBase`.
+2. **Use injected services directly** — all services are available via `BlazorBase` properties (e.g., `AzureStorageService`, `SubscriptionService`, `SongMetadataService`, etc.).
+3. **API controllers** are only needed for:
+   - JavaScript interop calls from the browser (e.g., audio player, PayPal SDK)
+   - External webhook endpoints (e.g., PayPal, TaxBandits)
+   - Truly client-side HTTP requests that originate from browser JavaScript
+
+### Example
+
+```csharp
+// ❌ WRONG — unnecessary HTTP round-trip through Cloudflare
+var result = await Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{fileName}");
+_streamUrl = result?.Url;
+
+// Also WRONG — firing many parallel HTTP requests triggers CDN rate limiting
+var tasks = tracks.Select(t => Http.GetFromJsonAsync<StreamUrlResponseDto>($"api/music/url/{t.Name}"));
+var results = await Task.WhenAll(tasks); // 429 Too Many Requests!
+
+// ✅ CORRECT — call the storage service directly (no HTTP, no CDN, no rate limits)
+var uri = AzureStorageService.GetReadSasUri(fileName, TimeSpan.FromHours(24));
+_streamUrl = uri.ToString();
+
+// ✅ CORRECT — generate all URLs directly without any HTTP calls
+var urls = tracks.Select(t => AzureStorageService.GetReadSasUri(t.Name, lifetime).ToString()).ToList();
+```
+
+### Available Services in BlazorBase
+
+All of these can be called directly from component code-behind without HTTP:
+
+- `AzureStorageService` — Blob storage operations (SAS URLs, uploads, downloads)
+- `SubscriptionService` — Subscription status checks
+- `SongMetadataService` — Song metadata queries
+- `PlaylistService` — Playlist operations
+- `StreamCountService` — Stream count operations
+- `CreatorService` — Creator lookups
+- `SongLikeService` — Like/dislike operations
+- See `BlazorBase.cs` for the full list of injected services
+
 ## Handling Optional Foreign Keys and Navigation Properties
 
 ### Issue: Filtering by navigation properties when foreign key may be null
