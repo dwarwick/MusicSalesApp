@@ -1447,26 +1447,7 @@ namespace MusicSalesApp.Components.Pages
         /// </summary>
         private List<string> GetTrackStreamUrlsBatch(List<StorageFileInfo> tracks)
         {
-            var hasAccess = _hasActiveSubscription;
-            var lifetime = hasAccess ? TimeSpan.FromHours(24) : TimeSpan.FromHours(2);
-
-            return tracks.Select(t =>
-            {
-                try
-                {
-                    var uri = AzureStorageService.GetReadSasUri(t.Name, lifetime);
-                    if (uri != null)
-                    {
-                        return uri.ToString();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogWarning(ex, "Failed to get SAS URL for track {FileName}; using fallback", t.Name);
-                }
-
-                return $"api/music/{SafeEncodePath(t.Name)}";
-            }).ToList();
+            return tracks.Select(t => GetTrackStreamUrl(t.Name)).ToList();
         }
 
         protected string GetTrackAlbumArtUrl(int index)
