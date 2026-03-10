@@ -638,7 +638,7 @@ public class TipServiceTests
         // Arrange
         await SeedUserAndCreator();
 
-        // Only 1 tip from a different user with the same fingerprint (below threshold of 2)
+        // Only 1 captured tip from a different user with the same fingerprint (below threshold of 2)
         var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
         _context.Users.Add(otherUser);
         _context.Tips.Add(new Tip
@@ -649,7 +649,8 @@ public class TipServiceTests
             Status = TipStatus.Pending,
             PayPalOrderId = "FP-ORDER-1",
             MachineFingerprint = "same-fingerprint-abc",
-            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+            CapturedAt = DateTime.UtcNow.AddMinutes(-10)
         });
         await _context.SaveChangesAsync();
 
@@ -697,7 +698,7 @@ public class TipServiceTests
         // Arrange
         await SeedUserAndCreator();
 
-        // Tips from different users with the same fingerprint, but older than 1 hour
+        // Captured tips from different users with the same fingerprint, but older than 1 hour
         var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
         _context.Users.Add(otherUser);
 
@@ -711,7 +712,8 @@ public class TipServiceTests
                 Status = TipStatus.Pending,
                 PayPalOrderId = $"OLD-FP-{i}",
                 MachineFingerprint = "same-fingerprint-abc",
-                CreatedAt = DateTime.UtcNow.AddHours(-2) // Outside 1-hour window
+                CreatedAt = DateTime.UtcNow.AddHours(-2), // Outside 1-hour window
+                CapturedAt = DateTime.UtcNow.AddHours(-2)
             });
         }
         await _context.SaveChangesAsync();
@@ -772,7 +774,7 @@ public class TipServiceTests
         // Arrange
         await SeedUserAndCreator();
 
-        // Only 4 tips from different users with the same IP (below threshold of 5)
+        // Only 4 captured tips from different users with the same IP (below threshold of 5)
         for (int i = 0; i < 4; i++)
         {
             var otherUser = new ApplicationUser
@@ -792,7 +794,8 @@ public class TipServiceTests
                 Status = TipStatus.Pending,
                 PayPalOrderId = $"IP-ORDER-{i}",
                 IpAddress = "192.168.1.100",
-                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1)),
+                CapturedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
             });
         }
         await _context.SaveChangesAsync();
@@ -883,7 +886,7 @@ public class TipServiceTests
         var tipperCreator = new Creator { Id = 2, UserId = 1, IsActive = true, DisplayName = "Tipper Creator", PayPalEmail = "tipper@test.com" };
         _context.Creators.Add(tipperCreator);
 
-        // Only 2 reciprocal tips (below threshold of 3)
+        // Only 2 captured reciprocal tips (below threshold of 3)
         for (int i = 0; i < 2; i++)
         {
             _context.Tips.Add(new Tip
@@ -893,7 +896,8 @@ public class TipServiceTests
                 Amount = 5.00m,
                 Status = TipStatus.Cleared,
                 PayPalOrderId = $"RECIP-ORDER-{i}",
-                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1))
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1)),
+                CapturedAt = DateTime.UtcNow.AddDays(-(i + 1))
             });
         }
         await _context.SaveChangesAsync();
@@ -915,7 +919,7 @@ public class TipServiceTests
         var tipperCreator = new Creator { Id = 2, UserId = 1, IsActive = true, DisplayName = "Tipper Creator", PayPalEmail = "tipper@test.com" };
         _context.Creators.Add(tipperCreator);
 
-        // 5 reciprocal tips, but all older than 30 days
+        // 5 captured reciprocal tips, but all older than 30 days
         for (int i = 0; i < 5; i++)
         {
             _context.Tips.Add(new Tip
@@ -925,7 +929,8 @@ public class TipServiceTests
                 Amount = 5.00m,
                 Status = TipStatus.Paid,
                 PayPalOrderId = $"OLD-RECIP-{i}",
-                CreatedAt = DateTime.UtcNow.AddDays(-(31 + i)) // Outside 30-day window
+                CreatedAt = DateTime.UtcNow.AddDays(-(31 + i)), // Outside 30-day window
+                CapturedAt = DateTime.UtcNow.AddDays(-(31 + i))
             });
         }
         await _context.SaveChangesAsync();

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Models;
 
@@ -18,7 +19,7 @@ public class Subscription
     public string PayPalSubscriptionId { get; set; }
 
     [MaxLength(20)]
-    public string Status { get; set; } = "APPROVAL_PENDING"; // APPROVAL_PENDING, ACTIVE, CANCELLED, SUSPENDED, EXPIRED
+    public string Status { get; set; } = SubscriptionStatuses.ApprovalPending;
 
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
 

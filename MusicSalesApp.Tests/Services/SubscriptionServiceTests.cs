@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -56,7 +57,7 @@ public class SubscriptionServiceTests
         Assert.That(result.UserId, Is.EqualTo(userId));
         Assert.That(result.PayPalSubscriptionId, Is.EqualTo(paypalSubscriptionId));
         Assert.That(result.MonthlyPrice, Is.EqualTo(monthlyPrice));
-        Assert.That(result.Status, Is.EqualTo("APPROVAL_PENDING"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
     }
 
     [Test]
@@ -110,7 +111,7 @@ public class SubscriptionServiceTests
         // Get the subscription directly by PayPal ID since GetActiveSubscriptionAsync filters by ACTIVE status
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("CANCELLED"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
         Assert.That(subscription.CancelledAt, Is.Not.Null);
         Assert.That(subscription.EndDate, Is.Not.Null);
     }
@@ -145,7 +146,7 @@ public class SubscriptionServiceTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result.UserId, Is.EqualTo(userId));
-        Assert.That(result.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Active));
     }
 
     [Test]
@@ -210,7 +211,7 @@ public class SubscriptionServiceTests
         // Verify subscription still exists
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
     }
 
     [Test]
@@ -238,7 +239,7 @@ public class SubscriptionServiceTests
         var result = await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
 
         // Assert - subscription should be APPROVAL_PENDING, not ACTIVE
-        Assert.That(result.Status, Is.EqualTo("APPROVAL_PENDING"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
         
         // GetActiveSubscriptionAsync should NOT return it
         var active = await _service.GetActiveSubscriptionAsync(userId);
@@ -263,7 +264,7 @@ public class SubscriptionServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Status, Is.EqualTo("APPROVAL_PENDING"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
         Assert.That(result.PayPalSubscriptionId, Is.EqualTo(paypalSubscriptionId));
     }
 
@@ -282,7 +283,7 @@ public class SubscriptionServiceTests
         // Assert
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
         Assert.That(subscription.LastPaymentDate, Is.Not.Null);
         Assert.That(subscription.NextBillingDate, Is.Not.Null);
     }
@@ -321,7 +322,7 @@ public class SubscriptionServiceTests
         Assert.That(result, Is.True);
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("CANCELLED"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
     }
 
     [Test]
@@ -344,6 +345,6 @@ public class SubscriptionServiceTests
         // New subscription should exist
         var newSub = await _service.GetSubscriptionByPayPalIdAsync(newSubscriptionId);
         Assert.That(newSub, Is.Not.Null);
-        Assert.That(newSub.Status, Is.EqualTo("APPROVAL_PENDING"));
+        Assert.That(newSub.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
     }
 }
