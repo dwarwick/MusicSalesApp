@@ -172,7 +172,7 @@ public class TipServiceTests
         // Arrange
         await SeedUserAndCreator();
 
-        // Add 5 tips in the last hour
+        // Add 5 captured tips in the last hour
         for (int i = 0; i < 5; i++)
         {
             _context.Tips.Add(new Tip
@@ -182,7 +182,8 @@ public class TipServiceTests
                 Amount = 1.00m,
                 Status = TipStatus.Pending,
                 PayPalOrderId = $"ORDER-{i}",
-                CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                CapturedAt = DateTime.UtcNow.AddMinutes(-10)
             });
         }
         await _context.SaveChangesAsync();
@@ -196,12 +197,72 @@ public class TipServiceTests
     }
 
     [Test]
+    public async Task ValidateTipAsync_UncapturedTipsDoNotCountTowardsRateLimit_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Add 5 uncaptured (abandoned) tips in the last hour - these should NOT count
+        for (int i = 0; i < 5; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 1,
+                CreatorId = 1,
+                Amount = 1.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"UNCAPTURED-ORDER-{i}",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                CapturedAt = null // Not captured - user abandoned PayPal checkout
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 1.00m, null, null);
+
+        // Assert - should succeed because uncaptured tips don't count
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_UncapturedTipsDoNotCountTowardsLifetimeLimit_ReturnsCanTip()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Add 10 uncaptured tips to the same creator - these should NOT count
+        for (int i = 0; i < 10; i++)
+        {
+            _context.Tips.Add(new Tip
+            {
+                TipperUserId = 1,
+                CreatorId = 1,
+                Amount = 1.00m,
+                Status = TipStatus.Pending,
+                PayPalOrderId = $"UNCAPTURED-LIFETIME-{i}",
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1)),
+                CapturedAt = null
+            });
+        }
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(1, 1, 1.00m, null, null);
+
+        // Assert - should succeed because uncaptured tips don't count
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
+
+    [Test]
     public async Task ValidateTipAsync_MaxTipsToSameCreator_ReturnsFalse()
     {
         // Arrange
         await SeedUserAndCreator();
 
-        // Add 10 tips to the same creator (spread over time to avoid hourly rate limit)
+        // Add 10 captured tips to the same creator (spread over time to avoid hourly rate limit)
         for (int i = 0; i < 10; i++)
         {
             _context.Tips.Add(new Tip
@@ -211,7 +272,8 @@ public class TipServiceTests
                 Amount = 1.00m,
                 Status = TipStatus.Paid,
                 PayPalOrderId = $"ORDER-{i}",
-                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1))
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1)),
+                CapturedAt = DateTime.UtcNow.AddDays(-(i + 1))
             });
         }
         await _context.SaveChangesAsync();
@@ -533,7 +595,7 @@ public class TipServiceTests
         var otherUser = new ApplicationUser { Id = 3, UserName = "other@test.com", Email = "other@test.com", NormalizedEmail = "OTHER@TEST.COM", NormalizedUserName = "OTHER@TEST.COM" };
         _context.Users.Add(otherUser);
 
-        // 2 tips from different users with the same fingerprint in the last hour (meets threshold of 2)
+        // 2 captured tips from different users with the same fingerprint in the last hour (meets threshold of 2)
         _context.Tips.Add(new Tip
         {
             TipperUserId = 3,
@@ -542,7 +604,8 @@ public class TipServiceTests
             Status = TipStatus.Pending,
             PayPalOrderId = "FP-ORDER-1",
             MachineFingerprint = "same-fingerprint-abc",
-            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+            CapturedAt = DateTime.UtcNow.AddMinutes(-10)
         });
 
         var otherUser2 = new ApplicationUser { Id = 4, UserName = "other2@test.com", Email = "other2@test.com", NormalizedEmail = "OTHER2@TEST.COM", NormalizedUserName = "OTHER2@TEST.COM" };
@@ -555,7 +618,8 @@ public class TipServiceTests
             Status = TipStatus.Pending,
             PayPalOrderId = "FP-ORDER-2",
             MachineFingerprint = "same-fingerprint-abc",
-            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            CapturedAt = DateTime.UtcNow.AddMinutes(-5)
         });
 
         await _context.SaveChangesAsync();
@@ -668,7 +732,7 @@ public class TipServiceTests
         // Arrange
         await SeedUserAndCreator();
 
-        // Add 5 tips from different users with the same IP in the last hour (meets threshold of 5)
+        // Add 5 captured tips from different users with the same IP in the last hour (meets threshold of 5)
         for (int i = 0; i < 5; i++)
         {
             var otherUser = new ApplicationUser
@@ -688,7 +752,8 @@ public class TipServiceTests
                 Status = TipStatus.Pending,
                 PayPalOrderId = $"IP-ORDER-{i}",
                 IpAddress = "192.168.1.100",
-                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
+                CreatedAt = DateTime.UtcNow.AddMinutes(-(i + 1)),
+                CapturedAt = DateTime.UtcNow.AddMinutes(-(i + 1))
             });
         }
         await _context.SaveChangesAsync();
@@ -794,7 +859,8 @@ public class TipServiceTests
                 Amount = 5.00m,
                 Status = TipStatus.Cleared,
                 PayPalOrderId = $"RECIP-ORDER-{i}",
-                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1))
+                CreatedAt = DateTime.UtcNow.AddDays(-(i + 1)),
+                CapturedAt = DateTime.UtcNow.AddDays(-(i + 1))
             });
         }
         await _context.SaveChangesAsync();

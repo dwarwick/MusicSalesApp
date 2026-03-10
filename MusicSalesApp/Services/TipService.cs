@@ -80,9 +80,10 @@ public class TipService : ITipService
             return (false, "You cannot tip yourself.");
 
         // Rate limit: max 5 tips per hour per user
+        // Only count captured tips (CapturedAt != null) - failed/abandoned tips should not count
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
         var recentTipCount = await context.Tips
-            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo);
+            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo && t.CapturedAt != null);
         if (recentTipCount >= MaxTipsPerHour)
         {
             await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "HourlyRateLimit",
@@ -91,8 +92,9 @@ public class TipService : ITipService
         }
 
         // Rate limit: max 10 tips from a user to the same creator (lifetime)
+        // Only count captured tips - failed/abandoned tips should not count
         var tipsToCreator = await context.Tips
-            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatorId == creatorId);
+            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatorId == creatorId && t.CapturedAt != null);
         if (tipsToCreator >= MaxTipsToSameCreator)
         {
             await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "LifetimeCreatorLimit",
@@ -101,12 +103,14 @@ public class TipService : ITipService
         }
 
         // Fraud detection: check fingerprint patterns (strict - same device, different accounts)
+        // Only count captured tips - failed/abandoned tips should not count
         if (!string.IsNullOrEmpty(fingerprint))
         {
             var fingerprintTips = await context.Tips
                 .CountAsync(t => t.CreatedAt >= oneHourAgo &&
                     t.TipperUserId != tipperUserId &&
-                    t.MachineFingerprint == fingerprint);
+                    t.MachineFingerprint == fingerprint &&
+                    t.CapturedAt != null);
 
             if (fingerprintTips >= MaxTipsPerHourSameFingerprint)
             {
@@ -120,12 +124,14 @@ public class TipService : ITipService
         }
 
         // Fraud detection: check IP patterns (lenient - shared networks are common)
+        // Only count captured tips - failed/abandoned tips should not count
         if (!string.IsNullOrEmpty(ipAddress))
         {
             var ipTips = await context.Tips
                 .CountAsync(t => t.CreatedAt >= oneHourAgo &&
                     t.TipperUserId != tipperUserId &&
-                    t.IpAddress == ipAddress);
+                    t.IpAddress == ipAddress &&
+                    t.CapturedAt != null);
 
             if (ipTips >= MaxTipsPerHour)
             {
@@ -147,10 +153,12 @@ public class TipService : ITipService
         if (tipperCreator != null)
         {
             var windowStart = DateTime.UtcNow.AddDays(-ReciprocalTipWindowDays);
+            // Only count captured tips - failed/abandoned tips should not count
             var reciprocalTipCount = await context.Tips
                 .CountAsync(t => t.TipperUserId == creator.UserId &&
                     t.CreatorId == tipperCreator.Value &&
-                    t.CreatedAt >= windowStart);
+                    t.CreatedAt >= windowStart &&
+                    t.CapturedAt != null);
 
             if (reciprocalTipCount >= MaxReciprocalTips)
             {

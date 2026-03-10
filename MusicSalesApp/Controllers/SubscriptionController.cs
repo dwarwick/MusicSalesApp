@@ -144,8 +144,16 @@ public class SubscriptionController : ControllerBase
                 return BadRequest("Failed to retrieve subscription details from PayPal");
             }
 
-            // Update our database with the details
-            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+            // Verify that PayPal has confirmed a payment before activating
+            if (subscriptionDetails.LastPaymentDate == null)
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
+                    request.SubscriptionId, user.Id);
+                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
+            }
+
+            // Activate the subscription now that payment is confirmed
+            await _subscriptionService.ActivateSubscriptionAsync(
                 request.SubscriptionId,
                 subscriptionDetails.NextBillingDate,
                 subscriptionDetails.LastPaymentDate
@@ -205,8 +213,13 @@ public class SubscriptionController : ControllerBase
 
         try
         {
-            // Get the user's most recent subscription
-            var subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            // Get the user's most recent pending subscription (APPROVAL_PENDING)
+            var subscription = await _subscriptionService.GetPendingSubscriptionAsync(user.Id);
+            if (subscription == null)
+            {
+                // Fall back to active subscription (for backward compatibility)
+                subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            }
             if (subscription == null)
             {
                 return BadRequest("No subscription found for user");
@@ -219,8 +232,16 @@ public class SubscriptionController : ControllerBase
                 return BadRequest("Failed to retrieve subscription details from PayPal");
             }
 
-            // Update our database with the details
-            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+            // Verify that PayPal has confirmed a payment before activating
+            if (subscriptionDetails.LastPaymentDate == null)
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
+                    subscription.PayPalSubscriptionId, user.Id);
+                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
+            }
+
+            // Activate the subscription now that payment is confirmed
+            await _subscriptionService.ActivateSubscriptionAsync(
                 subscription.PayPalSubscriptionId,
                 subscriptionDetails.NextBillingDate,
                 subscriptionDetails.LastPaymentDate

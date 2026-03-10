@@ -18,7 +18,7 @@ public class Subscription
     public string PayPalSubscriptionId { get; set; }
 
     [MaxLength(20)]
-    public string Status { get; set; } = "ACTIVE"; // ACTIVE, CANCELLED, SUSPENDED, EXPIRED
+    public string Status { get; set; } = "APPROVAL_PENDING"; // APPROVAL_PENDING, ACTIVE, CANCELLED, SUSPENDED, EXPIRED
 
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
 

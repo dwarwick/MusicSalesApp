@@ -59,11 +59,18 @@ public class SubscriptionService : ISubscriptionService
             existing.CancelledAt = DateTime.UtcNow;
         }
 
+        // Remove any stale APPROVAL_PENDING subscriptions (user started but never completed)
+        var pendingSubscriptions = await context.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == "APPROVAL_PENDING")
+            .ToListAsync();
+
+        context.Subscriptions.RemoveRange(pendingSubscriptions);
+
         var subscription = new Subscription
         {
             UserId = userId,
             PayPalSubscriptionId = paypalSubscriptionId,
-            Status = "ACTIVE",
+            Status = "APPROVAL_PENDING",
             StartDate = DateTime.UtcNow,
             MonthlyPrice = monthlyPrice,
             CreatedAt = DateTime.UtcNow,
@@ -83,7 +90,7 @@ public class SubscriptionService : ISubscriptionService
         using var context = await _contextFactory.CreateDbContextAsync();
         
         var subscription = await context.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == "ACTIVE")
+            .Where(s => s.UserId == userId && (s.Status == "ACTIVE" || s.Status == "APPROVAL_PENDING"))
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -186,11 +193,11 @@ public class SubscriptionService : ISubscriptionService
         using var context = await _contextFactory.CreateDbContextAsync();
         
         // Find the most recent subscription for this user that hasn't been paid for yet
-        // (no LastPaymentDate)
+        // (APPROVAL_PENDING status or ACTIVE with no LastPaymentDate)
         var pendingSubscription = await context.Subscriptions
             .Where(s => s.UserId == userId && 
-                       s.Status == "ACTIVE" && 
-                       s.LastPaymentDate == null)
+                       (s.Status == "APPROVAL_PENDING" ||
+                        (s.Status == "ACTIVE" && s.LastPaymentDate == null)))
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -205,5 +212,46 @@ public class SubscriptionService : ISubscriptionService
             pendingSubscription.Id, userId);
         
         return true;
+    }
+
+    public async Task<Subscription> GetPendingSubscriptionAsync(int userId)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        return await context.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == "APPROVAL_PENDING")
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task ActivateSubscriptionAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.PayPalSubscriptionId == paypalSubscriptionId);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning("Subscription with PayPal ID {PayPalSubscriptionId} not found for activation", paypalSubscriptionId);
+            return;
+        }
+
+        subscription.Status = "ACTIVE";
+        subscription.StartDate = DateTime.UtcNow;
+
+        if (nextBillingDate.HasValue)
+        {
+            subscription.NextBillingDate = nextBillingDate.Value;
+        }
+
+        if (lastPaymentDate.HasValue)
+        {
+            subscription.LastPaymentDate = lastPaymentDate.Value;
+        }
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.Id, subscription.UserId);
     }
 }
