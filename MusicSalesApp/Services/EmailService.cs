@@ -18,6 +18,7 @@ namespace MusicSalesApp.Services
         private readonly string _displayName;
         private readonly string _password;
         private readonly string _server;
+        private readonly string _username;
 
         // Spam filter error message patterns - more specific to avoid false positives
         // These patterns match common SMTP server responses for spam-related rejections
@@ -42,6 +43,7 @@ namespace MusicSalesApp.Services
             _displayName = emailSettings["DisplayName"] ?? "StreamTunes";
             _password = emailSettings["Password"] ?? string.Empty;
             _server = emailSettings["Server"] ?? string.Empty;
+            _username = emailSettings["Username"] ?? "apikey";
 
             _logger.LogInformation("EmailService initialized with domain: {Domain}", _domain);
         }

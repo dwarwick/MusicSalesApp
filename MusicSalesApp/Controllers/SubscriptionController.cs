@@ -609,10 +609,16 @@ public class SubscriptionController : ControllerBase
                 start_time = DateTime.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 application_context = new
                 {
-                    brand_name = "Music Sales App",
+                    brand_name = "StreamTunes",
                     locale = "en-US",
+                    landing_page = "LOGIN",
                     shipping_preference = "NO_SHIPPING",
                     user_action = "SUBSCRIBE_NOW",
+                    payment_method = new
+                    {
+                        payer_selected = "PAYPAL",
+                        payee_preferred = "IMMEDIATE_PAYMENT_REQUIRED"
+                    },
                     return_url = $"{returnBaseUrl}/manage-account?success=true",
                     cancel_url = $"{returnBaseUrl}/manage-account?success=false"
                 }
