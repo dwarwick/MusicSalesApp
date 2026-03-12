@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace MusicSalesApp.Data.Migrations
+namespace MusicSalesApp.Migrations
 {
     /// <inheritdoc />
     public partial class AddBlockedTipAttemptsTable : Migration

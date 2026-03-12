@@ -243,7 +243,7 @@ public class TipService : ITipService
             }
 
             // Capture the PayPal order
-            var (captured, captureError) = await CapturePayPalOrderAsync(payPalOrderId);
+            var (captured, captureError, captureId) = await CapturePayPalOrderAsync(payPalOrderId);
             if (!captured)
             {
                 // Remove the uncaptured tip record
@@ -254,6 +254,8 @@ public class TipService : ITipService
 
             // Mark as captured so ProcessPendingToClearedAsync knows this tip was paid
             tip.CapturedAt = DateTime.UtcNow;
+            // Store the PayPal capture transaction ID for dispute/chargeback matching
+            tip.PayPalCaptureId = captureId;
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
@@ -588,13 +590,13 @@ public class TipService : ITipService
         }
     }
 
-    private async Task<(bool Captured, string? Error)> CapturePayPalOrderAsync(string orderId)
+    private async Task<(bool Captured, string? Error, string? CaptureId)> CapturePayPalOrderAsync(string orderId)
     {
         try
         {
             var accessToken = await GetPayPalAccessTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
-                return (false, "Failed to authenticate with PayPal.");
+                return (false, "Failed to authenticate with PayPal.", null);
 
             var payPalBaseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             using var httpClient = new HttpClient();
@@ -609,21 +611,35 @@ public class TipService : ITipService
             if (!captureResponse.IsSuccessStatusCode)
             {
                 _logger.LogWarning("PayPal capture failed: {Status} {Body}", captureResponse.StatusCode, captureBody);
-                return (false, "Failed to capture payment.");
+                return (false, "Failed to capture payment.", null);
             }
 
             using var doc = JsonDocument.Parse(captureBody);
             var captureStatus = doc.RootElement.GetProperty("status").GetString();
 
             if (captureStatus != "COMPLETED")
-                return (false, $"Payment not completed. Status: {captureStatus}");
+                return (false, $"Payment not completed. Status: {captureStatus}", null);
 
-            return (true, null);
+            // Extract capture transaction ID from purchase_units[0].payments.captures[0].id
+            string? captureId = null;
+            if (doc.RootElement.TryGetProperty("purchase_units", out var purchaseUnits) &&
+                purchaseUnits.GetArrayLength() > 0)
+            {
+                var firstUnit = purchaseUnits[0];
+                if (firstUnit.TryGetProperty("payments", out var payments) &&
+                    payments.TryGetProperty("captures", out var captures) &&
+                    captures.GetArrayLength() > 0)
+                {
+                    captureId = captures[0].GetProperty("id").GetString();
+                }
+            }
+
+            return (true, null, captureId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error capturing PayPal tip order {OrderId}", orderId);
-            return (false, "An error occurred processing the payment.");
+            return (false, "An error occurred processing the payment.", null);
         }
     }
 
