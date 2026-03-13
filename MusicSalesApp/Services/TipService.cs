@@ -227,6 +227,34 @@ public class TipService : ITipService
     }
 
     /// <inheritdoc />
+    public async Task CancelTipAsync(string payPalOrderId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var tip = await context.Tips
+                .FirstOrDefaultAsync(t => t.PayPalOrderId == payPalOrderId && t.Status == TipStatus.Pending);
+
+            if (tip == null)
+            {
+                _logger.LogDebug("No pending tip found for PayPal order {OrderId} to cancel", payPalOrderId);
+                return;
+            }
+
+            tip.Status = TipStatus.Cancelled;
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Tip cancelled: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
+                tip.Amount, tip.TipperUserId, tip.CreatorId, payPalOrderId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling tip for PayPal order {OrderId}", payPalOrderId);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<(bool Success, string? ErrorMessage, decimal Amount)> CaptureTipAsync(string payPalOrderId)
     {
         try

@@ -261,7 +261,7 @@ namespace MusicSalesApp.Services
 
                 using var client = new SmtpClient(_server);
                 client.Port = 587;
-                client.Credentials = new NetworkCredential("apikey", _password);
+                client.Credentials = new NetworkCredential(_fromEmail, _password);
                 client.EnableSsl = true;
                 client.DeliveryMethod = SmtpDeliveryMethod.Network;
                 client.Timeout = 30000; // 30 seconds timeout

@@ -18,7 +18,9 @@ public enum TipStatus
     /// <summary>Refunded to the tipper.</summary>
     Refunded,
     /// <summary>PayPal chargeback received.</summary>
-    Chargeback
+    Chargeback,
+    /// <summary>User cancelled the PayPal checkout before completing payment.</summary>
+    Cancelled
 }
 
 /// <summary>

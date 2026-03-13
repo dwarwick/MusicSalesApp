@@ -1077,4 +1077,220 @@ public class TipServiceTests
         // Assert
         Assert.That(tip.CapturedAt, Is.Null);
     }
+
+    // ==================== CancelTipAsync Tests ====================
+
+    [Test]
+    public async Task CancelTipAsync_PendingTip_SetsToCancelled()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "CANCEL-ORDER-1",
+            CapturedAt = null,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.CancelTipAsync("CANCEL-ORDER-1");
+
+        // Assert
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "CANCEL-ORDER-1");
+        Assert.That(tip.Status, Is.EqualTo(TipStatus.Cancelled));
+    }
+
+    [Test]
+    public async Task CancelTipAsync_NonExistentOrder_DoesNotThrow()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(() => _service.CancelTipAsync("NON-EXISTENT-ORDER"));
+    }
+
+    [Test]
+    public async Task CancelTipAsync_AlreadyCapturedTip_DoesNotCancel()
+    {
+        // Arrange - tip that is pending but already captured (payment went through)
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Cleared,
+            PayPalOrderId = "CAPTURED-ORDER-1",
+            CapturedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - try to cancel a non-pending tip
+        await _service.CancelTipAsync("CAPTURED-ORDER-1");
+
+        // Assert - status should remain Cleared (only pending tips can be cancelled)
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "CAPTURED-ORDER-1");
+        Assert.That(tip.Status, Is.EqualTo(TipStatus.Cleared));
+    }
+
+    [Test]
+    public async Task CancelTipAsync_AlreadyPaidTip_DoesNotCancel()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 10.00m,
+            Status = TipStatus.Paid,
+            PayPalOrderId = "PAID-ORDER-1",
+            CapturedAt = DateTime.UtcNow.AddDays(-10),
+            PaidAt = DateTime.UtcNow.AddDays(-1),
+            CreatedAt = DateTime.UtcNow.AddDays(-10)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.CancelTipAsync("PAID-ORDER-1");
+
+        // Assert - status should remain Paid
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "PAID-ORDER-1");
+        Assert.That(tip.Status, Is.EqualTo(TipStatus.Paid));
+    }
+
+    [Test]
+    public async Task CancelTipAsync_DoubleCancelIsIdempotent()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Pending,
+            PayPalOrderId = "DOUBLE-CANCEL-1",
+            CapturedAt = null,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+
+        // Act - cancel twice
+        await _service.CancelTipAsync("DOUBLE-CANCEL-1");
+        await _service.CancelTipAsync("DOUBLE-CANCEL-1"); // second call should be safe (no pending tip found)
+
+        // Assert
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "DOUBLE-CANCEL-1");
+        Assert.That(tip.Status, Is.EqualTo(TipStatus.Cancelled));
+    }
+
+    // ==================== ProcessPendingToClearedAsync with Cancelled Tips ====================
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_DoesNotPromoteCancelledTips()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Cancelled,
+            PayPalOrderId = "CANCELLED-OLD",
+            CapturedAt = null,
+            CreatedAt = DateTime.UtcNow.AddDays(-10)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var clearedCount = await _service.ProcessPendingToClearedAsync();
+
+        // Assert - cancelled tip should not be promoted or removed
+        Assert.That(clearedCount, Is.EqualTo(0));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tip = await verifyContext.Tips.FirstAsync(t => t.PayPalOrderId == "CANCELLED-OLD");
+        Assert.That(tip.Status, Is.EqualTo(TipStatus.Cancelled));
+    }
+
+    [Test]
+    public async Task ProcessPendingToClearedAsync_DoesNotRemoveCancelledTipsAsStale()
+    {
+        // Arrange - cancelled tips should be preserved, even though they have no CapturedAt and are old
+        await SeedUserAndCreator();
+
+        _context.Tips.Add(new Tip
+        {
+            TipperUserId = 1,
+            CreatorId = 1,
+            Amount = 5.00m,
+            Status = TipStatus.Cancelled,
+            PayPalOrderId = "CANCELLED-STALE",
+            CapturedAt = null,
+            CreatedAt = DateTime.UtcNow.AddDays(-3)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.ProcessPendingToClearedAsync();
+
+        // Assert - cancelled tip should still exist
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var tips = await verifyContext.Tips.ToListAsync();
+        Assert.That(tips.Count, Is.EqualTo(1));
+        Assert.That(tips[0].Status, Is.EqualTo(TipStatus.Cancelled));
+    }
+
+    [Test]
+    public async Task GetClearedTipsForPayoutAsync_ExcludesCancelledTips()
+    {
+        // Arrange
+        await SeedUserAndCreator();
+
+        _context.Tips.AddRange(
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 5.00m, Status = TipStatus.Cleared, PayPalOrderId = "CLR-1", CreatedAt = DateTime.UtcNow.AddDays(-10) },
+            new Tip { TipperUserId = 1, CreatorId = 1, Amount = 3.00m, Status = TipStatus.Cancelled, PayPalOrderId = "CAN-1", CreatedAt = DateTime.UtcNow.AddDays(-10) }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var tips = await _service.GetClearedTipsForPayoutAsync(1);
+
+        // Assert - only cleared tips returned, not cancelled
+        Assert.That(tips, Has.Count.EqualTo(1));
+        Assert.That(tips[0].PayPalOrderId, Is.EqualTo("CLR-1"));
+    }
+
+    // ==================== TipStatus Enum Tests ====================
+
+    [Test]
+    public void TipStatus_Cancelled_HasExpectedValue()
+    {
+        // Assert - Cancelled should be value 5 (after Chargeback=4)
+        Assert.That((int)TipStatus.Cancelled, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void TipStatus_CancelledToString_ReturnsCancelled()
+    {
+        Assert.That(TipStatus.Cancelled.ToString(), Is.EqualTo("Cancelled"));
+    }
 }

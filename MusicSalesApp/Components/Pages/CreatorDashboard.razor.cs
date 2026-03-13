@@ -432,7 +432,7 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
             var tips = await TipService.GetTipsForCreatorAsync(_creatorId.Value);
 
             // Calculate bucket totals
-            var onHold = tips.Where(t => t.Status == Models.TipStatus.Pending).ToList();
+            var onHold = tips.Where(t => t.Status == Models.TipStatus.Pending && t.CapturedAt != null).ToList();
             var pendingPayout = tips.Where(t => t.Status == Models.TipStatus.Cleared).ToList();
             var paid = tips.Where(t => t.Status == Models.TipStatus.Paid).ToList();
 
