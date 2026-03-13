@@ -386,6 +386,990 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region StartOnboardingAsync Tests
+
+    private CreatorOnboardingInput CreateValidOnboardingInput(int userId, string email = "test@test.com") => new()
+    {
+        UserId = userId,
+        UserEmail = email,
+        DisplayName = "Test Creator",
+        Bio = "Test bio",
+        PayPalEmail = "paypal@test.com",
+        PayPalAccountAffirmed = true,
+        LocationCertification = CreatorLocationCertification.USPerson,
+        AcknowledgmentAccepted = true
+    };
+
+    [Test]
+    public async Task StartOnboardingAsync_NewCreator_USPerson_SetsTaxFormPending()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "new@test.com", Email = "new@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TaxFormPending, Is.True);
+        Assert.That(result.IsActive, Is.False);
+        Assert.That(result.IsIneligible, Is.False);
+
+        // Verify creator was created in DB with correct state
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var creator = await verifyContext.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
+        Assert.That(creator, Is.Not.Null);
+        Assert.That(creator!.PayPalEmail, Is.EqualTo("paypal@test.com"));
+        Assert.That(creator.PayPalAccountAffirmed, Is.True);
+        Assert.That(creator.LocationCertification, Is.EqualTo(CreatorLocationCertification.USPerson));
+        Assert.That(creator.AcknowledgmentAccepted, Is.True);
+        Assert.That(creator.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+        Assert.That(creator.DisplayName, Is.EqualTo("Test Creator"));
+        Assert.That(creator.Bio, Is.EqualTo("Test bio"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_NewCreator_NonUSPersonOutsideUS_SetsTaxFormPending()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "foreign@test.com", Email = "foreign@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.LocationCertification = CreatorLocationCertification.NonUSPersonOutsideUS;
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TaxFormPending, Is.True);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_NonUSPersonInsideUS_ReturnsIneligible()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "ineligible@test.com", Email = "ineligible@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.LocationCertification = CreatorLocationCertification.NonUSPersonInsideUS;
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsIneligible, Is.True);
+        Assert.That(result.IsActive, Is.False);
+        Assert.That(result.TaxFormPending, Is.False);
+
+        // Verify creator is marked Ineligible in DB
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var creator = await verifyContext.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
+        Assert.That(creator!.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Ineligible));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ReturningCreator_WithCompletedTaxForm_ActivatesImmediately()
+    {
+        // Arrange — creator who previously stopped selling but has completed tax form
+        var user = new ApplicationUser { UserName = "returning@test.com", Email = "returning@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            TaxFormStatus = TaxFormStatus.Completed,
+            TaxFormCompletedAt = DateTime.UtcNow.AddMonths(-3),
+            IsActive = false,
+            PayPalEmail = "old@paypal.com",
+            PayPalAccountAffirmed = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(false);
+        _mockUserManager.Setup(x => x.AddToRoleAsync(user, "Creator")).ReturnsAsync(IdentityResult.Success);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.PayPalEmail = "new@paypal.com";
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+        Assert.That(result.TaxFormPending, Is.False);
+        Assert.That(result.IsIneligible, Is.False);
+
+        // Verify role was assigned
+        _mockUserManager.Verify(x => x.AddToRoleAsync(user, "Creator"), Times.Once);
+
+        // Verify creator is active in DB
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(savedCreator!.IsActive, Is.True);
+        Assert.That(savedCreator.PayPalEmail, Is.EqualTo("new@paypal.com"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ReturningCreator_WithoutCompletedTaxForm_SetsTaxFormPending()
+    {
+        // Arrange — creator who previously stopped selling, tax form NOT completed
+        var user = new ApplicationUser { UserName = "return2@test.com", Email = "return2@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            TaxFormStatus = TaxFormStatus.NotStarted,
+            IsActive = false,
+            PayPalEmail = "old@paypal.com",
+            PayPalAccountAffirmed = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TaxFormPending, Is.True);
+        Assert.That(result.IsActive, Is.False);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_AlreadyActiveCreator_ReturnsError()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "active@test.com", Email = "active@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            PayPalEmail = "active@paypal.com",
+            PayPalAccountAffirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("already an active creator"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_EmptyPayPalEmail_ReturnsError()
+    {
+        var input = CreateValidOnboardingInput(1);
+        input.PayPalEmail = "";
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("PayPal email"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_WhitespacePayPalEmail_ReturnsError()
+    {
+        var input = CreateValidOnboardingInput(1);
+        input.PayPalEmail = "   ";
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("PayPal email"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_PayPalNotAffirmed_ReturnsError()
+    {
+        var input = CreateValidOnboardingInput(1);
+        input.PayPalAccountAffirmed = false;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("affirm"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_LocationCertificationNone_ReturnsError()
+    {
+        var input = CreateValidOnboardingInput(1);
+        input.LocationCertification = CreatorLocationCertification.None;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("location"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_AcknowledgmentNotAccepted_ReturnsError()
+    {
+        var input = CreateValidOnboardingInput(1);
+        input.AcknowledgmentAccepted = false;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("acknowledgment"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_UserNotFound_ReturnsError()
+    {
+        _mockUserManager.Setup(x => x.FindByIdAsync("999")).ReturnsAsync((ApplicationUser)null!);
+
+        var input = CreateValidOnboardingInput(999);
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("email"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_UserWithNoEmail_ReturnsError()
+    {
+        var user = new ApplicationUser { UserName = "noemail@test.com", Email = null };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id);
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("email"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_UserWithEmptyEmail_ReturnsError()
+    {
+        var user = new ApplicationUser { UserName = "empty@test.com", Email = "  " };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id);
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("email"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ExistingCreator_UpdatesProfile()
+    {
+        // Arrange — creator who was ineligible, now re-signing up with new info
+        var user = new ApplicationUser { UserName = "profile@test.com", Email = "profile@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Ineligible,
+            IsActive = false,
+            DisplayName = "Old Name",
+            Bio = "Old bio"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.DisplayName = "New Name";
+        input.Bio = "New bio";
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        // Verify profile was updated
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(savedCreator!.DisplayName, Is.EqualTo("New Name"));
+        Assert.That(savedCreator.Bio, Is.EqualTo("New bio"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ExistingCreator_NoDisplayName_DoesNotOverwriteProfile()
+    {
+        // Arrange — creator re-signing up without providing new display name
+        var user = new ApplicationUser { UserName = "keepname@test.com", Email = "keepname@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Ineligible,
+            IsActive = false,
+            DisplayName = "Existing Name",
+            Bio = "Existing bio"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.DisplayName = null;
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert — profile should not be overwritten
+        Assert.That(result.Success, Is.True);
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(savedCreator!.DisplayName, Is.EqualTo("Existing Name"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ReturningCreator_AlreadyHasRole_DoesNotAddAgain()
+    {
+        // Arrange — returning creator who already has the Creator role
+        var user = new ApplicationUser { UserName = "hasrole@test.com", Email = "hasrole@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            TaxFormStatus = TaxFormStatus.Completed,
+            TaxFormCompletedAt = DateTime.UtcNow.AddMonths(-1),
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(true); // Already has role
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+        _mockUserManager.Verify(x => x.AddToRoleAsync(It.IsAny<ApplicationUser>(), "Creator"), Times.Never);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_PayeeRef_IsStoredFromUserEmail()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "payeeref@test.com", Email = "payeeref@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.PayPalEmail = "different@paypal.com"; // PayPal email different from user email
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TaxFormPending, Is.True);
+
+        // Verify PayeeRef is stored from user email (not PayPal email)
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var creator = await verifyContext.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
+        Assert.That(creator!.TaxBanditsPayeeRef, Is.EqualTo("payeeref@test.com"));
+        Assert.That(creator.PayPalEmail, Is.EqualTo("different@paypal.com"));
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_ConsentRevokedCreator_CanReSignUp()
+    {
+        // Arrange — creator whose consent was revoked
+        var user = new ApplicationUser { UserName = "revoked@test.com", Email = "revoked@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.ConsentRevoked,
+            IsActive = false,
+            PayPalEmail = "old@paypal.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.TaxFormPending, Is.True);
+    }
+
+    #endregion
+
+    #region CompleteOnboardingAsync Tests
+
+    [Test]
+    public async Task CompleteOnboardingAsync_NoCreatorRecord_ReturnsError()
+    {
+        // Arrange — user who never started onboarding
+        var user = new ApplicationUser { UserName = "nocreator@test.com", Email = "nocreator@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Creator record not found"));
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_PayPalNotAffirmed_ReturnsError()
+    {
+        // Arrange — creator without PayPal affirmation
+        var user = new ApplicationUser { UserName = "noaffirm@test.com", Email = "noaffirm@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = false,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("complete the creator signup"));
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_BothComplete_ActivatesCreatorAndAssignsRole()
+    {
+        // Arrange — creator with both onboarding and tax form completed
+        var user = new ApplicationUser { UserName = "ready@test.com", Email = "ready@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true,
+            PayPalEmail = "ready@paypal.com",
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(false);
+        _mockUserManager.Setup(x => x.AddToRoleAsync(user, "Creator")).ReturnsAsync(IdentityResult.Success);
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+        _mockUserManager.Verify(x => x.AddToRoleAsync(user, "Creator"), Times.Once);
+
+        // Verify activation in DB
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.IsActive, Is.True);
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_AlreadyActive_DoesNotReactivate()
+    {
+        // Arrange — already active creator
+        var user = new ApplicationUser { UserName = "alreadyact@test.com", Email = "alreadyact@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true,
+            IsActive = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(true);
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+        _mockUserManager.Verify(x => x.AddToRoleAsync(It.IsAny<ApplicationUser>(), "Creator"), Times.Never);
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_OnboardingNotCompleted_ReturnsCurrentStatus()
+    {
+        // Arrange — creator with onboarding in progress but tax form not complete
+        var user = new ApplicationUser { UserName = "pending@test.com", Email = "pending@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.InProgress,
+            TaxFormStatus = TaxFormStatus.Pending,
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = false,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert — returns status without error, not fully onboarded
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.False);
+        Assert.That(result.PaymentsReceivable, Is.True);
+        Assert.That(result.PrimaryEmailConfirmed, Is.False);
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_TaxFormNotCompleted_ReturnsCurrentStatus()
+    {
+        // Arrange — creator with completed onboarding but pending tax form
+        var user = new ApplicationUser { UserName = "notax@test.com", Email = "notax@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Pending,
+            PayPalAccountAffirmed = true,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.False);
+    }
+
+    [Test]
+    public async Task CompleteOnboardingAsync_FailedTaxForm_ReturnsCurrentStatus()
+    {
+        // Arrange — creator whose tax form failed
+        var user = new ApplicationUser { UserName = "failedtax@test.com", Email = "failedtax@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Failed,
+            PayPalAccountAffirmed = true,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CompleteOnboardingAsync(user.Id);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.False);
+    }
+
+    #endregion
+
+    #region InitiateTaxFormUpdateAsync Tests
+
+    [Test]
+    public async Task InitiateTaxFormUpdateAsync_ActiveCreator_Success()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "taxupdate@test.com", Email = "taxupdate@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            PayPalEmail = "taxupdate@paypal.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, "taxupdate@test.com");
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        // Verify tax form status set to Pending in DB
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+        Assert.That(saved.TaxBanditsPayeeRef, Is.EqualTo("taxupdate@test.com"));
+    }
+
+    [Test]
+    public async Task InitiateTaxFormUpdateAsync_NoCreatorRecord_ReturnsError()
+    {
+        // Arrange — user is not a creator
+        var user = new ApplicationUser { UserName = "notcreator@test.com", Email = "notcreator@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, user.Email);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("active creator"));
+    }
+
+    [Test]
+    public async Task InitiateTaxFormUpdateAsync_InactiveCreator_ReturnsError()
+    {
+        // Arrange — creator who stopped selling
+        var user = new ApplicationUser { UserName = "inactive@test.com", Email = "inactive@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            IsActive = false
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, user.Email);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("active creator"));
+    }
+
+    [Test]
+    public async Task InitiateTaxFormUpdateAsync_NullEmail_SkipsPayeeRefUpdate()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "nullemail@test.com", Email = "nullemail@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            TaxBanditsPayeeRef = "original@test.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, null);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        // Verify PayeeRef was NOT overwritten
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+        Assert.That(saved.TaxBanditsPayeeRef, Is.EqualTo("original@test.com"));
+    }
+
+    [Test]
+    public async Task InitiateTaxFormUpdateAsync_EmptyEmail_SkipsPayeeRefUpdate()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "emptyeml@test.com", Email = "emptyeml@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            TaxBanditsPayeeRef = "existing@test.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, "   ");
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.TaxBanditsPayeeRef, Is.EqualTo("existing@test.com"));
+    }
+
+    #endregion
+
+    #region Full End-to-End Orchestration Tests
+
+    [Test]
+    public async Task FullFlow_NewCreator_Onboard_CompleteTaxForm_Activate()
+    {
+        // This test simulates the complete flow a new user would go through:
+        // 1. StartOnboarding → creates creator, sets TaxFormPending
+        // 2. (Tax form completed externally via webhook — simulate directly)
+        // 3. CompleteOnboarding → activates creator, assigns role
+
+        // Arrange
+        var user = new ApplicationUser { UserName = "e2e@test.com", Email = "e2e@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(false);
+        _mockUserManager.Setup(x => x.AddToRoleAsync(user, "Creator")).ReturnsAsync(IdentityResult.Success);
+
+        // Step 1: Start onboarding
+        var startResult = await _service.StartOnboardingAsync(CreateValidOnboardingInput(user.Id, user.Email!));
+        Assert.That(startResult.Success, Is.True);
+        Assert.That(startResult.TaxFormPending, Is.True);
+
+        // Step 2: Simulate tax form completion (webhook calls this)
+        var creatorAfterStart = await _service.GetCreatorByUserIdAsync(user.Id);
+        await _service.UpdateTaxFormStatusAsync(creatorAfterStart!.Id, TaxFormStatus.Completed);
+
+        // Step 3: Complete onboarding
+        var completeResult = await _service.CompleteOnboardingAsync(user.Id);
+        Assert.That(completeResult.Success, Is.True);
+        Assert.That(completeResult.IsActive, Is.True);
+
+        // Verify final state
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var finalCreator = await verifyContext.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
+        Assert.That(finalCreator!.IsActive, Is.True);
+        Assert.That(finalCreator.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+        Assert.That(finalCreator.TaxFormStatus, Is.EqualTo(TaxFormStatus.Completed));
+        Assert.That(finalCreator.PayPalEmail, Is.EqualTo("paypal@test.com"));
+        Assert.That(finalCreator.PayPalAccountAffirmed, Is.True);
+
+        _mockUserManager.Verify(x => x.AddToRoleAsync(user, "Creator"), Times.Once);
+    }
+
+    [Test]
+    public async Task FullFlow_Creator_StopSelling_ReSignUp_WithCompletedTaxForm()
+    {
+        // Full flow: active creator stops selling, then re-signs up
+        // Since they have TaxFormCompletedAt, they should be immediately re-activated
+
+        // Arrange — active creator
+        var user = new ApplicationUser { UserName = "fullflow2@test.com", Email = "fullflow2@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            TaxFormCompletedAt = DateTime.UtcNow.AddMonths(-6),
+            IsActive = true,
+            PayPalEmail = "original@paypal.com",
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // UserManager mocks — first for StopBeingCreator (remove role), then for StartOnboarding (add role)
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator"))
+            .ReturnsAsync(true); // First call: has role
+        _mockUserManager.Setup(x => x.RemoveFromRoleAsync(user, "Creator")).ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.AddToRoleAsync(user, "Creator")).ReturnsAsync(IdentityResult.Success);
+
+        // Step 1: Stop selling
+        var stopResult = await _service.StopBeingCreatorAsync(user.Id);
+        Assert.That(stopResult, Is.True);
+
+        // After stop, IsInRoleAsync should return false
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, "Creator")).ReturnsAsync(false);
+
+        // Step 2: Re-sign up
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.PayPalEmail = "new@paypal.com";
+        var startResult = await _service.StartOnboardingAsync(input);
+
+        // Assert — should be immediately active (tax form already completed)
+        Assert.That(startResult.Success, Is.True);
+        Assert.That(startResult.IsActive, Is.True);
+        Assert.That(startResult.TaxFormPending, Is.False);
+
+        // Verify final DB state
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var finalCreator = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(finalCreator!.IsActive, Is.True);
+        Assert.That(finalCreator.PayPalEmail, Is.EqualTo("new@paypal.com"));
+    }
+
+    [Test]
+    public async Task FullFlow_Creator_UpdateTaxForm_WhileActive()
+    {
+        // Creator wants to update their tax form (e.g., address changed)
+
+        // Arrange
+        var user = new ApplicationUser { UserName = "taxchange@test.com", Email = "taxchange@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            PayPalEmail = "taxchange@paypal.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.InitiateTaxFormUpdateAsync(user.Id, user.Email);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        // Verify — creator is still active, but tax form is now pending
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.IsActive, Is.True, "Creator should remain active during tax form update");
+        Assert.That(saved.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+    }
+
+    [Test]
+    public async Task FullFlow_IneligibleCreator_CannotProceed()
+    {
+        // Non-US person inside US tries to onboard — should be marked ineligible
+
+        // Arrange
+        var user = new ApplicationUser { UserName = "blocked@test.com", Email = "blocked@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.LocationCertification = CreatorLocationCertification.NonUSPersonInsideUS;
+
+        // Act
+        var result = await _service.StartOnboardingAsync(input);
+
+        // Assert — marked ineligible but not an error
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsIneligible, Is.True);
+
+        // Try to complete onboarding — should not activate
+        var completeResult = await _service.CompleteOnboardingAsync(user.Id);
+        Assert.That(completeResult.IsActive, Is.False);
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

@@ -622,4 +622,156 @@ public class CreatorService : ICreatorService
 
         return creator;
     }
+
+    /// <inheritdoc />
+    public async Task<StartOnboardingResult> StartOnboardingAsync(CreatorOnboardingInput request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PayPalEmail))
+            return StartOnboardingResult.Failure("PayPal email address is required to become a creator.");
+
+        if (!request.PayPalAccountAffirmed)
+            return StartOnboardingResult.Failure("You must affirm that you have a valid PayPal account in good standing to receive payments for streams.");
+
+        if (request.LocationCertification == CreatorLocationCertification.None)
+            return StartOnboardingResult.Failure("You must select a creator location and tax certification option.");
+
+        if (!request.AcknowledgmentAccepted)
+            return StartOnboardingResult.Failure("You must accept the acknowledgment to proceed.");
+
+        var user = await _userManager.FindByIdAsync(request.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+            return StartOnboardingResult.Failure("User must have a verified email address to become a creator.");
+
+        // Check if user already has a creator record
+        var existingCreator = await GetCreatorByUserIdAsync(request.UserId);
+        if (existingCreator != null && existingCreator.IsActive)
+            return StartOnboardingResult.Failure("You are already an active creator.");
+
+        // Create or update creator record
+        Creator creator;
+        if (existingCreator == null)
+        {
+            creator = await CreateCreatorAsync(request.UserId, request.DisplayName, request.Bio);
+        }
+        else
+        {
+            creator = existingCreator;
+            if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            {
+                await UpdateCreatorProfileAsync(creator.Id, request.DisplayName, request.Bio);
+            }
+        }
+
+        // Store attestation data
+        await UpdateLocationCertificationAsync(creator.Id, request.LocationCertification, request.AcknowledgmentAccepted);
+
+        // Handle ineligible case: non-U.S. person performing activities in the U.S.
+        if (request.LocationCertification == CreatorLocationCertification.NonUSPersonInsideUS)
+        {
+            await UpdateOnboardingStatusAsync(creator.Id, CreatorOnboardingStatus.Ineligible);
+            _logger.LogInformation("Creator {CreatorId} for user {UserId} marked as Ineligible - non-U.S. person performing activities in the U.S.",
+                creator.Id, request.UserId);
+            return new StartOnboardingResult { Success = true, IsIneligible = true };
+        }
+
+        var resetCreator = await ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
+
+        // Returning creators who have already completed a tax form can be activated immediately
+        if (resetCreator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            await ActivateCreatorAsync(creator.Id);
+            if (!await _userManager.IsInRoleAsync(user, Roles.Creator))
+            {
+                await _userManager.AddToRoleAsync(user, Roles.Creator);
+            }
+
+            _logger.LogInformation("Returning creator re-activated for user {UserId} (tax form already completed), PayPal email: {PayPalEmail}",
+                request.UserId, request.PayPalEmail);
+
+            return new StartOnboardingResult { Success = true, IsActive = true };
+        }
+
+        // New creator or returning creator without completed tax form — set up for tax form submission
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            await UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
+        }
+        await UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
+
+        _logger.LogInformation("Started creator onboarding for user {UserId}, PayPal email: {PayPalEmail}, PayPal affirmed: {PayPalAffirmed}",
+            request.UserId, request.PayPalEmail, request.PayPalAccountAffirmed);
+
+        return new StartOnboardingResult { Success = true, TaxFormPending = true };
+    }
+
+    /// <inheritdoc />
+    public async Task<CompleteOnboardingResult> CompleteOnboardingAsync(int userId)
+    {
+        var creator = await GetCreatorByUserIdAsync(userId);
+        if (creator == null)
+            return CompleteOnboardingResult.Failure("Creator record not found. Please start the onboarding process first.");
+
+        if (!creator.PayPalAccountAffirmed)
+            return CompleteOnboardingResult.Failure("Please complete the creator signup process first.");
+
+        if (creator.OnboardingStatus == CreatorOnboardingStatus.Completed &&
+            creator.TaxFormStatus == TaxFormStatus.Completed)
+        {
+            // Activate the creator if not already active
+            if (!creator.IsActive)
+            {
+                await ActivateCreatorAsync(creator.Id);
+            }
+
+            // Add Creator role if user doesn't already have it
+            var user = await _userManager.FindByIdAsync(userId.ToString());
+            if (user != null && !await _userManager.IsInRoleAsync(user, Roles.Creator))
+            {
+                await _userManager.AddToRoleAsync(user, Roles.Creator);
+                _logger.LogInformation("Added Creator role to user {UserId}", userId);
+            }
+
+            // Reload to get the latest state
+            var updatedCreator = await GetCreatorByUserIdAsync(userId);
+
+            return new CompleteOnboardingResult
+            {
+                Success = true,
+                IsActive = updatedCreator?.IsActive ?? false,
+                PaymentsReceivable = updatedCreator?.PaymentsReceivable ?? false,
+                PrimaryEmailConfirmed = updatedCreator?.PrimaryEmailConfirmed ?? false
+            };
+        }
+
+        _logger.LogInformation("Checked creator onboarding status for user {UserId}, IsActive: {IsActive}", userId, creator.IsActive);
+
+        return new CompleteOnboardingResult
+        {
+            Success = true,
+            IsActive = creator.IsActive,
+            PaymentsReceivable = creator.PaymentsReceivable,
+            PrimaryEmailConfirmed = creator.PrimaryEmailConfirmed
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<InitiateTaxFormUpdateResult> InitiateTaxFormUpdateAsync(int userId, string? email)
+    {
+        var creator = await GetCreatorByUserIdAsync(userId);
+        if (creator == null || !creator.IsActive)
+            return InitiateTaxFormUpdateResult.Failure("You must be an active creator to update your tax form.");
+
+        // Set tax form status to Pending so the embedded form page can load
+        await UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
+
+        // Update the PayeeRef (email) for the new request
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            await UpdateTaxBanditsPayeeRefAsync(creator.Id, email);
+        }
+
+        _logger.LogInformation("Creator {CreatorId} initiated tax form update for user {UserId}", creator.Id, userId);
+
+        return new InitiateTaxFormUpdateResult { Success = true };
+    }
 }

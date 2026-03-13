@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <PackageReference Include="Fido2" Version="4.0.0" />
+    <!-- Pin transitive dep from Fido2 → Fido2.Models to fix CVE-2026-26127 -->
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
     <PackageReference Include="Hangfire.Core" Version="1.8.23" />
     <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />

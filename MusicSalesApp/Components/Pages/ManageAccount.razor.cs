@@ -911,95 +911,48 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         try
         {
-            // Validate PayPal email is provided
-            if (string.IsNullOrWhiteSpace(_creatorPayPalEmail))
-            {
-                _errorMessage = "Please enter your PayPal email address before starting onboarding.";
-                _startingOnboarding = false;
-                return;
-            }
-
-            // Validate PayPal account affirmation
-            if (!_paypalAccountAffirmed)
-            {
-                _errorMessage = "Please confirm that you have a valid PayPal account in good standing.";
-                _startingOnboarding = false;
-                return;
-            }
-
-            // Validate location certification
-            if (_locationCertification == "None")
-            {
-                _errorMessage = "Please select a creator location and tax certification option.";
-                _startingOnboarding = false;
-                return;
-            }
-
-            // Validate acknowledgment
-            if (!_acknowledgmentAccepted)
-            {
-                _errorMessage = "Please accept the acknowledgment to proceed.";
-                _startingOnboarding = false;
-                return;
-            }
-
             // Parse the location certification enum value
-            var locationCertEnum = Enum.Parse<CreatorLocationCertification>(_locationCertification);
-
-            var response = await Http.PostAsJsonAsync("api/creator/start-onboarding", new
+            if (!Enum.TryParse<CreatorLocationCertification>(_locationCertification, out var locationCertEnum))
             {
+                locationCertEnum = CreatorLocationCertification.None;
+            }
+
+            var result = await CreatorService.StartOnboardingAsync(new CreatorOnboardingInput
+            {
+                UserId = _currentUser.Id,
+                UserEmail = _currentUser.Email,
                 DisplayName = _creatorDisplayName,
                 Bio = _creatorBio,
                 PayPalEmail = _creatorPayPalEmail,
                 PayPalAccountAffirmed = _paypalAccountAffirmed,
-                LocationCertification = (int)locationCertEnum,
+                LocationCertification = locationCertEnum,
                 AcknowledgmentAccepted = _acknowledgmentAccepted
             });
 
-            if (response.IsSuccessStatusCode)
+            if (!result.Success)
             {
-                var result = await response.Content.ReadFromJsonAsync<StartCreatorOnboardingResponse>();
-                if (result != null && result.Success)
-                {
-                    if (result.IsIneligible)
-                    {
-                        _errorMessage = "At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.";
-                        await LoadCreatorStatus();
-                    }
-                    else if (result.IsActive)
-                    {
-                        _successMessage = "Congratulations! Your creator account is now active. You can start uploading music!";
-                        await LoadCreatorStatus();
-                    }
-                    else if (result.TaxFormPending)
-                    {
-                        // Navigate to the embedded tax form page
-                        NavigationManager.NavigateTo("/submittaxform");
-                        return;
-                    }
-                    else
-                    {
-                        _successMessage = "Your creator signup is being processed. Please check back soon.";
-                        await LoadCreatorStatus();
-                    }
-                }
-                else
-                {
-                    _errorMessage = "Failed to start creator onboarding. Please try again.";
-                }
+                _errorMessage = result.ErrorMessage ?? "Failed to start creator onboarding. Please try again.";
             }
-            else
+            else if (result.IsIneligible)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to start creator onboarding: {error}";
+                _errorMessage = "At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.";
+                await LoadCreatorStatus();
+            }
+            else if (result.IsActive)
+            {
+                _successMessage = "Congratulations! Your creator account is now active. You can start uploading music!";
+                await LoadCreatorStatus();
+            }
+            else if (result.TaxFormPending)
+            {
+                NavigationManager.NavigateTo("/submittaxform");
+                return;
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error starting creator onboarding");
-            _errorMessage = $"Error starting creator onboarding. Please refresh the page to see your current status.";
-            // The server may have partially completed the onboarding before the error
-            // (e.g. client timeout while server continued). Refresh the UI state.
+            _errorMessage = "Error starting creator onboarding. Please refresh the page to see your current status.";
             await LoadCreatorStatus();
         }
         finally
@@ -1018,41 +971,26 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/creator/complete-onboarding", new
-            {
-                MerchantId = (string)null // Will be retrieved from PayPal
-            });
+            var result = await CreatorService.CompleteOnboardingAsync(_currentUser.Id);
 
-            if (response.IsSuccessStatusCode)
+            if (!result.Success)
             {
-                var result = await response.Content.ReadFromJsonAsync<CompleteCreatorOnboardingResponse>();
-                if (result != null && result.Success)
-                {
-                    if (result.IsActive)
-                    {
-                        _successMessage = "Congratulations! Your creator account is now active. You can start uploading and selling your music!";
-                        _isActiveCreator = true;
-                        _creatorOnboardingStatus = "Completed";
-                    }
-                    else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
-                    {
-                        _successMessage = "Your PayPal account is being verified. Please check back soon.";
-                        _creatorOnboardingStatus = "InProgress";
-                    }
-                    else
-                    {
-                        _errorMessage = "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.";
-                    }
-                }
-                else
-                {
-                    _errorMessage = "Could not verify your PayPal setup. Please try again.";
-                }
+                _errorMessage = result.ErrorMessage ?? "Could not verify your creator setup. Please try again.";
+            }
+            else if (result.IsActive)
+            {
+                _successMessage = "Congratulations! Your creator account is now active. You can start uploading and selling your music!";
+                _isActiveCreator = true;
+                _creatorOnboardingStatus = "Completed";
+            }
+            else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
+            {
+                _successMessage = "Your PayPal account is being verified. Please check back soon.";
+                _creatorOnboardingStatus = "InProgress";
             }
             else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to complete creator onboarding: {error}";
+                _errorMessage = "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.";
             }
 
             await LoadCreatorStatus();
@@ -1083,17 +1021,16 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         try
         {
-            var response = await Http.PostAsync("api/creator/initiate-tax-form-update", null);
+            var result = await CreatorService.InitiateTaxFormUpdateAsync(_currentUser.Id, _currentUser.Email);
 
-            if (response.IsSuccessStatusCode)
+            if (result.Success)
             {
                 NavigationManager.NavigateTo("/submittaxform");
                 return;
             }
             else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to initiate tax form update: {error}";
+                _errorMessage = result.ErrorMessage ?? "Failed to initiate tax form update.";
             }
         }
         catch (Exception ex)
@@ -1163,9 +1100,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         try
         {
-            var response = await Http.PostAsync("api/creator/stop-selling", null);
-
-            if (response.IsSuccessStatusCode)
+            var success = await CreatorService.StopBeingCreatorAsync(_currentUser.Id);
+            if (success)
             {
                 _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
                 _isActiveCreator = false;
@@ -1174,8 +1110,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             }
             else
             {
-                var error = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to stop being a creator: {error}";
+                _errorMessage = "You are not currently a creator or there was an error processing your request.";
             }
 
             await LoadCreatorStatus();
