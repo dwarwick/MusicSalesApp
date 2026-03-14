@@ -16,9 +16,10 @@ namespace MusicSalesApp.Services
         private readonly string _domain;
         private readonly string _fromEmail;
         private readonly string _displayName;
+        private readonly string _userName;
         private readonly string _password;
-        private readonly string _server;
-
+        private readonly string _server;        
+    
         // Spam filter error message patterns - more specific to avoid false positives
         // These patterns match common SMTP server responses for spam-related rejections
         private static readonly string[] SpamFilterPatterns = new[]
@@ -40,6 +41,7 @@ namespace MusicSalesApp.Services
             _domain = emailSettings["Domain"] ?? string.Empty;
             _fromEmail = emailSettings["CustomerServiceEmail"] ?? string.Empty;
             _displayName = emailSettings["DisplayName"] ?? "StreamTunes";
+            _userName = emailSettings["Username"] ?? string.Empty;
             _password = emailSettings["Password"] ?? string.Empty;
             _server = emailSettings["Server"] ?? string.Empty;
 
@@ -261,7 +263,7 @@ namespace MusicSalesApp.Services
 
                 using var client = new SmtpClient(_server);
                 client.Port = 587;
-                client.Credentials = new NetworkCredential(_fromEmail, _password);
+                client.Credentials = new NetworkCredential(_userName, _password);
                 client.EnableSsl = true;
                 client.DeliveryMethod = SmtpDeliveryMethod.Network;
                 client.Timeout = 30000; // 30 seconds timeout
