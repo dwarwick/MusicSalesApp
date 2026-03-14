@@ -19,7 +19,7 @@ namespace MusicSalesApp.Components.Pages;
 
 public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 {
-    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB, loaded from settings
     private const string PriceFormat = "F2";
     private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
@@ -34,6 +34,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected IGenreService GenreService { get; set; }
     [Inject] protected IEmailService EmailService { get; set; }
     [Inject] protected IConfiguration Configuration { get; set; }
+    [Inject] protected IAppSettingsService AppSettingsService { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -75,6 +76,17 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     {
         try
         {
+            // Load max image upload size from settings
+            try
+            {
+                var sizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+                _maxImageFileSize = (long)sizeMB * 1024 * 1024;
+            }
+            catch
+            {
+                // Use default if setting cannot be loaded
+            }
+
             // Load genres from database
             await LoadGenresAsync();
 
@@ -319,7 +331,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // Upload new images if provided
             else if (_songImageFile != null)
             {
-                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: _maxImageFileSize);
                 
                 // Get the file extension from the uploaded file
                 var fileExtension = Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
@@ -468,7 +480,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _validationErrors.Add($"Error saving changes: {ex.Message}");
+            _validationErrors.Add($"Error saving changes: {FileSizeHelper.FormatFileSizeExceptionMessage(ex.Message)}");
         }
         finally
         {

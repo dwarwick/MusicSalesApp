@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -10,7 +11,7 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 {
-    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB, loaded from settings
     private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
     protected bool _loading = true;
@@ -55,6 +56,17 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             _hasLoadedData = true;
             try
             {
+                // Load max image upload size from settings
+                try
+                {
+                    var sizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+                    _maxImageFileSize = (long)sizeMB * 1024 * 1024;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "CreatorSongManagement: Failed to load max image upload size setting. Using default.");
+                }
+
                 // Load genres from database
                 await LoadGenresAsync();
 
@@ -413,7 +425,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     // Handle image upload if provided
                     else if (_songImageFile != null)
                     {
-                        using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                        using var stream = _songImageFile.OpenReadStream(maxAllowedSize: _maxImageFileSize);
                         
                         // Get the file extension from the uploaded file
                         var fileExtension = System.IO.Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
@@ -508,7 +520,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _validationErrors.Add($"Error saving changes: {ex.Message}");
+            _validationErrors.Add($"Error saving changes: {FileSizeHelper.FormatFileSizeExceptionMessage(ex.Message)}");
         }
         finally
         {

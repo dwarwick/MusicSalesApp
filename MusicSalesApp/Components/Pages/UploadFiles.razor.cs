@@ -51,7 +51,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private const int ChunkSize = 8;
     private const int ImageOcrChunkSize = 4; // Max images buffered at once during the OCR matching phase
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
-    private const long MaxOcrImageSizeBytes = 20 * 1024 * 1024; // 20 MB per cover art image
+
+    private long _maxAudioFileSize = 100 * 1024 * 1024; // default 100 MB, loaded from settings
+    protected int _maxAudioUploadSizeMBDisplay = 100; // MB value for display in UI
+    private long _maxImageFileSize = 20 * 1024 * 1024; // default 20 MB, loaded from settings
+    protected int _maxImageUploadSizeMBDisplay = 20; // MB value for display in UI
 
     private static readonly string[] ValidAudioExtensions = MusicFileExtensions.ValidAudioExtensions;
     private static readonly string[] ValidCoverArtExtensions = MusicFileExtensions.ValidCoverArtExtensions;
@@ -64,6 +68,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             _hasLoadedCreatorId = true;
             await LoadCreatorIdAsync();
+            await LoadMaxAudioFileSizeAsync();
         }
     }
 
@@ -102,6 +107,29 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             Logger.LogError(ex, "UploadFiles: Failed to determine creator status");
             _currentCreatorId = null;
+        }
+    }
+
+    /// <summary>
+    /// Loads the maximum audio and image file upload sizes from the application settings.
+    /// </summary>
+    private async Task LoadMaxAudioFileSizeAsync()
+    {
+        try
+        {
+            var audioSizeMB = await AppSettingsService.GetMaxAudioUploadSizeMBAsync();
+            _maxAudioFileSize = (long)audioSizeMB * 1024 * 1024;
+            _maxAudioUploadSizeMBDisplay = audioSizeMB;
+
+            var imageSizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+            _maxImageFileSize = (long)imageSizeMB * 1024 * 1024;
+            _maxImageUploadSizeMBDisplay = imageSizeMB;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to load max upload size settings. Using defaults.");
         }
     }
 
@@ -392,7 +420,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem, string normalizedName)
     {
-        const long maxFileSize = 100 * 1024 * 1024; // 100 MB
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
 
         MemoryStream audioMemoryStream = null;
@@ -419,7 +446,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Buffer the audio file
             audioMemoryStream = new MemoryStream();
-            await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
+            await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
             {
                 await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
             }
@@ -470,7 +497,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Upload failed";
-            uploadItem.ErrorMessage = ex.Message;
+            uploadItem.ErrorMessage = FileSizeHelper.FormatFileSizeExceptionMessage(ex.Message);
         }
         finally
         {
@@ -482,7 +509,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, byte[] coverArtBytes, string coverArtContentType, UploadPairItem uploadItem, string normalizedName)
     {
-        const long maxFileSize = 100 * 1024 * 1024; // 100 MB
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
 
         MemoryStream audioMemoryStream = null;
@@ -512,7 +538,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // In Blazor Server, BrowserFileStream has a timeout and only one stream can be
             // actively read at a time, so we buffer sequentially into memory.
             audioMemoryStream = new MemoryStream();
-            await using (var audioStream = audioFile.OpenReadStream(maxFileSize))
+            await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
             {
                 await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
             }
@@ -532,7 +558,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 // Image not pre-buffered: buffer it now — this is the first (and only) read of this
                 // IBrowserFile stream, so there is no risk of the "There is no file with ID X" error.
                 coverArtMemoryStream = new MemoryStream();
-                await using (var coverArtStream = coverArtFile.OpenReadStream(MaxOcrImageSizeBytes))
+                await using (var coverArtStream = coverArtFile.OpenReadStream(_maxImageFileSize))
                 {
                     await coverArtStream.CopyToAsync(coverArtMemoryStream, bufferSize, _uploadCts.Token);
                 }
@@ -603,7 +629,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Upload failed";
-            uploadItem.ErrorMessage = ex.Message;
+            uploadItem.ErrorMessage = FileSizeHelper.FormatFileSizeExceptionMessage(ex.Message);
         }
         finally
         {
@@ -742,7 +768,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             try
             {
                 using var ms = new MemoryStream();
-                await using var stream = kvp.Value.OpenReadStream(MaxOcrImageSizeBytes);
+                await using var stream = kvp.Value.OpenReadStream(_maxImageFileSize);
                 await stream.CopyToAsync(ms, bufferSize, _uploadCts.Token);
                 var extension = Path.GetExtension(kvp.Key).ToLowerInvariant();
                 var contentType = extension switch
