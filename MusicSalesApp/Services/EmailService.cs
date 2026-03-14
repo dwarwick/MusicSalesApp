@@ -77,7 +77,7 @@ namespace MusicSalesApp.Services
 
             try
             {
-                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for verification email to {Email}", email);
                     return EmailResult.MissingConfiguration();
@@ -126,7 +126,7 @@ namespace MusicSalesApp.Services
 
             try
             {
-                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for password reset email to {Email}", email);
                     return EmailResult.MissingConfiguration();
@@ -183,7 +183,7 @@ namespace MusicSalesApp.Services
 
             try
             {
-                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
+                if (string.IsNullOrEmpty(_fromEmail) || string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password) || string.IsNullOrEmpty(_server))
                 {
                     _logger.LogError("Email configuration is missing required values for async email to {Email}", toEmail);
                     return EmailResult.MissingConfiguration();
