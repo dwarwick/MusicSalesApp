@@ -20,6 +20,10 @@ public class ApplicationUser : IdentityUser<int>
     public bool IsSubscriptionBlocked { get; set; } = false;
     public DateTime? SubscriptionBlockedAt { get; set; }
 
+    // Tip block (set automatically when a tip chargeback is received)
+    public bool IsTipBlocked { get; set; } = false;
+    public DateTime? TipBlockedAt { get; set; }
+
     // Email preferences - user opt-in to receive new song notification emails
     public bool ReceiveNewSongEmails { get; set; } = false;
 }

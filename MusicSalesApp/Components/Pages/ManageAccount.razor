@@ -77,8 +77,8 @@
             </CardContent>
         </SfCard>
 
-        <!-- Payout Email Section (for creators) -->
-        @if (_isCreator)
+        <!-- Payout Email Section (for active creators only — during onboarding, the PayPal email is collected in the onboarding form) -->
+        @if (_isActiveCreator)
         {
             <SfCard CssClass="mb-4">
                 <CardHeader Title="Payout Email Address" />

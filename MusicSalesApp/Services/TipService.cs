@@ -63,6 +63,10 @@ public class TipService : ITipService
         if (user == null)
             return (false, "User not found.");
 
+        // Check if user's tipping privileges have been revoked due to a previous chargeback
+        if (user.IsTipBlocked)
+            return (false, "Your tipping privileges have been revoked due to a previous chargeback.");
+
         var accountCreated = await context.UserHistories
             .Where(uh => uh.UserId == tipperUserId && uh.EventType == UserHistoryEventTypes.Registration)
             .Select(uh => uh.OccurredAt)

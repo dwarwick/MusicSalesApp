@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Data;
@@ -13,6 +14,7 @@ public class SongStatusServiceTests
     private Mock<ILogger<SongStatusService>> _mockLogger;
     private Mock<IEmailService> _mockEmailService;
     private Mock<IAzureStorageService> _mockAzureStorageService;
+    private Mock<IConfiguration> _mockConfiguration;
     private IDbContextFactory<AppDbContext> _contextFactory;
     private SongStatusService _service;
     private AppDbContext _context;
@@ -23,6 +25,10 @@ public class SongStatusServiceTests
         _mockLogger = new Mock<ILogger<SongStatusService>>();
         _mockEmailService = new Mock<IEmailService>();
         _mockAzureStorageService = new Mock<IAzureStorageService>();
+        _mockConfiguration = new Mock<IConfiguration>();
+
+        // Setup configuration
+        _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
 
         // Setup email service to return success
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -44,7 +50,8 @@ public class SongStatusServiceTests
             _contextFactory, 
             _mockLogger.Object, 
             _mockEmailService.Object,
-            _mockAzureStorageService.Object);
+            _mockAzureStorageService.Object,
+            _mockConfiguration.Object);
     }
 
     [TearDown]

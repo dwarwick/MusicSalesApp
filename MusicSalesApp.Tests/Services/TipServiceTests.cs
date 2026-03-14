@@ -1293,4 +1293,76 @@ public class TipServiceTests
     {
         Assert.That(TipStatus.Cancelled.ToString(), Is.EqualTo("Cancelled"));
     }
+
+    // ==================== Tip Block Tests ====================
+
+    [Test]
+    public async Task ValidateTipAsync_TipBlocked_ReturnsFalse()
+    {
+        // Arrange - create a tip-blocked user
+        var user = new ApplicationUser
+        {
+            Id = 100, UserName = "blocked@test.com", Email = "blocked@test.com",
+            NormalizedEmail = "BLOCKED@TEST.COM", NormalizedUserName = "BLOCKED@TEST.COM",
+            IsTipBlocked = true, TipBlockedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        var creatorUser = new ApplicationUser
+        {
+            Id = 200, UserName = "creator2@test.com", Email = "creator2@test.com",
+            NormalizedEmail = "CREATOR2@TEST.COM", NormalizedUserName = "CREATOR2@TEST.COM"
+        };
+        _context.Users.AddRange(user, creatorUser);
+        var creator = new Creator { Id = 10, UserId = 200, IsActive = true, DisplayName = "Creator2", PayPalEmail = "creator2@test.com" };
+        _context.Creators.Add(creator);
+        _context.UserHistories.Add(new UserHistory
+        {
+            UserId = 100, UserEmail = "blocked@test.com",
+            EventType = UserHistoryEventTypes.Registration,
+            Description = "User registered",
+            OccurredAt = DateTime.UtcNow.AddDays(-30)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(100, 10, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.False);
+        Assert.That(error, Does.Contain("tipping privileges have been revoked"));
+    }
+
+    [Test]
+    public async Task ValidateTipAsync_TipNotBlocked_ReturnsCanTip()
+    {
+        // Arrange - create a user that is NOT tip-blocked
+        var user = new ApplicationUser
+        {
+            Id = 101, UserName = "notblocked@test.com", Email = "notblocked@test.com",
+            NormalizedEmail = "NOTBLOCKED@TEST.COM", NormalizedUserName = "NOTBLOCKED@TEST.COM",
+            IsTipBlocked = false
+        };
+        var creatorUser = new ApplicationUser
+        {
+            Id = 201, UserName = "creator3@test.com", Email = "creator3@test.com",
+            NormalizedEmail = "CREATOR3@TEST.COM", NormalizedUserName = "CREATOR3@TEST.COM"
+        };
+        _context.Users.AddRange(user, creatorUser);
+        var creator = new Creator { Id = 11, UserId = 201, IsActive = true, DisplayName = "Creator3", PayPalEmail = "creator3@test.com" };
+        _context.Creators.Add(creator);
+        _context.UserHistories.Add(new UserHistory
+        {
+            UserId = 101, UserEmail = "notblocked@test.com",
+            EventType = UserHistoryEventTypes.Registration,
+            Description = "User registered",
+            OccurredAt = DateTime.UtcNow.AddDays(-30)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var (canTip, error) = await _service.ValidateTipAsync(101, 11, 5.00m, null, null);
+
+        // Assert
+        Assert.That(canTip, Is.True);
+        Assert.That(error, Is.Null);
+    }
 }

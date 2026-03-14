@@ -69,11 +69,11 @@ else
                     </Template>
                 </GridColumn>
                 <GridColumn Field="@nameof(UserViewModel.Roles)" HeaderText="Roles" Width="150"></GridColumn>
-                <GridColumn Field="@nameof(UserViewModel.IsCreator)" HeaderText="Is Creator" Width="100">
+                <GridColumn Field="@nameof(UserViewModel.CreatorIsActive)" HeaderText="Active Creator" Width="120">
                     <Template>
                         @{
                             var user = (context as UserViewModel);
-                            if (user!.IsCreator)
+                            if (user!.CreatorIsActive)
                             {
                                 <span class="badge bg-info">Yes</span>
                             }
@@ -88,7 +88,7 @@ else
                     <Template>
                         @{
                             var user = (context as UserViewModel);
-                            if (!user!.IsCreator)
+                            if (!user!.HasCreatorRecord)
                             {
                                 <span class="text-muted">-</span>
                             }
@@ -113,7 +113,7 @@ else
                     <Template>
                         @{
                             var user = (context as UserViewModel);
-                            if (!user!.IsCreator)
+                            if (!user!.HasCreatorRecord)
                             {
                                 <span class="text-muted">-</span>
                             }
@@ -135,7 +135,7 @@ else
                     <Template>
                         @{
                             var user = (context as UserViewModel);
-                            if (!user!.IsCreator)
+                            if (!user!.HasCreatorRecord)
                             {
                                 <span class="text-muted">-</span>
                             }
@@ -170,6 +170,36 @@ else
                         @{
                             var user = (context as UserViewModel);
                             if (user!.IsSubscriptionBlocked)
+                            {
+                                <span class="badge bg-danger">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.SubscriptionStatus)" HeaderText="Sub Status" Width="130">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            var badgeClass = user!.SubscriptionStatus switch
+                            {
+                                "Active" => "bg-success",
+                                "Cancelled" => "bg-warning",
+                                "Blocked" => "bg-danger",
+                                _ => "bg-secondary"
+                            };
+                            <span class="badge @badgeClass">@user.SubscriptionStatus</span>
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.IsTipBlocked)" HeaderText="Tip Blocked" Width="120">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.IsTipBlocked)
                             {
                                 <span class="badge bg-danger">Yes</span>
                             }
@@ -280,6 +310,21 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(UserViewModel.TipBlockedAt)" HeaderText="Tip Blocked At" Width="180">
+                    <Template>
+                        @{
+                            var user = (context as UserViewModel);
+                            if (user!.TipBlockedAt.HasValue)
+                            {
+                                <span>@user.TipBlockedAt.Value.ToString("g")</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
             </GridColumns>
         </SfGrid>
 
@@ -371,6 +416,12 @@ else
 
                     <div class="row mb-3">
                         <div class="col-md-6">
+                            <SfCheckBox @bind-Checked="_editIsTipBlocked" Label="Tip Blocked" CssClass="e-outline"></SfCheckBox>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
                             <label class="e-label">Access Failed Count</label>
                             <SfTextBox Value="@_editingUser.AccessFailedCount.ToString()" Enabled="false" CssClass="e-outline" />
                         </div>
@@ -410,7 +461,7 @@ else
                         </div>
                     </div>
 
-                    @if (_editingUser.IsCreator)
+                    @if (_editingUser.HasCreatorRecord)
                     {
                         <hr />
                         <h5>Creator Settings</h5>

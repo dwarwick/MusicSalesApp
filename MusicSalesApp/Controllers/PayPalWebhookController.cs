@@ -451,6 +451,14 @@ public class PayPalWebhookController : ControllerBase
                 notes.AppendLine(warningMsg);
             }
 
+            // 2b. Block tipper from sending future tips
+            if (tip.TipperUser != null)
+            {
+                tip.TipperUser.IsTipBlocked = true;
+                tip.TipperUser.TipBlockedAt = DateTime.UtcNow;
+                notes.AppendLine("Tipper has been blocked from sending future tips.");
+            }
+
             await context.SaveChangesAsync();
 
             // 3. Issue refund
@@ -496,7 +504,20 @@ public class PayPalWebhookController : ControllerBase
             await SendAdminChargebackNotificationAsync(disputeId, reason, stage, channel, amountStr,
                 sellerTransactionId, userEmail, "PROCESSED_TIP", adminAction);
 
-            // 6. If tip was already paid out, send email to creator/artist and admin about manual payout reversal
+            // 6. Send tipper chargeback email (for all tip chargebacks)
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                try
+                {
+                    await SendTipperChargebackEmailAsync(userEmail, disputeId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send tip chargeback email to tipper {Email}", userEmail);
+                }
+            }
+
+            // 7. If tip was already paid out, send email to creator/artist and admin about manual payout reversal
             if (previousStatus == TipStatus.Paid)
             {
                 try
@@ -822,7 +843,7 @@ public class PayPalWebhookController : ControllerBase
                         <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Dispute Reference:</strong> {System.Web.HttpUtility.HtmlEncode(disputeId ?? "N/A")}</p>
                     </div>
                     <p style='font-size: 16px; color: #333;'>If you believe this chargeback was filed in error, please contact our support team for assistance.</p>
-                    <p style='font-size: 14px; color: #999;'>StreamTunes Support: support@streamtunes.net</p>
+                    <p style='font-size: 14px; color: #999;'>StreamTunes Support: {_configuration["EmailSettings:CustomerServiceEmail"]}</p>
                 </div>
             </div>";
 
@@ -831,6 +852,38 @@ public class PayPalWebhookController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send chargeback notification email to {Email}", userEmail);
+        }
+    }
+
+    private async Task SendTipperChargebackEmailAsync(string userEmail, string? disputeId)
+    {
+        try
+        {
+            var logoUrl = _emailService.GetLogoUrl();
+            var subject = "StreamTunes - Tip Chargeback: Tipping Privileges Revoked";
+
+            var body = $@"
+            <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+                <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                    <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>Tipping Privileges Revoked</h1>
+                </div>
+                <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                    <p style='font-size: 16px; color: #333;'>A chargeback has been filed on a tip payment from your account.</p>
+                    <div style='background-color: #fff3f3; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc3545;'>
+                        <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Dispute Reference:</strong> {System.Web.HttpUtility.HtmlEncode(disputeId ?? "N/A")}</p>
+                    </div>
+                    <p style='font-size: 16px; color: #333;'>As a result, your ability to send tips on StreamTunes has been <strong>permanently revoked</strong>. You will no longer be permitted to tip any creator on the platform.</p>
+                    <p style='font-size: 16px; color: #333;'>If you believe this chargeback was filed in error, please contact our support team for assistance.</p>
+                    <p style='font-size: 14px; color: #999;'>StreamTunes Support: {_configuration["EmailSettings:CustomerServiceEmail"]}</p>
+                </div>
+            </div>";
+
+            await _emailService.SendEmailAsync(userEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send tip chargeback notification email to {Email}", userEmail);
         }
     }
 

@@ -55,7 +55,6 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string _accountActionConfirmEmail = string.Empty;
 
     // Creator fields
-    protected bool _isCreator = false;
     protected bool _isActiveCreator = false;
     protected string _creatorOnboardingStatus = null;
     protected string _creatorTaxFormStatus = null;
@@ -762,7 +761,6 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
             if (creator != null)
             {
-                _isCreator = true;
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
@@ -798,7 +796,6 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             }
             else
             {
-                _isCreator = false;
                 _isActiveCreator = false;
                 _creatorOnboardingStatus = null;
                 _creatorTaxFormStatus = null;

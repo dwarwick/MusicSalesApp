@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -35,6 +36,7 @@ public class AdminUserManagementModel : BlazorBase
     protected DateTimeOffset? _editLockoutEnd = null;
     protected bool _editIsSuspended = false;
     protected bool _editIsSubscriptionBlocked = false;
+    protected bool _editIsTipBlocked = false;
     protected string _editTheme = string.Empty;
     protected List<string> _editSelectedRoles = new();
     protected List<string> _availableRoles = new();
@@ -81,10 +83,29 @@ public class AdminUserManagementModel : BlazorBase
         var userRoles = await context.UserRoles.ToListAsync();
         var roles = await context.Roles.ToListAsync();
         var creators = await context.Creators.ToListAsync();
+        var subscriptions = await context.Subscriptions.ToListAsync();
 
         _users = users.Select(u => 
         {
             var creator = creators.FirstOrDefault(c => c.UserId == u.Id);
+            var latestSub = subscriptions
+                .Where(s => s.UserId == u.Id)
+                .OrderByDescending(s => s.CreatedAt)
+                .FirstOrDefault();
+
+            string subStatus;
+            if (u.IsSubscriptionBlocked)
+                subStatus = "Blocked";
+            else if (latestSub != null && latestSub.Status == SubscriptionStatuses.Active
+                     && (latestSub.EndDate == null || latestSub.EndDate > DateTime.UtcNow))
+                subStatus = "Active";
+            else if (latestSub != null && (latestSub.Status == SubscriptionStatuses.Cancelled
+                     || latestSub.Status == SubscriptionStatuses.Suspended
+                     || latestSub.Status == SubscriptionStatuses.Expired))
+                subStatus = "Cancelled";
+            else
+                subStatus = "Not Subscribed";
+
             return new UserViewModel
             {
                 Id = u.Id,
@@ -102,12 +123,15 @@ public class AdminUserManagementModel : BlazorBase
                 SuspendedAt = u.SuspendedAt,
                 IsSubscriptionBlocked = u.IsSubscriptionBlocked,
                 SubscriptionBlockedAt = u.SubscriptionBlockedAt,
+                IsTipBlocked = u.IsTipBlocked,
+                TipBlockedAt = u.TipBlockedAt,
+                SubscriptionStatus = subStatus,
                 Roles = string.Join(RolesDelimiter, userRoles
                     .Where(ur => ur.UserId == u.Id)
                     .Join(roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
                     .Where(r => r != null)),
                 // Creator status fields
-                IsCreator = creator != null,
+                HasCreatorRecord = creator != null,
                 CreatorId = creator?.Id,
                 PayPalOnboardingStatus = creator?.OnboardingStatus,
                 PayPalOnboardingStatusDisplay = creator?.OnboardingStatus.ToString() ?? "-",
@@ -137,6 +161,7 @@ public class AdminUserManagementModel : BlazorBase
         _editLockoutEnd = user.LockoutEnd;
         _editIsSuspended = user.IsSuspended;
         _editIsSubscriptionBlocked = user.IsSubscriptionBlocked;
+        _editIsTipBlocked = user.IsTipBlocked;
         _editTheme = user.Theme ?? "Light";
         _editSelectedRoles = user.Roles.Split(RolesDelimiter, StringSplitOptions.RemoveEmptyEntries).ToList();
         _selectedRoleToAdd = null;
@@ -220,6 +245,8 @@ public class AdminUserManagementModel : BlazorBase
             user.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
             user.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
             user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? DateTime.UtcNow : null;
+            user.IsTipBlocked = _editIsTipBlocked;
+            user.TipBlockedAt = _editIsTipBlocked ? DateTime.UtcNow : null;
             user.Theme = _editTheme;
 
             // Update roles
@@ -242,7 +269,7 @@ public class AdminUserManagementModel : BlazorBase
             }
 
             // Update creator status if user is a creator
-            if (_editingUser.IsCreator && _editingUser.CreatorId.HasValue)
+            if (_editingUser.HasCreatorRecord && _editingUser.CreatorId.HasValue)
             {
                 var creator = await context.Creators.FindAsync(_editingUser.CreatorId.Value);
                 if (creator != null)
@@ -299,6 +326,19 @@ public class AdminUserManagementModel : BlazorBase
 
             await context.SaveChangesAsync();
 
+            // Send tip re-enabled email if admin just unblocked tipping
+            if (_editingUser.IsTipBlocked && !_editIsTipBlocked)
+            {
+                try
+                {
+                    await SendTipReenabledEmailAsync(_editEmail);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to send tip re-enabled email to {Email}", _editEmail);
+                }
+            }
+
             // Update local model
             _editingUser.Email = _editEmail;
             _editingUser.EmailConfirmed = _editEmailConfirmed;
@@ -310,11 +350,13 @@ public class AdminUserManagementModel : BlazorBase
             _editingUser.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
             _editingUser.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
             _editingUser.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? DateTime.UtcNow : null;
+            _editingUser.IsTipBlocked = _editIsTipBlocked;
+            _editingUser.TipBlockedAt = _editIsTipBlocked ? DateTime.UtcNow : null;
             _editingUser.Theme = _editTheme;
             _editingUser.Roles = string.Join(RolesDelimiter, _editSelectedRoles);
 
             // Update creator status in local model
-            if (_editingUser.IsCreator)
+            if (_editingUser.HasCreatorRecord)
             {
                 _editingUser.PayPalOnboardingStatus = _editPayPalOnboardingStatus;
                 _editingUser.PayPalOnboardingStatusDisplay = _editPayPalOnboardingStatus?.ToString() ?? "-";
@@ -338,6 +380,31 @@ public class AdminUserManagementModel : BlazorBase
         }
     }
 
+    private async Task SendTipReenabledEmailAsync(string userEmail)
+    {
+        var logoUrl = EmailService.GetLogoUrl();
+        var baseUrl = EmailService.GetAppBaseUrl();
+        var subject = "StreamTunes - Tipping Privileges Restored";
+
+        var body = $@"
+        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+            <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>Tipping Privileges Restored</h1>
+            </div>
+            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                <p style='font-size: 16px; color: #333;'>Your tipping privileges on StreamTunes have been restored. You are now able to send tips to creators again.</p>
+                <p style='font-size: 16px; color: #333;'>Please note that any future chargebacks on tips will result in your tipping privileges being permanently revoked again.</p>
+                <p style='font-size: 14px; color: #999;'>StreamTunes Support: {Configuration["EmailSettings:CustomerServiceEmail"]}</p>
+                <p style='color: #999; font-size: 12px;'>
+                    <a href='{baseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+                </p>
+            </div>
+        </div>";
+
+        await EmailService.SendEmailAsync(userEmail, subject, body);
+    }
+
     protected class UserViewModel
     {
         public int Id { get; set; }
@@ -355,10 +422,13 @@ public class AdminUserManagementModel : BlazorBase
         public DateTime? SuspendedAt { get; set; }
         public bool IsSubscriptionBlocked { get; set; }
         public DateTime? SubscriptionBlockedAt { get; set; }
+        public bool IsTipBlocked { get; set; }
+        public DateTime? TipBlockedAt { get; set; }
+        public string SubscriptionStatus { get; set; } = string.Empty;
         public string Roles { get; set; } = string.Empty;
 
         // Creator status fields
-        public bool IsCreator { get; set; }
+        public bool HasCreatorRecord { get; set; }
         public int? CreatorId { get; set; }
         public CreatorOnboardingStatus? PayPalOnboardingStatus { get; set; }
         public string PayPalOnboardingStatusDisplay { get; set; } = "-";
