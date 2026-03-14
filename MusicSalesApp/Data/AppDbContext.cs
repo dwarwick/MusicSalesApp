@@ -30,6 +30,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<UserHistory> UserHistories { get; set; }
     public DbSet<Tip> Tips { get; set; }
     public DbSet<BlockedTipAttempt> BlockedTipAttempts { get; set; }
+    public DbSet<ChargebackLog> ChargebackLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -449,5 +450,22 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(b => b.CreatorId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure ChargebackLog entity
+        builder.Entity<ChargebackLog>()
+            .HasOne(c => c.User)
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<ChargebackLog>()
+            .HasOne(c => c.Tip)
+            .WithMany()
+            .HasForeignKey(c => c.TipId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Index on TipId for efficient lookups
+        builder.Entity<ChargebackLog>()
+            .HasIndex(c => c.TipId);
     }
 }

@@ -59,6 +59,26 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const string TaxBanditsMaintenanceEndUtcKey = "TaxBanditsMaintenanceEndUtc";
 
+    /// <summary>
+    /// The key used for storing the maximum audio upload file size in MB.
+    /// </summary>
+    public const string MaxAudioUploadSizeMBKey = "MaxAudioUploadSizeMB";
+
+    /// <summary>
+    /// Default maximum audio upload file size in MB if not set in the database.
+    /// </summary>
+    public const int DefaultMaxAudioUploadSizeMB = 100;
+
+    /// <summary>
+    /// The key used for storing the maximum image upload file size in MB.
+    /// </summary>
+    public const string MaxImageUploadSizeMBKey = "MaxImageUploadSizeMB";
+
+    /// <summary>
+    /// Default maximum image upload file size in MB if not set in the database.
+    /// </summary>
+    public const int DefaultMaxImageUploadSizeMB = 20;
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -252,6 +272,62 @@ public class AppSettingsService : IAppSettingsService
             TaxBanditsMaintenanceEndUtcKey,
             endUtc.ToUniversalTime().ToString("O"),
             "Tax Bandits maintenance window end time (UTC)");
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetMaxAudioUploadSizeMBAsync()
+    {
+        var value = await GetSettingAsync(MaxAudioUploadSizeMBKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultMaxAudioUploadSizeMB;
+        }
+
+        if (int.TryParse(value, out var sizeMB))
+        {
+            return sizeMB;
+        }
+
+        _logger.LogWarning("Invalid max audio upload size value in database: {Value}. Using default.", value);
+        return DefaultMaxAudioUploadSizeMB;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMaxAudioUploadSizeMBAsync(int sizeMB)
+    {
+        await SetSettingAsync(
+            MaxAudioUploadSizeMBKey,
+            sizeMB.ToString(),
+            "Maximum audio upload file size in MB");
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetMaxImageUploadSizeMBAsync()
+    {
+        var value = await GetSettingAsync(MaxImageUploadSizeMBKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultMaxImageUploadSizeMB;
+        }
+
+        if (int.TryParse(value, out var sizeMB))
+        {
+            return sizeMB;
+        }
+
+        _logger.LogWarning("Invalid max image upload size value in database: {Value}. Using default.", value);
+        return DefaultMaxImageUploadSizeMB;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMaxImageUploadSizeMBAsync(int sizeMB)
+    {
+        await SetSettingAsync(
+            MaxImageUploadSizeMBKey,
+            sizeMB.ToString(),
+            "Maximum image upload file size in MB");
     }
 
     /// <inheritdoc />

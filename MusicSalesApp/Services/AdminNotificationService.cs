@@ -32,6 +32,7 @@ public class AdminNotificationService : IAdminNotificationService
     public const string NotifySongRenamedKey = "AdminNotify_SongRenamed";
     public const string NotifySongArtUpdatedKey = "AdminNotify_SongArtUpdated";
     public const string NotifyTipFraudPreventedKey = "AdminNotify_TipFraudPrevented";
+    public const string NotifyChargebackReceivedKey = "AdminNotify_ChargebackReceived";
 
     public AdminNotificationService(
         IEmailService emailService,

@@ -21,6 +21,10 @@ public class AdminSettingsModel : BlazorBase
     protected decimal? _originalStreamPayRateDisplay = null;
     protected int _streamQualifyingSeconds = 30;
     protected int _originalStreamQualifyingSeconds = 30;
+    protected int _maxAudioUploadSizeMB = 100;
+    protected int _originalMaxAudioUploadSizeMB = 100;
+    protected int _maxImageUploadSizeMB = 20;
+    protected int _originalMaxImageUploadSizeMB = 20;
 
     // Admin notification settings
     protected bool _notifyRegistration = true;
@@ -60,7 +64,9 @@ public class AdminSettingsModel : BlazorBase
 
     protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
                                    || _streamPayRateDisplay != _originalStreamPayRateDisplay
-                                   || _streamQualifyingSeconds != _originalStreamQualifyingSeconds;
+                                   || _streamQualifyingSeconds != _originalStreamQualifyingSeconds
+                                   || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
+                                   || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
                                              || _notifyEmailConfirmed != _originalNotifyEmailConfirmed
@@ -109,6 +115,12 @@ public class AdminSettingsModel : BlazorBase
 
         _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
         _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
+
+        _maxAudioUploadSizeMB = await AppSettingsService.GetMaxAudioUploadSizeMBAsync();
+        _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
+
+        _maxImageUploadSizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+        _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
 
         // Load admin notification settings
         _notifyRegistration = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyRegistrationKey);
@@ -164,6 +176,8 @@ public class AdminSettingsModel : BlazorBase
         _subscriptionPrice = _originalSubscriptionPrice;
         _streamPayRateDisplay = _originalStreamPayRateDisplay;
         _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
+        _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
+        _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
         _validationErrors.Clear();
         _successMessage = null;
         StateHasChanged();
@@ -208,6 +222,26 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Stream qualifying seconds cannot exceed 300.");
             }
 
+            if (_maxAudioUploadSizeMB < 1)
+            {
+                _validationErrors.Add("Max audio upload size must be at least 1 MB.");
+            }
+
+            if (_maxAudioUploadSizeMB > 500)
+            {
+                _validationErrors.Add("Max audio upload size cannot exceed 500 MB.");
+            }
+
+            if (_maxImageUploadSizeMB < 1)
+            {
+                _validationErrors.Add("Max image upload size must be at least 1 MB.");
+            }
+
+            if (_maxImageUploadSizeMB > 100)
+            {
+                _validationErrors.Add("Max image upload size cannot exceed 100 MB.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
@@ -223,14 +257,22 @@ public class AdminSettingsModel : BlazorBase
             // Save the stream qualifying seconds
             await AppSettingsService.SetStreamQualifyingSecondsAsync(_streamQualifyingSeconds);
 
+            // Save the max audio upload size
+            await AppSettingsService.SetMaxAudioUploadSizeMBAsync(_maxAudioUploadSizeMB);
+
+            // Save the max image upload size
+            await AppSettingsService.SetMaxImageUploadSizeMBAsync(_maxImageUploadSizeMB);
+
             // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
-            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}";
-            
-            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}", 
-                _subscriptionPrice.Value, _streamPayRateDisplay.Value, _streamQualifyingSeconds);
+            _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
+            _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB";
+
+            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}, Max audio upload size: {MaxAudioMB} MB, Max image upload size: {MaxImageMB} MB", 
+                _subscriptionPrice.Value, _streamPayRateDisplay.Value, _streamQualifyingSeconds, _maxAudioUploadSizeMB, _maxImageUploadSizeMB);
         }
         catch (Exception ex)
         {

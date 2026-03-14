@@ -24,7 +24,7 @@ using Syncfusion.Blazor;
 using Serilog;
 using Serilog.Events;
 
-var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
+var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "logs");
 Directory.CreateDirectory(logDirectory);
 
 Log.Logger = new LoggerConfiguration()

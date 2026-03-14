@@ -153,8 +153,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Handle return from PayPal tip approval (once only)
-        if (firstRender && !_tipReturnHandled && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+        // Handle return from PayPal tip approval or cancellation (once only)
+        if (firstRender && !_tipReturnHandled && !string.IsNullOrEmpty(TipStatus)
+            && (!string.IsNullOrEmpty(TipPayPalToken) || TipStatus == "cancelled"))
         {
             _tipReturnHandled = true;
             await HandleTipReturnAsync();
@@ -618,11 +619,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     private async Task HandleTipReturnAsync()
     {
-        if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+        // Parse the LAST tip_status/token from the URL. When query params accumulate
+        // across multiple PayPal round-trips, [SupplyParameterFromQuery] returns the
+        // first value, which may be stale. The last pair is the most recent return.
+        var (tipStatus, tipToken) = Helpers.TipUrlHelper.GetLastTipParams(NavigationManager.Uri);
+
+        if (tipStatus == "approved" && !string.IsNullOrEmpty(tipToken))
         {
             try
             {
-                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(tipToken);
                 if (success)
                 {
                     await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
@@ -638,8 +644,12 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 await ShowTipToastAsync("An error occurred processing your tip.", false);
             }
         }
-        else if (TipStatus == "cancelled")
+        else if (tipStatus == "cancelled")
         {
+            if (!string.IsNullOrEmpty(tipToken))
+            {
+                await TipService.CancelTipAsync(tipToken);
+            }
             await ShowTipToastAsync("Tip payment was cancelled.", false);
         }
 

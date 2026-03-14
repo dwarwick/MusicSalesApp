@@ -365,3 +365,4 @@ FodyWeavers.xsd
 /MusicSalesApp/appsettings.Development.json
 /MusicSalesApp/wwwroot/sitemap.xml
 **/bin\\*
+/MusicSalesApp/appsettings.Test.json

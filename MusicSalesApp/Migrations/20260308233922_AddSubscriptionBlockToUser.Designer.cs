@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260308233922_AddSubscriptionBlockToUser")]
+    partial class AddSubscriptionBlockToUser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -334,9 +337,6 @@ namespace MusicSalesApp.Migrations
                     b.Property<bool>("IsSuspended")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsTipBlocked")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime?>("LastVerificationEmailSent")
                         .HasColumnType("datetime2");
 
@@ -379,9 +379,6 @@ namespace MusicSalesApp.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
-                    b.Property<DateTime?>("TipBlockedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 
@@ -411,7 +408,6 @@ namespace MusicSalesApp.Migrations
                             EmailConfirmed = true,
                             IsSubscriptionBlocked = false,
                             IsSuspended = false,
-                            IsTipBlocked = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "ADMIN@APP.COM",
                             NormalizedUserName = "ADMIN@APP.COM",
@@ -432,7 +428,6 @@ namespace MusicSalesApp.Migrations
                             EmailConfirmed = true,
                             IsSubscriptionBlocked = false,
                             IsSuspended = false,
-                            IsTipBlocked = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "USER@APP.COM",
                             NormalizedUserName = "USER@APP.COM",

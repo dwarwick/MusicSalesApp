@@ -52,7 +52,7 @@ else
             }
 
             <div class="row mb-4">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Subscription Price (USD) <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_subscriptionPrice" 
                                      Format="C2"
@@ -66,7 +66,7 @@ else
                         Monthly subscription price for new subscribers. Existing subscribers will continue at their original rate.
                     </small>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Stream Pay Rate (per 1000 streams) <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_streamPayRateDisplay" 
                                      Format="C2"
@@ -80,7 +80,7 @@ else
                         Amount paid to creators per 1000 streams (default $5.00). This applies to all new creators onboarded after this setting is changed.
                     </small>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Stream Qualifying Seconds <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_streamQualifyingSeconds" 
                                      Format="N0"
@@ -94,6 +94,37 @@ else
                         Number of continuous seconds of playback that qualifies as a stream (default 30). This applies to all new creators onboarded after this setting is changed.
                     </small>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Max Audio Upload Size (MB) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_maxAudioUploadSizeMB" 
+                                     Format="N0"
+                                     Min="1"
+                                     Max="500"
+                                     Decimals="0"
+                                     Step="10"
+                                     Placeholder="Enter size in MB"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Maximum file size in MB allowed for audio uploads (default 100). Changes take effect immediately for all users.
+                    </small>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <label class="form-label">Max Image Upload Size (MB) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_maxImageUploadSizeMB" 
+                                     Format="N0"
+                                     Min="1"
+                                     Max="100"
+                                     Decimals="0"
+                                     Step="1"
+                                     Placeholder="Enter size in MB"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Maximum file size in MB allowed for cover art image uploads (default 20). Changes take effect immediately for all users.
+                    </small>
+                </div>
             </div>
 
             <div class="alert alert-info">
@@ -102,6 +133,8 @@ else
                     <li><strong>Subscription Price:</strong> Existing subscribers continue at their original rate; new subscribers get the new price.</li>
                     <li><strong>Stream Pay Rate:</strong> This is used as the default for new creators. Existing creators keep their current rate unless manually updated.</li>
                     <li><strong>Stream Qualifying Seconds:</strong> This is used as the default for new creators. Existing creators keep their current value unless manually updated.</li>
+                    <li><strong>Max Audio Upload Size:</strong> Changes apply immediately to all future uploads.</li>
+                    <li><strong>Max Image Upload Size:</strong> Changes apply immediately to all future cover art uploads.</li>
                 </ul>
             </div>
 

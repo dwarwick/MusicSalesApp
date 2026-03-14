@@ -18,7 +18,9 @@ public enum TipStatus
     /// <summary>Refunded to the tipper.</summary>
     Refunded,
     /// <summary>PayPal chargeback received.</summary>
-    Chargeback
+    Chargeback,
+    /// <summary>User cancelled the PayPal checkout before completing payment.</summary>
+    Cancelled
 }
 
 /// <summary>
@@ -70,6 +72,13 @@ public class Tip
     /// </summary>
     [MaxLength(100)]
     public string PayPalOrderId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// PayPal capture transaction ID from the capture response.
+    /// This is the same value PayPal reports as seller_transaction_id in dispute webhooks.
+    /// </summary>
+    [MaxLength(100)]
+    public string? PayPalCaptureId { get; set; }
 
     /// <summary>
     /// PayPal payout transaction ID when tip is paid to creator.

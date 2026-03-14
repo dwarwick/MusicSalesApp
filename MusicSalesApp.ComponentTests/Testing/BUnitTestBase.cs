@@ -348,6 +348,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync(0);
         MockTipService.Setup(x => x.GetAllTipsAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.Tip>());
+        MockTipService.Setup(x => x.CancelTipAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
         MockStreamPayoutService.Setup(x => x.GetAllPayoutsAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.StreamPayout>());
 

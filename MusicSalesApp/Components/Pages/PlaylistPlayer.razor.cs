@@ -173,11 +173,13 @@ namespace MusicSalesApp.Components.Pages
 
         private async Task HandleTipReturnAsync()
         {
-            if (TipStatus == "approved" && !string.IsNullOrEmpty(TipPayPalToken))
+            var (tipStatus, tipToken) = Helpers.TipUrlHelper.GetLastTipParams(NavigationManager.Uri);
+
+            if (tipStatus == "approved" && !string.IsNullOrEmpty(tipToken))
             {
                 try
                 {
-                    var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(TipPayPalToken);
+                    var (success, errorMessage, tipAmount) = await TipService.CaptureTipAsync(tipToken);
                     if (success)
                     {
                         await ShowTipToastAsync($"Your ${tipAmount:F2} tip was sent successfully! Thank you for supporting this creator.", true);
@@ -193,8 +195,12 @@ namespace MusicSalesApp.Components.Pages
                     await ShowTipToastAsync("An error occurred processing your tip.", false);
                 }
             }
-            else if (TipStatus == "cancelled")
+            else if (tipStatus == "cancelled")
             {
+                if (!string.IsNullOrEmpty(tipToken))
+                {
+                    await TipService.CancelTipAsync(tipToken);
+                }
                 await ShowTipToastAsync("Tip payment was cancelled.", false);
             }
 
@@ -339,7 +345,8 @@ namespace MusicSalesApp.Components.Pages
             // IsProcessingTipReturn keeps the page in loading state (audio element not rendered),
             // so we must process the tip first, then re-render to get the audio element in the DOM.
             if (!_tipReturnHandled && !_loading && _playlistInfo != null
-                && !string.IsNullOrEmpty(TipStatus) && !string.IsNullOrEmpty(TipPayPalToken))
+                && !string.IsNullOrEmpty(TipStatus)
+                && (!string.IsNullOrEmpty(TipPayPalToken) || TipStatus == "cancelled"))
             {
                 _tipReturnHandled = true;
                 await HandleTipReturnAsync();

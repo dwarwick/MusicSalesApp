@@ -910,4 +910,19 @@ To minimize the chance of notification emails being flagged as spam:
 - Only send to users who have opted in and confirmed their email
 - Include clear unsubscribe/preferences links
 
+### Customer Service Email Address
+
+**CRITICAL:** Never hardcode email addresses (e.g., `support@streamtunes.net` or `customerservice@streamtunes.net`) in code that sends emails programmatically. Always read the customer service email from configuration.
+
+**Configuration Key:** `EmailSettings:CustomerServiceEmail` in `appsettings.json`
+
+**Usage by context:**
+- **Services with `IConfiguration` injection:** `_configuration["EmailSettings:CustomerServiceEmail"]`
+- **Classes inheriting `BlazorBase`:** `Configuration["EmailSettings:CustomerServiceEmail"]`
+- **Standalone `ComponentBase` classes:** Inject `[Inject] protected IConfiguration Configuration { get; set; }` and use `Configuration["EmailSettings:CustomerServiceEmail"]`
+
+**Exceptions:** Static legal/informational pages (TermsOfUse, PrivacyPolicy, CreatorAgreement, LearnMore) and the NavMenu "Contact Us" link display the email directly in HTML as user-facing contact information — these are acceptable as hardcoded.
+
+**Important:** `support@streamtunes.net` does NOT exist as a real email address. Never use it anywhere.
+
 ## References

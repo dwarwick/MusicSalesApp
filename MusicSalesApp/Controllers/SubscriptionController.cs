@@ -74,7 +74,8 @@ public class SubscriptionController : ControllerBase
             return Ok(new
             {
                 hasSubscription = false,
-                subscriptionPrice = subscriptionPrice.ToString("F2")
+                subscriptionPrice = subscriptionPrice.ToString("F2"),
+                isSubscriptionBlocked = user.IsSubscriptionBlocked
             });
         }
 
@@ -86,7 +87,8 @@ public class SubscriptionController : ControllerBase
             endDate = subscription.EndDate,
             nextBillingDate = subscription.NextBillingDate,
             monthlyPrice = subscription.MonthlyPrice,
-            paypalSubscriptionId = subscription.PayPalSubscriptionId
+            paypalSubscriptionId = subscription.PayPalSubscriptionId,
+            isSubscriptionBlocked = user.IsSubscriptionBlocked
         });
     }
 
@@ -95,6 +97,13 @@ public class SubscriptionController : ControllerBase
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
+
+        // Check if user is blocked from creating subscriptions (e.g., due to a previous chargeback)
+        if (user.IsSubscriptionBlocked)
+        {
+            _logger.LogWarning("User {UserId} attempted to create a subscription but is blocked due to a previous chargeback", user.Id);
+            return BadRequest("Your account is not eligible for a new subscription. Please contact support for assistance.");
+        }
 
         // Create subscription plan with PayPal
         var planId = await GetOrCreateSubscriptionPlanAsync();
@@ -144,8 +153,24 @@ public class SubscriptionController : ControllerBase
                 return BadRequest("Failed to retrieve subscription details from PayPal");
             }
 
-            // Update our database with the details
-            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+            // Verify that PayPal has confirmed a payment before activating
+            if (subscriptionDetails.LastPaymentDate == null)
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
+                    request.SubscriptionId, user.Id);
+                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
+            }
+
+            // Verify that PayPal reports the subscription as ACTIVE
+            if (subscriptionDetails.Status != "ACTIVE")
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
+                    request.SubscriptionId, user.Id, subscriptionDetails.Status);
+                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
+            }
+
+            // Activate the subscription now that payment is confirmed
+            await _subscriptionService.ActivateSubscriptionAsync(
                 request.SubscriptionId,
                 subscriptionDetails.NextBillingDate,
                 subscriptionDetails.LastPaymentDate
@@ -205,8 +230,13 @@ public class SubscriptionController : ControllerBase
 
         try
         {
-            // Get the user's most recent subscription
-            var subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            // Get the user's most recent pending subscription (APPROVAL_PENDING)
+            var subscription = await _subscriptionService.GetPendingSubscriptionAsync(user.Id);
+            if (subscription == null)
+            {
+                // Fall back to active subscription (for backward compatibility)
+                subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            }
             if (subscription == null)
             {
                 return BadRequest("No subscription found for user");
@@ -219,8 +249,24 @@ public class SubscriptionController : ControllerBase
                 return BadRequest("Failed to retrieve subscription details from PayPal");
             }
 
-            // Update our database with the details
-            await _subscriptionService.UpdateSubscriptionDetailsAsync(
+            // Verify that PayPal has confirmed a payment before activating
+            if (subscriptionDetails.LastPaymentDate == null)
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
+                    subscription.PayPalSubscriptionId, user.Id);
+                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
+            }
+
+            // Verify that PayPal reports the subscription as ACTIVE
+            if (subscriptionDetails.Status != "ACTIVE")
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
+                    subscription.PayPalSubscriptionId, user.Id, subscriptionDetails.Status);
+                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
+            }
+
+            // Activate the subscription now that payment is confirmed
+            await _subscriptionService.ActivateSubscriptionAsync(
                 subscription.PayPalSubscriptionId,
                 subscriptionDetails.NextBillingDate,
                 subscriptionDetails.LastPaymentDate
@@ -579,10 +625,16 @@ public class SubscriptionController : ControllerBase
                 start_time = DateTime.UtcNow.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ssZ"),
                 application_context = new
                 {
-                    brand_name = "Music Sales App",
+                    brand_name = "StreamTunes",
                     locale = "en-US",
+                    landing_page = "LOGIN",
                     shipping_preference = "NO_SHIPPING",
                     user_action = "SUBSCRIBE_NOW",
+                    payment_method = new
+                    {
+                        payer_selected = "PAYPAL",
+                        payee_preferred = "IMMEDIATE_PAYMENT_REQUIRED"
+                    },
                     return_url = $"{returnBaseUrl}/manage-account?success=true",
                     cancel_url = $"{returnBaseUrl}/manage-account?success=false"
                 }
@@ -782,6 +834,12 @@ public class SubscriptionController : ControllerBase
 
             var details = new PayPalSubscriptionDetails();
 
+            // Get subscription status from PayPal
+            if (root.TryGetProperty("status", out var statusProp))
+            {
+                details.Status = statusProp.GetString();
+            }
+
             // Get billing info
             if (root.TryGetProperty("billing_info", out var billingInfo))
             {
@@ -827,6 +885,7 @@ public class ActivateSubscriptionRequest
 
 public class PayPalSubscriptionDetails
 {
+    public string Status { get; set; }
     public DateTime? NextBillingDate { get; set; }
     public DateTime? LastPaymentDate { get; set; }
 }
