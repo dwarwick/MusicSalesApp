@@ -68,7 +68,12 @@ public class AdminUserManagementTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Last Verification Sent"));
         Assert.That(cut.Markup, Does.Contain("Theme"));
         Assert.That(cut.Markup, Does.Contain("Suspended"));
+        Assert.That(cut.Markup, Does.Contain("Sub Blocked"));
+        Assert.That(cut.Markup, Does.Contain("Sub Status"));
+        Assert.That(cut.Markup, Does.Contain("Tip Blocked"));
         Assert.That(cut.Markup, Does.Contain("Suspended At"));
+        Assert.That(cut.Markup, Does.Contain("Sub Blocked At"));
+        Assert.That(cut.Markup, Does.Contain("Tip Blocked At"));
         Assert.That(cut.Markup, Does.Contain("Roles"));
     }
 }

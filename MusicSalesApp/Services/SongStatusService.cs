@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -13,19 +14,20 @@ public class SongStatusService : ISongStatusService
     private readonly ILogger<SongStatusService> _logger;
     private readonly IEmailService _emailService;
     private readonly IAzureStorageService _azureStorageService;
-
-    private const string CustomerServiceEmail = "customerservice@streamtunes.net";
+    private readonly string _customerServiceEmail;
 
     public SongStatusService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<SongStatusService> logger,
         IEmailService emailService,
-        IAzureStorageService azureStorageService)
+        IAzureStorageService azureStorageService,
+        IConfiguration configuration)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _emailService = emailService;
         _azureStorageService = azureStorageService;
+        _customerServiceEmail = configuration["EmailSettings:CustomerServiceEmail"] ?? "admin@streamtunes.net";
     }
 
     public async Task<bool> DisableSongAsync(int songMetadataId, string reason, int adminUserId, string baseUrl)
@@ -232,8 +234,8 @@ public class SongStatusService : ISongStatusService
                 </ul>
                 <h3>Questions or Concerns?</h3>
                 <p>If you believe this action was taken in error, or if you would like to discuss this decision, please contact our customer service team:</p>
-                <p><a href='mailto:{CustomerServiceEmail}' style='display: inline-block; padding: 10px 20px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px;'>Contact Customer Service</a></p>
-                <p style='color: #666;'>Email: <a href='mailto:{CustomerServiceEmail}'>{CustomerServiceEmail}</a></p>
+                <p><a href='mailto:{_customerServiceEmail}' style='display: inline-block; padding: 10px 20px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px;'>Contact Customer Service</a></p>
+                <p style='color: #666;'>Email: <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a></p>
                 <p style='color: #999; font-size: 12px; margin-top: 30px;'>
                     <a href='{baseUrl.TrimEnd('/')}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
                 </p>
@@ -299,8 +301,8 @@ public class SongStatusService : ISongStatusService
                 </ul>
                 <h3>Questions or Concerns?</h3>
                 <p>If you have any questions, please contact our customer service team:</p>
-                <p><a href='mailto:{CustomerServiceEmail}' style='display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;'>Contact Customer Service</a></p>
-                <p style='color: #666;'>Email: <a href='mailto:{CustomerServiceEmail}'>{CustomerServiceEmail}</a></p>
+                <p><a href='mailto:{_customerServiceEmail}' style='display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;'>Contact Customer Service</a></p>
+                <p style='color: #666;'>Email: <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a></p>
                 <p style='color: #999; font-size: 12px; margin-top: 30px;'>
                     <a href='{baseUrl.TrimEnd('/')}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
                 </p>

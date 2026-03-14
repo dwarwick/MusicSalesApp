@@ -9,11 +9,11 @@ using MusicSalesApp.Data;
 
 #nullable disable
 
-namespace MusicSalesApp.Data.Migrations
+namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260307172359_AddTipCapturedAtAndStreamPayoutTipAmount")]
-    partial class AddTipCapturedAtAndStreamPayoutTipAmount
+    [Migration("20260308224742_AddChargebackLog")]
+    partial class AddChargebackLog
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -478,6 +478,74 @@ namespace MusicSalesApp.Data.Migrations
                     b.HasIndex("TipperUserId");
 
                     b.ToTable("BlockedTipAttempts");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ChargebackLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Amount")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("PayPalDisputeId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayPalSubscriptionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SellerTransactionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Stage")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("TipId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TipId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("ChargebackLogs");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>
@@ -1137,6 +1205,10 @@ namespace MusicSalesApp.Data.Migrations
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("PayPalCaptureId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("PayPalOrderId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1375,6 +1447,23 @@ namespace MusicSalesApp.Data.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("TipperUser");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ChargebackLog", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.Tip", "Tip")
+                        .WithMany()
+                        .HasForeignKey("TipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Tip");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>

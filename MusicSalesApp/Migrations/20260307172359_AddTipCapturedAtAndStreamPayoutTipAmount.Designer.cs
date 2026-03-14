@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260307172359_AddTipCapturedAtAndStreamPayoutTipAmount")]
+    partial class AddTipCapturedAtAndStreamPayoutTipAmount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -328,13 +331,7 @@ namespace MusicSalesApp.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsSubscriptionBlocked")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("IsSuspended")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsTipBlocked")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("LastVerificationEmailSent")
@@ -369,18 +366,12 @@ namespace MusicSalesApp.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("SubscriptionBlockedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<DateTime?>("SuspendedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Theme")
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
-
-                    b.Property<DateTime?>("TipBlockedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
@@ -409,9 +400,7 @@ namespace MusicSalesApp.Migrations
                             ConcurrencyStamp = "d4e5f6a7-b8c9-7d8e-1f2a-3b4c5d6e7f8a",
                             Email = "admin@app.com",
                             EmailConfirmed = true,
-                            IsSubscriptionBlocked = false,
                             IsSuspended = false,
-                            IsTipBlocked = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "ADMIN@APP.COM",
                             NormalizedUserName = "ADMIN@APP.COM",
@@ -430,9 +419,7 @@ namespace MusicSalesApp.Migrations
                             ConcurrencyStamp = "e5f6a7b8-c9d0-8e9f-2a3b-4c5d6e7f8a9b",
                             Email = "user@app.com",
                             EmailConfirmed = true,
-                            IsSubscriptionBlocked = false,
                             IsSuspended = false,
-                            IsTipBlocked = false,
                             LockoutEnabled = false,
                             NormalizedEmail = "USER@APP.COM",
                             NormalizedUserName = "USER@APP.COM",
@@ -491,74 +478,6 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("TipperUserId");
 
                     b.ToTable("BlockedTipAttempts");
-                });
-
-            modelBuilder.Entity("MusicSalesApp.Models.ChargebackLog", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Amount")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Channel")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("PayPalDisputeId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PayPalSubscriptionId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("SellerTransactionId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Stage")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("TipId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UserEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<int?>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TipId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("ChargebackLogs");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>
@@ -1218,10 +1137,6 @@ namespace MusicSalesApp.Migrations
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("PayPalCaptureId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
                     b.Property<string>("PayPalOrderId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1460,23 +1375,6 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("TipperUser");
-                });
-
-            modelBuilder.Entity("MusicSalesApp.Models.ChargebackLog", b =>
-                {
-                    b.HasOne("MusicSalesApp.Models.Tip", "Tip")
-                        .WithMany()
-                        .HasForeignKey("TipId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Tip");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>

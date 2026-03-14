@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -56,7 +57,7 @@ public class SubscriptionServiceTests
         Assert.That(result.UserId, Is.EqualTo(userId));
         Assert.That(result.PayPalSubscriptionId, Is.EqualTo(paypalSubscriptionId));
         Assert.That(result.MonthlyPrice, Is.EqualTo(monthlyPrice));
-        Assert.That(result.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
     }
 
     [Test]
@@ -67,6 +68,8 @@ public class SubscriptionServiceTests
         var paypalSubscriptionId = "SUB-123456789";
         var monthlyPrice = 3.99m;
         await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+        // Activate the subscription (simulating successful PayPal payment)
+        await _service.ActivateSubscriptionAsync(paypalSubscriptionId, DateTime.UtcNow.AddMonths(1), DateTime.UtcNow);
 
         // Act
         var result = await _service.HasActiveSubscriptionAsync(userId);
@@ -96,6 +99,8 @@ public class SubscriptionServiceTests
         var paypalSubscriptionId = "SUB-123456789";
         var monthlyPrice = 3.99m;
         var createdSubscription = await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+        // Activate the subscription (simulating successful PayPal payment)
+        await _service.ActivateSubscriptionAsync(paypalSubscriptionId, DateTime.UtcNow.AddMonths(1), DateTime.UtcNow);
 
         // Act
         var result = await _service.CancelSubscriptionAsync(userId);
@@ -106,7 +111,7 @@ public class SubscriptionServiceTests
         // Get the subscription directly by PayPal ID since GetActiveSubscriptionAsync filters by ACTIVE status
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("CANCELLED"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
         Assert.That(subscription.CancelledAt, Is.Not.Null);
         Assert.That(subscription.EndDate, Is.Not.Null);
     }
@@ -132,6 +137,8 @@ public class SubscriptionServiceTests
         var paypalSubscriptionId = "SUB-123456789";
         var monthlyPrice = 3.99m;
         await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+        // Activate the subscription (simulating successful PayPal payment)
+        await _service.ActivateSubscriptionAsync(paypalSubscriptionId, DateTime.UtcNow.AddMonths(1), DateTime.UtcNow);
 
         // Act
         var result = await _service.GetActiveSubscriptionAsync(userId);
@@ -139,7 +146,7 @@ public class SubscriptionServiceTests
         // Assert
         Assert.That(result, Is.Not.Null);
         Assert.That(result.UserId, Is.EqualTo(userId));
-        Assert.That(result.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Active));
     }
 
     [Test]
@@ -192,13 +199,10 @@ public class SubscriptionServiceTests
         var monthlyPrice = 3.99m;
         await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
         
-        // Simulate payment by setting LastPaymentDate
-        await _service.UpdateSubscriptionDetailsAsync(
-            paypalSubscriptionId, 
-            DateTime.UtcNow.AddMonths(1), 
-            DateTime.UtcNow);
+        // Activate and simulate payment
+        await _service.ActivateSubscriptionAsync(paypalSubscriptionId, DateTime.UtcNow.AddMonths(1), DateTime.UtcNow);
 
-        // Act - Try to delete but it has payment so should not delete
+        // Act - Try to delete but it has been activated and paid, so should not delete
         var result = await _service.DeletePendingSubscriptionAsync(userId);
 
         // Assert
@@ -207,7 +211,7 @@ public class SubscriptionServiceTests
         // Verify subscription still exists
         var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
         Assert.That(subscription, Is.Not.Null);
-        Assert.That(subscription.Status, Is.EqualTo("ACTIVE"));
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
     }
 
     [Test]
@@ -221,5 +225,126 @@ public class SubscriptionServiceTests
 
         // Assert
         Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_StatusIsApprovalPending()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-PENDING-1";
+        var monthlyPrice = 3.99m;
+
+        // Act
+        var result = await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Assert - subscription should be APPROVAL_PENDING, not ACTIVE
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+        
+        // GetActiveSubscriptionAsync should NOT return it
+        var active = await _service.GetActiveSubscriptionAsync(userId);
+        Assert.That(active, Is.Null);
+        
+        // HasActiveSubscriptionAsync should return false
+        var hasActive = await _service.HasActiveSubscriptionAsync(userId);
+        Assert.That(hasActive, Is.False);
+    }
+
+    [Test]
+    public async Task GetPendingSubscriptionAsync_ReturnsPendingSubscription()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-PENDING-2";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Act
+        var result = await _service.GetPendingSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+        Assert.That(result.PayPalSubscriptionId, Is.EqualTo(paypalSubscriptionId));
+    }
+
+    [Test]
+    public async Task ActivateSubscriptionAsync_SetsStatusToActive()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-ACTIVATE-1";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Act
+        await _service.ActivateSubscriptionAsync(paypalSubscriptionId, DateTime.UtcNow.AddMonths(1), DateTime.UtcNow);
+
+        // Assert
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        Assert.That(subscription, Is.Not.Null);
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+        Assert.That(subscription.LastPaymentDate, Is.Not.Null);
+        Assert.That(subscription.NextBillingDate, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task DeletePendingSubscriptionAsync_DeletesApprovalPendingSubscription()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-DELETE-PENDING";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Act - Delete the APPROVAL_PENDING subscription
+        var result = await _service.DeletePendingSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.True);
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        Assert.That(subscription, Is.Null);
+    }
+
+    [Test]
+    public async Task CancelSubscriptionAsync_CancelsApprovalPendingSubscription()
+    {
+        // Arrange
+        var userId = 1;
+        var paypalSubscriptionId = "SUB-CANCEL-PENDING";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, paypalSubscriptionId, monthlyPrice);
+
+        // Act - Cancel the APPROVAL_PENDING subscription (user cancels from ManageAccount)
+        var result = await _service.CancelSubscriptionAsync(userId);
+
+        // Assert
+        Assert.That(result, Is.True);
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        Assert.That(subscription, Is.Not.Null);
+        Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_RemovesStaleApprovalPendingSubscriptions()
+    {
+        // Arrange - create a stale APPROVAL_PENDING subscription
+        var userId = 1;
+        var staleSubscriptionId = "SUB-STALE";
+        var monthlyPrice = 3.99m;
+        await _service.CreateSubscriptionAsync(userId, staleSubscriptionId, monthlyPrice);
+
+        // Act - create a new subscription (should remove the stale one)
+        var newSubscriptionId = "SUB-NEW";
+        var result = await _service.CreateSubscriptionAsync(userId, newSubscriptionId, monthlyPrice);
+
+        // Assert - stale subscription should be removed
+        var stale = await _service.GetSubscriptionByPayPalIdAsync(staleSubscriptionId);
+        Assert.That(stale, Is.Null);
+        
+        // New subscription should exist
+        var newSub = await _service.GetSubscriptionByPayPalIdAsync(newSubscriptionId);
+        Assert.That(newSub, Is.Not.Null);
+        Assert.That(newSub.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
     }
 }

@@ -63,6 +63,10 @@ public class TipService : ITipService
         if (user == null)
             return (false, "User not found.");
 
+        // Check if user's tipping privileges have been revoked due to a previous chargeback
+        if (user.IsTipBlocked)
+            return (false, "Your tipping privileges have been revoked due to a previous chargeback.");
+
         var accountCreated = await context.UserHistories
             .Where(uh => uh.UserId == tipperUserId && uh.EventType == UserHistoryEventTypes.Registration)
             .Select(uh => uh.OccurredAt)
@@ -80,9 +84,10 @@ public class TipService : ITipService
             return (false, "You cannot tip yourself.");
 
         // Rate limit: max 5 tips per hour per user
+        // Only count captured tips (CapturedAt != null) - failed/abandoned tips should not count
         var oneHourAgo = DateTime.UtcNow.AddHours(-1);
         var recentTipCount = await context.Tips
-            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo);
+            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatedAt >= oneHourAgo && t.CapturedAt != null);
         if (recentTipCount >= MaxTipsPerHour)
         {
             await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "HourlyRateLimit",
@@ -91,8 +96,9 @@ public class TipService : ITipService
         }
 
         // Rate limit: max 10 tips from a user to the same creator (lifetime)
+        // Only count captured tips - failed/abandoned tips should not count
         var tipsToCreator = await context.Tips
-            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatorId == creatorId);
+            .CountAsync(t => t.TipperUserId == tipperUserId && t.CreatorId == creatorId && t.CapturedAt != null);
         if (tipsToCreator >= MaxTipsToSameCreator)
         {
             await RecordBlockedAttemptAsync(tipperUserId, creatorId, amount, "LifetimeCreatorLimit",
@@ -101,12 +107,14 @@ public class TipService : ITipService
         }
 
         // Fraud detection: check fingerprint patterns (strict - same device, different accounts)
+        // Only count captured tips - failed/abandoned tips should not count
         if (!string.IsNullOrEmpty(fingerprint))
         {
             var fingerprintTips = await context.Tips
                 .CountAsync(t => t.CreatedAt >= oneHourAgo &&
                     t.TipperUserId != tipperUserId &&
-                    t.MachineFingerprint == fingerprint);
+                    t.MachineFingerprint == fingerprint &&
+                    t.CapturedAt != null);
 
             if (fingerprintTips >= MaxTipsPerHourSameFingerprint)
             {
@@ -120,12 +128,14 @@ public class TipService : ITipService
         }
 
         // Fraud detection: check IP patterns (lenient - shared networks are common)
+        // Only count captured tips - failed/abandoned tips should not count
         if (!string.IsNullOrEmpty(ipAddress))
         {
             var ipTips = await context.Tips
                 .CountAsync(t => t.CreatedAt >= oneHourAgo &&
                     t.TipperUserId != tipperUserId &&
-                    t.IpAddress == ipAddress);
+                    t.IpAddress == ipAddress &&
+                    t.CapturedAt != null);
 
             if (ipTips >= MaxTipsPerHour)
             {
@@ -147,10 +157,12 @@ public class TipService : ITipService
         if (tipperCreator != null)
         {
             var windowStart = DateTime.UtcNow.AddDays(-ReciprocalTipWindowDays);
+            // Only count captured tips - failed/abandoned tips should not count
             var reciprocalTipCount = await context.Tips
                 .CountAsync(t => t.TipperUserId == creator.UserId &&
                     t.CreatorId == tipperCreator.Value &&
-                    t.CreatedAt >= windowStart);
+                    t.CreatedAt >= windowStart &&
+                    t.CapturedAt != null);
 
             if (reciprocalTipCount >= MaxReciprocalTips)
             {
@@ -219,6 +231,34 @@ public class TipService : ITipService
     }
 
     /// <inheritdoc />
+    public async Task CancelTipAsync(string payPalOrderId)
+    {
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var tip = await context.Tips
+                .FirstOrDefaultAsync(t => t.PayPalOrderId == payPalOrderId && t.Status == TipStatus.Pending);
+
+            if (tip == null)
+            {
+                _logger.LogDebug("No pending tip found for PayPal order {OrderId} to cancel", payPalOrderId);
+                return;
+            }
+
+            tip.Status = TipStatus.Cancelled;
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Tip cancelled: ${Amount} from user {TipperId} to creator {CreatorId}, PayPal order {OrderId}",
+                tip.Amount, tip.TipperUserId, tip.CreatorId, payPalOrderId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling tip for PayPal order {OrderId}", payPalOrderId);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<(bool Success, string? ErrorMessage, decimal Amount)> CaptureTipAsync(string payPalOrderId)
     {
         try
@@ -234,8 +274,25 @@ public class TipService : ITipService
                 return (false, "Tip not found or already processed.", 0);
             }
 
+            // Re-validate rate limits at capture time to prevent parallel bypass:
+            // A user could open multiple tip flows in parallel (all pass initial validation since
+            // CapturedAt is null), then capture them all. Re-checking here ensures the limits
+            // are enforced at the point of actual payment.
+            var (canTip, validationError) = await ValidateTipAsync(
+                tip.TipperUserId, tip.CreatorId, tip.Amount, tip.IpAddress, tip.MachineFingerprint);
+            if (!canTip)
+            {
+                // Remove the uncaptured tip record since it failed re-validation
+                context.Tips.Remove(tip);
+                await context.SaveChangesAsync();
+                _logger.LogWarning(
+                    "Tip capture blocked by re-validation for PayPal order {OrderId}: {Error}",
+                    payPalOrderId, validationError);
+                return (false, validationError ?? "Tip validation failed.", 0);
+            }
+
             // Capture the PayPal order
-            var (captured, captureError) = await CapturePayPalOrderAsync(payPalOrderId);
+            var (captured, captureError, captureId) = await CapturePayPalOrderAsync(payPalOrderId);
             if (!captured)
             {
                 // Remove the uncaptured tip record
@@ -246,6 +303,8 @@ public class TipService : ITipService
 
             // Mark as captured so ProcessPendingToClearedAsync knows this tip was paid
             tip.CapturedAt = DateTime.UtcNow;
+            // Store the PayPal capture transaction ID for dispute/chargeback matching
+            tip.PayPalCaptureId = captureId;
             await context.SaveChangesAsync();
 
             _logger.LogInformation(
@@ -580,13 +639,13 @@ public class TipService : ITipService
         }
     }
 
-    private async Task<(bool Captured, string? Error)> CapturePayPalOrderAsync(string orderId)
+    private async Task<(bool Captured, string? Error, string? CaptureId)> CapturePayPalOrderAsync(string orderId)
     {
         try
         {
             var accessToken = await GetPayPalAccessTokenAsync();
             if (string.IsNullOrEmpty(accessToken))
-                return (false, "Failed to authenticate with PayPal.");
+                return (false, "Failed to authenticate with PayPal.", null);
 
             var payPalBaseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
             using var httpClient = new HttpClient();
@@ -601,21 +660,38 @@ public class TipService : ITipService
             if (!captureResponse.IsSuccessStatusCode)
             {
                 _logger.LogWarning("PayPal capture failed: {Status} {Body}", captureResponse.StatusCode, captureBody);
-                return (false, "Failed to capture payment.");
+                return (false, "Failed to capture payment.", null);
             }
 
             using var doc = JsonDocument.Parse(captureBody);
             var captureStatus = doc.RootElement.GetProperty("status").GetString();
 
             if (captureStatus != "COMPLETED")
-                return (false, $"Payment not completed. Status: {captureStatus}");
+                return (false, $"Payment not completed. Status: {captureStatus}", null);
 
-            return (true, null);
+            // Extract capture transaction ID from purchase_units[0].payments.captures[0].id
+            string? captureId = null;
+            if (doc.RootElement.TryGetProperty("purchase_units", out var purchaseUnits) &&
+                purchaseUnits.GetArrayLength() > 0)
+            {
+                var firstUnit = purchaseUnits[0];
+                if (firstUnit.TryGetProperty("payments", out var payments) &&
+                    payments.TryGetProperty("captures", out var captures) &&
+                    captures.GetArrayLength() > 0)
+                {
+                    if (captures[0].TryGetProperty("id", out var captureIdProp))
+                    {
+                        captureId = captureIdProp.GetString();
+                    }
+                }
+            }
+
+            return (true, null, captureId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error capturing PayPal tip order {OrderId}", orderId);
-            return (false, "An error occurred processing the payment.");
+            return (false, "An error occurred processing the payment.", null);
         }
     }
 

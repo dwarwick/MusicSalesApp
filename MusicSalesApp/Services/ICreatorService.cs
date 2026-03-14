@@ -178,4 +178,86 @@ public interface ICreatorService
     /// <param name="acknowledgmentAccepted">Whether the acknowledgment was accepted</param>
     /// <returns>The updated creator</returns>
     Task<Creator> UpdateLocationCertificationAsync(int creatorId, CreatorLocationCertification locationCertification, bool acknowledgmentAccepted);
+
+    /// <summary>
+    /// Orchestrates the full creator onboarding flow: creates or updates the creator record,
+    /// stores attestation data, handles ineligibility, resets onboarding for returning creators,
+    /// activates returning creators with completed tax forms, or sets up for tax form submission.
+    /// </summary>
+    Task<StartOnboardingResult> StartOnboardingAsync(CreatorOnboardingInput request);
+
+    /// <summary>
+    /// Checks the creator's onboarding and tax form status and activates the creator
+    /// if both are complete. Also assigns the Creator role to the user.
+    /// </summary>
+    Task<CompleteOnboardingResult> CompleteOnboardingAsync(int userId);
+
+    /// <summary>
+    /// Initiates a tax form update for an active creator who wants to submit a new W-8/W-9.
+    /// Sets the tax form status to Pending and updates the PayeeRef.
+    /// </summary>
+    Task<InitiateTaxFormUpdateResult> InitiateTaxFormUpdateAsync(int userId, string? email);
+}
+
+/// <summary>
+/// Request data for starting creator onboarding.
+/// </summary>
+public class CreatorOnboardingInput
+{
+    public int UserId { get; set; }
+    public string? UserEmail { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Bio { get; set; }
+    public string PayPalEmail { get; set; } = string.Empty;
+    public bool PayPalAccountAffirmed { get; set; }
+    public CreatorLocationCertification LocationCertification { get; set; }
+    public bool AcknowledgmentAccepted { get; set; }
+}
+
+/// <summary>
+/// Result of the StartOnboarding operation.
+/// </summary>
+public class StartOnboardingResult
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>True if the creator was activated immediately (returning creator with completed tax form).</summary>
+    public bool IsActive { get; set; }
+
+    /// <summary>True if the creator needs to fill out a tax form next.</summary>
+    public bool TaxFormPending { get; set; }
+
+    /// <summary>True if the creator is ineligible (e.g. non-US person inside US).</summary>
+    public bool IsIneligible { get; set; }
+
+    public static StartOnboardingResult Failure(string errorMessage) =>
+        new() { Success = false, ErrorMessage = errorMessage };
+}
+
+/// <summary>
+/// Result of the CompleteOnboarding operation.
+/// </summary>
+public class CompleteOnboardingResult
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public bool IsActive { get; set; }
+    public bool PaymentsReceivable { get; set; }
+    public bool PrimaryEmailConfirmed { get; set; }
+
+    public static CompleteOnboardingResult Failure(string errorMessage) =>
+        new() { Success = false, ErrorMessage = errorMessage };
+}
+
+/// <summary>
+/// Result of the InitiateTaxFormUpdate operation.
+/// </summary>
+public class InitiateTaxFormUpdateResult
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public static InitiateTaxFormUpdateResult Failure(string errorMessage) =>
+        new() { Success = false, ErrorMessage = errorMessage };
 }

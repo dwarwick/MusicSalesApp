@@ -89,6 +89,30 @@ public interface IAppSettingsService
     Task SetTaxBanditsMaintenanceEndUtcAsync(DateTime endUtc);
 
     /// <summary>
+    /// Gets the maximum audio upload file size in MB.
+    /// </summary>
+    /// <returns>The max upload size in MB, or the default value (100) if not set.</returns>
+    Task<int> GetMaxAudioUploadSizeMBAsync();
+
+    /// <summary>
+    /// Sets the maximum audio upload file size in MB.
+    /// </summary>
+    /// <param name="sizeMB">The max upload size in MB.</param>
+    Task SetMaxAudioUploadSizeMBAsync(int sizeMB);
+
+    /// <summary>
+    /// Gets the maximum image upload file size in MB.
+    /// </summary>
+    /// <returns>The max upload size in MB, or the default value (20) if not set.</returns>
+    Task<int> GetMaxImageUploadSizeMBAsync();
+
+    /// <summary>
+    /// Sets the maximum image upload file size in MB.
+    /// </summary>
+    /// <param name="sizeMB">The max upload size in MB.</param>
+    Task SetMaxImageUploadSizeMBAsync(int sizeMB);
+
+    /// <summary>
     /// Checks if Tax Bandits is currently in a maintenance window.
     /// Returns true if maintenance is enabled and the current UTC time falls within the start/end range.
     /// </summary>

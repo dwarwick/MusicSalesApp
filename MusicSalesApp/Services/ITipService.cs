@@ -62,4 +62,9 @@ public interface ITipService
     /// Gets all blocked tip attempts for admin fraud review.
     /// </summary>
     Task<List<BlockedTipAttempt>> GetAllBlockedTipAttemptsAsync();
+
+    /// <summary>
+    /// Marks a pending tip as cancelled when the user cancels the PayPal checkout.
+    /// </summary>
+    Task CancelTipAsync(string payPalOrderId);
 }

@@ -54,7 +54,7 @@ public class CreatorController : ControllerBase
         {
             return Ok(new CreatorStatusResponse
             {
-                IsCreator = false,
+                HasCreatorRecord = false,
                 OnboardingStatus = null,
                 IsActive = false
             });
@@ -62,7 +62,7 @@ public class CreatorController : ControllerBase
 
         return Ok(new CreatorStatusResponse
         {
-            IsCreator = true,
+            HasCreatorRecord = true,
             CreatorId = creator.Id,
             OnboardingStatus = creator.OnboardingStatus.ToString(),
             IsActive = creator.IsActive,
@@ -578,7 +578,7 @@ public class CreatorController : ControllerBase
 
 public class CreatorStatusResponse
 {
-    public bool IsCreator { get; set; }
+    public bool HasCreatorRecord { get; set; }
     public int? CreatorId { get; set; }
     public string? OnboardingStatus { get; set; }
     public bool IsActive { get; set; }

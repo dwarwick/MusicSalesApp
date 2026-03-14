@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -18,7 +19,7 @@ namespace MusicSalesApp.Components.Pages;
 
 public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 {
-    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB, loaded from settings
     private const string PriceFormat = "F2";
     private const int CropOutputSize = 800; // Output size in pixels for cropped square images
 
@@ -32,6 +33,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected IJSRuntime JS { get; set; }
     [Inject] protected IGenreService GenreService { get; set; }
     [Inject] protected IEmailService EmailService { get; set; }
+    [Inject] protected IConfiguration Configuration { get; set; }
+    [Inject] protected IAppSettingsService AppSettingsService { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -73,6 +76,17 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     {
         try
         {
+            // Load max image upload size from settings
+            try
+            {
+                var sizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+                _maxImageFileSize = (long)sizeMB * 1024 * 1024;
+            }
+            catch
+            {
+                // Use default if setting cannot be loaded
+            }
+
             // Load genres from database
             await LoadGenresAsync();
 
@@ -317,7 +331,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // Upload new images if provided
             else if (_songImageFile != null)
             {
-                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: MaxFileSize);
+                using var stream = _songImageFile.OpenReadStream(maxAllowedSize: _maxImageFileSize);
                 
                 // Get the file extension from the uploaded file
                 var fileExtension = Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
@@ -466,7 +480,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _validationErrors.Add($"Error saving changes: {ex.Message}");
+            _validationErrors.Add($"Error saving changes: {FileSizeHelper.FormatFileSizeExceptionMessage(ex.Message)}");
         }
         finally
         {
@@ -765,7 +779,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 <h2>Genre Disabled</h2>
 <p>The genre <strong>{genreName}</strong> has been disabled by an administrator.</p>
 <p>Songs that were assigned this genre have had their genre cleared. Please update your songs with a new genre.</p>
-<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:{Configuration["EmailSettings:CustomerServiceEmail"]}'>{Configuration["EmailSettings:CustomerServiceEmail"]}</a>.</p>
 <p style='color: #999; font-size: 12px;'>
     <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
 </p>";
@@ -808,7 +822,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 <h2>Genre Re-Enabled</h2>
 <p>The genre <strong>{genreName}</strong> has been re-enabled by an administrator.</p>
 <p>You can now assign this genre to your songs again.</p>
-<p>If you have any questions, please contact our customer service team at <a href='mailto:customerservice@streamtunes.net'>customerservice@streamtunes.net</a>.</p>
+<p>If you have any questions, please contact our customer service team at <a href='mailto:{Configuration["EmailSettings:CustomerServiceEmail"]}'>{Configuration["EmailSettings:CustomerServiceEmail"]}</a>.</p>
 <p style='color: #999; font-size: 12px;'>
     <a href='{EmailService.GetAppBaseUrl()}/manage-account' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
 </p>";

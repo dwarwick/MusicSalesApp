@@ -89,8 +89,10 @@ public partial class TipDialogModel : BlazorBase, IAsyncDisposable
 
         try
         {
-            // Get the current page URL to use as the return URL after PayPal approval
-            var currentUrl = NavigationManager.Uri;
+            // Get the current page URL to use as the return URL after PayPal approval.
+            // Strip any existing tip-related query params (tip_status, token, PayerID) to prevent
+            // accumulation across multiple PayPal round-trips.
+            var currentUrl = Helpers.TipUrlHelper.StripTipQueryParams(NavigationManager.Uri);
 
             // Capture client IP address from the HTTP connection for fraud detection
             var ipAddress = HttpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString();
