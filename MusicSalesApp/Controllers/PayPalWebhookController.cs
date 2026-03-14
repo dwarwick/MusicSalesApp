@@ -30,6 +30,7 @@ public class PayPalWebhookController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<PayPalWebhookController> _logger;
 
     public PayPalWebhookController(
@@ -40,6 +41,7 @@ public class PayPalWebhookController : ControllerBase
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
         UserManager<ApplicationUser> userManager,
+        IWebHostEnvironment environment,
         ILogger<PayPalWebhookController> logger)
     {
         _contextFactory = contextFactory;
@@ -49,6 +51,7 @@ public class PayPalWebhookController : ControllerBase
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
         _userManager = userManager;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -88,9 +91,14 @@ public class PayPalWebhookController : ControllerBase
                 return Unauthorized("Webhook signature verification failed");
             }
         }
+        else if (_environment.IsDevelopment())
+        {
+            _logger.LogInformation("Skipping PayPal webhook signature verification (Development environment with placeholder webhook ID)");
+        }
         else
         {
-            _logger.LogInformation("Skipping PayPal webhook signature verification (sandbox/placeholder webhook ID)");
+            _logger.LogError("PayPal:WebhookId is missing or placeholder in non-Development environment. Rejecting webhook to prevent forged requests.");
+            return Unauthorized("Webhook signature verification is required in production");
         }
 
         JsonDocument doc;
@@ -304,7 +312,7 @@ public class PayPalWebhookController : ControllerBase
         // 1. Cancel subscription in our database
         try
         {
-            await _subscriptionService.UpdateSubscriptionStatusAsync(paypalSubscriptionId, "CANCELLED");
+            await _subscriptionService.UpdateSubscriptionStatusAsync(paypalSubscriptionId, SubscriptionStatuses.Cancelled);
             notes.AppendLine("Subscription cancelled in database.");
         }
         catch (Exception ex)

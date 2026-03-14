@@ -85,13 +85,17 @@ public class AdminUserManagementModel : BlazorBase
         var creators = await context.Creators.ToListAsync();
         var subscriptions = await context.Subscriptions.ToListAsync();
 
+        // Pre-group subscriptions by UserId for O(users) lookup instead of O(users × subscriptions)
+        var latestSubByUser = subscriptions
+            .GroupBy(s => s.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(s => s.CreatedAt).First());
+
         _users = users.Select(u => 
         {
             var creator = creators.FirstOrDefault(c => c.UserId == u.Id);
-            var latestSub = subscriptions
-                .Where(s => s.UserId == u.Id)
-                .OrderByDescending(s => s.CreatedAt)
-                .FirstOrDefault();
+            latestSubByUser.TryGetValue(u.Id, out var latestSub);
 
             string subStatus;
             if (u.IsSubscriptionBlocked)
@@ -242,11 +246,11 @@ public class AdminUserManagementModel : BlazorBase
             user.LockoutEnabled = _editLockoutEnabled;
             user.LockoutEnd = _editLockoutEnd;
             user.IsSuspended = _editIsSuspended;
-            user.SuspendedAt = _editIsSuspended ? DateTime.UtcNow : null;
+            user.SuspendedAt = _editIsSuspended ? (user.SuspendedAt ?? DateTime.UtcNow) : null;
             user.IsSubscriptionBlocked = _editIsSubscriptionBlocked;
-            user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? DateTime.UtcNow : null;
+            user.SubscriptionBlockedAt = _editIsSubscriptionBlocked ? (user.SubscriptionBlockedAt ?? DateTime.UtcNow) : null;
             user.IsTipBlocked = _editIsTipBlocked;
-            user.TipBlockedAt = _editIsTipBlocked ? DateTime.UtcNow : null;
+            user.TipBlockedAt = _editIsTipBlocked ? (user.TipBlockedAt ?? DateTime.UtcNow) : null;
             user.Theme = _editTheme;
 
             // Update roles

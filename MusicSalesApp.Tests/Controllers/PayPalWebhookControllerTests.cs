@@ -1,9 +1,11 @@
 using System.Text;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Controllers;
@@ -23,6 +25,7 @@ public class PayPalWebhookControllerTests
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<IHttpClientFactory> _mockHttpClientFactory;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
+    private Mock<IWebHostEnvironment> _mockEnvironment;
     private Mock<ILogger<PayPalWebhookController>> _mockLogger;
     private PayPalWebhookController _controller;
     private DbContextOptions<AppDbContext> _dbOptions;
@@ -62,6 +65,10 @@ public class PayPalWebhookControllerTests
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
             userStore.Object, null, null, null, null, null, null, null, null);
 
+        // Set up environment as Development so placeholder WebhookId is accepted
+        _mockEnvironment = new Mock<IWebHostEnvironment>();
+        _mockEnvironment.Setup(e => e.EnvironmentName).Returns(Environments.Development);
+
         _mockLogger = new Mock<ILogger<PayPalWebhookController>>();
 
         _controller = new PayPalWebhookController(
@@ -72,6 +79,7 @@ public class PayPalWebhookControllerTests
             _mockConfiguration.Object,
             _mockHttpClientFactory.Object,
             _mockUserManager.Object,
+            _mockEnvironment.Object,
             _mockLogger.Object);
     }
 

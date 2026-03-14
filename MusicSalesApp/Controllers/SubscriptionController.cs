@@ -161,6 +161,14 @@ public class SubscriptionController : ControllerBase
                 return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
             }
 
+            // Verify that PayPal reports the subscription as ACTIVE
+            if (subscriptionDetails.Status != "ACTIVE")
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
+                    request.SubscriptionId, user.Id, subscriptionDetails.Status);
+                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
+            }
+
             // Activate the subscription now that payment is confirmed
             await _subscriptionService.ActivateSubscriptionAsync(
                 request.SubscriptionId,
@@ -247,6 +255,14 @@ public class SubscriptionController : ControllerBase
                 _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
                     subscription.PayPalSubscriptionId, user.Id);
                 return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
+            }
+
+            // Verify that PayPal reports the subscription as ACTIVE
+            if (subscriptionDetails.Status != "ACTIVE")
+            {
+                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
+                    subscription.PayPalSubscriptionId, user.Id, subscriptionDetails.Status);
+                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
             }
 
             // Activate the subscription now that payment is confirmed
@@ -818,6 +834,12 @@ public class SubscriptionController : ControllerBase
 
             var details = new PayPalSubscriptionDetails();
 
+            // Get subscription status from PayPal
+            if (root.TryGetProperty("status", out var statusProp))
+            {
+                details.Status = statusProp.GetString();
+            }
+
             // Get billing info
             if (root.TryGetProperty("billing_info", out var billingInfo))
             {
@@ -863,6 +885,7 @@ public class ActivateSubscriptionRequest
 
 public class PayPalSubscriptionDetails
 {
+    public string Status { get; set; }
     public DateTime? NextBillingDate { get; set; }
     public DateTime? LastPaymentDate { get; set; }
 }

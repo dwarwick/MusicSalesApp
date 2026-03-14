@@ -274,6 +274,23 @@ public class TipService : ITipService
                 return (false, "Tip not found or already processed.", 0);
             }
 
+            // Re-validate rate limits at capture time to prevent parallel bypass:
+            // A user could open multiple tip flows in parallel (all pass initial validation since
+            // CapturedAt is null), then capture them all. Re-checking here ensures the limits
+            // are enforced at the point of actual payment.
+            var (canTip, validationError) = await ValidateTipAsync(
+                tip.TipperUserId, tip.CreatorId, tip.Amount, tip.IpAddress, tip.MachineFingerprint);
+            if (!canTip)
+            {
+                // Remove the uncaptured tip record since it failed re-validation
+                context.Tips.Remove(tip);
+                await context.SaveChangesAsync();
+                _logger.LogWarning(
+                    "Tip capture blocked by re-validation for PayPal order {OrderId}: {Error}",
+                    payPalOrderId, validationError);
+                return (false, validationError ?? "Tip validation failed.", 0);
+            }
+
             // Capture the PayPal order
             var (captured, captureError, captureId) = await CapturePayPalOrderAsync(payPalOrderId);
             if (!captured)
@@ -662,7 +679,10 @@ public class TipService : ITipService
                     payments.TryGetProperty("captures", out var captures) &&
                     captures.GetArrayLength() > 0)
                 {
-                    captureId = captures[0].GetProperty("id").GetString();
+                    if (captures[0].TryGetProperty("id", out var captureIdProp))
+                    {
+                        captureId = captureIdProp.GetString();
+                    }
                 }
             }
 
