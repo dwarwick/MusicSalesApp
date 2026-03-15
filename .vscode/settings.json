@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^git stash push -m \"preserve plan file\" -- \\.github/prompts/plan-staticSsrSitemapPages\\.prompt\\.md$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

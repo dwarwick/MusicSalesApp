@@ -1,4 +1,5 @@
 @page "/my-playlists"
+@rendermode InteractiveServer
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Components.Shared
@@ -41,7 +42,7 @@
                             </div>
                             <div class="card-actions">
                                 <SfButton OnClick="@(() => PlayPlaylist(likedSongsPlaylist))">
-                                    <SfIcon IconCss="fas fa-solid fa-play" />
+                                    @((MarkupString)SvgIcons.Play)
                                 </SfButton>
                                 @* No View button for Liked Songs *@
                             </div>
@@ -55,8 +56,7 @@
     <div class="playlists-page-header">
         <h2>My Playlists</h2>
         <SfButton OnClick="@ShowCreatePlaylistDialog" CssClass="e-success">
-            <span class="e-btn-icon fas fa-plus"></span>
-            Create Playlist
+            @((MarkupString)SvgIcons.Plus) Create Playlist
         </SfButton>
     </div>
 
@@ -96,8 +96,8 @@
                 <SfCard CssClass="@GetPlaylistCardClass(playlist)">
                     <CardHeader Title="@playlist.PlaylistName">
                         <div class="playlists-page-actions">
-                            <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small" IconCss="fas fa-edit" />
-                            <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger" IconCss="fas fa-trash" />
+                            <SfButton OnClick="@(() => ShowEditPlaylistDialog(playlist))" CssClass="e-small">@((MarkupString)SvgIcons.Edit)</SfButton>
+                            <SfButton OnClick="@(() => ShowDeletePlaylistDialog(playlist))" CssClass="e-small e-danger">@((MarkupString)SvgIcons.Trash)</SfButton>
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -107,10 +107,10 @@
                         </div>
                         <div class="card-actions">
                             <SfButton OnClick="@(() => PlayPlaylist(playlist))">
-                                <SfIcon IconCss="fas fa-solid fa-play" />
+                                @((MarkupString)SvgIcons.Play)
                             </SfButton>
                             <SfButton OnClick="@(() => ViewPlaylist(playlist))">
-                                <SfIcon IconCss="fas fa-solid fa-eye" />
+                                @((MarkupString)SvgIcons.Eye)
                             </SfButton>
                         </div>
                     </CardContent>
@@ -126,8 +126,7 @@
                 <h4>@_selectedPlaylist.PlaylistName</h4>
                 <div>
                     <SfButton OnClick="@ShowAddSongDialog" CssClass="e-success">
-                        <span class="e-btn-icon fas fa-plus"></span>
-                        Add Song
+                        @((MarkupString)SvgIcons.Plus) Add Song
                     </SfButton>
                     <SfButton OnClick="@ClosePlaylistView" CssClass="e-outline">
                         Close
@@ -156,8 +155,9 @@
                                     }
                                 </div>
                                 <SfButton OnClick="@(() => RemoveSongFromPlaylist(userPlaylist))"
-                                          CssClass="e-small e-danger"
-                                          IconCss="fas fa-times" />
+                                          CssClass="e-small e-danger">
+                                    @((MarkupString)SvgIcons.Times)
+                                </SfButton>
                             </div>
                         }
                     }

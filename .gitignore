@@ -366,3 +366,4 @@ FodyWeavers.xsd
 /MusicSalesApp/wwwroot/sitemap.xml
 **/bin\\*
 /MusicSalesApp/appsettings.Test.json
+/MusicSalesApp/appsettings.Production.json

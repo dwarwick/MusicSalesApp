@@ -1,4 +1,5 @@
 @page "/music-library"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inherits MusicSalesApp.Components.Pages.MusicLibraryModel
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
@@ -111,17 +112,17 @@ else
                                 <SfButton OnClick=@(() => ToggleCardPlay(cardId)) title="@(IsCardCurrentlyPlaying(cardId) ? "Pause" : "Play")">
                                     @if (IsCardCurrentlyPlaying(cardId))
                                     {
-                                        <SfIcon IconCss="fas fa-solid fa-pause" />
+                                        @((MarkupString)SvgIcons.Pause)
                                     }
                                     else
                                     {
-                                        <SfIcon IconCss="fas fa-solid fa-play" />
+                                        @((MarkupString)SvgIcons.Play)
                                     }
                                 </SfButton>
 
                                 <!-- Stop Button -->
                                 <SfButton OnClick=@(() => StopCard(cardId)) title="Stop">
-                                    <SfIcon IconCss="fas fa-solid fa-stop" />
+                                    @((MarkupString)SvgIcons.Stop)
                                 </SfButton>
                             </div>
 
@@ -176,11 +177,11 @@ else
                     <!-- Card Actions: Play button, Like/Dislike, and View button -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play"><SfIcon IconCss="fas fa-solid fa-play" /></SfButton>
+                            <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
                         <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view"><SfIcon IconCss="fas fa-solid fa-eye" /></SfButton>
+                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
                         </div>
                     </div>
                 }

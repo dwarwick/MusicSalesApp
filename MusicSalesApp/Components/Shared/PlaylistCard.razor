@@ -31,12 +31,12 @@
         </div>
         <div class="card-actions">
             <SfButton OnClick="@OnPlay">
-                <SfIcon IconCss="fas fa-solid fa-play" />
+                @((MarkupString)SvgIcons.Play)
             </SfButton>
             @if (OnView.HasDelegate)
             {
                 <SfButton OnClick="@OnView">
-                    <SfIcon IconCss="fas fa-solid fa-eye" />
+                    @((MarkupString)SvgIcons.Eye)
                 </SfButton>
             }
         </div>

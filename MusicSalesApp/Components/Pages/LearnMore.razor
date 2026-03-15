@@ -1,5 +1,4 @@
 @page "/LearnMore"
-@using Syncfusion.Blazor.Buttons
 @inherits LearnMoreModel
 
 <PageTitle>Learn More - Streamtunes</PageTitle>
@@ -218,21 +217,21 @@
             @if (!_isAuthenticated)
             {
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
-                    <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                    <a href="/register" class="e-control e-btn cta-button cta-button-register">
                         Create Free Account
-                    </SfButton>
+                    </a>
                     <p style="margin-top: 1rem;">Already registered?</p>
-                    <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                    <a href="/login" class="e-control e-btn cta-button cta-button-login">
                         Log In
-                    </SfButton>
+                    </a>
                 </div>
             }
             else if (!_isActiveCreator)
             {
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
-                    <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                    <a href="/manage-account" class="e-control e-btn cta-button cta-button-register">
                         Get Started
-                    </SfButton>
+                    </a>
                 </div>
             }
         </section>

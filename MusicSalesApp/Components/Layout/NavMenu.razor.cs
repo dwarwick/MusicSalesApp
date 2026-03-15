@@ -15,12 +15,21 @@ public class NavMenuModel : BlazorBase, IDisposable
     protected SfSidebar _sidebar;
 
     private bool _disposed;
+    private bool _hasLoadedData = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         ThemeService.OnThemeChanged += HandleThemeChanged;
-        
-        await InitializeTheme();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            await InitializeTheme();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task InitializeTheme()

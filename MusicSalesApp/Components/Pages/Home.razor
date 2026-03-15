@@ -1,8 +1,5 @@
 ﻿@page "/"
-@using MusicSalesApp.Components.Shared
 @using MusicSalesApp.Components.Pages
-@using Syncfusion.Blazor.Buttons
-@using Syncfusion.Blazor.Cards
 @inherits HomeModel
 
 <PageTitle>Stream Tunes - Unlimited Music Streaming</PageTitle>
@@ -22,20 +19,20 @@
             @if (!_isAuthenticated)
             {
                 <div class="hero-cta">                    
-                    <SfButton CssClass="cta-secondary" OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                    <a href="/login" class="e-control e-btn cta-secondary">
                         Log In
-                    </SfButton>
-                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                    </a>
+                    <a href="/register" class="e-control e-btn cta-primary">
                         Register
-                    </SfButton>
+                    </a>
                 </div>
             }
             else if (!_hasActiveSubscription)
             {
                 <div class="hero-cta">
-                    <SfButton CssClass="cta-primary" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                    <a href="/manage-account" class="e-control e-btn cta-primary">
                         Subscribe Now - $@_subscriptionPrice/mo
-                    </SfButton>
+                    </a>
                 </div>
             }
         </div>
@@ -92,26 +89,26 @@
                         </p>
                         <div class="cta-learn-row">
                             <span class="cta-learn-link">Learn how it works →</span>
-                            <SfButton CssClass="cta-button cta-button-learn" OnClick="@(() => NavigationManager.NavigateTo("/LearnMore"))">
+                            <a href="/LearnMore" class="e-control e-btn cta-button cta-button-learn">
                                 Learn More
-                            </SfButton>
+                            </a>
                         </div>
                         @if (!_isAuthenticated)
                         {
                             <div class="cta-button-group">
-                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                <a href="/login?returnUrl=/manage-account" class="e-control e-btn cta-button cta-button-login">
                                     Log In
-                                </SfButton>
-                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                </a>
+                                <a href="/register" class="e-control e-btn cta-button cta-button-register">
                                     Register
-                                </SfButton>
+                                </a>
                             </div>
                         }
                         else
                         {
-                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                            <a href="/manage-account" class="e-control e-btn cta-button">
                                 Click Here to Get Started
-                            </SfButton>
+                            </a>
                         }
                     </div>
                 }
@@ -162,19 +159,19 @@
                         {
                             <p class="cta-auth-text">Log In or Register to Get Started</p>
                             <div class="cta-button-group">
-                                <SfButton CssClass="cta-button cta-button-login" OnClick="@(() => NavigationManager.NavigateTo("/login?returnUrl=/manage-account"))">
+                                <a href="/login?returnUrl=/manage-account" class="e-control e-btn cta-button cta-button-login">
                                     Log In
-                                </SfButton>
-                                <SfButton CssClass="cta-button cta-button-register" OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                                </a>
+                                <a href="/register" class="e-control e-btn cta-button cta-button-register">
                                     Register
-                                </SfButton>
+                                </a>
                             </div>
                         }
                         else
                         {
-                            <SfButton CssClass="cta-button" OnClick="@(() => NavigationManager.NavigateTo("/manage-account"))">
+                            <a href="/manage-account" class="e-control e-btn cta-button">
                                 Click Here to Get Started
-                            </SfButton>
+                            </a>
                         }
                     </div>
                 }
@@ -227,23 +224,27 @@
             <div class="playlists-page-grid">
                 @if (_recommendedPlaylist.Any())
                 {
-                    <PlaylistCard 
-                        PlaylistName="Recommended For You"
-                        SongCount="@_recommendedPlaylist.Count"
-                        Description="Songs you might enjoy based on your preferences"
-                        ShowActions="false"
-                        CssClass="recommended-playlist-card"
-                        OnPlay="@PlayRecommendedPlaylist" />
+                    <a href="/recommended-playlist/@_currentUserId" class="e-card playlists-page-card music-card recommended-playlist-card playlist-card-link">
+                        <div class="e-card-header">
+                            <div class="e-card-header-title">Recommended For You</div>
+                        </div>
+                        <div class="e-card-content">
+                            <p>@_recommendedPlaylist.Count song(s)</p>
+                            <p class="playlist-description">Songs you might enjoy based on your preferences</p>
+                        </div>
+                    </a>
                 }
                 @if (HasLikedSongsToShow)
                 {
-                    <PlaylistCard 
-                        PlaylistName="Liked Songs"
-                        SongCount="@_likedSongsCount"
-                        Description="Songs you've liked"
-                        ShowActions="false"
-                        CssClass="liked-songs-playlist-card"
-                        OnPlay="@PlayLikedSongsPlaylist" />
+                    <a href="/playlist/@_likedSongsPlaylist.Id" class="e-card playlists-page-card music-card liked-songs-playlist-card playlist-card-link">
+                        <div class="e-card-header">
+                            <div class="e-card-header-title">Liked Songs</div>
+                        </div>
+                        <div class="e-card-content">
+                            <p>@_likedSongsCount song(s)</p>
+                            <p class="playlist-description">Songs you've liked</p>
+                        </div>
+                    </a>
                 }
             </div>
         </section>

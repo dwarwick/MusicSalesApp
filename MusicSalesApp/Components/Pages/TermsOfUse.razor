@@ -214,14 +214,14 @@
                 Creators may earn stream-based earnings from streams of their music on the platform under the following structure:
             </p>
             <ul>
-                <li><strong>Pay Rate:</strong> Creators are paid per stream at a rate established at the time of creator onboarding (typically $5.00 per 1,000 streams, or $0.005 per stream). This rate is locked in for the lifetime of the creator account unless modified by written agreement or required by law.</li>
+                <li><strong>Pay Rate:</strong> Creators are paid per stream at a rate established at the time of creator onboarding (typically $@_streamPayRateDisplay.ToString("F2") per 1,000 streams, or $@_streamPayRatePerStream.ToString("F3") per stream). This rate is locked in for the lifetime of the creator account unless modified by written agreement or required by law.</li>
                 <li><strong>Stream Definition:</strong> A stream is counted when a user plays a song for at least @_streamQualifyingSeconds continuous seconds without seeking or looping.</li>
                 <li><strong>Payout Schedule:</strong> Stream-based earnings are processed weekly, every Monday at 1:00 AM UTC, subject to payment processor availability and compliance checks.</li>
                 <li><strong>Minimum Payout:</strong> Creators must accrue at least $5.00 in unpaid stream-based earnings to receive a payout.</li>
                 <li><strong>Payment Frequency:</strong> Creators may receive no more than one payout per week.</li>
                 <li><strong>Payment Method:</strong> All payouts are issued through Streamtunes' designated payment processor. Streamtunes does not custody creator funds.</li>
                 <li><strong>Receipts:</strong> Creators will receive an electronic, itemized payout receipt detailing stream counts and earnings, subject to payment processor availability and compliance checks, and as long as there are no technical issues.</li>
-                <li><strong>Example:</strong> If a creator accrues 1,000 total qualifying streams at $0.005 per stream, the creator earns $5.00 and will be paid on the next eligible payout date.</li>
+                <li><strong>Example:</strong> If a creator accrues 1,000 total qualifying streams at $@_streamPayRatePerStream.ToString("F3") per stream, the creator earns $@_streamPayRateDisplay.ToString("F2") and will be paid on the next eligible payout date.</li>
             </ul>
 
             <h3>10.4 No Guaranteed Earnings</h3>
