@@ -82,10 +82,10 @@ namespace MusicSalesApp.Components.Pages
         protected SubscribeCtaDialogModel _subscribeCtaDialog;
         protected TipDialogModel _tipDialog;
 
-        [SupplyParameterFromQuery(Name = "tip_status")]
+        [Parameter]
         public string TipStatus { get; set; }
 
-        [SupplyParameterFromQuery(Name = "token")]
+        [Parameter]
         public string TipPayPalToken { get; set; }
 
         protected SfToast _toastRef;

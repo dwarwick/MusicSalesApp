@@ -222,6 +222,46 @@ public class SongPlayerTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("4:05"));
     }
 
+    [Test]
+    public void SongPlayer_BindsTipStatusFromQueryString()
+    {
+        // Arrange – navigate to a URL that contains tip return query params
+        var nav = TestContext.Services.GetService<NavigationManager>();
+        nav.NavigateTo("/song/TestSong?tip_status=approved&token=EC-TESTTOKEN123");
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        var cut = TestContext.Render<SongPlayer>(
+            pb => pb.Add(p => p.SongTitle, "TestSong"));
+
+        // Assert – the routable wrapper should have bound both query params
+        var instance = cut.Instance;
+        Assert.That(instance.TipStatus, Is.EqualTo("approved"));
+        Assert.That(instance.TipPayPalToken, Is.EqualTo("EC-TESTTOKEN123"));
+    }
+
+    [Test]
+    public void SongPlayer_ForwardsTipParamsToInteractiveChild()
+    {
+        // Arrange
+        var nav = TestContext.Services.GetService<NavigationManager>();
+        nav.NavigateTo("/song/TestSong?tip_status=approved&token=EC-TESTTOKEN123");
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        // Act
+        var cut = TestContext.Render<SongPlayer>(
+            pb => pb.Add(p => p.SongTitle, "TestSong"));
+
+        // Assert – the interactive child should receive the params as [Parameter] values
+        var child = cut.FindComponent<SongPlayerInteractive>();
+        Assert.That(child.Instance.TipStatus, Is.EqualTo("approved"));
+        Assert.That(child.Instance.TipPayPalToken, Is.EqualTo("EC-TESTTOKEN123"));
+    }
+
     private new class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly Dictionary<Uri, HttpResponseMessage> _responses = new();

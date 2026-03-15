@@ -9,6 +9,12 @@ public partial class SongPlayerModel : ComponentBase
     [Parameter]
     public string SongTitle { get; set; }
 
+    [SupplyParameterFromQuery(Name = "tip_status")]
+    public string TipStatus { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    public string TipPayPalToken { get; set; }
+
     [Inject]
     private ISongMetadataService SongMetadataService { get; set; }
 
