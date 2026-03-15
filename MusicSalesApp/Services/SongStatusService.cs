@@ -75,6 +75,17 @@ public class SongStatusService : ISongStatusService
                 _logger.LogInformation("Removed song {SongMetadataId} from {Count} playlists", songMetadataId, playlistEntries.Count);
             }
 
+            // Remove the song from all recommended playlists
+            var recommendedEntries = await context.RecommendedPlaylists
+                .Where(rp => rp.SongMetadataId == songMetadataId)
+                .ToListAsync();
+
+            if (recommendedEntries.Any())
+            {
+                context.RecommendedPlaylists.RemoveRange(recommendedEntries);
+                _logger.LogInformation("Removed song {SongMetadataId} from {Count} recommended playlists", songMetadataId, recommendedEntries.Count);
+            }
+
             await context.SaveChangesAsync();
 
             // Send notification email to creator if they have an email

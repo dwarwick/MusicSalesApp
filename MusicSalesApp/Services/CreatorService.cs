@@ -435,6 +435,19 @@ public class CreatorService : ICreatorService
         // Mark as inactive
         song.IsActive = false;
         song.UpdatedAt = DateTime.UtcNow;
+
+        // Remove from all user playlists
+        var userPlaylists = await context.UserPlaylists
+            .Where(up => up.SongMetadataId == songMetadataId)
+            .ToListAsync();
+        context.UserPlaylists.RemoveRange(userPlaylists);
+
+        // Remove from all recommended playlists
+        var recommendedPlaylists = await context.RecommendedPlaylists
+            .Where(rp => rp.SongMetadataId == songMetadataId)
+            .ToListAsync();
+        context.RecommendedPlaylists.RemoveRange(recommendedPlaylists);
+
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Deleted song {SongMetadataId} for creator {CreatorId}", songMetadataId, creatorId);

@@ -1020,6 +1020,94 @@ public class SongMetadataServiceTests
 
     #endregion
 
+    #region DeactivateByBlobPathAsync Cleanup Tests
+
+    [Test]
+    public async Task DeactivateByBlobPathAsync_RemovesSongFromUserPlaylists()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            BlobPath = "folder/test.mp3",
+            Mp3BlobPath = "folder/test.mp3",
+            IsActive = true,
+            IsEnabled = true
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        var playlist = new Playlist { UserId = user.Id, PlaylistName = "Test Playlist" };
+        _context.Playlists.Add(playlist);
+        await _context.SaveChangesAsync();
+
+        _context.UserPlaylists.Add(new UserPlaylist
+        {
+            UserId = user.Id,
+            PlaylistId = playlist.Id,
+            SongMetadataId = song.Id
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.DeactivateByBlobPathAsync("folder/test.mp3", "Creator removed");
+
+        // Assert
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var playlistEntry = await verifyContext.UserPlaylists
+            .Where(up => up.SongMetadataId == song.Id)
+            .FirstOrDefaultAsync();
+        Assert.That(playlistEntry, Is.Null, "Song should be removed from user playlists when deactivated");
+    }
+
+    [Test]
+    public async Task DeactivateByBlobPathAsync_RemovesSongFromRecommendedPlaylists()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            BlobPath = "folder/test.mp3",
+            Mp3BlobPath = "folder/test.mp3",
+            IsActive = true,
+            IsEnabled = true
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        _context.RecommendedPlaylists.Add(new RecommendedPlaylist
+        {
+            UserId = user.Id,
+            SongMetadataId = song.Id,
+            DisplayOrder = 1,
+            GeneratedAt = DateTime.UtcNow,
+            Score = 5.0
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.DeactivateByBlobPathAsync("folder/test.mp3", "Creator removed");
+
+        // Assert
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var recommendedEntry = await verifyContext.RecommendedPlaylists
+            .Where(rp => rp.SongMetadataId == song.Id)
+            .FirstOrDefaultAsync();
+        Assert.That(recommendedEntry, Is.Null, "Song should be removed from recommended playlists when deactivated");
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

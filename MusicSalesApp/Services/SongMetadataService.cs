@@ -227,6 +227,19 @@ namespace MusicSalesApp.Services
                 metadata.IsEnabled = false;
                 metadata.StatusReason = reason;
                 metadata.UpdatedAt = DateTime.UtcNow;
+
+                // Remove from all user playlists
+                var userPlaylists = await context.UserPlaylists
+                    .Where(up => up.SongMetadataId == metadata.Id)
+                    .ToListAsync();
+                context.UserPlaylists.RemoveRange(userPlaylists);
+
+                // Remove from all recommended playlists
+                var recommendedPlaylists = await context.RecommendedPlaylists
+                    .Where(rp => rp.SongMetadataId == metadata.Id)
+                    .ToListAsync();
+                context.RecommendedPlaylists.RemoveRange(recommendedPlaylists);
+
                 await context.SaveChangesAsync();
                 return true;
             }

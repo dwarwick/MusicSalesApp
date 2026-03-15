@@ -453,6 +453,58 @@ public class PlaylistServiceTests
         Assert.That(result, Has.Count.EqualTo(1)); // Only song2 should be available
         Assert.That(result[0].Id, Is.EqualTo(song2Metadata.Id));
     }
+
+    [Test]
+    public async Task GetPlaylistSongsAsync_ExcludesInactiveSongs()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var activeSong = new SongMetadata { Mp3BlobPath = "active.mp3", IsActive = true, IsEnabled = true };
+        var inactiveSong = new SongMetadata { Mp3BlobPath = "inactive.mp3", IsActive = false, IsEnabled = true };
+        _context.SongMetadata.AddRange(activeSong, inactiveSong);
+        await _context.SaveChangesAsync();
+
+        var playlist = new Playlist { UserId = user.Id, PlaylistName = "Test Playlist" };
+        _context.Playlists.Add(playlist);
+        await _context.SaveChangesAsync();
+
+        _context.UserPlaylists.AddRange(
+            new UserPlaylist { UserId = user.Id, PlaylistId = playlist.Id, SongMetadataId = activeSong.Id },
+            new UserPlaylist { UserId = user.Id, PlaylistId = playlist.Id, SongMetadataId = inactiveSong.Id }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.GetPlaylistSongsAsync(playlist.Id);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].SongMetadataId, Is.EqualTo(activeSong.Id));
+    }
+
+    [Test]
+    public async Task CanAddSongToPlaylistAsync_ReturnsFalse_ForInactiveSong()
+    {
+        // Arrange
+        var song = new SongMetadata
+        {
+            Mp3BlobPath = "test.mp3",
+            IsActive = false,
+            IsEnabled = true,
+            IsAlbumCover = false
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.CanAddSongToPlaylistAsync(song.Id);
+
+        // Assert
+        Assert.That(result, Is.False, "Inactive songs should not be addable to playlists");
+    }
 }
 
 // Tests for Liked Songs Playlist functionality

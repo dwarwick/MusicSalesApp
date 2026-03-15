@@ -170,7 +170,7 @@ public class PlaylistService : IPlaylistService
                     .ThenInclude(sm => sm.Creator)
                         .ThenInclude(c => c.User)
                 .Where(up => up.PlaylistId == playlistId)
-                .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled) // Filter out disabled songs
+                .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled && up.SongMetadata.IsActive) // Filter out disabled/inactive songs
                 .OrderBy(up => up.AddedAt)
                 .ToListAsync();
         }
@@ -283,8 +283,9 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
-            // Check if this is a valid song (not an album cover, is enabled, and has MP3)
+            // Check if this is a valid song (not an album cover, is active, is enabled, and has MP3)
             return !metadata.IsAlbumCover && 
+                   metadata.IsActive &&
                    metadata.IsEnabled && 
                    !string.IsNullOrEmpty(metadata.Mp3BlobPath);
         }
