@@ -1370,6 +1370,104 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region DeleteCreatorSongAsync Cleanup Tests
+
+    [Test]
+    public async Task DeleteCreatorSongAsync_RemovesSongFromUserPlaylists()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            BlobPath = "test.mp3",
+            Mp3BlobPath = "test.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = creator.Id
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        var playlist = new Playlist { UserId = user.Id, PlaylistName = "My Playlist" };
+        _context.Playlists.Add(playlist);
+        await _context.SaveChangesAsync();
+
+        _context.UserPlaylists.Add(new UserPlaylist
+        {
+            UserId = user.Id,
+            PlaylistId = playlist.Id,
+            SongMetadataId = song.Id
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.DeleteCreatorSongAsync(song.Id, creator.Id);
+
+        // Assert
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var playlistEntry = await verifyContext.UserPlaylists
+            .Where(up => up.SongMetadataId == song.Id)
+            .FirstOrDefaultAsync();
+        Assert.That(playlistEntry, Is.Null, "Song should be removed from user playlists when creator deletes it");
+    }
+
+    [Test]
+    public async Task DeleteCreatorSongAsync_RemovesSongFromRecommendedPlaylists()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, IsActive = true };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            BlobPath = "test.mp3",
+            Mp3BlobPath = "test.mp3",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = creator.Id
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        _context.RecommendedPlaylists.Add(new RecommendedPlaylist
+        {
+            UserId = user.Id,
+            SongMetadataId = song.Id,
+            DisplayOrder = 1,
+            GeneratedAt = DateTime.UtcNow,
+            Score = 5.0
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.DeleteCreatorSongAsync(song.Id, creator.Id);
+
+        // Assert
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var recommendedEntry = await verifyContext.RecommendedPlaylists
+            .Where(rp => rp.SongMetadataId == song.Id)
+            .FirstOrDefaultAsync();
+        Assert.That(recommendedEntry, Is.Null, "Song should be removed from recommended playlists when creator deletes it");
+    }
+
+    #endregion
+
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;
