@@ -395,9 +395,9 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_ExcludesInactiveSongsFromCachedResults()
+    public async Task GenerateRecommendationsAsync_ExcludesInactiveSongsWhenPreviouslyCached()
     {
-        // Arrange - seed a song and a cached recommendation for it, then mark inactive
+        // Arrange - seed an inactive song that already has a cached recommendation entry
         var songs = new List<SongMetadata>
         {
             new() { Id = 1, Mp3BlobPath = "song1.mp3", IsAlbumCover = false, IsActive = false, IsEnabled = true }
@@ -416,11 +416,49 @@ public class RecommendationServiceTests
 
         var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
 
-        // Act - in DEBUG mode this always regenerates, so we test GenerateRecommendationsAsync directly
+        // Act - GenerateRecommendationsAsync clears old cached entries and rebuilds; inactive
+        // songs must not appear in the regenerated results.
         var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         var recommendedSongIds = result.Select(r => r.SongMetadataId).ToList();
         Assert.That(recommendedSongIds, Does.Not.Contain(1), "Inactive song should not appear even if previously cached");
+    }
+
+    [Test]
+    public async Task GetRecommendedPlaylistAsync_RegeneratesWhenAllCachedSongsBecomeInactiveOrDisabled()
+    {
+        // Arrange - seed one active and one inactive song; only the inactive one has a cached
+        // recommendation so that after filtering the cached list is empty and a regeneration
+        // must occur (returning the active song instead).
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "inactive.mp3", IsAlbumCover = false, IsActive = false, IsEnabled = true, NumberOfStreams = 10 },
+            new() { Id = 2, Mp3BlobPath = "active.mp3",   IsAlbumCover = false, IsActive = true,  IsEnabled = true, NumberOfStreams = 100 }
+        };
+        var context = await CreateAndSeedDatabase(songs);
+
+        // Only the inactive song is in the cache
+        context.RecommendedPlaylists.Add(new RecommendedPlaylist
+        {
+            UserId = 1,
+            SongMetadataId = 1,
+            DisplayOrder = 1,
+            GeneratedAt = DateTime.UtcNow,
+            Score = 5.0
+        });
+        await context.SaveChangesAsync();
+
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+
+        // Act - call GenerateRecommendationsAsync directly (in DEBUG builds GetRecommendedPlaylistAsync
+        // always regenerates, so this directly exercises the regeneration path that the production
+        // RELEASE fallback relies on when all cached entries are inactive/disabled).
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
+
+        // Assert - the inactive song must not appear; the active song should be returned
+        var recommendedSongIds = result.Select(r => r.SongMetadataId).ToList();
+        Assert.That(recommendedSongIds, Does.Not.Contain(1), "Inactive song should not be recommended after regeneration");
+        Assert.That(recommendedSongIds, Does.Contain(2), "Active song should appear in regenerated recommendations");
     }
 }

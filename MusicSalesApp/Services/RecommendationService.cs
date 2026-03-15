@@ -87,7 +87,7 @@ public class RecommendationService : IRecommendationService
             if (await HasFreshRecommendationsAsync(userId))
             {
                 await using var context = await _contextFactory.CreateDbContextAsync();
-                return await context.RecommendedPlaylists
+                var cached = await context.RecommendedPlaylists
                     .Include(rp => rp.SongMetadata)
                         .ThenInclude(sm => sm.Creator)
                             .ThenInclude(c => c.User)
@@ -95,6 +95,13 @@ public class RecommendationService : IRecommendationService
                     .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled && rp.SongMetadata.IsActive) // Filter out disabled/inactive songs
                     .OrderBy(rp => rp.DisplayOrder)
                     .ToListAsync();
+
+                // If all cached recommendations were filtered out (e.g. songs became inactive/disabled),
+                // fall through to regenerate rather than returning an empty list for up to 24 hours.
+                if (cached.Count > 0)
+                {
+                    return cached;
+                }
             }
 
             return await GenerateRecommendationsAsync(userId);
