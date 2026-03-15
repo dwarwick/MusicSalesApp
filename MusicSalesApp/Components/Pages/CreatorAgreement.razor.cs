@@ -6,23 +6,18 @@ public partial class CreatorAgreementModel : BlazorBase
 {
     protected int _streamQualifyingSeconds = 30;
     protected decimal _streamPayRateDisplay = 5.00m;
-    private bool _hasLoadedData = false;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender && !_hasLoadedData)
+        try
         {
-            _hasLoadedData = true;
-            try
-            {
-                _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-                var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
-                _streamPayRateDisplay = streamPayRate * 1000;
-            }
-            finally
-            {
-                await InvokeAsync(StateHasChanged);
-            }
+            _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+            var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
+            _streamPayRateDisplay = streamPayRate * 1000;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading CreatorAgreement data");
         }
     }
 }

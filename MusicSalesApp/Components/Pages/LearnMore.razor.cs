@@ -1,4 +1,3 @@
-using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages;
@@ -9,39 +8,29 @@ public partial class LearnMoreModel : BlazorBase
     protected int _streamQualifyingSeconds = 30;
     protected bool _isAuthenticated = false;
     protected bool _isActiveCreator = false;
-    private bool _hasLoadedData = false;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender)
+        try
         {
-            await JS.InvokeVoidAsync("eval", "document.querySelector('main').scrollTop = 0");
+            var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
+            _streamPayRateDisplay = streamPayRate.ToString("0.###");
+            _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
 
-            if (!_hasLoadedData)
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User?.Identity?.IsAuthenticated == true)
             {
-                _hasLoadedData = true;
-                try
+                _isAuthenticated = true;
+                var appUser = await UserManager.GetUserAsync(authState.User);
+                if (appUser != null)
                 {
-                    var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
-                    _streamPayRateDisplay = streamPayRate.ToString("0.###");
-                    _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-
-                    var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                    if (authState.User?.Identity?.IsAuthenticated == true)
-                    {
-                        _isAuthenticated = true;
-                        var appUser = await UserManager.GetUserAsync(authState.User);
-                        if (appUser != null)
-                        {
-                            _isActiveCreator = await CreatorService.IsActiveCreatorAsync(appUser.Id);
-                        }
-                    }
-                }
-                finally
-                {
-                    await InvokeAsync(StateHasChanged);
+                    _isActiveCreator = await CreatorService.IsActiveCreatorAsync(appUser.Id);
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading LearnMore page data");
         }
     }
 }

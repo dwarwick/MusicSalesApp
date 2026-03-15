@@ -5,21 +5,20 @@ namespace MusicSalesApp.Components.Pages;
 public partial class TermsOfUseModel : BlazorBase
 {
     protected int _streamQualifyingSeconds = 30;
-    private bool _hasLoadedData = false;
+    protected decimal _streamPayRatePerStream = 0.005m;
+    protected decimal _streamPayRateDisplay = 5.00m;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender && !_hasLoadedData)
+        try
         {
-            _hasLoadedData = true;
-            try
-            {
-                _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-            }
-            finally
-            {
-                await InvokeAsync(StateHasChanged);
-            }
+            _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+            _streamPayRatePerStream = await AppSettingsService.GetStreamPayRateAsync();
+            _streamPayRateDisplay = _streamPayRatePerStream * 1000;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading TermsOfUse data");
         }
     }
 }

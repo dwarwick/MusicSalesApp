@@ -1,4 +1,5 @@
 @page "/upload-files"
+@rendermode InteractiveServer
 @inherits MusicSalesApp.Components.Pages.UploadFilesModel
 @using Microsoft.AspNetCore.Authorization
 @using MusicSalesApp.Common.Helpers
@@ -272,7 +273,7 @@
 
                     input.files = dt.files;
 
-                    // Remove our detector — it either fired synchronously or won't
+                    // Remove our detector ï¿½ it either fired synchronously or won't
                     input.removeEventListener('change', onNativeChange);
 
                     // Only dispatch a synthetic event if the browser didn't fire one
