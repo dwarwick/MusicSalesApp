@@ -18,10 +18,10 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     [Parameter]
     public string SongTitle { get; set; }
 
-    [SupplyParameterFromQuery(Name = "tip_status")]
+    [Parameter]
     public string TipStatus { get; set; }
 
-    [SupplyParameterFromQuery(Name = "token")]
+    [Parameter]
     public string TipPayPalToken { get; set; }
 
     protected SfToast _toastRef;
