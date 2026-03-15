@@ -344,4 +344,40 @@ public class PlaylistPlayerTests : BUnitTestBase
         // Assert
         Assert.That(cut.Markup, Does.Contain("You do not have access to this playlist"));
     }
+
+    [Test]
+    public void PlaylistPlayer_BindsTipStatusFromQueryString()
+    {
+        // Arrange – navigate to a URL that contains tip return query params
+        var nav = TestContext.Services.GetService<NavigationManager>();
+        nav.NavigateTo("/playlist/1?tip_status=approved&token=EC-TESTTOKEN123");
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<PlaylistPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Assert – the routable wrapper should have bound both query params
+        var instance = cut.Instance;
+        Assert.That(instance.TipStatus, Is.EqualTo("approved"));
+        Assert.That(instance.TipPayPalToken, Is.EqualTo("EC-TESTTOKEN123"));
+    }
+
+    [Test]
+    public void PlaylistPlayer_ForwardsTipParamsToInteractiveChild()
+    {
+        // Arrange
+        var nav = TestContext.Services.GetService<NavigationManager>();
+        nav.NavigateTo("/playlist/1?tip_status=cancelled&token=EC-CANCELTOKEN456");
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<PlaylistPlayer>(parameters => parameters
+            .Add(p => p.PlaylistId, 1));
+
+        // Assert – the interactive child should receive the params as [Parameter] values
+        var child = cut.FindComponent<PlaylistPlayerInteractive>();
+        Assert.That(child.Instance.TipStatus, Is.EqualTo("cancelled"));
+        Assert.That(child.Instance.TipPayPalToken, Is.EqualTo("EC-CANCELTOKEN456"));
+    }
 }
