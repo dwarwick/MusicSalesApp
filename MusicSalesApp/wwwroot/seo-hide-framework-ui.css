@@ -1,0 +1,4 @@
+﻿#blazor-error-ui:empty,
+#components-reconnect-modal:empty {
+    display: none !important;
+}
