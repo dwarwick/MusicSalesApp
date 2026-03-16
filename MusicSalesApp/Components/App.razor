@@ -22,6 +22,11 @@
     <link rel="stylesheet" href="@Assets["md_app.css"]" />
     <link rel="stylesheet" href="@Assets["sm_app.css"]" />
     <link rel="stylesheet" href="@Assets["xs_app.css"]" />
+
+    <environment include="Production">
+        <link rel="stylesheet" href="seo-hide-framework-ui.css" />
+    </environment>
+
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.ico" />
     <HeadOutlet @rendermode="InteractiveServer" />
