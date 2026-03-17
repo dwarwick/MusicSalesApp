@@ -31,3 +31,19 @@ window.getMaintenanceLocalTime = function (startUtcIso, endUtcIso) {
 
     return { startLocal: startLocal, endLocal: endLocal, timeZoneAbbreviation: tzAbbr };
 };
+
+window.checkMaintenanceAcknowledged = function (key) {
+    try {
+        return localStorage.getItem(key) === 'true';
+    } catch (e) {
+        return false;
+    }
+};
+
+window.acknowledgeMaintenanceNotice = function (key) {
+    try {
+        localStorage.setItem(key, 'true');
+    } catch (e) {
+        // localStorage may be unavailable in private browsing
+    }
+};

@@ -143,4 +143,94 @@ public class AppSettingsServiceTests
         // Assert
         Assert.That(result, Is.EqualTo(AppSettingsService.DefaultSubscriptionPrice));
     }
+
+    // ===== Site Maintenance Methods =====
+
+    [Test]
+    public async Task GetSiteMaintenanceStartUtcAsync_ReturnsNull_WhenNotSet()
+    {
+        var result = await _service.GetSiteMaintenanceStartUtcAsync();
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task SetAndGetSiteMaintenanceStartUtcAsync_RoundTrips()
+    {
+        var expected = new DateTime(2025, 7, 15, 3, 0, 0, DateTimeKind.Utc);
+        await _service.SetSiteMaintenanceStartUtcAsync(expected);
+
+        var result = await _service.GetSiteMaintenanceStartUtcAsync();
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(expected).Within(TimeSpan.FromSeconds(1)));
+    }
+
+    [Test]
+    public async Task GetSiteMaintenanceEndUtcAsync_ReturnsNull_WhenNotSet()
+    {
+        var result = await _service.GetSiteMaintenanceEndUtcAsync();
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task SetAndGetSiteMaintenanceEndUtcAsync_RoundTrips()
+    {
+        var expected = new DateTime(2025, 7, 15, 7, 0, 0, DateTimeKind.Utc);
+        await _service.SetSiteMaintenanceEndUtcAsync(expected);
+
+        var result = await _service.GetSiteMaintenanceEndUtcAsync();
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Value, Is.EqualTo(expected).Within(TimeSpan.FromSeconds(1)));
+    }
+
+    [Test]
+    public async Task ShouldShowSiteMaintenanceNoticeAsync_ReturnsFalse_WhenNotSet()
+    {
+        var result = await _service.ShouldShowSiteMaintenanceNoticeAsync();
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ShouldShowSiteMaintenanceNoticeAsync_ReturnsFalse_WhenEndIsMinValue()
+    {
+        await _service.SetSiteMaintenanceEndUtcAsync(DateTime.MinValue);
+
+        var result = await _service.ShouldShowSiteMaintenanceNoticeAsync();
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ShouldShowSiteMaintenanceNoticeAsync_ReturnsFalse_WhenEndIsInPast()
+    {
+        await _service.SetSiteMaintenanceEndUtcAsync(DateTime.UtcNow.AddHours(-1));
+
+        var result = await _service.ShouldShowSiteMaintenanceNoticeAsync();
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task ShouldShowSiteMaintenanceNoticeAsync_ReturnsTrue_WhenEndIsInFuture()
+    {
+        await _service.SetSiteMaintenanceEndUtcAsync(DateTime.UtcNow.AddHours(2));
+
+        var result = await _service.ShouldShowSiteMaintenanceNoticeAsync();
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetSiteMaintenanceStartUtcAsync_ReturnsNull_WhenInvalidValueStored()
+    {
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.AppSettings.Add(new AppSettings
+            {
+                Key = AppSettingsService.SiteMaintenanceStartUtcKey,
+                Value = "not-a-date",
+                UpdatedAt = DateTime.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.GetSiteMaintenanceStartUtcAsync();
+        Assert.That(result, Is.Null);
+    }
 }

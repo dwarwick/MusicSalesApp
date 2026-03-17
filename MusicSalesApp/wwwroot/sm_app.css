@@ -556,6 +556,10 @@
         height: 32px;
     }
 
+    .maintenance-warning-label {
+        font-size: 0.75rem;
+    }
+
     .home-container {
         padding: 2rem;
         max-width: 1200px;

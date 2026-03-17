@@ -525,6 +525,10 @@
         height: 30px;
     }
 
+    .maintenance-warning-label {
+        font-size: 0.75rem;
+    }
+
     .action-controls {        
         gap: 8px;
         height: auto;

@@ -59,16 +59,6 @@ public interface IAppSettingsService
     Task SetStreamQualifyingSecondsAsync(int seconds);
 
     /// <summary>
-    /// Gets whether the Tax Bandits maintenance window display is enabled.
-    /// </summary>
-    Task<bool> GetTaxBanditsMaintenanceEnabledAsync();
-
-    /// <summary>
-    /// Sets whether the Tax Bandits maintenance window display is enabled.
-    /// </summary>
-    Task SetTaxBanditsMaintenanceEnabledAsync(bool enabled);
-
-    /// <summary>
     /// Gets the Tax Bandits maintenance window start time in UTC.
     /// </summary>
     Task<DateTime?> GetTaxBanditsMaintenanceStartUtcAsync();
@@ -123,4 +113,30 @@ public interface IAppSettingsService
     /// Returns true if maintenance is enabled and the end time is in the future.
     /// </summary>
     Task<bool> ShouldShowTaxBanditsMaintenanceWarningAsync();
+
+    /// <summary>
+    /// Gets the site maintenance window start time in UTC.
+    /// </summary>
+    Task<DateTime?> GetSiteMaintenanceStartUtcAsync();
+
+    /// <summary>
+    /// Sets the site maintenance window start time in UTC.
+    /// </summary>
+    Task SetSiteMaintenanceStartUtcAsync(DateTime startUtc);
+
+    /// <summary>
+    /// Gets the site maintenance window end time in UTC.
+    /// </summary>
+    Task<DateTime?> GetSiteMaintenanceEndUtcAsync();
+
+    /// <summary>
+    /// Sets the site maintenance window end time in UTC.
+    /// </summary>
+    Task SetSiteMaintenanceEndUtcAsync(DateTime endUtc);
+
+    /// <summary>
+    /// Checks if the site maintenance notice should be displayed to users.
+    /// Returns true if the end time is in the future and not DateTime.MinValue.
+    /// </summary>
+    Task<bool> ShouldShowSiteMaintenanceNoticeAsync();
 }

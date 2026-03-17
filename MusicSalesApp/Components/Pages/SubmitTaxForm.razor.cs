@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Helpers;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages;
@@ -44,21 +45,10 @@ public partial class SubmitTaxFormModel : BlazorBase
                     _maintenanceEndUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
 
                     // Get user's local time zone info via JS interop
-                    try
-                    {
-                        var localInfo = await JS.InvokeAsync<MaintenanceLocalTimeInfo>("getMaintenanceLocalTime",
-                            _maintenanceStartUtc?.ToString("O"), _maintenanceEndUtc?.ToString("O"));
-                        _maintenanceStartLocal = localInfo.StartLocal;
-                        _maintenanceEndLocal = localInfo.EndLocal;
-                        _maintenanceTimeZoneAbbreviation = localInfo.TimeZoneAbbreviation;
-                    }
-                    catch
-                    {
-                        // Fallback to UTC display
-                        _maintenanceStartLocal = _maintenanceStartUtc?.ToString("g") ?? "";
-                        _maintenanceEndLocal = _maintenanceEndUtc?.ToString("g") ?? "";
-                        _maintenanceTimeZoneAbbreviation = "UTC";
-                    }
+                    var localInfo = await TimeZoneHelper.GetUserLocalTimeAsync(JS, _maintenanceStartUtc, _maintenanceEndUtc);
+                    _maintenanceStartLocal = localInfo.StartLocal;
+                    _maintenanceEndLocal = localInfo.EndLocal;
+                    _maintenanceTimeZoneAbbreviation = localInfo.TimeZoneAbbreviation;
 
                     _loading = false;
                     await InvokeAsync(StateHasChanged);
@@ -144,11 +134,4 @@ public class TaxFormTokenResponse
     public string? BusinessId { get; set; }
     public bool UseSandbox { get; set; }
     public string? ErrorMessage { get; set; }
-}
-
-public class MaintenanceLocalTimeInfo
-{
-    public string StartLocal { get; set; } = string.Empty;
-    public string EndLocal { get; set; } = string.Empty;
-    public string TimeZoneAbbreviation { get; set; } = string.Empty;
 }

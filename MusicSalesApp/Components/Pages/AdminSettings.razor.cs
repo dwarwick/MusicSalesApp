@@ -1,4 +1,8 @@
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.SignalR;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Services;
 
 #nullable enable
@@ -7,6 +11,7 @@ namespace MusicSalesApp.Components.Pages;
 
 public class AdminSettingsModel : BlazorBase
 {
+    [Inject] private IHubContext<MaintenanceHub> MaintenanceHubContext { get; set; } = default!;
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
     protected string? _successMessage = null;
@@ -50,8 +55,6 @@ public class AdminSettingsModel : BlazorBase
     protected bool _isSavingNotifications = false;
 
     // Tax Bandits maintenance window fields
-    protected bool _maintenanceEnabled = false;
-    protected bool _originalMaintenanceEnabled = false;
     protected DateTime? _maintenanceStartEastern = null;
     protected DateTime? _originalMaintenanceStartEastern = null;
     protected DateTime? _maintenanceEndEastern = null;
@@ -61,6 +64,16 @@ public class AdminSettingsModel : BlazorBase
     protected List<string> _maintenanceValidationErrors = new();
 
     private static readonly TimeZoneInfo EasternTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+    private static readonly TimeZoneInfo PacificTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles");
+
+    // Site maintenance window fields
+    protected DateTime? _siteMaintenanceStartPacific = null;
+    protected DateTime? _originalSiteMaintenanceStartPacific = null;
+    protected DateTime? _siteMaintenanceEndPacific = null;
+    protected DateTime? _originalSiteMaintenanceEndPacific = null;
+    protected bool _isSavingSiteMaintenance = false;
+    protected string? _siteMaintenanceSuccessMessage = null;
+    protected List<string> _siteMaintenanceValidationErrors = new();
 
     protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
                                    || _streamPayRateDisplay != _originalStreamPayRateDisplay
@@ -78,9 +91,11 @@ public class AdminSettingsModel : BlazorBase
                                              || _notifySongArtUpdated != _originalNotifySongArtUpdated
                                              || _notifyTipFraudPrevented != _originalNotifyTipFraudPrevented;
 
-    protected bool _hasMaintenanceChanges => _maintenanceEnabled != _originalMaintenanceEnabled
-                                              || _maintenanceStartEastern != _originalMaintenanceStartEastern
+    protected bool _hasMaintenanceChanges => _maintenanceStartEastern != _originalMaintenanceStartEastern
                                               || _maintenanceEndEastern != _originalMaintenanceEndEastern;
+
+    protected bool _hasSiteMaintenanceChanges => _siteMaintenanceStartPacific != _originalSiteMaintenanceStartPacific
+                                                  || _siteMaintenanceEndPacific != _originalSiteMaintenanceEndPacific;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -151,11 +166,8 @@ public class AdminSettingsModel : BlazorBase
         _originalNotifyTipFraudPrevented = _notifyTipFraudPrevented;
 
         // Load Tax Bandits maintenance window settings
-        _maintenanceEnabled = await AppSettingsService.GetTaxBanditsMaintenanceEnabledAsync();
-        _originalMaintenanceEnabled = _maintenanceEnabled;
-
         var startUtc = await AppSettingsService.GetTaxBanditsMaintenanceStartUtcAsync();
-        if (startUtc.HasValue)
+        if (startUtc.HasValue && startUtc.Value != DateTime.MinValue)
         {
             _maintenanceStartEastern = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.SpecifyKind(startUtc.Value, DateTimeKind.Utc), EasternTimeZone);
@@ -163,12 +175,29 @@ public class AdminSettingsModel : BlazorBase
         _originalMaintenanceStartEastern = _maintenanceStartEastern;
 
         var endUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
-        if (endUtc.HasValue)
+        if (endUtc.HasValue && endUtc.Value != DateTime.MinValue)
         {
             _maintenanceEndEastern = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.SpecifyKind(endUtc.Value, DateTimeKind.Utc), EasternTimeZone);
         }
         _originalMaintenanceEndEastern = _maintenanceEndEastern;
+
+        // Load site maintenance window settings
+        var siteStartUtc = await AppSettingsService.GetSiteMaintenanceStartUtcAsync();
+        if (siteStartUtc.HasValue && siteStartUtc.Value != DateTime.MinValue)
+        {
+            _siteMaintenanceStartPacific = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(siteStartUtc.Value, DateTimeKind.Utc), PacificTimeZone);
+        }
+        _originalSiteMaintenanceStartPacific = _siteMaintenanceStartPacific;
+
+        var siteEndUtc = await AppSettingsService.GetSiteMaintenanceEndUtcAsync();
+        if (siteEndUtc.HasValue && siteEndUtc.Value != DateTime.MinValue)
+        {
+            _siteMaintenanceEndPacific = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(siteEndUtc.Value, DateTimeKind.Utc), PacificTimeZone);
+        }
+        _originalSiteMaintenanceEndPacific = _siteMaintenanceEndPacific;
     }
 
     protected void CancelChanges()
@@ -342,7 +371,6 @@ public class AdminSettingsModel : BlazorBase
 
     protected void CancelMaintenanceChanges()
     {
-        _maintenanceEnabled = _originalMaintenanceEnabled;
         _maintenanceStartEastern = _originalMaintenanceStartEastern;
         _maintenanceEndEastern = _originalMaintenanceEndEastern;
         _maintenanceValidationErrors.Clear();
@@ -358,23 +386,20 @@ public class AdminSettingsModel : BlazorBase
 
         try
         {
-            if (_maintenanceEnabled)
+            if (!_maintenanceStartEastern.HasValue)
             {
-                if (!_maintenanceStartEastern.HasValue)
-                {
-                    _maintenanceValidationErrors.Add("Maintenance start date/time is required when enabled.");
-                }
+                _maintenanceValidationErrors.Add("Maintenance start date/time is required.");
+            }
 
-                if (!_maintenanceEndEastern.HasValue)
-                {
-                    _maintenanceValidationErrors.Add("Maintenance end date/time is required when enabled.");
-                }
+            if (!_maintenanceEndEastern.HasValue)
+            {
+                _maintenanceValidationErrors.Add("Maintenance end date/time is required.");
+            }
 
-                if (_maintenanceStartEastern.HasValue && _maintenanceEndEastern.HasValue
-                    && _maintenanceEndEastern.Value <= _maintenanceStartEastern.Value)
-                {
-                    _maintenanceValidationErrors.Add("End date/time must be after start date/time.");
-                }
+            if (_maintenanceStartEastern.HasValue && _maintenanceEndEastern.HasValue
+                && _maintenanceEndEastern.Value <= _maintenanceStartEastern.Value)
+            {
+                _maintenanceValidationErrors.Add("End date/time must be after start date/time.");
             }
 
             if (_maintenanceValidationErrors.Any())
@@ -383,29 +408,20 @@ public class AdminSettingsModel : BlazorBase
                 return;
             }
 
-            await AppSettingsService.SetTaxBanditsMaintenanceEnabledAsync(_maintenanceEnabled);
+            var startUtc = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(_maintenanceStartEastern!.Value, DateTimeKind.Unspecified), EasternTimeZone);
+            await AppSettingsService.SetTaxBanditsMaintenanceStartUtcAsync(startUtc);
 
-            if (_maintenanceStartEastern.HasValue)
-            {
-                var startUtc = TimeZoneInfo.ConvertTimeToUtc(
-                    DateTime.SpecifyKind(_maintenanceStartEastern.Value, DateTimeKind.Unspecified), EasternTimeZone);
-                await AppSettingsService.SetTaxBanditsMaintenanceStartUtcAsync(startUtc);
-            }
+            var endUtc = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(_maintenanceEndEastern!.Value, DateTimeKind.Unspecified), EasternTimeZone);
+            await AppSettingsService.SetTaxBanditsMaintenanceEndUtcAsync(endUtc);
 
-            if (_maintenanceEndEastern.HasValue)
-            {
-                var endUtc = TimeZoneInfo.ConvertTimeToUtc(
-                    DateTime.SpecifyKind(_maintenanceEndEastern.Value, DateTimeKind.Unspecified), EasternTimeZone);
-                await AppSettingsService.SetTaxBanditsMaintenanceEndUtcAsync(endUtc);
-            }
-
-            _originalMaintenanceEnabled = _maintenanceEnabled;
             _originalMaintenanceStartEastern = _maintenanceStartEastern;
             _originalMaintenanceEndEastern = _maintenanceEndEastern;
 
             _maintenanceSuccessMessage = "Tax Bandits maintenance window settings saved successfully.";
-            Logger.LogInformation("Tax Bandits maintenance window settings updated - Enabled: {Enabled}, Start (ET): {Start}, End (ET): {End}",
-                _maintenanceEnabled, _maintenanceStartEastern, _maintenanceEndEastern);
+            Logger.LogInformation("Tax Bandits maintenance window settings updated - Start (ET): {Start}, End (ET): {End}",
+                _maintenanceStartEastern, _maintenanceEndEastern);
         }
         catch (Exception ex)
         {
@@ -415,6 +431,74 @@ public class AdminSettingsModel : BlazorBase
         finally
         {
             _isSavingMaintenance = false;
+            StateHasChanged();
+        }
+    }
+
+    protected void CancelSiteMaintenanceChanges()
+    {
+        _siteMaintenanceStartPacific = _originalSiteMaintenanceStartPacific;
+        _siteMaintenanceEndPacific = _originalSiteMaintenanceEndPacific;
+        _siteMaintenanceValidationErrors.Clear();
+        _siteMaintenanceSuccessMessage = null;
+        StateHasChanged();
+    }
+
+    protected async Task SaveSiteMaintenanceSettings()
+    {
+        _siteMaintenanceValidationErrors.Clear();
+        _siteMaintenanceSuccessMessage = null;
+        _isSavingSiteMaintenance = true;
+
+        try
+        {
+            if (!_siteMaintenanceStartPacific.HasValue)
+            {
+                _siteMaintenanceValidationErrors.Add("Start date/time is required.");
+            }
+
+            if (!_siteMaintenanceEndPacific.HasValue)
+            {
+                _siteMaintenanceValidationErrors.Add("End date/time is required.");
+            }
+
+            if (_siteMaintenanceStartPacific.HasValue && _siteMaintenanceEndPacific.HasValue
+                && _siteMaintenanceEndPacific.Value <= _siteMaintenanceStartPacific.Value)
+            {
+                _siteMaintenanceValidationErrors.Add("End date/time must be after start date/time.");
+            }
+
+            if (_siteMaintenanceValidationErrors.Any())
+            {
+                StateHasChanged();
+                return;
+            }
+
+            var startUtc = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(_siteMaintenanceStartPacific!.Value, DateTimeKind.Unspecified), PacificTimeZone);
+            await AppSettingsService.SetSiteMaintenanceStartUtcAsync(startUtc);
+
+            var endUtc = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(_siteMaintenanceEndPacific!.Value, DateTimeKind.Unspecified), PacificTimeZone);
+            await AppSettingsService.SetSiteMaintenanceEndUtcAsync(endUtc);
+
+            _originalSiteMaintenanceStartPacific = _siteMaintenanceStartPacific;
+            _originalSiteMaintenanceEndPacific = _siteMaintenanceEndPacific;
+
+            _siteMaintenanceSuccessMessage = "Site maintenance window settings saved successfully.";
+            Logger.LogInformation("Site maintenance window settings updated - Start (PT): {Start}, End (PT): {End}",
+                _siteMaintenanceStartPacific, _siteMaintenanceEndPacific);
+
+            await MaintenanceHubContext.Clients.All.SendAsync(SignalRMethodNames.ReceiveMaintenanceUpdate);
+        }
+        catch (Exception ex)
+        {
+            _siteMaintenanceValidationErrors.Add($"Error saving site maintenance settings: {ex.Message}");
+            Logger.LogError(ex, "Failed to save site maintenance window settings");
+        }
+        finally
+        {
+            _isSavingSiteMaintenance = false;
             StateHasChanged();
         }
     }

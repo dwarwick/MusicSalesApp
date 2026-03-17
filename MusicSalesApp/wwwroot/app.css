@@ -1369,6 +1369,54 @@ h1:focus {
     min-width: 100px;
 }
 
+/* Planned Maintenance Notice */
+.maintenance-banner {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid;
+    box-sizing: border-box;
+}
+
+.maintenance-warning-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.maintenance-notice-dialog .e-dlg-content {
+    padding: 1.5rem !important;
+}
+
+.maintenance-dialog-header {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.maintenance-dialog-content {
+    text-align: center;
+}
+
+.maintenance-dialog-content p {
+    margin-bottom: 0.75rem;
+}
+
+.maintenance-dialog-times {
+    font-size: 1.05rem;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: 1px solid;
+    display: inline-block;
+    margin: 0.5rem 0;
+}
+
+.maintenance-notice-dialog .e-footer-content {
+    display: flex;
+    justify-content: center;
+    padding: 1rem !important;
+}
+
 /* Liked Songs Playlist Card */
 .liked-songs-playlist-card {
     border-left: 4px solid #e91e63;
