@@ -121,4 +121,89 @@ public class NavMenuTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("maintenance-banner"));
         Assert.That(cut.Markup, Does.Not.Contain("maintenance-notice-dialog"));
     }
+
+    [Test]
+    public void NavMenu_ClearsMaintenanceBanner_WhenExpiryTimerFires()
+    {
+        // Arrange
+        SetupRendererInfo();
+
+        var now = FakeTimeProvider.GetUtcNow().UtcDateTime;
+        var startUtc = now.AddHours(-1); // window started an hour ago
+        var endUtc = now.AddHours(2);    // window ends in 2 hours
+
+        // First call (initial render): show maintenance. Second call (timer-triggered): hide it.
+        MockAppSettingsService
+            .SetupSequence(x => x.ShouldShowSiteMaintenanceNoticeAsync())
+            .ReturnsAsync(true)
+            .ReturnsAsync(false);
+
+        MockAppSettingsService
+            .Setup(x => x.GetSiteMaintenanceStartUtcAsync())
+            .ReturnsAsync(startUtc);
+        MockAppSettingsService
+            .Setup(x => x.GetSiteMaintenanceEndUtcAsync())
+            .ReturnsAsync(endUtc);
+
+        TestContext.JSInterop
+            .Setup<MaintenanceLocalTimeInfo>("getMaintenanceLocalTime", _ => true)
+            .SetResult(new MaintenanceLocalTimeInfo
+            {
+                StartLocal = "9:00 AM",
+                EndLocal = "11:00 AM",
+                TimeZoneAbbreviation = "PT"
+            });
+        TestContext.JSInterop
+            .Setup<bool>("checkMaintenanceAcknowledged", _ => true)
+            .SetResult(false);
+
+        var cut = TestContext.Render<NavMenu>();
+        cut.WaitForState(() => cut.Markup.Contains("maintenance-banner"), timeout: TimeSpan.FromSeconds(5));
+        Assert.That(cut.Markup, Does.Contain("maintenance-banner"), "Precondition: banner visible before timer fires");
+
+        // Act: advance fake time past the window end so the timer fires
+        FakeTimeProvider.Advance(TimeSpan.FromHours(3));
+
+        // Assert: the async reload triggered by the timer clears the banner
+        cut.WaitForState(() => !cut.Markup.Contains("maintenance-banner"), timeout: TimeSpan.FromSeconds(5));
+        Assert.That(cut.Markup, Does.Not.Contain("maintenance-banner"));
+    }
+
+    [Test]
+    public void NavMenu_ShowsBannerWithoutTimer_WhenWindowEndsMoreThan49DaysAway()
+    {
+        // System.Threading.Timer has an upper bound of ~49.7 days. If the maintenance window
+        // end is beyond that, the component must not throw and must still show the banner.
+        SetupRendererInfo();
+
+        MockAppSettingsService
+            .Setup(x => x.ShouldShowSiteMaintenanceNoticeAsync())
+            .ReturnsAsync(true);
+        MockAppSettingsService
+            .Setup(x => x.GetSiteMaintenanceStartUtcAsync())
+            .ReturnsAsync(FakeTimeProvider.GetUtcNow().UtcDateTime.AddHours(1));
+        // 100 days is well beyond the ~49.7-day Timer maximum
+        MockAppSettingsService
+            .Setup(x => x.GetSiteMaintenanceEndUtcAsync())
+            .ReturnsAsync(FakeTimeProvider.GetUtcNow().UtcDateTime.AddDays(100));
+
+        TestContext.JSInterop
+            .Setup<MaintenanceLocalTimeInfo>("getMaintenanceLocalTime", _ => true)
+            .SetResult(new MaintenanceLocalTimeInfo
+            {
+                StartLocal = "9:00 AM",
+                EndLocal = "11:00 AM",
+                TimeZoneAbbreviation = "PT"
+            });
+        TestContext.JSInterop
+            .Setup<bool>("checkMaintenanceAcknowledged", _ => true)
+            .SetResult(false);
+
+        // Act – should not throw ArgumentOutOfRangeException
+        var cut = TestContext.Render<NavMenu>();
+        cut.WaitForState(() => cut.Markup.Contains("maintenance-banner"), timeout: TimeSpan.FromSeconds(5));
+
+        // Banner is still shown even though no client-side expiry timer was scheduled
+        Assert.That(cut.Markup, Does.Contain("maintenance-banner"));
+    }
 }

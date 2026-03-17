@@ -120,6 +120,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IConfiguration Configuration { get; set; } = default!;
 
+    [Inject]
+    protected TimeProvider TimeProvider { get; set; } = default!;
+
     private ILogger _logger;
     protected ILogger Logger => _logger ??= LoggerFactory.CreateLogger(GetType());
 }

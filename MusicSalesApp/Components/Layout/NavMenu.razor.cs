@@ -31,7 +31,12 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
 
     // Timer that fires when the scheduled maintenance window expires so the banner/dialog
     // close automatically for long-lived sessions without waiting for the next Hangfire run.
-    private Timer? _maintenanceExpiryTimer;
+    private ITimer? _maintenanceExpiryTimer;
+
+    // System.Threading.Timer's dueTime has an upper bound of uint.MaxValue - 1 milliseconds
+    // (~49.7 days). When the maintenance window's end exceeds that, skip scheduling the
+    // client-side timer and rely on the SignalR/Hangfire mechanism instead.
+    private static readonly TimeSpan MaxTimerDelay = TimeSpan.FromMilliseconds((double)uint.MaxValue - 1);
 
     private bool _disposed;
     private bool _hasLoadedData = false;
@@ -114,7 +119,7 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
         if (!endUtc.HasValue || endUtc.Value == DateTime.MinValue)
             return;
 
-        var delay = endUtc.Value - DateTime.UtcNow;
+        var delay = endUtc.Value - TimeProvider.GetUtcNow().UtcDateTime;
         if (delay <= TimeSpan.Zero)
         {
             // Already past the end – force an immediate re-check.
@@ -122,13 +127,27 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        _maintenanceExpiryTimer = new Timer(_ =>
+        // System.Threading.Timer has an upper bound on dueTime (~49.7 days).
+        // For end times beyond that, skip the client-side timer and rely on SignalR/Hangfire.
+        if (delay > MaxTimerDelay)
+            return;
+
+        _maintenanceExpiryTimer = TimeProvider.CreateTimer(_ =>
         {
-            InvokeAsync(async () =>
+            if (_disposed) return;
+            try
             {
-                await LoadMaintenanceNoticeAsync();
-                StateHasChanged();
-            });
+                InvokeAsync(async () =>
+                {
+                    await LoadMaintenanceNoticeAsync();
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+            {
+                // Component was disposed between the _disposed check and InvokeAsync — expected race condition; ignore.
+                Logger.LogDebug(ex, "Maintenance expiry timer callback invoked after component disposal (expected race condition)");
+            }
         }, null, delay, Timeout.InfiniteTimeSpan);
     }
 
