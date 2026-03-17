@@ -61,6 +61,13 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.RetryPending1099TransactionsAsync(),
                 Cron.Hourly());
 
+            // Schedule hourly reset of expired maintenance windows
+            // Resets site maintenance and Tax Bandits maintenance times to DateTime.MinValue once the end time passes
+            RecurringJob.AddOrUpdate<IMaintenanceResetService>(
+                "reset-expired-maintenance-windows",
+                service => service.ResetExpiredMaintenanceWindowsAsync(),
+                Cron.Hourly());
+
             _logger.LogInformation("Hangfire recurring jobs initialized successfully");
         }
         catch (Exception ex)

@@ -2,6 +2,7 @@
 @using Syncfusion.Blazor
 @using Syncfusion.Blazor.Buttons
 @using Syncfusion.Blazor.Navigations
+@using Syncfusion.Blazor.Popups
 @inherits NavMenuModel
 
 <SfAppBar>
@@ -17,11 +18,44 @@
     }
 
     <AppBarSpacer></AppBarSpacer>
+    @if (_showMaintenanceWarning)
+    {
+        <span class="maintenance-warning-label">
+            &#9888; Planned maintenance: @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTzAbbr
+        </span>
+        <AppBarSpacer></AppBarSpacer>
+    }
     <div class="theme-switcher">
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
     </div>
 </SfAppBar>
+
+@if (_showMaintenanceDialog)
+{
+    <SfDialog @bind-Visible="_showMaintenanceDialog" Width="450px" IsModal="true" ShowCloseIcon="false"
+              CssClass="maintenance-notice-dialog" AllowDragging="false">
+        <DialogTemplates>
+            <Header>
+                <span class="maintenance-dialog-header">&#9888; Planned Maintenance Notice</span>
+            </Header>
+            <Content>
+                <div class="maintenance-dialog-content">
+                    <p>We have scheduled maintenance during the following time:</p>
+                    <p class="maintenance-dialog-times">
+                        <strong>@_maintenanceStartLocal</strong> &ndash; <strong>@_maintenanceEndLocal</strong> @_maintenanceTzAbbr
+                    </p>
+                    <p>The site may be temporarily unavailable during this period. We apologize for any inconvenience.</p>
+                </div>
+            </Content>
+            <FooterTemplate>
+                <SfButton OnClick="AcknowledgeMaintenance" IsPrimary="true" CssClass="e-btn e-primary maintenance-ack-button">
+                    I Understand
+                </SfButton>
+            </FooterTemplate>
+        </DialogTemplates>
+    </SfDialog>
+}
 
 <SfSidebar @ref="_sidebar"
            @bind-IsOpen="_isMenuOpen"

@@ -45,11 +45,6 @@ public class AppSettingsService : IAppSettingsService
     public const int DefaultStreamQualifyingSeconds = 30;
 
     /// <summary>
-    /// The key used for storing whether the Tax Bandits maintenance window is enabled.
-    /// </summary>
-    public const string TaxBanditsMaintenanceEnabledKey = "TaxBanditsMaintenanceEnabled";
-
-    /// <summary>
     /// The key used for storing the Tax Bandits maintenance window start time (UTC).
     /// </summary>
     public const string TaxBanditsMaintenanceStartUtcKey = "TaxBanditsMaintenanceStartUtc";
@@ -58,6 +53,16 @@ public class AppSettingsService : IAppSettingsService
     /// The key used for storing the Tax Bandits maintenance window end time (UTC).
     /// </summary>
     public const string TaxBanditsMaintenanceEndUtcKey = "TaxBanditsMaintenanceEndUtc";
+
+    /// <summary>
+    /// The key used for storing the site maintenance window start time (UTC).
+    /// </summary>
+    public const string SiteMaintenanceStartUtcKey = "SiteMaintenanceStartUtc";
+
+    /// <summary>
+    /// The key used for storing the site maintenance window end time (UTC).
+    /// </summary>
+    public const string SiteMaintenanceEndUtcKey = "SiteMaintenanceEndUtc";
 
     /// <summary>
     /// The key used for storing the maximum audio upload file size in MB.
@@ -223,22 +228,6 @@ public class AppSettingsService : IAppSettingsService
     }
 
     /// <inheritdoc />
-    public async Task<bool> GetTaxBanditsMaintenanceEnabledAsync()
-    {
-        var value = await GetSettingAsync(TaxBanditsMaintenanceEnabledKey);
-        return bool.TryParse(value, out var enabled) && enabled;
-    }
-
-    /// <inheritdoc />
-    public async Task SetTaxBanditsMaintenanceEnabledAsync(bool enabled)
-    {
-        await SetSettingAsync(
-            TaxBanditsMaintenanceEnabledKey,
-            enabled.ToString(),
-            "Whether the Tax Bandits maintenance window warning is enabled");
-    }
-
-    /// <inheritdoc />
     public async Task<DateTime?> GetTaxBanditsMaintenanceStartUtcAsync()
     {
         var value = await GetSettingAsync(TaxBanditsMaintenanceStartUtcKey);
@@ -333,14 +322,13 @@ public class AppSettingsService : IAppSettingsService
     /// <inheritdoc />
     public async Task<bool> IsTaxBanditsMaintenanceActiveAsync()
     {
-        var enabled = await GetTaxBanditsMaintenanceEnabledAsync();
-        if (!enabled)
-            return false;
-
         var start = await GetTaxBanditsMaintenanceStartUtcAsync();
         var end = await GetTaxBanditsMaintenanceEndUtcAsync();
 
         if (!start.HasValue || !end.HasValue)
+            return false;
+
+        if (start.Value == DateTime.MinValue || end.Value == DateTime.MinValue)
             return false;
 
         var now = DateTime.UtcNow;
@@ -350,12 +338,54 @@ public class AppSettingsService : IAppSettingsService
     /// <inheritdoc />
     public async Task<bool> ShouldShowTaxBanditsMaintenanceWarningAsync()
     {
-        var enabled = await GetTaxBanditsMaintenanceEnabledAsync();
-        if (!enabled)
+        var end = await GetTaxBanditsMaintenanceEndUtcAsync();
+        if (!end.HasValue || end.Value == DateTime.MinValue)
             return false;
 
-        var end = await GetTaxBanditsMaintenanceEndUtcAsync();
-        if (!end.HasValue)
+        return end.Value > DateTime.UtcNow;
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetSiteMaintenanceStartUtcAsync()
+    {
+        var value = await GetSettingAsync(SiteMaintenanceStartUtcKey);
+        if (string.IsNullOrEmpty(value))
+            return null;
+        return DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetSiteMaintenanceStartUtcAsync(DateTime startUtc)
+    {
+        await SetSettingAsync(
+            SiteMaintenanceStartUtcKey,
+            startUtc.ToUniversalTime().ToString("O"),
+            "Site maintenance window start time (UTC)");
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetSiteMaintenanceEndUtcAsync()
+    {
+        var value = await GetSettingAsync(SiteMaintenanceEndUtcKey);
+        if (string.IsNullOrEmpty(value))
+            return null;
+        return DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetSiteMaintenanceEndUtcAsync(DateTime endUtc)
+    {
+        await SetSettingAsync(
+            SiteMaintenanceEndUtcKey,
+            endUtc.ToUniversalTime().ToString("O"),
+            "Site maintenance window end time (UTC)");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ShouldShowSiteMaintenanceNoticeAsync()
+    {
+        var end = await GetSiteMaintenanceEndUtcAsync();
+        if (!end.HasValue || end.Value == DateTime.MinValue)
             return false;
 
         return end.Value > DateTime.UtcNow;

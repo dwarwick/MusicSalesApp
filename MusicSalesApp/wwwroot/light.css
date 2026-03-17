@@ -598,6 +598,42 @@ body {
     color: #fff !important;
 }
 
+/* Planned Maintenance Notice - Light Theme */
+.maintenance-warning-label {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.maintenance-notice-dialog .e-dlg-header-content {
+    background-color: #fff3cd !important;
+    border-bottom: 1px solid #ffc107 !important;
+}
+
+.maintenance-dialog-header {
+    color: #856404;
+}
+
+.maintenance-dialog-content {
+    color: #1a1a2e;
+}
+
+.maintenance-dialog-times {
+    color: #1a1a2e;
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.maintenance-ack-button {
+    background-color: #1db954 !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.maintenance-ack-button:hover {
+    background-color: #1ed760 !important;
+}
+
 /* Tip Jar - Light Theme */
 .tip-button.control-button {
     color: #e91e63;

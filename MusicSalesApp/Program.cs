@@ -251,6 +251,7 @@ try
     builder.Services.AddScoped<IPlaylistService, PlaylistService>();
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
+    builder.Services.AddScoped<IMaintenanceResetService, MaintenanceResetService>();
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
@@ -259,6 +260,7 @@ try
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
     builder.Services.AddScoped<IWebhookStatusHubClient, WebhookStatusHubClient>();
+    builder.Services.AddScoped<IMaintenanceHubClient, MaintenanceHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IOpenAIEmbeddingService, OpenAIEmbeddingService>();
     builder.Services.AddScoped<IFileMatchingService, FileMatchingService>();
@@ -410,6 +412,7 @@ try
     // Map SignalR hubs for real-time updates
     app.MapHub<MusicSalesApp.Hubs.StreamCountHub>("/streamcounthub");
     app.MapHub<MusicSalesApp.Hubs.WebhookStatusHub>("/webhookstatushub");
+    app.MapHub<MusicSalesApp.Hubs.MaintenanceHub>("/maintenancehub");
 
     app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
     {

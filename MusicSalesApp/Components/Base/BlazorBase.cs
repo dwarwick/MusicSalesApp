@@ -72,6 +72,9 @@ public abstract class BlazorBase : ComponentBase
     protected IWebhookStatusHubClient WebhookStatusHubClient { get; set; } = default!;
 
     [Inject]
+    protected IMaintenanceHubClient MaintenanceHubClient { get; set; } = default!;
+
+    [Inject]
     protected IRecommendationService RecommendationService { get; set; } = default!;
 
     [Inject]

@@ -525,6 +525,10 @@
         height: 30px;
     }
 
+    .maintenance-warning-label {
+        display: none;
+    }
+
     .action-controls {        
         gap: 8px;
         height: auto;
