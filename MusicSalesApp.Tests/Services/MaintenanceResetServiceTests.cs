@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Services;
 using System.Threading;
@@ -49,7 +50,7 @@ public class MaintenanceResetServiceTests
         // Assert SignalR broadcast is sent so connected clients close their maintenance banners/dialogs
         _mockAllClients.Verify(
             x => x.SendCoreAsync(
-                MaintenanceHub.ReceiveMaintenanceUpdate,
+                SignalRMethodNames.ReceiveMaintenanceUpdate,
                 It.IsAny<object[]>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -153,7 +154,7 @@ public class MaintenanceResetServiceTests
         // Assert SignalR broadcast is sent for the site window expiry
         _mockAllClients.Verify(
             x => x.SendCoreAsync(
-                MaintenanceHub.ReceiveMaintenanceUpdate,
+                SignalRMethodNames.ReceiveMaintenanceUpdate,
                 It.IsAny<object[]>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
