@@ -32,7 +32,7 @@ public class MaintenanceResetService : IMaintenanceResetService
             _logger.LogInformation("Site maintenance window has expired (ended {EndUtc}). Resetting to DateTime.MinValue.", siteEnd.Value);
             await _appSettingsService.SetSiteMaintenanceStartUtcAsync(DateTime.MinValue);
             await _appSettingsService.SetSiteMaintenanceEndUtcAsync(DateTime.MinValue);
-            await _hubContext.Clients.All.SendAsync("ReceiveMaintenanceUpdate");
+            await _hubContext.Clients.All.SendAsync(MaintenanceHub.ReceiveMaintenanceUpdate);
         }
 
         // Reset expired Tax Bandits maintenance window

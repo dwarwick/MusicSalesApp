@@ -488,7 +488,7 @@ public class AdminSettingsModel : BlazorBase
             Logger.LogInformation("Site maintenance window settings updated - Start (PT): {Start}, End (PT): {End}",
                 _siteMaintenanceStartPacific, _siteMaintenanceEndPacific);
 
-            await MaintenanceHubContext.Clients.All.SendAsync("ReceiveMaintenanceUpdate");
+            await MaintenanceHubContext.Clients.All.SendAsync(MaintenanceHub.ReceiveMaintenanceUpdate);
         }
         catch (Exception ex)
         {

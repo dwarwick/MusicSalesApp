@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Services;
+using System.Threading;
 
 namespace MusicSalesApp.Tests.Services;
 
@@ -11,6 +12,7 @@ public class MaintenanceResetServiceTests
 {
     private Mock<IAppSettingsService> _mockAppSettings;
     private Mock<IHubContext<MaintenanceHub>> _mockHubContext;
+    private Mock<IClientProxy> _mockAllClients;
     private Mock<ILogger<MaintenanceResetService>> _mockLogger;
     private MaintenanceResetService _service;
 
@@ -22,8 +24,8 @@ public class MaintenanceResetServiceTests
 
         _mockHubContext = new Mock<IHubContext<MaintenanceHub>>();
         var mockClients = new Mock<IHubClients>();
-        var mockAllClients = new Mock<IClientProxy>();
-        mockClients.Setup(c => c.All).Returns(mockAllClients.Object);
+        _mockAllClients = new Mock<IClientProxy>();
+        mockClients.Setup(c => c.All).Returns(_mockAllClients.Object);
         _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
         _service = new MaintenanceResetService(_mockAppSettings.Object, _mockHubContext.Object, _mockLogger.Object);
@@ -40,9 +42,17 @@ public class MaintenanceResetServiceTests
         // Act
         await _service.ResetExpiredMaintenanceWindowsAsync();
 
-        // Assert
+        // Assert settings are reset
         _mockAppSettings.Verify(x => x.SetSiteMaintenanceStartUtcAsync(DateTime.MinValue), Times.Once);
         _mockAppSettings.Verify(x => x.SetSiteMaintenanceEndUtcAsync(DateTime.MinValue), Times.Once);
+
+        // Assert SignalR broadcast is sent so connected clients close their maintenance banners/dialogs
+        _mockAllClients.Verify(
+            x => x.SendCoreAsync(
+                MaintenanceHub.ReceiveMaintenanceUpdate,
+                It.IsAny<object[]>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Test]
@@ -140,6 +150,13 @@ public class MaintenanceResetServiceTests
         // Assert - tax bandits window reset
         _mockAppSettings.Verify(x => x.SetTaxBanditsMaintenanceStartUtcAsync(DateTime.MinValue), Times.Once);
         _mockAppSettings.Verify(x => x.SetTaxBanditsMaintenanceEndUtcAsync(DateTime.MinValue), Times.Once);
+        // Assert SignalR broadcast is sent for the site window expiry
+        _mockAllClients.Verify(
+            x => x.SendCoreAsync(
+                MaintenanceHub.ReceiveMaintenanceUpdate,
+                It.IsAny<object[]>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Test]
