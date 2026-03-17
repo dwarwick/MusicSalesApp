@@ -223,7 +223,7 @@ public class AppSettingsServiceTests
         {
             context.AppSettings.Add(new AppSettings
             {
-                Key = "SiteMaintenanceStartUtc",
+                Key = AppSettingsService.SiteMaintenanceStartUtcKey,
                 Value = "not-a-date",
                 UpdatedAt = DateTime.UtcNow
             });

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Services;
@@ -488,7 +489,7 @@ public class AdminSettingsModel : BlazorBase
             Logger.LogInformation("Site maintenance window settings updated - Start (PT): {Start}, End (PT): {End}",
                 _siteMaintenanceStartPacific, _siteMaintenanceEndPacific);
 
-            await MaintenanceHubContext.Clients.All.SendAsync("ReceiveMaintenanceUpdate");
+            await MaintenanceHubContext.Clients.All.SendAsync(SignalRMethodNames.ReceiveMaintenanceUpdate);
         }
         catch (Exception ex)
         {

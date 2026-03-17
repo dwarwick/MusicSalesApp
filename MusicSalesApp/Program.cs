@@ -234,6 +234,8 @@ try
         }
     });
 
+    builder.Services.AddSingleton(TimeProvider.System);
+
     builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
     builder.Services.AddScoped<ServerAuthenticationStateProvider>();
     builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically

@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -61,6 +62,7 @@ public abstract class BUnitTestBase
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
+    protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
     [SetUp]
     public virtual void BaseSetup()
@@ -100,6 +102,7 @@ public abstract class BUnitTestBase
         MockTipService = new Mock<ITipService>();
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
+        FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         
         // UserManager requires IUserStore in its constructor
         var mockUserStore = new Mock<IUserStore<ApplicationUser>>();
@@ -398,6 +401,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
+        TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);
 
         // Add IConfiguration for components that need it
         var configData = new Dictionary<string, string>

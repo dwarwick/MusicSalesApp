@@ -2,6 +2,7 @@
 
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services;
 
@@ -47,7 +48,7 @@ public class MaintenanceHubClient : IMaintenanceHubClient
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On("ReceiveMaintenanceUpdate", () =>
+        _hubConnection.On(SignalRMethodNames.ReceiveMaintenanceUpdate, () =>
         {
             OnMaintenanceUpdated?.Invoke();
         });
