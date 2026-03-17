@@ -1370,16 +1370,19 @@ h1:focus {
 }
 
 /* Planned Maintenance Notice */
+.maintenance-banner {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid;
+    box-sizing: border-box;
+}
+
 .maintenance-warning-label {
     font-size: 0.85rem;
     font-weight: 600;
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: 1px solid;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 500px;
+    text-align: center;
 }
 
 .maintenance-notice-dialog .e-dlg-content {

@@ -526,7 +526,7 @@
     }
 
     .maintenance-warning-label {
-        display: none;
+        font-size: 0.75rem;
     }
 
     .action-controls {        

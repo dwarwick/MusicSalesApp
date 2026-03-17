@@ -599,10 +599,13 @@ body {
 }
 
 /* Planned Maintenance Notice - Light Theme */
+.maintenance-banner {
+    background-color: #fff3cd;
+    border-bottom-color: #ffc107;
+}
+
 .maintenance-warning-label {
     color: #856404;
-    background-color: #fff3cd;
-    border-color: #ffc107;
 }
 
 .maintenance-notice-dialog .e-dlg-header-content {

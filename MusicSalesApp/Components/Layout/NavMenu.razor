@@ -18,18 +18,20 @@
     }
 
     <AppBarSpacer></AppBarSpacer>
-    @if (_showMaintenanceWarning)
-    {
-        <span class="maintenance-warning-label">
-            &#9888; Planned maintenance: @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTzAbbr
-        </span>
-        <AppBarSpacer></AppBarSpacer>
-    }
     <div class="theme-switcher">
         <span class="theme-label">@(_isDarkTheme ? "Dark" : "Light")</span>
         <SfSwitch @bind-Checked="_isDarkTheme" ValueChange="@OnThemeChanged" TChecked="bool" />
     </div>
 </SfAppBar>
+
+@if (_showMaintenanceWarning)
+{
+    <div class="maintenance-banner">
+        <span class="maintenance-warning-label">
+            &#9888; Planned maintenance: @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTzAbbr
+        </span>
+    </div>
+}
 
 @if (_showMaintenanceDialog)
 {

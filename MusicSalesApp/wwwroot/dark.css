@@ -535,10 +535,13 @@ body {
 }
 
 /* Planned Maintenance Notice - Dark Theme */
+.maintenance-banner {
+    background-color: rgba(255, 193, 7, 0.15);
+    border-bottom-color: #ffc107;
+}
+
 .maintenance-warning-label {
     color: #ffc107;
-    background-color: rgba(255, 193, 7, 0.15);
-    border-color: #ffc107;
 }
 
 .maintenance-notice-dialog .e-dlg-header-content {
