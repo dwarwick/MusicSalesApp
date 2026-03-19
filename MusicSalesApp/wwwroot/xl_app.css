@@ -163,7 +163,6 @@
         text-overflow: ellipsis;
     }
 
-    /* Artist Name on Card */
     .card-artist-name {
         font-size: 12px;
         color: #b3b3b3;
@@ -171,16 +170,6 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .card-artist-name a {
-        color: #1db954;
-        text-decoration: none;
-    }
-
-    .card-artist-name a:hover {
-        color: #1ed760;
-        text-decoration: underline;
     }
 
     /* Genre on Card */
@@ -191,16 +180,6 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .card-genre a {
-        color: #9b87f5;
-        text-decoration: none;
-    }
-
-    .card-genre a:hover {
-        color: #b8a8f8;
-        text-decoration: underline;
     }
 
     /* Stream Count on Card */
@@ -341,32 +320,12 @@
         margin-top: 4px;
     }
 
-    .artist-link {
-        color: #1db954;
-        text-decoration: none;
-    }
-
-    .artist-link:hover {
-        color: #1ed760;
-        text-decoration: underline;
-    }
-
     /* Genre info on song player */
     .genre-info {
         color: #b3b3b3;
         font-size: 14px;
         font-weight: 400;
         margin-top: 4px;
-    }
-
-    .genre-link {
-        color: #9b87f5;
-        text-decoration: none;
-    }
-
-    .genre-link:hover {
-        color: #b8a8f8;
-        text-decoration: underline;
     }
 
     .stream-icon {
@@ -428,16 +387,6 @@
         text-align: left;
         font-size: 14px;
         color: #a0a0a0;
-    }
-
-    .track-genre-link {
-        color: #9b87f5;
-        text-decoration: none;
-    }
-
-    .track-genre-link:hover {
-        color: #b8a8f8;
-        text-decoration: underline;
     }
 
     /* Playing Indicator */
