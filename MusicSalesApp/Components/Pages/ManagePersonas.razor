@@ -94,7 +94,7 @@
                                         <img src="@persona.PersonaImageUrl" alt="Persona Image" class="img-thumbnail" style="max-width: 60px; max-height: 60px; object-fit: cover;" />
                                         @if (persona.IsImageSquare == false)
                                         {
-                                            <span class="badge bg-dark" style="position: absolute; top: -5px; right: -5px; font-size: 0.6rem;" title="Image is not square - consider cropping">⚠️</span>
+                                            <span class="badge bg-dark non-square-warning-badge" title="Image is not square - consider cropping">⚠️</span>
                                         }
                                     </div>
                                 }

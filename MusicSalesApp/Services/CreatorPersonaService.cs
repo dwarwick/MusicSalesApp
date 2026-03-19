@@ -16,7 +16,7 @@ public class CreatorPersonaService : ICreatorPersonaService
 {
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ILogger<CreatorPersonaService> _logger;
-    private readonly BlobContainerClient _personaContainerClient;
+    private readonly BlobContainerClient? _personaContainerClient;
 
     public CreatorPersonaService(
         IDbContextFactory<AppDbContext> dbContextFactory,
@@ -37,7 +37,7 @@ public class CreatorPersonaService : ICreatorPersonaService
         else
         {
             // Fallback – container won't be usable, but service still loads
-            _personaContainerClient = null!;
+            _personaContainerClient = null;
             _logger.LogWarning("Persona image container is not configured. Persona image operations will fail.");
         }
     }

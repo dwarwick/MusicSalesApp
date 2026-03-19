@@ -9,6 +9,8 @@ namespace MusicSalesApp.Components.Pages;
 
 public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
 {
+    private const int PersonaImageOutputSize = 800; // Output size in pixels for cropped square images
+
     private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB
 
     protected bool _loading = true;
@@ -245,8 +247,8 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
             if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
             {
                 imageBlobPath = _cropTargetBlobPath;
-                imageWidth = 800;
-                imageHeight = 800;
+                imageWidth = PersonaImageOutputSize;
+                imageHeight = PersonaImageOutputSize;
             }
             else if (_personaImageFile != null)
             {
@@ -395,9 +397,9 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                         }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Best-effort
+                    Logger.LogDebug(ex, "Failed to check image dimensions for persona {PersonaId}", vm.Id);
                 }
             }
 

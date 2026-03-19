@@ -1821,3 +1821,10 @@ h1:focus {
     margin-right: 4px;
     vertical-align: middle;
 }
+
+.non-square-warning-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 0.6rem;
+}
