@@ -249,7 +249,7 @@
                             <div class="mb-2">
                                 <img src="@_editingPersona.PersonaImageUrl" alt="Current persona image" class="img-thumbnail" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
                             </div>
-                            @if (!_showCropTool && !string.IsNullOrEmpty(_editingPersona.ImageBlobPath))
+                            @if (!_showCropTool && !string.IsNullOrEmpty(_editingPersona.ImageBlobPath) && _personaImageFile == null)
                             {
                                 <SfButton OnClick="OpenCropTool" CssClass="e-btn e-small e-outline mb-2">
                                     <i class="bi bi-crop"></i> Crop to Square
@@ -280,13 +280,19 @@
 
                         <InputFile OnChange="HandlePersonaImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
                         <small class="text-muted">Upload a profile image (JPEG or PNG, square 1:1 recommended)</small>
-                        @if (_personaImageFile != null)
+                        @if (_personaImageFile != null && !_cropApplied)
                         {
                             @if (_newPersonaImageIsSquare == false)
                             {
                                 <div class="alert alert-warning py-1 px-2 mt-2 mb-1">
-                                    <small><i class="bi bi-exclamation-triangle"></i> Selected image is not square. Use the crop tool after saving, or select a square image.</small>
+                                    <small><i class="bi bi-exclamation-triangle"></i> Selected image is not square.</small>
                                 </div>
+                                @if (!_showCropTool)
+                                {
+                                    <SfButton OnClick="OpenCropTool" CssClass="e-btn e-small e-outline mb-2">
+                                        <i class="bi bi-crop"></i> Crop to Square
+                                    </SfButton>
+                                }
                             }
                             @if (!string.IsNullOrEmpty(_newPersonaImagePreviewUrl))
                             {

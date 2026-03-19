@@ -171,8 +171,15 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _showEditDialog = true;
     }
 
-    protected void CancelEdit()
+    protected async Task CancelEdit()
     {
+        // If a crop was applied but the persona was never saved, remove the orphaned blob.
+        if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
+        {
+            try { await CreatorPersonaService.DeletePersonaImageBlobAsync(_cropTargetBlobPath); }
+            catch (Exception ex) { Logger.LogWarning(ex, "ManagePersonas: Failed to clean up orphaned crop blob {Path}", _cropTargetBlobPath); }
+        }
+
         _showEditDialog = false;
         _editingPersona = null;
         _showCropTool = false;
@@ -381,15 +388,26 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
 
     protected async Task OpenCropTool()
     {
-        if (_editingPersona == null || string.IsNullOrEmpty(_editingPersona.ImageBlobPath)) return;
+        if (_editingPersona == null) return;
+
+        // Require either a buffered new image (data-URL) or an existing saved image blob path.
+        if (string.IsNullOrEmpty(_newPersonaImagePreviewUrl) && string.IsNullOrEmpty(_editingPersona.ImageBlobPath))
+            return;
 
         _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
         _showCropTool = true;
         _cropZoom = 50;
         await InvokeAsync(StateHasChanged);
         await Task.Delay(100);
-        var proxyUrl = $"api/persona/image/{SafeEncodePath(_editingPersona.ImageBlobPath)}";
-        await _cropModule.InvokeVoidAsync("initCropTool", "persona-crop-canvas", proxyUrl, null);
+
+        // Use the data-URL for a newly uploaded (not yet saved) image so the canvas isn't
+        // tainted by a cross-origin request.  Fall back to the same-origin proxy for an
+        // already-saved image.
+        var imageUrl = !string.IsNullOrEmpty(_newPersonaImagePreviewUrl)
+            ? _newPersonaImagePreviewUrl
+            : $"api/persona/image/{SafeEncodePath(_editingPersona.ImageBlobPath)}";
+
+        await _cropModule.InvokeVoidAsync("initCropTool", "persona-crop-canvas", imageUrl, null);
     }
 
     protected async Task OnCropZoomChanged(int value)
@@ -405,9 +423,12 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
     {
         if (_cropModule == null || _editingPersona == null) return;
 
+        // When the persona already has a saved image, overwrite it as PNG.
+        // For a new persona (Id == 0) or one with no existing image, use a unique
+        // temporary path so the upload never collides with another persona.
         var targetPath = !string.IsNullOrEmpty(_editingPersona.ImageBlobPath)
             ? Path.ChangeExtension(_editingPersona.ImageBlobPath, ".png")
-            : $"creator-{_creatorId}/persona-{_editingPersona.Id}.png";
+            : $"creator-{_creatorId}/persona-temp-{Guid.NewGuid():N}.png";
 
         var uploadUrl = $"api/persona/upload-cropped-image?blobPath={Uri.EscapeDataString(targetPath)}";
         var success = await _cropModule.InvokeAsync<bool>("getCroppedImageAndUpload", uploadUrl);

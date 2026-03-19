@@ -70,4 +70,11 @@ public interface ICreatorPersonaService
     /// Gets the number of songs linked to a persona.
     /// </summary>
     Task<int> GetPersonaSongCountAsync(int personaId);
+
+    /// <summary>
+    /// Deletes a persona image blob directly from storage.
+    /// Used to clean up orphaned blobs (e.g. a cropped image that was uploaded but
+    /// the persona save was subsequently cancelled).
+    /// </summary>
+    Task DeletePersonaImageBlobAsync(string blobPath);
 }

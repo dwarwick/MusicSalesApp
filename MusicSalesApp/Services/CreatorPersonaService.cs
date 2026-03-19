@@ -458,6 +458,10 @@ public class CreatorPersonaService : ICreatorPersonaService
         }
     }
 
+    /// <inheritdoc />
+    public Task DeletePersonaImageBlobAsync(string blobPath) =>
+        DeletePersonaImageFromStorageAsync(blobPath);
+
     private async Task EnsurePersonaContainerExistsAsync()
     {
         if (_personaContainerClient == null) return;
