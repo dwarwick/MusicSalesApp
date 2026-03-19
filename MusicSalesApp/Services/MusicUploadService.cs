@@ -70,15 +70,21 @@ namespace MusicSalesApp.Services
             destinationFolder ??= string.Empty;
 
             // If the incoming stream is not seekable (e.g., BrowserFileStream),
-            // buffer it into a MemoryStream so we can rewind / reuse it.
+            // buffer it into a temp file so we can rewind / reuse it without
+            // holding the entire file in memory.
+            string tempFilePath = null;
             if (!fileStream.CanSeek)
             {
-                var buffered = new MemoryStream();
-                await fileStream.CopyToAsync(buffered, cancellationToken);
-                buffered.Position = 0;
-                fileStream = buffered;
+                tempFilePath = Path.GetTempFileName();
+                await using (var tempFs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await fileStream.CopyToAsync(tempFs, cancellationToken);
+                }
+                fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             }
 
+            try
+            {
             // Ensure container exists
             await _storageService.EnsureContainerExistsAsync();
 
@@ -121,6 +127,16 @@ namespace MusicSalesApp.Services
             }
 
             return fullPath;
+            }
+            finally
+            {
+                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
+                if (tempFilePath != null)
+                {
+                    await fileStream.DisposeAsync();
+                    TempFileHelper.TryDelete(tempFilePath, _logger);
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -158,22 +174,32 @@ namespace MusicSalesApp.Services
             // Get the normalized base name for folder and file naming
             var baseName = GetNormalizedBaseName(audioFileName);
 
-            // Buffer streams if needed
+            // Buffer non-seekable streams into temp files so we can rewind / reuse them
+            // without holding entire files in memory.
+            string audioTempPath = null;
             if (!audioStream.CanSeek)
             {
-                var buffered = new MemoryStream();
-                await audioStream.CopyToAsync(buffered, cancellationToken);
-                buffered.Position = 0;
-                audioStream = buffered;
+                audioTempPath = Path.GetTempFileName();
+                await using (var tempFs = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await audioStream.CopyToAsync(tempFs, cancellationToken);
+                }
+                audioStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             }
 
+            string albumArtTempPath = null;
             if (!albumArtStream.CanSeek)
             {
-                var buffered = new MemoryStream();
-                await albumArtStream.CopyToAsync(buffered, cancellationToken);
-                buffered.Position = 0;
-                albumArtStream = buffered;
+                albumArtTempPath = Path.GetTempFileName();
+                await using (var tempFs = new FileStream(albumArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await albumArtStream.CopyToAsync(tempFs, cancellationToken);
+                }
+                albumArtStream = new FileStream(albumArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             }
+
+            try
+            {
 
             // Ensure container exists
             await _storageService.EnsureContainerExistsAsync();
@@ -199,11 +225,11 @@ namespace MusicSalesApp.Services
             // Create folder path and file paths
             string folderPath = baseName;
             string mp3Path = $"{folderPath}/{mp3FileName}";
-            
+
             // Preserve original image file extension
             var albumArtExtension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
             string albumArtPath = $"{folderPath}/{baseName}{albumArtExtension}";
-            
+
             // Determine content type based on extension
             string imageContentType = GetImageContentType(albumArtExtension);
 
@@ -256,6 +282,22 @@ namespace MusicSalesApp.Services
             }
 
             return folderPath;
+
+            }
+            finally
+            {
+                // If we created temp-file-backed FileStreams, dispose them and delete the temp files.
+                if (audioTempPath != null)
+                {
+                    await audioStream.DisposeAsync();
+                    TempFileHelper.TryDelete(audioTempPath, _logger);
+                }
+                if (albumArtTempPath != null)
+                {
+                    await albumArtStream.DisposeAsync();
+                    TempFileHelper.TryDelete(albumArtTempPath, _logger);
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -279,14 +321,21 @@ namespace MusicSalesApp.Services
             // Get the normalized base name for folder and file naming
             var baseName = GetNormalizedBaseName(audioFileName);
 
-            // Buffer streams if needed
+            // Buffer non-seekable stream into a temp file so we can rewind / reuse it
+            // without holding the entire file in memory.
+            string audioTempPath = null;
             if (!audioStream.CanSeek)
             {
-                var buffered = new MemoryStream();
-                await audioStream.CopyToAsync(buffered, cancellationToken);
-                buffered.Position = 0;
-                audioStream = buffered;
+                audioTempPath = Path.GetTempFileName();
+                await using (var tempFs = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await audioStream.CopyToAsync(tempFs, cancellationToken);
+                }
+                audioStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             }
+
+            try
+            {
 
             // Ensure container exists
             await _storageService.EnsureContainerExistsAsync();
@@ -357,6 +406,17 @@ namespace MusicSalesApp.Services
             }
 
             return folderPath;
+
+            }
+            finally
+            {
+                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
+                if (audioTempPath != null)
+                {
+                    await audioStream.DisposeAsync();
+                    TempFileHelper.TryDelete(audioTempPath, _logger);
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -380,13 +440,17 @@ namespace MusicSalesApp.Services
                 throw new InvalidDataException($"File {albumArtFileName} is not a valid album art file. Accepted formats: JPEG, JPG, PNG.");
             }
 
-            // Buffer stream if needed
+            // Buffer non-seekable stream into a temp file so we can rewind / reuse it
+            // without holding the entire file in memory.
+            string albumArtTempPath = null;
             if (!albumArtStream.CanSeek)
             {
-                var buffered = new MemoryStream();
-                await albumArtStream.CopyToAsync(buffered, cancellationToken);
-                buffered.Position = 0;
-                albumArtStream = buffered;
+                albumArtTempPath = Path.GetTempFileName();
+                await using (var tempFs = new FileStream(albumArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await albumArtStream.CopyToAsync(tempFs, cancellationToken);
+                }
+                albumArtStream = new FileStream(albumArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             }
 
             // Ensure container exists
@@ -405,22 +469,34 @@ namespace MusicSalesApp.Services
 
             // Upload album cover (no tags)
             _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
-            albumArtStream.Position = 0;
-            await _storageService.UploadAsync(albumCoverPath, albumArtStream, imageContentType);
-
-            // Save metadata to database
-            await _metadataService.UpsertAsync(new Models.SongMetadata
+            try
             {
-                BlobPath = albumCoverPath, // Kept for backward compatibility
-                Mp3BlobPath = null, // No MP3 for album cover
-                ImageBlobPath = albumCoverPath,
-                FileExtension = albumArtExtension,
-                AlbumName = albumName,
-                IsAlbumCover = true,
-                CreatorId = creatorId
-            });
+                albumArtStream.Position = 0;
+                await _storageService.UploadAsync(albumCoverPath, albumArtStream, imageContentType);
 
-            _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
+                // Save metadata to database
+                await _metadataService.UpsertAsync(new Models.SongMetadata
+                {
+                    BlobPath = albumCoverPath, // Kept for backward compatibility
+                    Mp3BlobPath = null, // No MP3 for album cover
+                    ImageBlobPath = albumCoverPath,
+                    FileExtension = albumArtExtension,
+                    AlbumName = albumName,
+                    IsAlbumCover = true,
+                    CreatorId = creatorId
+                });
+
+                _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
+            }
+            finally
+            {
+                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
+                if (albumArtTempPath != null)
+                {
+                    await albumArtStream.DisposeAsync();
+                    TempFileHelper.TryDelete(albumArtTempPath, _logger);
+                }
+            }
 
             return albumCoverPath;
         }

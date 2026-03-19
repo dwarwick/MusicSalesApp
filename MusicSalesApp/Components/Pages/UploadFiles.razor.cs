@@ -426,7 +426,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     {
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
 
-        MemoryStream audioMemoryStream = null;
+        string audioTempPath = null;
 
         try
         {
@@ -443,15 +443,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Buffer the audio file BEFORE calling StateHasChanged. In .NET 9+ Blazor Server,
-            // IBrowserFile references can become invalid after a re-render triggered by
-            // StateHasChanged, causing "There is no file with ID X" on OpenReadStream.
-            audioMemoryStream = new MemoryStream();
+            // Stream the audio file to a temp file BEFORE calling StateHasChanged. In .NET 9+
+            // Blazor Server, IBrowserFile references can become invalid after a re-render
+            // triggered by StateHasChanged. Using a temp file instead of MemoryStream avoids
+            // holding the entire file in memory (critical for large WAV files).
+            audioTempPath = Path.GetTempFileName();
             await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
+            await using (var tempFileStream = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true))
             {
-                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
+                await audioStream.CopyToAsync(tempFileStream, bufferSize, _uploadCts.Token);
             }
-            audioMemoryStream.Position = 0;
 
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Uploading...";
@@ -461,8 +462,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // Upload without cover art - use the normalized name as the filename so storage uses clean names
             var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
             var audioFileNameForStorage = normalizedName + audioExtension;
+            await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             var folderPath = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
-                audioMemoryStream,
+                audioFileStream,
                 audioFileNameForStorage,
                 null, // No album name
                 _currentCreatorId,
@@ -503,8 +505,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            // Dispose memory streams
-            audioMemoryStream?.Dispose();
+            // Clean up temp file
+            if (audioTempPath != null)
+                TempFileHelper.TryDelete(audioTempPath, Logger);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -513,8 +516,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     {
         const int bufferSize = 81920; // 80 KB buffer for better performance with large files
 
-        MemoryStream audioMemoryStream = null;
-        MemoryStream coverArtMemoryStream = null;
+        string audioTempPath = null;
+        string coverArtTempPath = null;
 
         try
         {
@@ -531,16 +534,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Buffer the audio file BEFORE calling StateHasChanged to prevent IBrowserFile
-            // reference invalidation on re-render (same fix as UploadAudioOnlyAsync).
-            // In Blazor Server, BrowserFileStream has a timeout and only one stream can be
-            // actively read at a time, so we buffer sequentially into memory.
-            audioMemoryStream = new MemoryStream();
+            // Stream the audio file to a temp file BEFORE calling StateHasChanged to prevent
+            // IBrowserFile reference invalidation on re-render (same fix as UploadAudioOnlyAsync).
+            // Using a temp file instead of MemoryStream avoids holding the entire file in memory.
+            audioTempPath = Path.GetTempFileName();
             await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
+            await using (var tempFileStream = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true))
             {
-                await audioStream.CopyToAsync(audioMemoryStream, bufferSize, _uploadCts.Token);
+                await audioStream.CopyToAsync(tempFileStream, bufferSize, _uploadCts.Token);
             }
-            audioMemoryStream.Position = 0;
 
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Reading cover art...";
@@ -550,18 +552,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             if (coverArtBytes != null)
             {
                 // OCR-matched image: bytes were pre-buffered during Phase 2 chunked matching.
-                coverArtMemoryStream = new MemoryStream(coverArtBytes);
+                // Write them to a temp file to keep memory usage low.
+                coverArtTempPath = Path.GetTempFileName();
+                await File.WriteAllBytesAsync(coverArtTempPath, coverArtBytes, _uploadCts.Token);
             }
             else
             {
-                // Image not pre-buffered: buffer it now — this is the first (and only) read of this
-                // IBrowserFile stream, so there is no risk of the "There is no file with ID X" error.
-                coverArtMemoryStream = new MemoryStream();
-                await using (var coverArtStream = coverArtFile.OpenReadStream(_maxImageFileSize))
-                {
-                    await coverArtStream.CopyToAsync(coverArtMemoryStream, bufferSize, _uploadCts.Token);
-                }
-                coverArtMemoryStream.Position = 0;
+                // Image not pre-buffered: stream it to a temp file — this is the first (and only)
+                // read of this IBrowserFile stream, so there is no risk of the "There is no file with ID X" error.
+                coverArtTempPath = Path.GetTempFileName();
+                await using var coverArtStream = coverArtFile.OpenReadStream(_maxImageFileSize);
+                await using var tempCoverArtFileStream = new FileStream(coverArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
+                await coverArtStream.CopyToAsync(tempCoverArtFileStream, bufferSize, _uploadCts.Token);
 
                 // Determine content type from the file extension when not already set
                 if (string.IsNullOrEmpty(coverArtContentType))
@@ -575,7 +577,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Delegate to the service with buffered streams - use normalized name for both files
+            // Delegate to the service with temp file streams - use normalized name for both files
             // so they are stored under the same clean base name regardless of original filenames
             var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
             var coverArtExtension = coverArtContentType switch
@@ -586,10 +588,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             };
             var audioFileNameForStorage = normalizedName + audioExtension;
             var coverArtFileNameForStorage = normalizedName + coverArtExtension;
+            await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
+            await using var coverArtFileStream = new FileStream(coverArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
-                audioMemoryStream,
+                audioFileStream,
                 audioFileNameForStorage,
-                coverArtMemoryStream,
+                coverArtFileStream,
                 coverArtFileNameForStorage,
                 null, // No album name
                 _currentCreatorId,
@@ -632,9 +636,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            // Dispose memory streams
-            audioMemoryStream?.Dispose();
-            coverArtMemoryStream?.Dispose();
+            // Clean up temp files
+            if (audioTempPath != null)
+                TempFileHelper.TryDelete(audioTempPath, Logger);
+            if (coverArtTempPath != null)
+                TempFileHelper.TryDelete(coverArtTempPath, Logger);
             await InvokeAsync(StateHasChanged);
         }
     }
