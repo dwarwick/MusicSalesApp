@@ -1822,6 +1822,57 @@ h1:focus {
     vertical-align: middle;
 }
 
+/* Artist / genre link colours — applied at all breakpoints */
+.card-artist-name a {
+    color: #1db954;
+    text-decoration: none;
+}
+
+.card-artist-name a:hover {
+    color: #1ed760;
+    text-decoration: underline;
+}
+
+.card-genre a {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.card-genre a:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
+.artist-link {
+    color: #1db954;
+    text-decoration: none;
+}
+
+.artist-link:hover {
+    color: #1ed760;
+    text-decoration: underline;
+}
+
+.genre-link {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.genre-link:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
+.track-genre-link {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.track-genre-link:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
 .non-square-warning-badge {
     position: absolute;
     top: -5px;
