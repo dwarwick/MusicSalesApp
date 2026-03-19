@@ -128,10 +128,21 @@ public class SongMetadata
 
     /// <summary>
     /// The artist name for this song. If set, overrides the creator's display name.
-    /// Priority for display: ArtistName > Creator.DisplayName > Creator.User.Email
+    /// Priority for display: Persona.Name > ArtistName > Creator.DisplayName > Creator.User.Email
     /// </summary>
     [MaxLength(20)]
     public string ArtistName { get; set; }
+
+    /// <summary>
+    /// Optional foreign key to the CreatorPersona associated with this song.
+    /// When set, the persona name takes highest priority for artist display.
+    /// </summary>
+    public int? PersonaId { get; set; }
+
+    /// <summary>
+    /// Navigation property to the persona associated with this song.
+    /// </summary>
+    public virtual CreatorPersona Persona { get; set; }
 
     /// <summary>
     /// The width of the image in pixels. Populated during upload or crop operations.
@@ -155,26 +166,33 @@ public class SongMetadata
 
     /// <summary>
     /// Gets the effective artist name using the priority:
-    /// 1. SongMetadata.ArtistName
-    /// 2. Creator.DisplayName
-    /// 3. Creator.User.Email (part before @)
+    /// 1. Persona.Name (if a persona is linked)
+    /// 2. SongMetadata.ArtistName
+    /// 3. Creator.DisplayName
+    /// 4. Creator.User.Email (part before @)
     /// </summary>
     public string GetEffectiveArtistName()
     {
-        // Priority 1: ArtistName from SongMetadata
+        // Priority 1: Persona name
+        if (Persona != null && !string.IsNullOrWhiteSpace(Persona.Name))
+        {
+            return Persona.Name;
+        }
+
+        // Priority 2: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(ArtistName))
         {
             // Strip email domain if it contains @ to avoid exposing email addresses
             return ArtistName.Contains('@') ? ArtistName.Split('@')[0] : ArtistName;
         }
 
-        // Priority 2: DisplayName from Creator
+        // Priority 3: DisplayName from Creator
         if (Creator != null && !string.IsNullOrWhiteSpace(Creator.DisplayName))
         {
             return Creator.DisplayName;
         }
 
-        // Priority 3: Email from Creator's User - use part before @ symbol
+        // Priority 4: Email from Creator's User - use part before @ symbol
         if (Creator?.User?.Email != null)
         {
             return Creator.User.Email.Split('@')[0];
@@ -185,26 +203,33 @@ public class SongMetadata
 
     /// <summary>
     /// Gets the effective artist name for admin/management views using the priority:
-    /// 1. SongMetadata.ArtistName
-    /// 2. Creator.DisplayName
-    /// 3. Creator.User.Email (full email address)
+    /// 1. Persona.Name (if a persona is linked)
+    /// 2. SongMetadata.ArtistName
+    /// 3. Creator.DisplayName
+    /// 4. Creator.User.Email (full email address)
     /// Used in admin and creator song management grids/forms.
     /// </summary>
     public string GetEffectiveArtistNameFull()
     {
-        // Priority 1: ArtistName from SongMetadata
+        // Priority 1: Persona name
+        if (Persona != null && !string.IsNullOrWhiteSpace(Persona.Name))
+        {
+            return Persona.Name;
+        }
+
+        // Priority 2: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(ArtistName))
         {
             return ArtistName;
         }
 
-        // Priority 2: DisplayName from Creator
+        // Priority 3: DisplayName from Creator
         if (Creator != null && !string.IsNullOrWhiteSpace(Creator.DisplayName))
         {
             return Creator.DisplayName;
         }
 
-        // Priority 3: Email from Creator's User - full email address for admin views
+        // Priority 4: Email from Creator's User - full email address for admin views
         if (Creator?.User?.Email != null)
         {
             return Creator.User.Email;

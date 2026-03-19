@@ -54,6 +54,7 @@ public abstract class BUnitTestBase
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
     protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
+    protected Mock<ICreatorPersonaService> MockCreatorPersonaService { get; private set; } = default!;
     protected Mock<IDashboardService> MockDashboardService { get; private set; } = default!;
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
@@ -94,6 +95,7 @@ public abstract class BUnitTestBase
         MockAccountEmailService = new Mock<IAccountEmailService>();
         MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
+        MockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         MockDashboardService = new Mock<IDashboardService>();
         MockSongStatusService = new Mock<ISongStatusService>();
         MockGenreService = new Mock<IGenreService>();
@@ -196,6 +198,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync(30);
         MockAppSettingsService.Setup(x => x.SetStreamQualifyingSecondsAsync(It.IsAny<int>()))
             .Returns(Task.CompletedTask);
+        MockAppSettingsService.Setup(x => x.GetMaxImageUploadSizeMBAsync())
+            .ReturnsAsync(10);
 
         // Setup default returns for IPasskeyService methods
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
@@ -288,6 +292,20 @@ public abstract class BUnitTestBase
             .ReturnsAsync(false);
         MockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(It.IsAny<int>()))
             .ReturnsAsync((int?)null);
+
+        // Setup default returns for ICreatorPersonaService methods
+        MockCreatorPersonaService.Setup(x => x.GetPersonasByCreatorIdAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<CreatorPersona>());
+        MockCreatorPersonaService.Setup(x => x.GetPersonaByIdAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((CreatorPersona)null);
+        MockCreatorPersonaService.Setup(x => x.DeletePersonaAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(true);
+        MockCreatorPersonaService.Setup(x => x.DeleteAllPersonasForCreatorAsync(It.IsAny<int>()))
+            .ReturnsAsync(0);
+        MockCreatorPersonaService.Setup(x => x.GetPersonaImageSasUrl(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(string.Empty);
+        MockCreatorPersonaService.Setup(x => x.GetPersonaSongCountAsync(It.IsAny<int>()))
+            .ReturnsAsync(0);
 
         // Setup default returns for IDashboardService methods
         MockDashboardService.Setup(x => x.GetStreamDataAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<StreamInterval>(),
@@ -393,6 +411,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
         TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
+        TestContext.Services.AddSingleton<ICreatorPersonaService>(MockCreatorPersonaService.Object);
         TestContext.Services.AddSingleton<IDashboardService>(MockDashboardService.Object);
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);

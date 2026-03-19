@@ -1,0 +1,289 @@
+@page "/creator/personas"
+@rendermode InteractiveServer
+@inherits ManagePersonasModel
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
+
+<PageTitle>My Personas - Creator Dashboard</PageTitle>
+
+<div class="container-fluid my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3><i class="bi bi-person-badge me-2"></i>My Personas</h3>
+            <p class="text-muted mb-0">Manage your artist personas</p>
+        </div>
+        <div>
+            <SfButton CssClass="e-success" OnClick="ShowAddDialog">
+                <i class="bi bi-plus-circle me-1"></i> Create New Persona
+            </SfButton>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading your personas...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                @_successMessage
+                <button type="button" class="btn-close" @onclick="() => _successMessage = string.Empty"></button>
+            </div>
+        }
+
+        @if (!_personas.Any())
+        {
+            <div class="text-center my-5">
+                <i class="bi bi-person-badge display-1 text-muted"></i>
+                <h4 class="mt-3">No personas yet</h4>
+                <p class="text-muted">Create a persona to represent an artist or band name you perform under.</p>
+                <SfButton CssClass="e-success" OnClick="ShowAddDialog">
+                    <i class="bi bi-plus-circle me-1"></i> Create Your First Persona
+                </SfButton>
+            </div>
+        }
+        else
+        {
+            <SfGrid TValue="PersonaAdminViewModel"
+                    DataSource="@_personas"
+                    AllowPaging="true"
+                    AllowSorting="true"
+                    AllowFiltering="true"
+                    Height="400px">
+                <GridPageSettings PageSize="10"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn HeaderText="Actions" Width="160" AllowFiltering="false" AllowSorting="false">
+                        <Template>
+                            @{
+                                var persona = (context as PersonaAdminViewModel);
+                                <div class="d-flex gap-2">
+                                    <SfButton OnClick="() => EditPersona(persona)" IsPrimary="true" CssClass="e-btn e-small e-primary">
+                                        <i class="bi bi-pencil me-1"></i> Edit
+                                    </SfButton>
+                                    <SfButton OnClick="() => ShowDeleteConfirmation(persona)" CssClass="e-btn e-small e-danger">
+                                        <i class="bi bi-trash me-1"></i> Delete
+                                    </SfButton>
+                                </div>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn HeaderText="Image" Width="100" AllowFiltering="false">
+                        <Template>
+                            @{
+                                var persona = (context as PersonaAdminViewModel);
+                                if (!string.IsNullOrEmpty(persona.PersonaImageUrl))
+                                {
+                                    <div style="position: relative; display: inline-block;">
+                                        <img src="@persona.PersonaImageUrl" alt="Persona Image" class="img-thumbnail" style="max-width: 60px; max-height: 60px; object-fit: cover;" />
+                                        @if (persona.IsImageSquare == false)
+                                        {
+                                            <span class="badge bg-dark" style="position: absolute; top: -5px; right: -5px; font-size: 0.6rem;" title="Image is not square - consider cropping">⚠️</span>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 4px;">
+                                        <i class="bi bi-person-circle text-muted" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(PersonaAdminViewModel.Name)" HeaderText="Name" Width="200"></GridColumn>
+                    <GridColumn Field="@nameof(PersonaAdminViewModel.Bio)" HeaderText="Bio" Width="300">
+                        <Template>
+                            @{
+                                var persona = (context as PersonaAdminViewModel);
+                                if (!string.IsNullOrEmpty(persona.Bio))
+                                {
+                                    <span class="text-truncate d-inline-block" style="max-width: 280px;" title="@persona.Bio">@persona.Bio</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn HeaderText="Website" Width="200">
+                        <Template>
+                            @{
+                                var persona = (context as PersonaAdminViewModel);
+                                if (!string.IsNullOrEmpty(persona.WebsiteUrl))
+                                {
+                                    <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" @onclick:stopPropagation="true" class="text-truncate d-inline-block" style="max-width: 180px;">@persona.WebsiteUrl</a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(PersonaAdminViewModel.SongCount)" HeaderText="Songs" Width="80"></GridColumn>
+                </GridColumns>
+            </SfGrid>
+        }
+    }
+</div>
+
+<!-- Delete Confirmation Dialog -->
+<SfDialog @bind-Visible="_showDeleteDialog" Width="400px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Delete Persona</Header>
+        <Content>
+            @if (_personaToDelete != null)
+            {
+                <div class="text-center">
+                    <i class="bi bi-exclamation-triangle-fill text-warning display-4 mb-3"></i>
+                    <p>Are you sure you want to delete the persona "<strong>@_personaToDelete.Name</strong>"?</p>
+                    @if (_personaToDelete.SongCount > 0)
+                    {
+                        <p class="text-warning"><i class="bi bi-exclamation-circle"></i> <strong>@_personaToDelete.SongCount</strong> song(s) are linked to this persona. The songs will remain but will no longer show this persona name.</p>
+                    }
+                    <p class="text-danger"><strong>Warning:</strong> This action cannot be undone. The persona image will also be deleted.</p>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-secondary" Content="Cancel" OnClick="CancelDelete" />
+            <SfButton CssClass="e-danger" Content="Delete" OnClick="ConfirmDelete" Disabled="@_isDeleting">
+                @if (_isDeleting)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                Delete
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<!-- Edit / Create Dialog -->
+<SfDialog @bind-Visible="_showEditDialog" Width="650px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>@(_isNewPersona ? "Create New Persona" : "Edit Persona")</Header>
+        <Content>
+            @if (_editingPersona != null)
+            {
+                <div class="p-3">
+                    @if (_validationErrors.Any())
+                    {
+                        <div class="alert alert-danger">
+                            <ul class="mb-0">
+                                @foreach (var error in _validationErrors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Persona Name <span class="text-danger">*</span></label>
+                        <SfTextBox @bind-Value="_editName" CssClass="e-outline" Placeholder="Enter artist or band name" />
+                        <small class="text-muted">This is the name that will be displayed as the artist name for songs linked to this persona.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Bio</label>
+                        <SfTextBox @bind-Value="_editBio" CssClass="e-outline" Placeholder="Enter a bio or description for this persona (optional)" Multiline="true" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Website URL</label>
+                        <SfTextBox @bind-Value="_editWebsiteUrl" CssClass="e-outline" Placeholder="https://example.com (optional)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Profile Image</label>
+                        <small class="d-block text-muted mb-2">Upload a square (1:1) profile image for this persona. Use the crop tool to make a non-square image square.</small>
+
+                        @if (_editingPersona.IsImageSquare == false)
+                        {
+                            <div class="alert alert-warning py-1 px-2 mb-2">
+                                <small><i class="bi bi-exclamation-triangle"></i> Image is not square. Use the crop tool to fix this.</small>
+                            </div>
+                        }
+
+                        @if (_cropApplied)
+                        {
+                            <div class="mb-2">
+                                <span class="text-success"><i class="bi bi-check-circle"></i> Image cropped to square — will be saved when you click Save.</span>
+                            </div>
+                        }
+                        else if (!string.IsNullOrEmpty(_editingPersona.PersonaImageUrl))
+                        {
+                            <div class="mb-2">
+                                <img src="@_editingPersona.PersonaImageUrl" alt="Current persona image" class="img-thumbnail" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
+                            </div>
+                            @if (!_showCropTool && !string.IsNullOrEmpty(_editingPersona.ImageBlobPath))
+                            {
+                                <SfButton OnClick="OpenCropTool" CssClass="e-btn e-small e-outline mb-2">
+                                    <i class="bi bi-crop"></i> Crop to Square
+                                </SfButton>
+                            }
+                        }
+
+                        @if (_showCropTool)
+                        {
+                            <div class="crop-tool-container mb-3 p-3 border rounded">
+                                <h6>Crop Image to Square</h6>
+                                <p class="text-muted small">Drag to position. Use the slider to zoom. The green border shows the crop area.</p>
+                                <canvas id="persona-crop-canvas" width="300" height="300" style="border: 1px solid #ccc; cursor: grab; display: block; margin-bottom: 10px;"></canvas>
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="small">Zoom:</span>
+                                    <input type="range" min="0" max="100" value="@_cropZoom"
+                                           @oninput="@(async (e) => await OnCropZoomChanged(int.Parse(e.Value?.ToString() ?? "50")))"
+                                           class="form-range" style="max-width: 200px;" />
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <SfButton OnClick="ApplyCrop" IsPrimary="true" CssClass="e-btn e-small e-success">
+                                        <i class="bi bi-check"></i> Apply Crop
+                                    </SfButton>
+                                    <SfButton OnClick="CancelCrop" CssClass="e-btn e-small">Cancel</SfButton>
+                                </div>
+                            </div>
+                        }
+
+                        <InputFile OnChange="HandlePersonaImageUpload" accept=".jpeg,.jpg,.png" class="form-control" />
+                        <small class="text-muted">Upload a profile image (JPEG or PNG, square 1:1 recommended)</small>
+                        @if (_personaImageFile != null)
+                        {
+                            <div class="mt-2 text-success">
+                                <i class="bi bi-check-circle"></i> New file selected: @_personaImageFile.Name
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-secondary" Content="Cancel" OnClick="CancelEdit" />
+            <SfButton CssClass="e-primary" Content="@(_isNewPersona ? "Create Persona" : "Save Changes")" OnClick="SaveEdit" Disabled="@_isSaving">
+                @if (_isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                @(_isNewPersona ? "Create Persona" : "Save Changes")
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

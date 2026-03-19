@@ -45,6 +45,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .ToListAsync();
         }
@@ -55,6 +56,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreatorIncludingDisabled)
                 .ToListAsync();
         }
@@ -62,7 +64,9 @@ namespace MusicSalesApp.Services
         public async Task<SongMetadata> GetByIdAsync(int id)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata.FirstOrDefaultAsync(s => s.Id == id);
+            return await context.SongMetadata
+                .Include(s => s.Persona)
+                .FirstOrDefaultAsync(s => s.Id == id);
         }
 
         public async Task<SongMetadata> GetByBlobPathAsync(string blobPath)
@@ -71,6 +75,7 @@ namespace MusicSalesApp.Services
             // Include disabled songs for admin operations
             return await context.SongMetadata
                 .Include(s => s.Creator)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreatorIncludingDisabled)
                 .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
                     s.Mp3BlobPath == blobPath || 
@@ -83,6 +88,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => s.AlbumName == albumName)
                 .ToListAsync();
@@ -94,6 +100,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => 
                     // Match songs where ArtistName field matches
@@ -114,6 +121,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => s.CreatorId == creatorId)
                 .ToListAsync();
@@ -129,6 +137,7 @@ namespace MusicSalesApp.Services
                 return await context.SongMetadata
                     .Include(s => s.Creator)
                         .ThenInclude(c => c.User)
+                    .Include(s => s.Persona)
                     .Where(ActiveSongFromActiveCreator)
                     .Where(s => s.Genre == null || s.Genre == "")
                     .ToListAsync();
@@ -138,6 +147,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
+                .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s => s.Genre == genreName)
                 .ToListAsync();
@@ -250,7 +260,7 @@ namespace MusicSalesApp.Services
         public async Task<PaginatedSongResult> GetPagedAsync(SongQueryParameters parameters)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            var query = context.SongMetadata.Include(s => s.Creator).AsQueryable();
+            var query = context.SongMetadata.Include(s => s.Creator).Include(s => s.Persona).AsQueryable();
 
             // Only include active songs by default (unless specifically querying for inactive)
             if (!parameters.IncludeInactive)

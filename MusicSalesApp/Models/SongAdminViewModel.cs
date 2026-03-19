@@ -48,4 +48,29 @@ public class SongAdminViewModel
     /// Null means dimensions are unknown.
     /// </summary>
     public bool? IsImageSquare { get; set; }
+
+    /// <summary>
+    /// The ID of the persona associated with this song (if any).
+    /// </summary>
+    public int? PersonaId { get; set; }
+
+    /// <summary>
+    /// The name of the persona associated with this song (if any).
+    /// </summary>
+    public string PersonaName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The SAS URL of the persona image (if any).
+    /// </summary>
+    public string PersonaImageUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The album name of the song (for album tracks).
+    /// </summary>
+    public string AlbumName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this entry is an album (has an album name).
+    /// </summary>
+    public bool IsAlbum { get; set; }
 }

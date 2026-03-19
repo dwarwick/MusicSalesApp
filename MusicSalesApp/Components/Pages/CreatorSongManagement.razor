@@ -141,6 +141,21 @@
                     </Template>
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.SongTitle)" HeaderText="Title" Width="200"></GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.PersonaName)" HeaderText="Persona" Width="130">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (!string.IsNullOrEmpty(song.PersonaName))
+                            {
+                                <span class="badge bg-info text-dark">@song.PersonaName</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.ArtistName)" HeaderText="Artist Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.Genre)" HeaderText="Genre" Width="100"></GridColumn>
                 <GridColumn HeaderText="Duration" Width="100">
@@ -252,9 +267,21 @@
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label">Artist Persona</label>
+                        <SfDropDownList TValue="int?" TItem="PersonaDropdownItem"
+                                       @bind-Value="_editPersonaId"
+                                       DataSource="@_personaOptions"
+                                       Placeholder="— No Persona —"
+                                       CssClass="e-outline">
+                            <DropDownListFieldSettings Value="Id" Text="Name"></DropDownListFieldSettings>
+                        </SfDropDownList>
+                        <small class="text-muted">Select a persona to display as the artist name for this song. Persona name takes highest priority.</small>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label">Artist Name</label>
                         <SfTextBox @bind-Value="_editArtistName" CssClass="e-outline" Placeholder="Enter artist name (max 20 characters)" MaxLength="20" />
-                        <small class="text-muted">Optional. If set, this will override your display name on song cards.</small>
+                        <small class="text-muted">Optional. Used if no persona is selected. If set, this will override your display name on song cards.</small>
                     </div>
 
                     <div class="mb-3">

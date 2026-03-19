@@ -272,6 +272,7 @@ try
     builder.Services.AddScoped<ICreatorEmailService, CreatorEmailService>();
     builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
+    builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
     
     // Register TaxBanditsService with HttpClient

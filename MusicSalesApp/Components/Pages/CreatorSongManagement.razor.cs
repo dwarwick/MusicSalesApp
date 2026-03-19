@@ -45,6 +45,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected int _cropZoom = 50;
     private IJSObjectReference _cropModule;
 
+    // Persona selection
+    protected List<PersonaDropdownItem> _personaOptions = new();
+    protected int? _editPersonaId = null;
+
+    protected record PersonaDropdownItem(int? Id, string Name);
+
     private int? _creatorId;
     private bool _hasLoadedData = false;
     private string _currentUserEmail = string.Empty;
@@ -86,6 +92,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         if (_creatorId.HasValue)
                         {
                             await LoadSongsAsync();
+                            await LoadPersonasAsync();
                         }
                         else
                         {
@@ -139,10 +146,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             IsEnabled = m.IsEnabled,
             StatusReason = m.StatusReason ?? string.Empty,
             NumberOfStreams = m.NumberOfStreams,
-            IsImageSquare = m.IsImageSquare
+            IsImageSquare = m.IsImageSquare,
+            PersonaId = m.PersonaId,
+            PersonaName = m.Persona?.Name ?? string.Empty
         }).ToList();
 
-        // Generate SAS URLs for images and load like counts
+        // Generate SAS URLs for images, persona images, and load like counts
         var songIds = _songs
             .Select(s => int.TryParse(s.Id, out var id) ? id : (int?)null)
             .Where(id => id.HasValue)
@@ -155,6 +164,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             if (!string.IsNullOrEmpty(song.JpegFileName))
             {
                 song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+            }
+            // Generate persona image SAS URLs
+            var personaSong = creatorSongs.FirstOrDefault(m => m.Id.ToString() == song.Id);
+            if (personaSong?.Persona != null && !string.IsNullOrEmpty(personaSong.Persona.ImageBlobPath))
+            {
+                song.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(personaSong.Persona.ImageBlobPath, TimeSpan.FromHours(1));
             }
 
             if (int.TryParse(song.Id, out var songId))
@@ -263,6 +278,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _editSongTitle = song.SongTitle;
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
+        _editPersonaId = song.PersonaId;
         _songImageFile = null;
         _cropApplied = false;
         _cropTargetBlobPath = null;
@@ -278,6 +294,14 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     {
         var genres = await GenreService.GetActiveGenresAsync();
         _genreOptions = genres.Select(g => g.Name).ToList();
+    }
+
+    protected async Task LoadPersonasAsync()
+    {
+        if (!_creatorId.HasValue) return;
+        var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(_creatorId.Value);
+        _personaOptions = new List<PersonaDropdownItem> { new PersonaDropdownItem(null, "— No Persona —") };
+        _personaOptions.AddRange(personas.Select(p => new PersonaDropdownItem(p.Id, p.Name)));
     }
 
     protected async Task AddNewGenre()
@@ -471,7 +495,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         artChanged = true;
                     }
 
-                    // Always update the title, genre, and artist name
+                    // Always update the title, genre, artist name, and persona
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
                     // Strip email domain if artist name contains @ to avoid persisting email addresses
@@ -481,6 +505,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         artistNameToSave = artistNameToSave.Split('@')[0];
                     }
                     metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
+                    metadata.PersonaId = _editPersonaId;
 
                     await SongMetadataService.UpsertAsync(metadata);
 

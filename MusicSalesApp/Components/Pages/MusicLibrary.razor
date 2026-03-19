@@ -69,6 +69,10 @@ else
                 @if (!string.IsNullOrEmpty(artistInfo.DisplayName))
                 {
                     <div class="card-artist-name">
+                        @if (!string.IsNullOrEmpty(artistInfo.PersonaImageUrl))
+                        {
+                            <img src="@artistInfo.PersonaImageUrl" alt="@artistInfo.DisplayName" class="card-persona-image" />
+                        }
                         <a href="@artistInfo.LinkUrl" @onclick:stopPropagation="true" title="View all songs by @artistInfo.DisplayName">@artistInfo.DisplayName</a>
                     </div>
                 }
