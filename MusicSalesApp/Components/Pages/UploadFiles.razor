@@ -306,6 +306,16 @@
                 window.removeEventListener('beforeunload', window._uploadBeforeUnloadHandler);
                 window._uploadBeforeUnloadHandler = null;
             }
+        },
+        showSpinner: function () {
+            var uploadBox = document.querySelector('.upload-box');
+            if (uploadBox) {
+                uploadBox.classList.add('upload-box-disabled');
+                var content = uploadBox.querySelector('.upload-content');
+                if (content) content.style.display = 'none';
+                var spinner = uploadBox.querySelector('.upload-spinner');
+                if (spinner) spinner.style.display = 'flex';
+            }
         }
     };
 </script>

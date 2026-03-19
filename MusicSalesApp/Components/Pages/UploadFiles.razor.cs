@@ -142,6 +142,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         _isProcessingFiles = true;
 
+        // Track temp files for centralized cleanup — declared outside try so
+        // the finally block can always reach them.
+        var audioTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var coverArtTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         try
         {
         // Clear previous validation errors
@@ -150,7 +155,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _unmatchedCoverArtFiles.Clear();
         _duplicateSongFiles.Clear();
 
-        // Ensure CreatorId is loaded - retry if not yet available (e.g. race with OnAfterRenderAsync)
+        // Show the lottie spinner immediately via direct DOM manipulation.
+        // We cannot call StateHasChanged here because re-rendering InputFile
+        // invalidates IBrowserFile references in .NET 9+.
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.showSpinner");
+        }
+        catch (JSDisconnectedException) { }
+
+        // Ensure CreatorId is loaded
         if (_currentCreatorId == null)
         {
             Logger.LogWarning("UploadFiles: CreatorId is null at file selection time. Attempting to reload...");
@@ -194,58 +208,70 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 coverArtFilesByName[file.Name] = file;
         }
 
-        // Show spinner immediately — hide upload box, prevent further drops
+        // Buffer ALL IBrowserFile streams to temp files BEFORE calling StateHasChanged.
+        // In .NET 9+ Blazor Server, re-rendering the InputFile component clears the
+        // JS-side file list, invalidating all IBrowserFile references from the current
+        // selection. After buffering to disk, re-renders are safe.
+        const int bufferSize = 81920;
+
+        foreach (var kvp in audioFilesByName)
+        {
+            var tempPath = Path.GetTempFileName();
+            await using var stream = kvp.Value.OpenReadStream(_maxAudioFileSize);
+            await using var tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
+            await stream.CopyToAsync(tempFs, bufferSize, _uploadCts.Token);
+            audioTempPaths[kvp.Key] = tempPath;
+        }
+
+        foreach (var kvp in coverArtFilesByName)
+        {
+            var tempPath = Path.GetTempFileName();
+            await using var stream = kvp.Value.OpenReadStream(_maxImageFileSize);
+            await using var tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
+            await stream.CopyToAsync(tempFs, bufferSize, _uploadCts.Token);
+            coverArtTempPaths[kvp.Key] = tempPath;
+        }
+
+        // Show spinner — now safe to re-render since all IBrowserFile streams are consumed
         _isUploading = true;
         await InvokeAsync(StateHasChanged);
 
-        // Show a "matching" status before calling AI
-        if (audioFilesByName.Any() && coverArtFilesByName.Any())
-        {
-            _validationErrorMessage = string.Empty;
-            await InvokeAsync(StateHasChanged);
-        }
-
         // Process all image files in chunks of ImageOcrChunkSize (4).
         // Each chunk: filename-only match first (no bytes), then OCR for any still-unmatched
-        // images in that chunk. At most ImageOcrChunkSize images are buffered at once.
-        var (matchingResult, bufferedOcrImages) = await PerformChunkedMatchingAsync(
+        // images in that chunk. At most ImageOcrChunkSize image bytes are in memory at once.
+        var matchingResult = await PerformChunkedMatchingAsync(
             audioFilesByName.Keys.ToList(),
             coverArtFilesByName.Keys.ToList(),
-            coverArtFilesByName);
+            coverArtTempPaths);
 
         // Track image files that could not be matched (shown below progress table, no error)
         _unmatchedCoverArtFiles = matchingResult.UnmatchedImageFiles;
 
-        // Build the upload item list.
-        // • Images matched by OCR  → already have pre-buffered bytes from Phase 2; use those bytes.
-        // • All other images       → store the IBrowserFile reference; buffered lazily at upload time (one at a time).
-        var uploadItemsWithFiles = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)>();
+        // Build the upload item list. All files are already on disk as temp files,
+        // so we just pass temp paths through to the upload methods.
+        var uploadItemsWithFiles = new List<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)>();
 
         foreach (var pair in matchingResult.Pairs)
         {
-            audioFilesByName.TryGetValue(pair.AudioFileName, out var audioFile);
-            if (audioFile == null)
+            if (!audioTempPaths.TryGetValue(pair.AudioFileName, out var audioTempPath))
                 continue;
 
-            IBrowserFile coverArtFile = null;
-            byte[] coverArtBytes = null;
+            audioFilesByName.TryGetValue(pair.AudioFileName, out var audioFileMeta);
+            if (audioFileMeta == null)
+                continue;
+
+            string coverArtTempPath = null;
             string coverArtContentType = null;
             string coverArtFileName = "(No cover art)";
             long coverArtFileSize = 0;
 
             if (!string.IsNullOrEmpty(pair.ImageFileName))
             {
-                if (bufferedOcrImages != null && bufferedOcrImages.TryGetValue(pair.ImageFileName, out var ocrData))
-                {
-                    // Image was buffered during OCR phase — use pre-buffered bytes
-                    coverArtBytes = ocrData.Data;
-                    coverArtContentType = ocrData.ContentType;
-                }
-                else
-                {
-                    // Image stream not yet read — buffer it just-in-time at upload time
-                    coverArtFilesByName.TryGetValue(pair.ImageFileName, out coverArtFile);
-                }
+                coverArtTempPaths.TryGetValue(pair.ImageFileName, out coverArtTempPath);
+
+                // Determine content type from file extension
+                var ext = Path.GetExtension(pair.ImageFileName).ToLowerInvariant();
+                coverArtContentType = ext == ".png" ? "image/png" : "image/jpeg";
 
                 // Metadata for display in the progress table
                 if (coverArtFilesByName.TryGetValue(pair.ImageFileName, out var metaFile))
@@ -262,18 +288,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             var uploadItem = new UploadPairItem
             {
                 BaseName = normalizedName,
-                AudioFileName = audioFile.Name,
-                AudioFileSize = audioFile.Size,
+                AudioFileName = audioFileMeta.Name,
+                AudioFileSize = audioFileMeta.Size,
                 CoverArtFileName = coverArtFileName,
                 CoverArtFileSize = coverArtFileSize,
-                HasCoverArt = coverArtFile != null || coverArtBytes != null,
+                HasCoverArt = coverArtTempPath != null,
                 Status = UploadStatus.Pending,
                 Progress = 0,
                 StatusMessage = "Pending"
             };
 
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add((uploadItem, audioFile, coverArtFile, coverArtBytes, coverArtContentType, normalizedName));
+            uploadItemsWithFiles.Add((uploadItem, audioTempPath, coverArtTempPath, coverArtContentType, normalizedName));
         }
 
         // Check for duplicate song titles before uploading
@@ -366,6 +392,19 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         finally
         {
             _isProcessingFiles = false;
+            // If an error occurred after showing the spinner via JS but before
+            // Blazor took over (_isUploading was set), sync the render state so
+            // the spinner is hidden and the upload box is re-enabled.
+            if (!_isUploading)
+            {
+                try { await InvokeAsync(StateHasChanged); }
+                catch { }
+            }
+            // Clean up ALL temp files (safe to call even if already deleted)
+            foreach (var path in audioTempPaths.Values)
+                TempFileHelper.TryDelete(path, Logger);
+            foreach (var path in coverArtTempPaths.Values)
+                TempFileHelper.TryDelete(path, Logger);
         }
     }
 
@@ -374,7 +413,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// Audio/cover art pairs are kept together within their chunks.
     /// ChunkSize represents the maximum number of files (not pairs) to process concurrently.
     /// </summary>
-    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)> uploadItemsWithFiles)
+    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)> uploadItemsWithFiles)
     {
         var itemsList = uploadItemsWithFiles.ToList();
         var currentIndex = 0;
@@ -382,14 +421,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         while (currentIndex < itemsList.Count)
         {
             // Build a chunk that respects the max file count
-            var chunk = new List<(UploadPairItem Item, IBrowserFile AudioFile, IBrowserFile CoverArtFile, byte[] CoverArtBytes, string CoverArtContentType, string NormalizedName)>();
+            var chunk = new List<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)>();
             var currentFileCount = 0;
 
             while (currentIndex < itemsList.Count && currentFileCount < ChunkSize)
             {
                 var item = itemsList[currentIndex];
                 // Count files: 2 for pair (audio + cover art), 1 for audio only
-                var fileCount = (item.CoverArtFile != null || item.CoverArtBytes != null) ? 2 : 1;
+                var fileCount = item.CoverArtTempPath != null ? 2 : 1;
 
                 // Check if adding this item would exceed the limit
                 // Always allow at least one item per chunk
@@ -405,15 +444,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
-            foreach (var (item, audioFile, coverArtFile, coverArtBytes, coverArtContentType, normalizedName) in chunk)
+            foreach (var (item, audioTempPath, coverArtTempPath, coverArtContentType, normalizedName) in chunk)
             {
-                if (coverArtFile != null || coverArtBytes != null)
+                if (coverArtTempPath != null)
                 {
-                    chunkTasks.Add(UploadFilePairAsync(audioFile, coverArtFile, coverArtBytes, coverArtContentType, item, normalizedName));
+                    chunkTasks.Add(UploadFilePairAsync(audioTempPath, coverArtTempPath, coverArtContentType, item, normalizedName));
                 }
                 else
                 {
-                    chunkTasks.Add(UploadAudioOnlyAsync(audioFile, item, normalizedName));
+                    chunkTasks.Add(UploadAudioOnlyAsync(audioTempPath, item, normalizedName));
                 }
             }
 
@@ -422,19 +461,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadAudioOnlyAsync(IBrowserFile audioFile, UploadPairItem uploadItem, string normalizedName)
+    private async Task UploadAudioOnlyAsync(string audioTempPath, UploadPairItem uploadItem, string normalizedName)
     {
-        const int bufferSize = 81920; // 80 KB buffer for better performance with large files
-
-        string audioTempPath = null;
+        const int bufferSize = 81920;
 
         try
         {
             // Validate CreatorId before uploading - songs without a creator cannot be tracked or paid
             if (_currentCreatorId == null)
             {
-                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload {FileName} without a creator association.", _currentUserEmail, audioFile.Name);
-                await SendCreatorIdFailureEmailAsync(audioFile.Name);
+                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload {FileName} without a creator association.", _currentUserEmail, uploadItem.AudioFileName);
+                await SendCreatorIdFailureEmailAsync(uploadItem.AudioFileName);
                 uploadItem.Status = UploadStatus.Failed;
                 uploadItem.Progress = 0;
                 uploadItem.StatusMessage = "Upload failed";
@@ -443,24 +480,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Stream the audio file to a temp file BEFORE calling StateHasChanged. In .NET 9+
-            // Blazor Server, IBrowserFile references can become invalid after a re-render
-            // triggered by StateHasChanged. Using a temp file instead of MemoryStream avoids
-            // holding the entire file in memory (critical for large WAV files).
-            audioTempPath = Path.GetTempFileName();
-            await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
-            await using (var tempFileStream = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true))
-            {
-                await audioStream.CopyToAsync(tempFileStream, bufferSize, _uploadCts.Token);
-            }
-
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Uploading...";
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
             // Upload without cover art - use the normalized name as the filename so storage uses clean names
-            var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
+            var audioExtension = Path.GetExtension(uploadItem.AudioFileName).ToLowerInvariant();
             var audioFileNameForStorage = normalizedName + audioExtension;
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             var folderPath = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
@@ -505,27 +531,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            // Clean up temp file
-            if (audioTempPath != null)
-                TempFileHelper.TryDelete(audioTempPath, Logger);
             await InvokeAsync(StateHasChanged);
         }
     }
 
-    private async Task UploadFilePairAsync(IBrowserFile audioFile, IBrowserFile coverArtFile, byte[] coverArtBytes, string coverArtContentType, UploadPairItem uploadItem, string normalizedName)
+    private async Task UploadFilePairAsync(string audioTempPath, string coverArtTempPath, string coverArtContentType, UploadPairItem uploadItem, string normalizedName)
     {
-        const int bufferSize = 81920; // 80 KB buffer for better performance with large files
-
-        string audioTempPath = null;
-        string coverArtTempPath = null;
+        const int bufferSize = 81920;
 
         try
         {
             // Validate CreatorId before uploading - songs without a creator cannot be tracked or paid
             if (_currentCreatorId == null)
             {
-                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload audio '{AudioFile}' + cover art '{CoverArtFile}' without a creator association.", _currentUserEmail, audioFile.Name, uploadItem.CoverArtFileName);
-                await SendCreatorIdFailureEmailAsync($"{audioFile.Name}, {uploadItem.CoverArtFileName}");
+                Logger.LogError("UploadFiles: CreatorId is null for user {Email}. Cannot upload audio '{AudioFile}' + cover art '{CoverArtFile}' without a creator association.", _currentUserEmail, uploadItem.AudioFileName, uploadItem.CoverArtFileName);
+                await SendCreatorIdFailureEmailAsync($"{uploadItem.AudioFileName}, {uploadItem.CoverArtFileName}");
                 uploadItem.Status = UploadStatus.Failed;
                 uploadItem.Progress = 0;
                 uploadItem.StatusMessage = "Upload failed";
@@ -534,52 +554,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            // Stream the audio file to a temp file BEFORE calling StateHasChanged to prevent
-            // IBrowserFile reference invalidation on re-render (same fix as UploadAudioOnlyAsync).
-            // Using a temp file instead of MemoryStream avoids holding the entire file in memory.
-            audioTempPath = Path.GetTempFileName();
-            await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
-            await using (var tempFileStream = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true))
-            {
-                await audioStream.CopyToAsync(tempFileStream, bufferSize, _uploadCts.Token);
-            }
-
             uploadItem.Status = UploadStatus.Uploading;
-            uploadItem.StatusMessage = "Reading cover art...";
-            uploadItem.Progress = 15;
-            await InvokeAsync(StateHasChanged);
-
-            if (coverArtBytes != null)
-            {
-                // OCR-matched image: bytes were pre-buffered during Phase 2 chunked matching.
-                // Write them to a temp file to keep memory usage low.
-                coverArtTempPath = Path.GetTempFileName();
-                await File.WriteAllBytesAsync(coverArtTempPath, coverArtBytes, _uploadCts.Token);
-            }
-            else
-            {
-                // Image not pre-buffered: stream it to a temp file — this is the first (and only)
-                // read of this IBrowserFile stream, so there is no risk of the "There is no file with ID X" error.
-                coverArtTempPath = Path.GetTempFileName();
-                await using var coverArtStream = coverArtFile.OpenReadStream(_maxImageFileSize);
-                await using var tempCoverArtFileStream = new FileStream(coverArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
-                await coverArtStream.CopyToAsync(tempCoverArtFileStream, bufferSize, _uploadCts.Token);
-
-                // Determine content type from the file extension when not already set
-                if (string.IsNullOrEmpty(coverArtContentType))
-                {
-                    var ext = Path.GetExtension(coverArtFile.Name).ToLowerInvariant();
-                    coverArtContentType = ext == ".png" ? "image/png" : "image/jpeg";
-                }
-            }
-
             uploadItem.StatusMessage = "Uploading...";
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Delegate to the service with temp file streams - use normalized name for both files
-            // so they are stored under the same clean base name regardless of original filenames
-            var audioExtension = Path.GetExtension(audioFile.Name).ToLowerInvariant();
+            // Use normalized name for both files so they are stored under the same
+            // clean base name regardless of original filenames
+            var audioExtension = Path.GetExtension(uploadItem.AudioFileName).ToLowerInvariant();
             var coverArtExtension = coverArtContentType switch
             {
                 "image/png" => ".png",
@@ -636,11 +618,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            // Clean up temp files
-            if (audioTempPath != null)
-                TempFileHelper.TryDelete(audioTempPath, Logger);
-            if (coverArtTempPath != null)
-                TempFileHelper.TryDelete(coverArtTempPath, Logger);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -648,21 +625,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Processes ALL image files in chunks of <see cref="ImageOcrChunkSize"/> (4).
     /// For each chunk: (a) filename-only matching — no bytes read; then (b) for images still
-    /// unmatched in that chunk, buffer their bytes and attempt OCR matching.
-    /// At most <see cref="ImageOcrChunkSize"/> images are in memory at any one time.
+    /// unmatched in that chunk, read their bytes from temp files and attempt OCR matching.
+    /// At most <see cref="ImageOcrChunkSize"/> image byte arrays are in memory at any one time.
     /// Bytes for unmatched images in each chunk become GC-eligible immediately after the chunk.
-    /// Bytes for OCR-matched images are retained and returned so they can be used during upload
-    /// (their IBrowserFile streams have been consumed and cannot be re-read).
     /// </summary>
-    private async Task<(FileMatchingResult Result, Dictionary<string, (byte[] Data, string ContentType)> BufferedImages)>
-        PerformChunkedMatchingAsync(
+    private async Task<FileMatchingResult> PerformChunkedMatchingAsync(
             List<string> audioFileNames,
             List<string> allImageFileNames,
-            Dictionary<string, IBrowserFile> coverArtFilesByName)
+            Dictionary<string, string> coverArtTempPaths)
     {
         var allPairs = new List<FilePair>();
         var unmatchedImages = new List<string>();
-        var bufferedImages = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
         var remainingAudioNames = audioFileNames.ToList();
 
         for (int i = 0; i < allImageFileNames.Count; i += ImageOcrChunkSize)
@@ -708,13 +681,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             var stillUnmatched = chunkResult.UnmatchedImageFiles.ToList();
             if (stillUnmatched.Any() && remainingAudioNames.Any())
             {
-                var chunkFiles = stillUnmatched
-                    .Where(coverArtFilesByName.ContainsKey)
-                    .ToDictionary(f => f, f => coverArtFilesByName[f]);
+                var chunkTempPaths = stillUnmatched
+                    .Where(coverArtTempPaths.ContainsKey)
+                    .ToDictionary(f => f, f => coverArtTempPaths[f]);
 
-                if (chunkFiles.Any())
+                if (chunkTempPaths.Any())
                 {
-                    var chunkData = await BufferCoverArtChunkAsync(chunkFiles);
+                    var chunkData = await BufferCoverArtChunkAsync(chunkTempPaths);
                     try
                     {
                         var ocrResult = await FileMatchingService.MatchFilesAsync(
@@ -724,9 +697,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                         {
                             allPairs.Add(pair);
                             remainingAudioNames.Remove(pair.AudioFileName);
-                            // Retain bytes — IBrowserFile stream already consumed by OCR
-                            if (chunkData.TryGetValue(pair.ImageFileName, out var data))
-                                bufferedImages[pair.ImageFileName] = data;
                         }
                         unmatchedImages.AddRange(ocrResult.UnmatchedImageFiles);
                     }
@@ -735,7 +705,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                         Logger.LogWarning(ex, "UploadFiles: OCR matching failed for image chunk {ChunkIndex}; images will remain unmatched.", i / ImageOcrChunkSize);
                         unmatchedImages.AddRange(stillUnmatched);
                     }
-                    // Bytes for unmatched images in chunkData go out of scope → GC-eligible
+                    // Bytes for images in chunkData go out of scope → GC-eligible
                 }
             }
             else
@@ -755,37 +725,34 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             });
         }
 
-        return (new FileMatchingResult { Pairs = allPairs, UnmatchedImageFiles = unmatchedImages }, bufferedImages);
+        return new FileMatchingResult { Pairs = allPairs, UnmatchedImageFiles = unmatchedImages };
     }
 
     /// <summary>
-    /// Buffers a subset of cover art files into memory.
+    /// Reads a subset of cover art temp files into memory for OCR matching.
     /// Called once per OCR chunk — only <see cref="ImageOcrChunkSize"/> images at a time.
     /// </summary>
     private async Task<Dictionary<string, (byte[] Data, string ContentType)>> BufferCoverArtChunkAsync(
-        Dictionary<string, IBrowserFile> coverArtChunk)
+        Dictionary<string, string> coverArtTempPaths)
     {
-        const int bufferSize = 81920;
         var result = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var kvp in coverArtChunk)
+        foreach (var kvp in coverArtTempPaths)
         {
             try
             {
-                using var ms = new MemoryStream();
-                await using var stream = kvp.Value.OpenReadStream(_maxImageFileSize);
-                await stream.CopyToAsync(ms, bufferSize, _uploadCts.Token);
+                var bytes = await File.ReadAllBytesAsync(kvp.Value, _uploadCts.Token);
                 var extension = Path.GetExtension(kvp.Key).ToLowerInvariant();
                 var contentType = extension switch
                 {
                     ".png" => "image/png",
                     _ => "image/jpeg"
                 };
-                result[kvp.Key] = (ms.ToArray(), contentType);
+                result[kvp.Key] = (bytes, contentType);
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "UploadFiles: Failed to buffer image '{FileName}' for OCR; it will be unmatched.", kvp.Key);
+                Logger.LogWarning(ex, "UploadFiles: Failed to read temp file for image '{FileName}' for OCR; it will be unmatched.", kvp.Key);
             }
         }
 
