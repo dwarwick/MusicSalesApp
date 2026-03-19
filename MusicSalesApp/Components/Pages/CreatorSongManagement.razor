@@ -367,9 +367,24 @@
                         <small class="text-muted">Upload a song cover image (JPEG or PNG) - optional</small>
                         @if (_songImageFile != null)
                         {
-                            <div class="mt-2 text-success">
-                                <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
-                            </div>
+                            @if (_newSongImageIsSquare == false)
+                            {
+                                <div class="alert alert-warning py-1 px-2 mt-2 mb-1">
+                                    <small><i class="bi bi-exclamation-triangle"></i> Selected image is not square. Use the crop tool after saving, or select a square image.</small>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(_newSongImagePreviewUrl))
+                            {
+                                <div class="mt-2">
+                                    <img src="@_newSongImagePreviewUrl" alt="Selected song cover preview" class="img-thumbnail" style="max-width: 200px;" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mt-2 text-success">
+                                    <i class="bi bi-check-circle"></i> New file selected: @_songImageFile.Name
+                                </div>
+                            }
                         }
                     </div>
                 </div>
