@@ -434,7 +434,11 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     /// <summary>
     /// Gets the persona for the current song, or null if no persona is associated.
     /// </summary>
-    protected Models.CreatorPersona GetPersona() => _songMetadata?.Persona;
+    protected Models.CreatorPersona GetPersona()
+    {
+        var persona = _songMetadata?.Persona;
+        return (persona != null && persona.IsEnabled) ? persona : null;
+    }
 
     /// <summary>
     /// Gets the SAS URL for the persona image, or null if no persona image exists.

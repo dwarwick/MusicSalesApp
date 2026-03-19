@@ -1130,7 +1130,10 @@ namespace MusicSalesApp.Components.Pages
 
             var track = _playlistInfo.Tracks[_currentTrackIndex];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata))
-                return metadata.Persona;
+            {
+                var persona = metadata.Persona;
+                return (persona != null && persona.IsEnabled) ? persona : null;
+            }
 
             return null;
         }

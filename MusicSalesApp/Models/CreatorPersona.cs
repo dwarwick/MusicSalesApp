@@ -72,6 +72,12 @@ public class CreatorPersona
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// Whether this persona is enabled. Disabled personas are not displayed anywhere on the site.
+    /// Admins can disable/re-enable personas.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
     /// Returns true if the persona image is a perfect square, false if not square,
     /// or null if dimensions are unknown.
     /// </summary>

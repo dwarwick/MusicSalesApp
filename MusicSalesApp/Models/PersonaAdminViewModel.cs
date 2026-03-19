@@ -26,4 +26,24 @@ public class PersonaAdminViewModel
     /// Number of songs linked to this persona.
     /// </summary>
     public int SongCount { get; set; }
+
+    /// <summary>
+    /// Whether this persona is enabled and visible on the site.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Email address of the creator who owns this persona (used in admin view).
+    /// </summary>
+    public string CreatorEmail { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Display name of the creator who owns this persona (used in admin view).
+    /// </summary>
+    public string CreatorName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The creator's internal ID.
+    /// </summary>
+    public int CreatorId { get; set; }
 }

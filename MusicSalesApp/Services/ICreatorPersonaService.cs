@@ -9,9 +9,14 @@ namespace MusicSalesApp.Services;
 public interface ICreatorPersonaService
 {
     /// <summary>
-    /// Gets all personas belonging to a creator.
+    /// Gets all personas belonging to a creator (including disabled ones, for the creator's own management view).
     /// </summary>
     Task<List<CreatorPersona>> GetPersonasByCreatorIdAsync(int creatorId);
+
+    /// <summary>
+    /// Gets all personas across all creators, including creator info, for the admin management view.
+    /// </summary>
+    Task<List<CreatorPersona>> GetAllPersonasAdminAsync();
 
     /// <summary>
     /// Gets a persona by its ID, verifying it belongs to the specified creator.
@@ -40,6 +45,16 @@ public interface ICreatorPersonaService
     /// Used when a creator stops being a creator or closes their account.
     /// </summary>
     Task<int> DeleteAllPersonasForCreatorAsync(int creatorId);
+
+    /// <summary>
+    /// Disables a persona (admin action). Records user history and sends email to the creator.
+    /// </summary>
+    Task<bool> DisablePersonaAsync(int personaId, int adminUserId, string reason, string baseUrl);
+
+    /// <summary>
+    /// Re-enables a previously disabled persona (admin action). Records user history and sends email to the creator.
+    /// </summary>
+    Task<bool> EnablePersonaAsync(int personaId, int adminUserId, string reason, string baseUrl);
 
     /// <summary>
     /// Generates a SAS URL for a persona image blob.

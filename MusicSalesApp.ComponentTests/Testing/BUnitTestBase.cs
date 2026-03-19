@@ -296,12 +296,18 @@ public abstract class BUnitTestBase
         // Setup default returns for ICreatorPersonaService methods
         MockCreatorPersonaService.Setup(x => x.GetPersonasByCreatorIdAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<CreatorPersona>());
+        MockCreatorPersonaService.Setup(x => x.GetAllPersonasAdminAsync())
+            .ReturnsAsync(new List<CreatorPersona>());
         MockCreatorPersonaService.Setup(x => x.GetPersonaByIdAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync((CreatorPersona)null);
         MockCreatorPersonaService.Setup(x => x.DeletePersonaAsync(It.IsAny<int>(), It.IsAny<int>()))
             .ReturnsAsync(true);
         MockCreatorPersonaService.Setup(x => x.DeleteAllPersonasForCreatorAsync(It.IsAny<int>()))
             .ReturnsAsync(0);
+        MockCreatorPersonaService.Setup(x => x.DisablePersonaAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
+        MockCreatorPersonaService.Setup(x => x.EnablePersonaAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
         MockCreatorPersonaService.Setup(x => x.GetPersonaImageSasUrl(It.IsAny<string>(), It.IsAny<TimeSpan>()))
             .Returns(string.Empty);
         MockCreatorPersonaService.Setup(x => x.GetPersonaSongCountAsync(It.IsAny<int>()))

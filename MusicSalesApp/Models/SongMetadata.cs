@@ -173,8 +173,8 @@ public class SongMetadata
     /// </summary>
     public string GetEffectiveArtistName()
     {
-        // Priority 1: Persona name
-        if (Persona != null && !string.IsNullOrWhiteSpace(Persona.Name))
+        // Priority 1: Persona name (only if persona is enabled)
+        if (Persona != null && Persona.IsEnabled && !string.IsNullOrWhiteSpace(Persona.Name))
         {
             return Persona.Name;
         }
@@ -211,8 +211,8 @@ public class SongMetadata
     /// </summary>
     public string GetEffectiveArtistNameFull()
     {
-        // Priority 1: Persona name
-        if (Persona != null && !string.IsNullOrWhiteSpace(Persona.Name))
+        // Priority 1: Persona name (only if persona is enabled)
+        if (Persona != null && Persona.IsEnabled && !string.IsNullOrWhiteSpace(Persona.Name))
         {
             return Persona.Name;
         }

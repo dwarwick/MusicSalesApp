@@ -114,6 +114,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                 WebsiteUrl = p.WebsiteUrl ?? string.Empty,
                 ImageBlobPath = p.ImageBlobPath ?? string.Empty,
                 IsImageSquare = p.IsImageSquare,
+                IsEnabled = p.IsEnabled,
                 SongCount = await CreatorPersonaService.GetPersonaSongCountAsync(p.Id)
             };
             if (!string.IsNullOrEmpty(p.ImageBlobPath))

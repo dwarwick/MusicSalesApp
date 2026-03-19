@@ -398,7 +398,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private ArtistDisplayInfo GetArtistDisplayInfo(SongMetadata songMeta)
     {
         // Priority 1: Persona name
-        if (songMeta.Persona != null && !string.IsNullOrWhiteSpace(songMeta.Persona.Name))
+        if (songMeta.Persona != null && songMeta.Persona.IsEnabled && !string.IsNullOrWhiteSpace(songMeta.Persona.Name))
         {
             return new ArtistDisplayInfo
             {

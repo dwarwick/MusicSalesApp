@@ -139,6 +139,21 @@
                         </Template>
                     </GridColumn>
                     <GridColumn Field="@nameof(PersonaAdminViewModel.SongCount)" HeaderText="Songs" Width="80"></GridColumn>
+                    <GridColumn Field="@nameof(PersonaAdminViewModel.IsEnabled)" HeaderText="Status" Width="110">
+                        <Template>
+                            @{
+                                var persona = (context as PersonaAdminViewModel);
+                                if (persona.IsEnabled)
+                                {
+                                    <span class="badge bg-success">Enabled</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Disabled</span>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
                 </GridColumns>
             </SfGrid>
         }
