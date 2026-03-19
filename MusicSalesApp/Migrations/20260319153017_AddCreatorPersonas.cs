@@ -59,8 +59,7 @@ namespace MusicSalesApp.Migrations
                 table: "SongMetadata",
                 column: "PersonaId",
                 principalTable: "CreatorPersonas",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+                principalColumn: "Id");
         }
 
         /// <inheritdoc />

@@ -1629,7 +1629,7 @@ namespace MusicSalesApp.Migrations
                     b.HasOne("MusicSalesApp.Models.CreatorPersona", "Persona")
                         .WithMany()
                         .HasForeignKey("PersonaId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Creator");
 

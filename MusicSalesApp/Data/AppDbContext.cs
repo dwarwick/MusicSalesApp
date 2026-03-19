@@ -481,6 +481,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasOne(sm => sm.Persona)
             .WithMany()
             .HasForeignKey(sm => sm.PersonaId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }
