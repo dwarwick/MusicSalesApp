@@ -141,6 +141,7 @@ public class SongMetadata
 
     /// <summary>
     /// Navigation property to the persona associated with this song.
+    /// Will be null when PersonaId is null (no persona associated).
     /// </summary>
     public virtual CreatorPersona Persona { get; set; }
 

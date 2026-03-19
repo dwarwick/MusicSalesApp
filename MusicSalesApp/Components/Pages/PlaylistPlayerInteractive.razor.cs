@@ -1105,15 +1105,16 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
-        /// <summary>
-        /// Gets the display name for a song's artist using the priority:
-        /// 1. Persona.Name (if a persona is linked to the song)
+                /// <summary>
+        /// Gets the artist display name for a song metadata entry, using persona name priority.
+        /// Priority: 1. Persona.Name (if a persona is linked to the song)
         /// 2. SongMetadata.ArtistName
         /// 3. Creator.DisplayName
         /// 4. Creator.User.Email
         /// </summary>
         protected string GetArtistDisplayName(Models.SongMetadata metadata)
         {
+            if (metadata == null) return "Unknown Artist";
             return metadata.GetEffectiveArtistName() is var name && !string.IsNullOrWhiteSpace(name)
                 ? name
                 : "Unknown Artist";

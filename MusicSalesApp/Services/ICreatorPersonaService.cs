@@ -72,6 +72,12 @@ public interface ICreatorPersonaService
     Task<int> GetPersonaSongCountAsync(int personaId);
 
     /// <summary>
+    /// Gets song counts for multiple personas in a single query (avoids N+1).
+    /// Returns a dictionary of personaId → count. Personas with no songs are omitted (count = 0).
+    /// </summary>
+    Task<Dictionary<int, int>> GetPersonaSongCountsAsync(IEnumerable<int> personaIds);
+
+    /// <summary>
     /// Deletes a persona image blob directly from storage.
     /// Used to clean up orphaned blobs (e.g. a cropped image that was uploaded but
     /// the persona save was subsequently cancelled).

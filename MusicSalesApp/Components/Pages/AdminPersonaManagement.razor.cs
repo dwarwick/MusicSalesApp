@@ -54,6 +54,7 @@ public partial class AdminPersonaManagementModel : BlazorBase
     protected async Task LoadPersonasAsync()
     {
         var personas = await CreatorPersonaService.GetAllPersonasAdminAsync();
+        var songCounts = await CreatorPersonaService.GetPersonaSongCountsAsync(personas.Select(p => p.Id));
 
         var viewModels = new List<PersonaAdminViewModel>();
         foreach (var p in personas)
@@ -70,7 +71,7 @@ public partial class AdminPersonaManagementModel : BlazorBase
                 CreatorId = p.CreatorId,
                 CreatorEmail = p.Creator?.User?.Email ?? string.Empty,
                 CreatorName = p.Creator?.DisplayName ?? p.Creator?.User?.Email ?? string.Empty,
-                SongCount = await CreatorPersonaService.GetPersonaSongCountAsync(p.Id)
+                SongCount = songCounts.GetValueOrDefault(p.Id, 0)
             };
             if (!string.IsNullOrEmpty(p.ImageBlobPath))
             {

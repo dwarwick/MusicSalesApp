@@ -339,6 +339,12 @@ public class CreatorPersonaService : ICreatorPersonaService
         try
         {
             var blobClient = _personaContainerClient.GetBlobClient(blobPath);
+            if (!blobClient.CanGenerateSasUri)
+            {
+                _logger.LogWarning("Cannot generate SAS URI for persona image {BlobPath}: credential does not support SAS generation.", blobPath);
+                return string.Empty;
+            }
+
             var expiresOn = DateTimeOffset.UtcNow.Add(lifetime);
             var sasBuilder = new BlobSasBuilder(BlobSasPermissions.Read, expiresOn)
             {
@@ -383,6 +389,21 @@ public class CreatorPersonaService : ICreatorPersonaService
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         return await context.SongMetadata
             .CountAsync(sm => sm.PersonaId == personaId && sm.IsActive);
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, int>> GetPersonaSongCountsAsync(IEnumerable<int> personaIds)
+    {
+        var ids = personaIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, int>();
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.SongMetadata
+            .Where(sm => sm.PersonaId != null && ids.Contains(sm.PersonaId.Value) && sm.IsActive)
+            .GroupBy(sm => sm.PersonaId!.Value)
+            .Select(g => new { PersonaId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.PersonaId, x => x.Count);
     }
 
     private async Task SendPersonaStatusEmailAsync(CreatorPersona persona, bool isEnabled, string reason,

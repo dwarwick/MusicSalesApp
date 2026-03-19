@@ -103,14 +103,14 @@ namespace MusicSalesApp.Services
                 .Include(s => s.Persona)
                 .Where(ActiveSongFromActiveCreator)
                 .Where(s =>
-                    // Highest priority: persona name (matches GetEffectiveArtistName priority)
-                    (s.Persona != null && s.Persona.Name == artistName) ||
-                    // Match songs where ArtistName field matches and no persona overrides it
-                    (s.Persona == null && s.ArtistName == artistName) ||
-                    // Or match songs where ArtistName is null/empty and Creator.DisplayName matches (and no persona)
-                    (s.Persona == null && (s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName) ||
-                    // Or match songs where both ArtistName and DisplayName are null/empty and email prefix matches (and no persona)
-                    (s.Persona == null && (s.ArtistName == null || s.ArtistName == "") && 
+                    // Highest priority: enabled persona name (matches GetEffectiveArtistName priority)
+                    (s.Persona != null && s.Persona.IsEnabled && s.Persona.Name == artistName) ||
+                    // Match songs where ArtistName field matches and no enabled persona overrides it
+                    ((s.Persona == null || !s.Persona.IsEnabled) && s.ArtistName == artistName) ||
+                    // Or match songs where ArtistName is null/empty and Creator.DisplayName matches (and no enabled persona)
+                    ((s.Persona == null || !s.Persona.IsEnabled) && (s.ArtistName == null || s.ArtistName == "") && s.Creator != null && s.Creator.DisplayName == artistName) ||
+                    // Or match songs where both ArtistName and DisplayName are null/empty and email prefix matches (and no enabled persona)
+                    ((s.Persona == null || !s.Persona.IsEnabled) && (s.ArtistName == null || s.ArtistName == "") && 
                      (s.Creator == null || s.Creator.DisplayName == null || s.Creator.DisplayName == "") && 
                      s.Creator != null && s.Creator.User != null && s.Creator.User.Email != null &&
                      s.Creator.User.Email.StartsWith(artistName + "@")))

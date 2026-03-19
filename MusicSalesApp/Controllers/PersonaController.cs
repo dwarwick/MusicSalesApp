@@ -45,8 +45,26 @@ public class PersonaController : ControllerBase
     }
 
     /// <summary>
+    /// Returns the creator ID for the current user, or null if not a creator.
+    /// </summary>
+    private async Task<int?> GetCallerCreatorIdAsync()
+    {
+        var appUser = await _userManager.GetUserAsync(User);
+        if (appUser == null) return null;
+        return await _creatorService.GetCreatorIdForUserAsync(appUser.Id);
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="blobPath"/> resides inside the creator's own
+    /// blob namespace (<c>creator-{creatorId}/…</c>).
+    /// </summary>
+    private static bool BlobPathBelongsToCreator(string blobPath, int creatorId)
+        => blobPath.StartsWith($"creator-{creatorId}/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Serves a persona image as a same-origin proxy so the browser crop tool can load it
     /// without CORS/tainted-canvas issues.
+    /// Only the owning creator may fetch their own persona images through this endpoint.
     /// </summary>
     [HttpGet("image/{*blobPath}")]
     public async Task<IActionResult> GetPersonaImage(string blobPath)
@@ -56,6 +74,14 @@ public class PersonaController : ControllerBase
 
         if (blobPath.Contains("..") || blobPath.Contains("~"))
             return BadRequest();
+
+        // Enforce that the requested blob belongs to the authenticated creator.
+        var creatorId = await GetCallerCreatorIdAsync();
+        if (creatorId == null)
+            return Forbid();
+
+        if (!BlobPathBelongsToCreator(blobPath, creatorId.Value))
+            return Forbid();
 
         if (_personaContainerClient == null)
             return StatusCode(503, "Persona image storage is not configured.");
@@ -87,6 +113,7 @@ public class PersonaController : ControllerBase
     /// <summary>
     /// Accepts a cropped persona image upload (as a binary blob from canvas) and stores it
     /// in the persona images Azure Blob container.
+    /// The <paramref name="blobPath"/> must reside inside the calling creator's own namespace.
     /// </summary>
     [HttpPost("upload-cropped-image")]
     public async Task<IActionResult> UploadCroppedPersonaImage([FromQuery] string blobPath)
@@ -96,6 +123,14 @@ public class PersonaController : ControllerBase
 
         if (blobPath.Contains("..") || blobPath.Contains("~"))
             return BadRequest(new { error = "Invalid blobPath" });
+
+        // Enforce that the target blob belongs to the authenticated creator.
+        var creatorId = await GetCallerCreatorIdAsync();
+        if (creatorId == null)
+            return Forbid();
+
+        if (!BlobPathBelongsToCreator(blobPath, creatorId.Value))
+            return Forbid();
 
         if (Request.ContentLength == null || Request.ContentLength == 0)
             return BadRequest(new { error = "No image data provided" });

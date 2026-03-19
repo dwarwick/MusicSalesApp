@@ -44,6 +44,9 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
     protected bool _showCropTool = false;
     protected bool _cropApplied = false;
     protected string _cropTargetBlobPath = null;
+    // True when the crop target is a brand-new temp blob (not an overwrite of the existing saved image).
+    // Only in this case do we delete the blob if the user cancels.
+    private bool _cropTargetIsNewBlob = false;
     protected int _cropZoom = 50;
     private IJSObjectReference _cropModule;
 
@@ -108,6 +111,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         if (!_creatorId.HasValue) return;
 
         var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(_creatorId.Value);
+        var songCounts = await CreatorPersonaService.GetPersonaSongCountsAsync(personas.Select(p => p.Id));
 
         var viewModels = new List<PersonaAdminViewModel>();
         foreach (var p in personas)
@@ -121,7 +125,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                 ImageBlobPath = p.ImageBlobPath ?? string.Empty,
                 IsImageSquare = p.IsImageSquare,
                 IsEnabled = p.IsEnabled,
-                SongCount = await CreatorPersonaService.GetPersonaSongCountAsync(p.Id)
+                SongCount = songCounts.GetValueOrDefault(p.Id, 0)
             };
             if (!string.IsNullOrEmpty(p.ImageBlobPath))
             {
@@ -148,6 +152,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _bufferedPersonaImageContentType = null;
         _cropApplied = false;
         _cropTargetBlobPath = null;
+        _cropTargetIsNewBlob = false;
         _showCropTool = false;
         _showEditDialog = true;
     }
@@ -167,14 +172,18 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _bufferedPersonaImageContentType = null;
         _cropApplied = false;
         _cropTargetBlobPath = null;
+        _cropTargetIsNewBlob = false;
         _showCropTool = false;
         _showEditDialog = true;
     }
 
     protected async Task CancelEdit()
     {
-        // If a crop was applied but the persona was never saved, remove the orphaned blob.
-        if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
+        // Only delete the crop blob if it was a freshly-uploaded temp blob that was never
+        // committed to the persona record.  Do NOT delete it when the path is the same as
+        // the persona's existing saved image (e.g., same .png path after Path.ChangeExtension)
+        // — that would remove the still-live persisted image.
+        if (_cropApplied && _cropTargetIsNewBlob && !string.IsNullOrEmpty(_cropTargetBlobPath))
         {
             try { await CreatorPersonaService.DeletePersonaImageBlobAsync(_cropTargetBlobPath); }
             catch (Exception ex) { Logger.LogWarning(ex, "ManagePersonas: Failed to clean up orphaned crop blob {Path}", _cropTargetBlobPath); }
@@ -253,22 +262,15 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _isSaving = true;
         try
         {
-            int personaId;
-            if (_isNewPersona)
-            {
-                var created = await CreatorPersonaService.CreatePersonaAsync(
-                    _creatorId.Value, _editName.Trim(), _editBio?.Trim(), _editWebsiteUrl?.Trim());
-                personaId = created.Id;
-            }
-            else
-            {
-                personaId = _editingPersona.Id;
-            }
-
-            // Handle image upload
+            // ── Image validation FIRST (before creating the persona row) ──────────────────
+            // Determine the resolved image state so we can fail fast on bad input without
+            // leaving an orphan persona row in the database.
             string imageBlobPath = _isNewPersona ? null : (_editingPersona.ImageBlobPath ?? null);
             int? imageWidth = null;
             int? imageHeight = null;
+            byte[] imageBytes = null;
+            string imageContentType = null;
+            string imageFileExtension = null;
 
             if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
             {
@@ -291,17 +293,37 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                     return;
                 }
 
-                var contentType = _bufferedPersonaImageContentType ?? (fileExtension == ".png" ? "image/png" : "image/jpeg");
-                await using var stream = new MemoryStream(_bufferedPersonaImageBytes);
-                imageBlobPath = await CreatorPersonaService.UploadPersonaImageAsync(
-                    personaId, _creatorId.Value, stream, contentType, fileExtension);
+                imageBytes = _bufferedPersonaImageBytes;
+                imageContentType = _bufferedPersonaImageContentType ?? (fileExtension == ".png" ? "image/png" : "image/jpeg");
+                imageFileExtension = fileExtension;
             }
             else if (_personaImageFile != null)
             {
-                // Buffering should have happened in HandlePersonaImageUpload; this is an unexpected fallback.
-                Logger.LogWarning("ManagePersonas: _bufferedPersonaImageBytes is null but _personaImageFile is set for persona {PersonaId}. Buffering may have failed.", personaId);
+                // Buffering should have happened in HandlePersonaImageUpload; unexpected fallback.
+                Logger.LogWarning("ManagePersonas: _bufferedPersonaImageBytes is null but _personaImageFile is set. Buffering may have failed.");
                 _validationErrors.Add("Image could not be processed. Please re-select the image and try again.");
                 return;
+            }
+
+            // ── Create/resolve the persona row ────────────────────────────────────────────
+            int personaId;
+            if (_isNewPersona)
+            {
+                var created = await CreatorPersonaService.CreatePersonaAsync(
+                    _creatorId.Value, _editName.Trim(), _editBio?.Trim(), _editWebsiteUrl?.Trim());
+                personaId = created.Id;
+            }
+            else
+            {
+                personaId = _editingPersona.Id;
+            }
+
+            // ── Upload image (if any) ─────────────────────────────────────────────────────
+            if (imageBytes != null)
+            {
+                await using var stream = new MemoryStream(imageBytes);
+                imageBlobPath = await CreatorPersonaService.UploadPersonaImageAsync(
+                    personaId, _creatorId.Value, stream, imageContentType, imageFileExtension);
             }
 
             await CreatorPersonaService.UpdatePersonaAsync(
@@ -337,6 +359,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _personaImageFile = e.File;
         _cropApplied = false;
         _cropTargetBlobPath = null;
+        _cropTargetIsNewBlob = false;
         _newPersonaImagePreviewUrl = null;
         _newPersonaImageIsSquare = null;
         _bufferedPersonaImageBytes = null;
@@ -423,12 +446,27 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
     {
         if (_cropModule == null || _editingPersona == null) return;
 
-        // When the persona already has a saved image, overwrite it as PNG.
-        // For a new persona (Id == 0) or one with no existing image, use a unique
-        // temporary path so the upload never collides with another persona.
-        var targetPath = !string.IsNullOrEmpty(_editingPersona.ImageBlobPath)
-            ? Path.ChangeExtension(_editingPersona.ImageBlobPath, ".png")
-            : $"creator-{_creatorId}/persona-temp-{Guid.NewGuid():N}.png";
+        // When the persona has a new buffered image (not yet saved), or has no existing image,
+        // use a GUID-based temp path — this is a genuinely new blob and must be cleaned up on cancel.
+        // When editing an existing saved image, use Path.ChangeExtension so the crop replaces it
+        // in-place.  In that case we do NOT delete on cancel (the blob belongs to the persona).
+        bool isNewBlob;
+        string targetPath;
+        if (!string.IsNullOrEmpty(_newPersonaImagePreviewUrl) || string.IsNullOrEmpty(_editingPersona.ImageBlobPath))
+        {
+            // New image staged or persona has no image yet — always a fresh temp blob.
+            targetPath = $"creator-{_creatorId}/persona-temp-{Guid.NewGuid():N}.png";
+            isNewBlob = true;
+        }
+        else
+        {
+            // Editing an already-saved image — overwrite it in place.
+            targetPath = Path.ChangeExtension(_editingPersona.ImageBlobPath, ".png");
+            // Mark as a new blob only when the path actually differs from the existing saved path
+            // (i.e. the extension changed from .jpg to .png).  If they are the same path this
+            // overwrites the existing blob and we must not delete it on cancel.
+            isNewBlob = !string.Equals(targetPath, _editingPersona.ImageBlobPath, StringComparison.OrdinalIgnoreCase);
+        }
 
         var uploadUrl = $"api/persona/upload-cropped-image?blobPath={Uri.EscapeDataString(targetPath)}";
         var success = await _cropModule.InvokeAsync<bool>("getCroppedImageAndUpload", uploadUrl);
@@ -437,6 +475,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         {
             _cropApplied = true;
             _cropTargetBlobPath = targetPath;
+            _cropTargetIsNewBlob = isNewBlob;
         }
         else
         {
@@ -453,6 +492,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _showCropTool = false;
         _cropApplied = false;
         _cropTargetBlobPath = null;
+        _cropTargetIsNewBlob = false;
         if (_cropModule != null)
         {
             await _cropModule.InvokeVoidAsync("disposeCropTool");
