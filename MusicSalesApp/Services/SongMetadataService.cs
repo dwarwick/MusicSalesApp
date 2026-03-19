@@ -185,6 +185,7 @@ namespace MusicSalesApp.Services
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
                 existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
                 existing.ArtistName = metadata.ArtistName;
+                existing.PersonaId = metadata.PersonaId;
                 existing.UpdatedAt = DateTime.UtcNow;
 
                 // Re-uploading to a previously used path should always reactivate the song.

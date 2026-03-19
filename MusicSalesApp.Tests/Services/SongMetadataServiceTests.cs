@@ -166,7 +166,68 @@ public class SongMetadataServiceTests
     }
 
     [Test]
-    public async Task UpsertAsync_MatchesOnMp3BlobPath_RestoresInactiveSong()
+    public async Task UpsertAsync_ExistingSong_UpdatesPersonaId()
+    {
+        // Arrange — existing song with no persona
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "track/track.mp3",
+            Mp3BlobPath = "track/track.mp3",
+            Genre = "Pop",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1,
+            PersonaId = null
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        // Act — update with a PersonaId
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "track/track.mp3",
+            Mp3BlobPath = "track/track.mp3",
+            Genre = "Pop",
+            CreatorId = 1,
+            PersonaId = 42
+        };
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        // Assert — PersonaId persisted
+        Assert.That(result.PersonaId, Is.EqualTo(42), "UpsertAsync should persist PersonaId when updating an existing song");
+    }
+
+    [Test]
+    public async Task UpsertAsync_ExistingSong_ClearsPersonaIdWhenNull()
+    {
+        // Arrange — existing song with a persona
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "track/track2.mp3",
+            Mp3BlobPath = "track/track2.mp3",
+            Genre = "Rock",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1,
+            PersonaId = 99
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        // Act — update clearing the PersonaId
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "track/track2.mp3",
+            Mp3BlobPath = "track/track2.mp3",
+            Genre = "Rock",
+            CreatorId = 1,
+            PersonaId = null
+        };
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        // Assert — PersonaId cleared
+        Assert.That(result.PersonaId, Is.Null, "UpsertAsync should clear PersonaId when null is passed");
+    }
     {
         // Arrange — existing song matched via Mp3BlobPath
         var existingSong = new SongMetadata
