@@ -45,33 +45,7 @@ else if (!string.IsNullOrEmpty(_error))
                         }
                     </div>
                 </div>
-            </div>
-
-            <!-- Persona Section (shown below song art if song has a persona) -->
-            @{
-                var persona = GetPersona();
-                var personaImageUrl = GetPersonaImageUrl();
-            }
-            @if (persona != null)
-            {
-                <div class="persona-section">
-                    @if (!string.IsNullOrEmpty(personaImageUrl))
-                    {
-                        <img src="@personaImageUrl" alt="@persona.Name" class="persona-image" />
-                    }
-                    <div class="persona-details">
-                        <span class="persona-name">@persona.Name</span>
-                        @if (!string.IsNullOrEmpty(persona.Bio))
-                        {
-                            <p class="persona-bio">@persona.Bio</p>
-                        }
-                        @if (!string.IsNullOrEmpty(persona.WebsiteUrl))
-                        {
-                            <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
-                        }
-                    </div>
-                </div>
-            }
+            </div>            
 
             <div class="song-info">
 
@@ -97,6 +71,34 @@ else if (!string.IsNullOrEmpty(_error))
                                        Layout="button_count" 
                                        Size="large" 
                                        CssClass="share-button-action" />
+
+                    <!-- Persona Section (shown below song art if song has a persona) -->
+                    @{
+                        var persona = GetPersona();
+                        var personaImageUrl = GetPersonaImageUrl();
+                    }
+                    @if (persona != null)
+                    {
+                        <div class="playlist-persona-section">
+                            @if (!string.IsNullOrEmpty(personaImageUrl))
+                            {
+                                <img src="@personaImageUrl" alt="@persona.Name" class="persona-image persona-image-sm" />
+                            }
+                            <div class="persona-details">
+                                <span class="artist-name-info">
+                                    <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
+                                </span>
+                                @if (!string.IsNullOrEmpty(persona.Bio))
+                                {
+                                    <p class="persona-bio">@persona.Bio</p>
+                                }
+                                @if (!string.IsNullOrEmpty(persona.WebsiteUrl))
+                                {
+                                    <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
 
 

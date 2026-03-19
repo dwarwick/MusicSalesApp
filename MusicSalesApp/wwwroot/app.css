@@ -740,13 +740,18 @@ h1:focus {
 }
 
 /* Song Title */
-.card-song-title {    
+.card-song-title {
     font-size: 14px;
     font-weight: 600;
-    margin-bottom: 0px;
+    margin-bottom: -8px;
+    margin-top: -18px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.card-genre {
+    margin: -8px 0 -14px 0;
 }
 
 /* Playlists Page Layout */
@@ -1777,7 +1782,7 @@ h1:focus {
     width: 100px;
     height: 100px;
     object-fit: cover;
-    border-radius: 50%;
+    border-radius: 12%;
 }
 
 .persona-image-sm {
@@ -1817,9 +1822,9 @@ h1:focus {
 }
 
 .card-persona-image {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    border-radius: 12%;
     object-fit: cover;
     margin-right: 4px;
     vertical-align: middle;
