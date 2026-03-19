@@ -76,6 +76,7 @@ else if (!string.IsNullOrEmpty(_error))
                     @{
                         var persona = GetPersona();
                         var personaImageUrl = GetPersonaImageUrl();
+                        var creatorBio = GetCreatorBio();
                     }
                     @if (persona != null)
                     {
@@ -96,6 +97,17 @@ else if (!string.IsNullOrEmpty(_error))
                                 {
                                     <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
                                 }
+                            </div>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(creatorBio))
+                    {
+                        <div class="playlist-persona-section">
+                            <div class="persona-details">
+                                <span class="artist-name-info">
+                                    <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
+                                </span>
+                                <p class="persona-bio">@creatorBio</p>
                             </div>
                         </div>
                     }

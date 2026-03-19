@@ -1139,6 +1139,49 @@ namespace MusicSalesApp.Components.Pages
         }
 
         /// <summary>
+        /// Gets the Creator bio for the currently playing track.
+        /// Returns null when an active persona is already displayed or no bio is set.
+        /// </summary>
+        protected string GetCurrentTrackCreatorBio()
+        {
+            if (GetCurrentTrackPersona() != null)
+                return null;
+
+            if (_currentTrackIndex < 0 || _playlistInfo?.Tracks == null ||
+                _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return null;
+
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                return metadata.Creator?.Bio;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the SongMetadata for the currently playing track, or null if unavailable.
+        /// </summary>
+        protected Models.SongMetadata GetCurrentTrackMetadata()
+        {
+            if (_currentTrackIndex < 0 || _playlistInfo?.Tracks == null ||
+                _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return null;
+
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            _metadataLookup.TryGetValue(track.Name, out var metadata);
+            return metadata;
+        }
+
+        /// <summary>
+        /// Gets the artist browse URL for the currently playing track.
+        /// </summary>
+        protected string GetCurrentTrackArtistUrl()
+        {
+            var name = GetArtistDisplayName(GetCurrentTrackMetadata());
+            return $"/artist/{Uri.EscapeDataString(name)}";
+        }
+
+        /// <summary>
         /// Gets the SAS URL for the current track's persona image.
         /// </summary>
         protected string GetCurrentTrackPersonaImageUrl()

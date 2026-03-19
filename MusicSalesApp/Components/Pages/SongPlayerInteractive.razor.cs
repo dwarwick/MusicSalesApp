@@ -441,6 +441,17 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// Gets the Creator bio for the current song, used as a fallback when there is no active persona.
+    /// Returns null when a persona is already displayed.
+    /// </summary>
+    protected string GetCreatorBio()
+    {
+        if (GetPersona() != null)
+            return null;
+        return _songMetadata?.Creator?.Bio;
+    }
+
+    /// <summary>
     /// Gets the SAS URL for the persona image, or null if no persona image exists.
     /// </summary>
     protected string GetPersonaImageUrl()
