@@ -175,10 +175,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _uploadedBlobPaths.Clear();
         }
 
-        // Show spinner immediately — hide upload box, prevent further drops
-        _isUploading = true;
-        await InvokeAsync(StateHasChanged);
-
+        // Capture file references BEFORE showing the spinner / calling StateHasChanged.
+        // In .NET 9+ Blazor Server, calling StateHasChanged before GetMultipleFiles can
+        // invalidate IBrowserFile references, causing "There is no file with ID X" errors
+        // when OpenReadStream is later called on an audio-only upload.
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
         // Separate files into audio and cover art by original filename
@@ -193,6 +193,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             else if (ValidCoverArtExtensions.Contains(extension))
                 coverArtFilesByName[file.Name] = file;
         }
+
+        // Show spinner immediately — hide upload box, prevent further drops
+        _isUploading = true;
+        await InvokeAsync(StateHasChanged);
 
         // Show a "matching" status before calling AI
         if (audioFilesByName.Any() && coverArtFilesByName.Any())
@@ -439,12 +443,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            uploadItem.Status = UploadStatus.Uploading;
-            uploadItem.StatusMessage = "Reading audio file...";
-            uploadItem.Progress = 5;
-            await InvokeAsync(StateHasChanged);
-
-            // Buffer the audio file
+            // Buffer the audio file BEFORE calling StateHasChanged. In .NET 9+ Blazor Server,
+            // IBrowserFile references can become invalid after a re-render triggered by
+            // StateHasChanged, causing "There is no file with ID X" on OpenReadStream.
             audioMemoryStream = new MemoryStream();
             await using (var audioStream = audioFile.OpenReadStream(_maxAudioFileSize))
             {
@@ -452,6 +453,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
             audioMemoryStream.Position = 0;
 
+            uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Uploading...";
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
@@ -529,12 +531,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return;
             }
 
-            uploadItem.Status = UploadStatus.Uploading;
-            uploadItem.StatusMessage = "Reading audio file...";
-            uploadItem.Progress = 5;
-            await InvokeAsync(StateHasChanged);
-
-            // Buffer the audio file first to avoid timeout issues with multiple open streams
+            // Buffer the audio file BEFORE calling StateHasChanged to prevent IBrowserFile
+            // reference invalidation on re-render (same fix as UploadAudioOnlyAsync).
             // In Blazor Server, BrowserFileStream has a timeout and only one stream can be
             // actively read at a time, so we buffer sequentially into memory.
             audioMemoryStream = new MemoryStream();
@@ -544,6 +542,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
             audioMemoryStream.Position = 0;
 
+            uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Reading cover art...";
             uploadItem.Progress = 15;
             await InvokeAsync(StateHasChanged);

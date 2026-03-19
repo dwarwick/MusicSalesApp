@@ -34,6 +34,12 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
     protected bool _isSaving = false;
     protected IBrowserFile _personaImageFile = null;
 
+    // New-image preview (before saving)
+    protected string _newPersonaImagePreviewUrl = null;
+    protected bool? _newPersonaImageIsSquare = null;
+    private byte[] _bufferedPersonaImageBytes = null;
+    private string _bufferedPersonaImageContentType = null;
+
     // Crop tool fields
     protected bool _showCropTool = false;
     protected bool _cropApplied = false;
@@ -136,6 +142,10 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _editWebsiteUrl = string.Empty;
         _validationErrors.Clear();
         _personaImageFile = null;
+        _newPersonaImagePreviewUrl = null;
+        _newPersonaImageIsSquare = null;
+        _bufferedPersonaImageBytes = null;
+        _bufferedPersonaImageContentType = null;
         _cropApplied = false;
         _cropTargetBlobPath = null;
         _showCropTool = false;
@@ -151,6 +161,10 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _editWebsiteUrl = persona.WebsiteUrl;
         _validationErrors.Clear();
         _personaImageFile = null;
+        _newPersonaImagePreviewUrl = null;
+        _newPersonaImageIsSquare = null;
+        _bufferedPersonaImageBytes = null;
+        _bufferedPersonaImageContentType = null;
         _cropApplied = false;
         _cropTargetBlobPath = null;
         _showCropTool = false;
@@ -162,6 +176,10 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         _showEditDialog = false;
         _editingPersona = null;
         _showCropTool = false;
+        _newPersonaImagePreviewUrl = null;
+        _newPersonaImageIsSquare = null;
+        _bufferedPersonaImageBytes = null;
+        _bufferedPersonaImageContentType = null;
     }
 
     protected void ShowDeleteConfirmation(PersonaAdminViewModel persona)
@@ -251,7 +269,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                 imageWidth = PersonaImageOutputSize;
                 imageHeight = PersonaImageOutputSize;
             }
-            else if (_personaImageFile != null)
+            else if (_bufferedPersonaImageBytes != null && _personaImageFile != null)
             {
                 var fileExtension = Path.GetExtension(_personaImageFile.Name).ToLowerInvariant();
                 if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
@@ -260,16 +278,23 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                     return;
                 }
 
-                if (_personaImageFile.Size > _maxImageFileSize)
+                if (_bufferedPersonaImageBytes.Length > _maxImageFileSize)
                 {
                     _validationErrors.Add($"Image file is too large. Maximum size is {_maxImageFileSize / (1024 * 1024)} MB.");
                     return;
                 }
 
-                var contentType = fileExtension == ".png" ? "image/png" : "image/jpeg";
-                await using var stream = _personaImageFile.OpenReadStream(_maxImageFileSize);
+                var contentType = _bufferedPersonaImageContentType ?? (fileExtension == ".png" ? "image/png" : "image/jpeg");
+                await using var stream = new MemoryStream(_bufferedPersonaImageBytes);
                 imageBlobPath = await CreatorPersonaService.UploadPersonaImageAsync(
                     personaId, _creatorId.Value, stream, contentType, fileExtension);
+            }
+            else if (_personaImageFile != null)
+            {
+                // Buffering should have happened in HandlePersonaImageUpload; this is an unexpected fallback.
+                Logger.LogWarning("ManagePersonas: _bufferedPersonaImageBytes is null but _personaImageFile is set for persona {PersonaId}. Buffering may have failed.", personaId);
+                _validationErrors.Add("Image could not be processed. Please re-select the image and try again.");
+                return;
             }
 
             await CreatorPersonaService.UpdatePersonaAsync(
@@ -300,11 +325,58 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected void HandlePersonaImageUpload(InputFileChangeEventArgs e)
+    protected async Task HandlePersonaImageUpload(InputFileChangeEventArgs e)
     {
         _personaImageFile = e.File;
         _cropApplied = false;
         _cropTargetBlobPath = null;
+        _newPersonaImagePreviewUrl = null;
+        _newPersonaImageIsSquare = null;
+        _bufferedPersonaImageBytes = null;
+        _bufferedPersonaImageContentType = null;
+
+        var fileExtension = Path.GetExtension(e.File.Name).ToLowerInvariant();
+        if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
+            return;
+
+        try
+        {
+            var contentType = fileExtension == ".png" ? "image/png" : "image/jpeg";
+            _bufferedPersonaImageContentType = contentType;
+
+            // Buffer the image bytes now so we can (a) generate a preview and (b) avoid
+            // re-reading the IBrowserFile later, which is not safe after state changes.
+            using var ms = new MemoryStream((int)Math.Min(e.File.Size, _maxImageFileSize));
+            await using (var stream = e.File.OpenReadStream(_maxImageFileSize))
+                await stream.CopyToAsync(ms);
+            _bufferedPersonaImageBytes = ms.ToArray();
+
+            // Generate a data-URL for inline preview
+            _newPersonaImagePreviewUrl = $"data:{contentType};base64,{Convert.ToBase64String(_bufferedPersonaImageBytes)}";
+
+            // Detect whether the selected image is square via JS (best-effort)
+            try
+            {
+                _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+                var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", _newPersonaImagePreviewUrl);
+                if (dimensions != null)
+                    _newPersonaImageIsSquare = dimensions.Width == dimensions.Height;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "ManagePersonas: Could not determine new image dimensions for preview.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "ManagePersonas: Failed to buffer persona image for preview.");
+            _bufferedPersonaImageBytes = null;
+            _bufferedPersonaImageContentType = null;
+            _newPersonaImagePreviewUrl = null;
+            _newPersonaImageIsSquare = null;
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     protected async Task OpenCropTool()

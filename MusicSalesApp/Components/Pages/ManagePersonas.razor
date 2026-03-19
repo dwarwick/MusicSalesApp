@@ -282,9 +282,24 @@
                         <small class="text-muted">Upload a profile image (JPEG or PNG, square 1:1 recommended)</small>
                         @if (_personaImageFile != null)
                         {
-                            <div class="mt-2 text-success">
-                                <i class="bi bi-check-circle"></i> New file selected: @_personaImageFile.Name
-                            </div>
+                            @if (_newPersonaImageIsSquare == false)
+                            {
+                                <div class="alert alert-warning py-1 px-2 mt-2 mb-1">
+                                    <small><i class="bi bi-exclamation-triangle"></i> Selected image is not square. Use the crop tool after saving, or select a square image.</small>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(_newPersonaImagePreviewUrl))
+                            {
+                                <div class="mt-2">
+                                    <img src="@_newPersonaImagePreviewUrl" alt="Selected persona image preview" class="img-thumbnail" style="max-width: 200px; max-height: 200px; object-fit: cover;" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mt-2 text-success">
+                                    <i class="bi bi-check-circle"></i> New file selected: @_personaImageFile.Name
+                                </div>
+                            }
                         }
                     </div>
                 </div>
