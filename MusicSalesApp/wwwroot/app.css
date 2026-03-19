@@ -428,6 +428,9 @@ h1:focus {
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .action-column {
