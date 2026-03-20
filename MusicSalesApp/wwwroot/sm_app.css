@@ -154,6 +154,7 @@
     .playlist-player-container .action-controls {
         flex-wrap: wrap;
         gap: 16px;
+        height: auto !important;
     }
 
     .playlist-player-container .cart-button-large {
