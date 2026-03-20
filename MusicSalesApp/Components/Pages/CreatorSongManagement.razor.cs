@@ -34,6 +34,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     protected IBrowserFile _songImageFile = null;
+
+    // New-image preview (before saving)
+    protected string _newSongImagePreviewUrl = null;
+    protected bool? _newSongImageIsSquare = null;
+    private string _songImageTempPath = null;
+    private string _songImageContentType = null;
+
     protected List<string> _genreOptions = new();
     protected string _newGenreName = string.Empty;
     protected bool _showAddGenre = false;
@@ -44,6 +51,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected string _cropTargetBlobPath = null;
     protected int _cropZoom = 50;
     private IJSObjectReference _cropModule;
+
+    // Persona selection
+    protected List<PersonaDropdownItem> _personaOptions = new();
+    protected int? _editPersonaId = null;
+
+    protected record PersonaDropdownItem(int? Id, string Name);
 
     private int? _creatorId;
     private bool _hasLoadedData = false;
@@ -86,6 +99,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         if (_creatorId.HasValue)
                         {
                             await LoadSongsAsync();
+                            await LoadPersonasAsync();
                         }
                         else
                         {
@@ -139,10 +153,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             IsEnabled = m.IsEnabled,
             StatusReason = m.StatusReason ?? string.Empty,
             NumberOfStreams = m.NumberOfStreams,
-            IsImageSquare = m.IsImageSquare
+            IsImageSquare = m.IsImageSquare,
+            PersonaId = m.PersonaId,
+            PersonaName = m.Persona?.Name ?? string.Empty
         }).ToList();
 
-        // Generate SAS URLs for images and load like counts
+        // Generate SAS URLs for images, persona images, and load like counts
         var songIds = _songs
             .Select(s => int.TryParse(s.Id, out var id) ? id : (int?)null)
             .Where(id => id.HasValue)
@@ -155,6 +171,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             if (!string.IsNullOrEmpty(song.JpegFileName))
             {
                 song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+            }
+            // Generate persona image SAS URLs
+            var personaSong = creatorSongs.FirstOrDefault(m => m.Id.ToString() == song.Id);
+            if (personaSong?.Persona != null && !string.IsNullOrEmpty(personaSong.Persona.ImageBlobPath))
+            {
+                song.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(personaSong.Persona.ImageBlobPath, TimeSpan.FromHours(1));
             }
 
             if (int.TryParse(song.Id, out var songId))
@@ -263,7 +285,11 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _editSongTitle = song.SongTitle;
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
+        _editPersonaId = song.PersonaId;
         _songImageFile = null;
+        _newSongImagePreviewUrl = null;
+        _newSongImageIsSquare = null;
+        CleanupSongImageTempFile();
         _cropApplied = false;
         _cropTargetBlobPath = null;
         _showCropTool = false;
@@ -278,6 +304,14 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     {
         var genres = await GenreService.GetActiveGenresAsync();
         _genreOptions = genres.Select(g => g.Name).ToList();
+    }
+
+    protected async Task LoadPersonasAsync()
+    {
+        if (!_creatorId.HasValue) return;
+        var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(_creatorId.Value);
+        _personaOptions = new List<PersonaDropdownItem> { new PersonaDropdownItem(null, "— No Persona —") };
+        _personaOptions.AddRange(personas.Select(p => new PersonaDropdownItem(p.Id, p.Name)));
     }
 
     protected async Task AddNewGenre()
@@ -326,6 +360,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _showEditDialog = false;
         _validationErrors.Clear();
         _songImageFile = null;
+        _newSongImagePreviewUrl = null;
+        _newSongImageIsSquare = null;
+        CleanupSongImageTempFile();
         _cropApplied = false;
         _cropTargetBlobPath = null;
         _showCropTool = false;
@@ -333,9 +370,81 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         await DisposeCropTool();
     }
 
-    protected void HandleSongImageUpload(InputFileChangeEventArgs e)
+    protected async Task HandleSongImageUpload(InputFileChangeEventArgs e)
     {
         _songImageFile = e.File;
+        _newSongImagePreviewUrl = null;
+        _newSongImageIsSquare = null;
+        CleanupSongImageTempFile();
+        _cropApplied = false;
+        _cropTargetBlobPath = null;
+
+        var fileExtension = System.IO.Path.GetExtension(e.File.Name).ToLowerInvariant();
+        if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
+        {
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (e.File.Size > _maxImageFileSize)
+        {
+            _validationErrors.Add($"Image file is too large. Maximum size is {_maxImageFileSize / (1024 * 1024)} MB.");
+            _songImageFile = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            _songImageContentType = GetImageContentType(fileExtension);
+
+            // Buffer to a temp file BEFORE any StateHasChanged — in .NET 9+ Blazor Server,
+            // re-rendering the InputFile component invalidates IBrowserFile references.
+            const int bufferSize = 81920;
+            var tempPath = System.IO.Path.GetTempFileName();
+            await using (var stream = e.File.OpenReadStream(_maxImageFileSize))
+            await using (var tempFs = new System.IO.FileStream(tempPath, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None, bufferSize, useAsync: true))
+            {
+                await stream.CopyToAsync(tempFs, bufferSize);
+            }
+            _songImageTempPath = tempPath;
+
+            // Generate a data-URL for immediate inline preview by reading the temp file back
+            var imageBytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+            _newSongImagePreviewUrl = $"data:{_songImageContentType};base64,{Convert.ToBase64String(imageBytes)}";
+
+            // Detect whether the selected image is square via JS (best-effort)
+            try
+            {
+                _cropModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/image-crop-helper.js");
+                var dimensions = await _cropModule.InvokeAsync<ImageDimensions>("checkImageDimensions", _newSongImagePreviewUrl);
+                if (dimensions != null)
+                    _newSongImageIsSquare = dimensions.Width == dimensions.Height;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "CreatorSongManagement: Could not determine new image dimensions for preview.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "CreatorSongManagement: Failed to buffer song image for preview.");
+            CleanupSongImageTempFile();
+            _newSongImagePreviewUrl = null;
+            _newSongImageIsSquare = null;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CleanupSongImageTempFile()
+    {
+        if (!string.IsNullOrEmpty(_songImageTempPath))
+        {
+            TempFileHelper.TryDelete(_songImageTempPath, Logger);
+            _songImageTempPath = null;
+        }
+        _songImageContentType = null;
     }
 
     protected async Task SaveEdit()
@@ -422,14 +531,11 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         _cropTargetBlobPath = null;
                         _showCropTool = false;
                     }
-                    // Handle image upload if provided
-                    else if (_songImageFile != null)
+                    // Handle image upload if provided (_songImageTempPath is set together with _songImageFile)
+                    else if (_songImageTempPath != null)
                     {
-                        using var stream = _songImageFile.OpenReadStream(maxAllowedSize: _maxImageFileSize);
-                        
-                        // Get the file extension from the uploaded file
-                        var fileExtension = System.IO.Path.GetExtension(_songImageFile.Name).ToLowerInvariant();
-                        var contentType = GetImageContentType(fileExtension);
+                        var fileExtension = System.IO.Path.GetExtension(_songImageFile!.Name).ToLowerInvariant();
+                        var contentType = _songImageContentType ?? GetImageContentType(fileExtension);
                         
                         var oldFileName = metadata.ImageBlobPath;
                         string newFileName;
@@ -463,7 +569,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                             await AzureStorageService.DeleteAsync(oldFileName);
                         }
 
-                        await AzureStorageService.UploadAsync(newFileName, stream, contentType);
+                        // Read from temp file (safe after any StateHasChanged since IBrowserFile is no longer needed)
+                        await using var tempStream = System.IO.File.OpenRead(_songImageTempPath);
+                        await AzureStorageService.UploadAsync(newFileName, tempStream, contentType);
                         
                         // Update metadata with new image path
                         metadata.ImageBlobPath = newFileName;
@@ -471,7 +579,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         artChanged = true;
                     }
 
-                    // Always update the title, genre, and artist name
+                    // Always update the title, genre, artist name, and persona
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
                     // Strip email domain if artist name contains @ to avoid persisting email addresses
@@ -481,6 +589,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         artistNameToSave = artistNameToSave.Split('@')[0];
                     }
                     metadata.ArtistName = string.IsNullOrWhiteSpace(artistNameToSave) ? null : artistNameToSave;
+                    metadata.PersonaId = _editPersonaId;
 
                     await SongMetadataService.UpsertAsync(metadata);
 
@@ -510,6 +619,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     _showEditDialog = false;
                     _editingSong = null;
                     _songImageFile = null;
+                    _newSongImagePreviewUrl = null;
+                    _newSongImageIsSquare = null;
+                    CleanupSongImageTempFile();
                     _editArtistName = string.Empty;
                 }
                 else
@@ -695,6 +807,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        CleanupSongImageTempFile();
         await DisposeCropTool();
         if (_cropModule != null)
         {

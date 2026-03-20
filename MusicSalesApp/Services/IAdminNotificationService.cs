@@ -76,4 +76,22 @@ public interface IAdminNotificationService
     /// Notifies admin about a tip fraud prevention event.
     /// </summary>
     Task NotifyTipFraudPreventedAsync(string tipperEmail, string creatorName, string creatorEmail, decimal amount, string fraudRule, string reason);
+
+    /// <summary>
+    /// Notifies admin and the creator when a new persona is created.
+    /// Records a user history event.
+    /// </summary>
+    Task NotifyPersonaCreatedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl);
+
+    /// <summary>
+    /// Notifies admin and the creator when a persona is updated.
+    /// Records a user history event.
+    /// </summary>
+    Task NotifyPersonaUpdatedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl);
+
+    /// <summary>
+    /// Notifies admin and the creator when a persona is deleted.
+    /// Records a user history event.
+    /// </summary>
+    Task NotifyPersonaDeletedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl);
 }

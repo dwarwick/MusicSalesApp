@@ -19,6 +19,7 @@ public class CreatorService : ICreatorService
     private readonly ILogger<CreatorService> _logger;
     private readonly IAppSettingsService _appSettingsService;
     private readonly IAdminNotificationService _adminNotificationService;
+    private readonly ICreatorPersonaService _creatorPersonaService;
 
     public CreatorService(
         IDbContextFactory<AppDbContext> dbContextFactory,
@@ -27,7 +28,8 @@ public class CreatorService : ICreatorService
         IConfiguration configuration,
         ILogger<CreatorService> logger,
         IAppSettingsService appSettingsService,
-        IAdminNotificationService adminNotificationService)
+        IAdminNotificationService adminNotificationService,
+        ICreatorPersonaService creatorPersonaService)
     {
         _dbContextFactory = dbContextFactory;
         _storageService = storageService;
@@ -36,6 +38,7 @@ public class CreatorService : ICreatorService
         _logger = logger;
         _appSettingsService = appSettingsService;
         _adminNotificationService = adminNotificationService;
+        _creatorPersonaService = creatorPersonaService;
     }
 
     /// <inheritdoc />
@@ -378,6 +381,10 @@ public class CreatorService : ICreatorService
         var deactivatedCount = await DeactivateAllCreatorSongsAsync(creator.Id);
         _logger.LogInformation("Deactivated {Count} songs for creator {CreatorId}", deactivatedCount, creator.Id);
 
+        // Delete all personas for this creator (including blob images)
+        var deletedPersonaCount = await _creatorPersonaService.DeleteAllPersonasForCreatorAsync(creator.Id);
+        _logger.LogInformation("Deleted {Count} personas for creator {CreatorId}", deletedPersonaCount, creator.Id);
+
         // Mark creator as inactive
         creator.IsActive = false;
         creator.OnboardingStatus = CreatorOnboardingStatus.Suspended;
@@ -461,6 +468,7 @@ public class CreatorService : ICreatorService
         return await context.SongMetadata
             .Include(s => s.Creator)
                 .ThenInclude(c => c.User)
+            .Include(s => s.Persona)
             .Where(s => s.CreatorId == creatorId && s.IsActive)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
@@ -525,6 +533,10 @@ public class CreatorService : ICreatorService
         // Deactivate all creator's songs (marks inactive + removes from Azure storage)
         var deactivatedCount = await DeactivateAllCreatorSongsAsync(creatorId);
         _logger.LogInformation("Deactivated {Count} songs for creator {CreatorId} due to consent revocation", deactivatedCount, creatorId);
+
+        // Delete all personas for this creator (including blob images)
+        var deletedPersonaCount = await _creatorPersonaService.DeleteAllPersonasForCreatorAsync(creatorId);
+        _logger.LogInformation("Deleted {Count} personas for creator {CreatorId} due to consent revocation", deletedPersonaCount, creatorId);
 
         // Mark creator as inactive with consent revoked status
         creator.IsActive = false;

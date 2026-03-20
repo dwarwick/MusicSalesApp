@@ -31,6 +31,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<Tip> Tips { get; set; }
     public DbSet<BlockedTipAttempt> BlockedTipAttempts { get; set; }
     public DbSet<ChargebackLog> ChargebackLogs { get; set; }
+    public DbSet<CreatorPersona> CreatorPersonas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -467,5 +468,19 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on TipId for efficient lookups
         builder.Entity<ChargebackLog>()
             .HasIndex(c => c.TipId);
+
+        // Configure CreatorPersona entity
+        builder.Entity<CreatorPersona>()
+            .HasOne(cp => cp.Creator)
+            .WithMany()
+            .HasForeignKey(cp => cp.CreatorId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure SongMetadata -> CreatorPersona (optional, no cascade to avoid multi-path)
+        builder.Entity<SongMetadata>()
+            .HasOne(sm => sm.Persona)
+            .WithMany()
+            .HasForeignKey(sm => sm.PersonaId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

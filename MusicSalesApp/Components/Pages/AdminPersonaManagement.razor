@@ -1,0 +1,231 @@
+@page "/admin/personas"
+@rendermode InteractiveServer
+@inherits AdminPersonaManagementModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Persona Management</PageTitle>
+
+<h3>Persona Management</h3>
+
+@if (_isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading personas...</p>
+    </div>
+}
+else
+{
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>Error:</strong> @_errorMessage
+            <button type="button" class="btn-close" @onclick="() => _errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @_successMessage
+            <button type="button" class="btn-close" @onclick="() => _successMessage = string.Empty"></button>
+        </div>
+    }
+
+    <div id="grid-container">
+        <SfGrid TValue="PersonaAdminViewModel"
+                DataSource="@_allPersonas"
+                AllowPaging="true"
+                AllowSorting="true"
+                AllowFiltering="true"
+                Height="600px">
+            <GridPageSettings PageSize="20"></GridPageSettings>
+            <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+            <GridColumns>
+                <GridColumn HeaderText="Actions" Width="180" AllowFiltering="false" AllowSorting="false">
+                    <Template>
+                        @{
+                            var persona = (context as PersonaAdminViewModel);
+                            <div class="d-flex gap-2">
+                                @if (persona.IsEnabled)
+                                {
+                                    <SfButton CssClass="e-btn e-small e-danger" OnClick="() => ShowDisableDialog(persona)">
+                                        <i class="bi bi-slash-circle me-1"></i> Disable
+                                    </SfButton>
+                                }
+                                else
+                                {
+                                    <SfButton CssClass="e-btn e-small e-success" OnClick="() => ShowEnableDialog(persona)">
+                                        <i class="bi bi-check-circle me-1"></i> Enable
+                                    </SfButton>
+                                }
+                            </div>
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn HeaderText="Image" Width="90" AllowFiltering="false" AllowSorting="false">
+                    <Template>
+                        @{
+                            var persona = (context as PersonaAdminViewModel);
+                            if (!string.IsNullOrEmpty(persona.PersonaImageUrl))
+                            {
+                                <div style="position: relative; display: inline-block;">
+                                    <img src="@persona.PersonaImageUrl" alt="Persona Image" class="img-thumbnail"
+                                         style="max-width: 55px; max-height: 55px; object-fit: cover;" />
+                                    @if (persona.IsImageSquare == false)
+                                    {
+                                        <span class="badge bg-dark non-square-warning-badge" title="Not square">⚠️</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 4px;">
+                                    <i class="bi bi-person-circle text-muted" style="font-size: 1.4rem;"></i>
+                                </div>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.Name)" HeaderText="Persona Name" Width="160"></GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.CreatorEmail)" HeaderText="Creator Email" Width="220"></GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.CreatorName)" HeaderText="Creator Name" Width="160"></GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.IsEnabled)" HeaderText="Status" Width="100">
+                    <Template>
+                        @{
+                            var persona = (context as PersonaAdminViewModel);
+                            if (persona.IsEnabled)
+                            {
+                                <span class="badge bg-success">Enabled</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Disabled</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.Bio)" HeaderText="Bio" Width="280" ClipMode="Syncfusion.Blazor.Grids.ClipMode.EllipsisWithTooltip">
+                    <Template>
+                        @{
+                            var persona = (context as PersonaAdminViewModel);
+                            if (!string.IsNullOrEmpty(persona.Bio))
+                            {
+                                <span style="white-space: normal; word-break: break-word;">@persona.Bio</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn HeaderText="Website" Width="200" AllowSorting="false">
+                    <Template>
+                        @{
+                            var persona = (context as PersonaAdminViewModel);
+                            if (!string.IsNullOrEmpty(persona.WebsiteUrl))
+                            {
+                                <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer"
+                                   @onclick:stopPropagation="true"
+                                   class="text-truncate d-inline-block" style="max-width: 180px;">
+                                    @persona.WebsiteUrl
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(PersonaAdminViewModel.SongCount)" HeaderText="Songs" Width="80"></GridColumn>
+            </GridColumns>
+        </SfGrid>
+    </div>
+}
+
+<!-- Disable / Enable Confirmation Dialog -->
+<SfDialog @bind-Visible="_showStatusDialog" Width="450px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>@(_isDisablingAction ? "Disable Persona" : "Re-Enable Persona")</Header>
+        <Content>
+            @if (_statusPersona != null)
+            {
+                <div class="p-2">
+                    @if (_isDisablingAction)
+                    {
+                        <div class="text-center mb-3">
+                            <i class="bi bi-slash-circle-fill text-danger display-4"></i>
+                        </div>
+                        <p>Are you sure you want to <strong>disable</strong> the persona
+                            "<strong>@_statusPersona.Name</strong>"
+                            (creator: <em>@_statusPersona.CreatorEmail</em>)?</p>
+                        <p class="text-muted small">Disabled personas will not be shown anywhere on the site.
+                            Songs linked to this persona will fall back to the creator's default artist name.
+                            The creator will receive an email notification.</p>
+                    }
+                    else
+                    {
+                        <div class="text-center mb-3">
+                            <i class="bi bi-check-circle-fill text-success display-4"></i>
+                        </div>
+                        <p>Are you sure you want to <strong>re-enable</strong> the persona
+                            "<strong>@_statusPersona.Name</strong>"
+                            (creator: <em>@_statusPersona.CreatorEmail</em>)?</p>
+                        <p class="text-muted small">The persona will become visible again on the site.
+                            The creator will receive an email notification.</p>
+                    }
+
+                    @if (_statusValidationErrors.Any())
+                    {
+                        <div class="alert alert-danger py-2">
+                            <ul class="mb-0">
+                                @foreach (var err in _statusValidationErrors)
+                                {
+                                    <li>@err</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <div class="mb-2">
+                        <label class="form-label">Reason <span class="text-danger">*</span></label>
+                        <SfTextBox @bind-Value="_statusReason"
+                                   CssClass="e-outline"
+                                   Placeholder="@(_isDisablingAction ? "Reason for disabling..." : "Reason for re-enabling...")"
+                                   Multiline="true" />
+                    </div>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-secondary" Content="Cancel" OnClick="CancelStatusDialog" />
+            @if (_isDisablingAction)
+            {
+                <SfButton CssClass="e-danger" OnClick="ConfirmStatusChange" Disabled="@_isProcessingStatus">
+                    @if (_isProcessingStatus)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    }
+                    Disable Persona
+                </SfButton>
+            }
+            else
+            {
+                <SfButton CssClass="e-success" OnClick="ConfirmStatusChange" Disabled="@_isProcessingStatus">
+                    @if (_isProcessingStatus)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    }
+                    Re-Enable Persona
+                </SfButton>
+            }
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

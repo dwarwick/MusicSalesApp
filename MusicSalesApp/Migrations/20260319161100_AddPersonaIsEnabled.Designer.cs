@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319161100_AddPersonaIsEnabled")]
+    partial class AddPersonaIsEnabled
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -285,7 +288,7 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("AppSettings", (string)null);
+                    b.ToTable("AppSettings");
 
                     b.HasData(
                         new
@@ -490,7 +493,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("TipperUserId");
 
-                    b.ToTable("BlockedTipAttempts", (string)null);
+                    b.ToTable("BlockedTipAttempts");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.ChargebackLog", b =>
@@ -558,7 +561,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ChargebackLogs", (string)null);
+                    b.ToTable("ChargebackLogs");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Creator", b =>
@@ -663,7 +666,7 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Creators", (string)null);
+                    b.ToTable("Creators");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.CreatorPersona", b =>
@@ -713,7 +716,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("CreatorId");
 
-                    b.ToTable("CreatorPersonas", (string)null);
+                    b.ToTable("CreatorPersonas");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Genre", b =>
@@ -744,7 +747,7 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Genres", (string)null);
+                    b.ToTable("Genres");
 
                     b.HasData(
                         new
@@ -865,7 +868,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Passkeys", (string)null);
+                    b.ToTable("Passkeys");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Playlist", b =>
@@ -897,7 +900,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Playlists", (string)null);
+                    b.ToTable("Playlists");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.RecommendedPlaylist", b =>
@@ -931,7 +934,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId", "GeneratedAt");
 
-                    b.ToTable("RecommendedPlaylists", (string)null);
+                    b.ToTable("RecommendedPlaylists");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongLike", b =>
@@ -966,7 +969,7 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("UserId", "SongMetadataId")
                         .IsUnique();
 
-                    b.ToTable("SongLikes", (string)null);
+                    b.ToTable("SongLikes");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongMetadata", b =>
@@ -1061,7 +1064,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("PersonaId");
 
-                    b.ToTable("SongMetadata", (string)null);
+                    b.ToTable("SongMetadata");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongStatusHistory", b =>
@@ -1097,7 +1100,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("SongMetadataId");
 
-                    b.ToTable("SongStatusHistories", (string)null);
+                    b.ToTable("SongStatusHistories");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongStream", b =>
@@ -1130,7 +1133,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("StreamerUserId");
 
-                    b.ToTable("SongStreams", (string)null);
+                    b.ToTable("SongStreams");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.StreamPayout", b =>
@@ -1192,7 +1195,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("SongMetadataId");
 
-                    b.ToTable("StreamPayouts", (string)null);
+                    b.ToTable("StreamPayouts");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Subscription", b =>
@@ -1239,7 +1242,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Subscriptions", (string)null);
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Tip", b =>
@@ -1307,7 +1310,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("TipperUserId");
 
-                    b.ToTable("Tips", (string)null);
+                    b.ToTable("Tips");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.UserHistory", b =>
@@ -1355,7 +1358,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserHistories", (string)null);
+                    b.ToTable("UserHistories");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.UserPlaylist", b =>
@@ -1386,7 +1389,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserPlaylists", (string)null);
+                    b.ToTable("UserPlaylists");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.W9Request", b =>
@@ -1444,7 +1447,7 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("W9Requests", (string)null);
+                    b.ToTable("W9Requests");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<int>", b =>

@@ -420,7 +420,7 @@ h1:focus {
     justify-content: space-between !important;
     gap: 6px;
     align-items: center;
-    margin-top: auto;
+    margin-top: 4px;
     overflow: hidden;
 }
 
@@ -428,6 +428,9 @@ h1:focus {
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .action-column {
@@ -516,7 +519,7 @@ h1:focus {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: auto;
+    margin-top: 4px;
 }
 
 .card-now-playing {
@@ -737,13 +740,18 @@ h1:focus {
 }
 
 /* Song Title */
-.card-song-title {    
+.card-song-title {
     font-size: 14px;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: -8px;
+    margin-top: -18px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.card-genre {
+    margin: -8px 0 -14px 0;
 }
 
 /* Playlists Page Layout */
@@ -999,7 +1007,7 @@ h1:focus {
     justify-content: center;
     align-items: stretch;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 4px;
 }
 
 .card-bottom-row .cart-button-wrapper {
@@ -1756,4 +1764,129 @@ h1:focus {
 .tip-bucket .tip-bucket-count {
     font-size: 12px;
     opacity: 0.6;
+}
+
+/* Persona display styles */
+.persona-section {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    justify-content: center;
+    text-align: center;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.persona-image {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 12%;
+}
+
+.persona-image-sm {
+    width: 60px;
+    height: 60px;
+}
+
+.persona-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.persona-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.persona-bio {
+    font-size: 0.9rem;
+    margin: 0;
+    opacity: 0.8;
+    max-width: 400px;
+    max-height: 4.5em;
+    overflow-y: auto;
+    line-height: 1.5;
+}
+
+.persona-website {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.playlist-persona-section {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+}
+
+.card-persona-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 12%;
+    object-fit: cover;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+/* Artist / genre link colours — applied at all breakpoints */
+.card-artist-name a {
+    color: #1db954;
+    text-decoration: none;
+}
+
+.card-artist-name a:hover {
+    color: #1ed760;
+    text-decoration: underline;
+}
+
+.card-genre a {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.card-genre a:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
+.artist-link {
+    color: #1db954;
+    text-decoration: none;
+}
+
+.artist-link:hover {
+    color: #1ed760;
+    text-decoration: underline;
+}
+
+.genre-link {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.genre-link:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
+.track-genre-link {
+    color: #9b87f5;
+    text-decoration: none;
+}
+
+.track-genre-link:hover {
+    color: #b8a8f8;
+    text-decoration: underline;
+}
+
+.non-square-warning-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 0.6rem;
 }

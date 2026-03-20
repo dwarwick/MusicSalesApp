@@ -16,4 +16,9 @@ public static class UserHistoryEventTypes
     public const string SongRenamed = "SongRenamed";
     public const string SongArtUpdated = "SongArtUpdated";
     public const string ChargebackReceived = "ChargebackReceived";
+    public const string PersonaEnabled = "PersonaEnabled";
+    public const string PersonaDisabled = "PersonaDisabled";
+    public const string PersonaCreated = "PersonaCreated";
+    public const string PersonaUpdated = "PersonaUpdated";
+    public const string PersonaDeleted = "PersonaDeleted";
 }

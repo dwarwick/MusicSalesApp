@@ -426,22 +426,40 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         if (_songMetadata == null)
             return null;
 
-        if (!string.IsNullOrWhiteSpace(_songMetadata.ArtistName))
-        {
-            return _songMetadata.ArtistName.Contains('@') ? _songMetadata.ArtistName.Split('@')[0] : _songMetadata.ArtistName;
-        }
+        // Use the model's GetEffectiveArtistName() which now includes persona as highest priority
+        var name = _songMetadata.GetEffectiveArtistName();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
 
-        if (_songMetadata.Creator != null && !string.IsNullOrWhiteSpace(_songMetadata.Creator.DisplayName))
-        {
-            return _songMetadata.Creator.DisplayName;
-        }
+    /// <summary>
+    /// Gets the persona for the current song, or null if no persona is associated.
+    /// </summary>
+    protected Models.CreatorPersona GetPersona()
+    {
+        var persona = _songMetadata?.Persona;
+        return (persona != null && persona.IsEnabled) ? persona : null;
+    }
 
-        if (_songMetadata.Creator?.User?.Email != null)
-        {
-            return _songMetadata.Creator.User.Email.Split('@')[0];
-        }
+    /// <summary>
+    /// Gets the Creator bio for the current song, used as a fallback when there is no active persona.
+    /// Returns null when a persona is already displayed.
+    /// </summary>
+    protected string GetCreatorBio()
+    {
+        if (GetPersona() != null)
+            return null;
+        return _songMetadata?.Creator?.Bio;
+    }
 
-        return null;
+    /// <summary>
+    /// Gets the SAS URL for the persona image, or null if no persona image exists.
+    /// </summary>
+    protected string GetPersonaImageUrl()
+    {
+        var persona = GetPersona();
+        if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
+            return null;
+        return CreatorPersonaService.GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromHours(2));
     }
 
     protected double? GetTrackLengthSeconds()

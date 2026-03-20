@@ -166,6 +166,70 @@ public class SongMetadataServiceTests
     }
 
     [Test]
+    public async Task UpsertAsync_ExistingSong_UpdatesPersonaId()
+    {
+        // Arrange — existing song with no persona
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "track/track.mp3",
+            Mp3BlobPath = "track/track.mp3",
+            Genre = "Pop",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1,
+            PersonaId = null
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        // Act — update with a PersonaId
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "track/track.mp3",
+            Mp3BlobPath = "track/track.mp3",
+            Genre = "Pop",
+            CreatorId = 1,
+            PersonaId = 42
+        };
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        // Assert — PersonaId persisted
+        Assert.That(result.PersonaId, Is.EqualTo(42), "UpsertAsync should persist PersonaId when updating an existing song");
+    }
+
+    [Test]
+    public async Task UpsertAsync_ExistingSong_ClearsPersonaIdWhenNull()
+    {
+        // Arrange — existing song with a persona
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "track/track2.mp3",
+            Mp3BlobPath = "track/track2.mp3",
+            Genre = "Rock",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1,
+            PersonaId = 99
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        // Act — update clearing the PersonaId
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "track/track2.mp3",
+            Mp3BlobPath = "track/track2.mp3",
+            Genre = "Rock",
+            CreatorId = 1,
+            PersonaId = null
+        };
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        // Assert — PersonaId cleared
+        Assert.That(result.PersonaId, Is.Null, "UpsertAsync should clear PersonaId when null is passed");
+    }
+
+    [Test]
     public async Task UpsertAsync_MatchesOnMp3BlobPath_RestoresInactiveSong()
     {
         // Arrange — existing song matched via Mp3BlobPath
@@ -223,6 +287,92 @@ public class SongMetadataServiceTests
 
         // Assert
         Assert.That(result.IsActive, Is.True, "Should match on ImageBlobPath and reactivate");
+    }
+
+    #endregion
+
+    #region GetByArtistNameAsync Tests
+
+    [Test]
+    public async Task GetByArtistNameAsync_MatchesByPersonaName()
+    {
+        // Arrange — song assigned to a persona; effective artist name should be the persona name
+        var persona = new MusicSalesApp.Models.CreatorPersona
+        {
+            Id = 10,
+            Name = "Avalara",
+            CreatorId = 1
+        };
+        _context.CreatorPersonas.Add(persona);
+
+        var user = new MusicSalesApp.Models.ApplicationUser { Id = 101, Email = "user1@example.com", UserName = "user1" };
+        _context.Users.Add(user);
+
+        var creator = new MusicSalesApp.Models.Creator
+        {
+            Id = 1,
+            DisplayName = "Real Name",
+            IsActive = true,
+            UserId = 101
+        };
+        _context.Creators.Add(creator);
+
+        var song = new SongMetadata
+        {
+            Mp3BlobPath = "songs/track1.mp3",
+            BlobPath = "songs/track1.mp3",
+            Genre = "Pop",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1,
+            PersonaId = 10
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        // Act — look up by persona name
+        var result = await _service.GetByArtistNameAsync("Avalara");
+
+        // Assert — the song is returned
+        Assert.That(result, Has.Count.EqualTo(1), "Should find song by persona name");
+        Assert.That(result[0].Mp3BlobPath, Is.EqualTo("songs/track1.mp3"));
+    }
+
+    [Test]
+    public async Task GetByArtistNameAsync_PersonaNameDoesNotMatchArtistName()
+    {
+        // Arrange — song with ArtistName set but no persona; "Avalara" is NOT a match
+        var user = new MusicSalesApp.Models.ApplicationUser { Id = 102, Email = "user2@example.com", UserName = "user2" };
+        _context.Users.Add(user);
+
+        var creator = new MusicSalesApp.Models.Creator
+        {
+            Id = 2,
+            DisplayName = "Real Name",
+            IsActive = true,
+            UserId = 102
+        };
+        _context.Creators.Add(creator);
+
+        var song = new SongMetadata
+        {
+            Mp3BlobPath = "songs/track2.mp3",
+            BlobPath = "songs/track2.mp3",
+            Genre = "Rock",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 2,
+            ArtistName = "Different Artist",
+            PersonaId = null
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        // Act — look up by a name that doesn't match the artist or creator
+        var result = await _service.GetByArtistNameAsync("Avalara");
+
+        // Assert — nothing returned
+        Assert.That(result, Is.Empty, "Should not match when artist name differs and no persona exists");
     }
 
     #endregion

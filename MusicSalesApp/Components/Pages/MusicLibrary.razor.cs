@@ -107,6 +107,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         public string DisplayName { get; set; }
         public string LinkUrl { get; set; }
+        /// <summary>
+        /// SAS URL for the persona profile image, if a persona is associated.
+        /// Null if no persona or no persona image.
+        /// </summary>
+        public string PersonaImageUrl { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -385,13 +390,27 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Determines the artist display name and link URL based on priority:
-    /// 1. SongMetadata.ArtistName - links to /artist/{artistName}
-    /// 2. Creator.DisplayName - links to /creator/{creatorId}
-    /// 3. Creator.User.Email (part before @) - links to /artist/{emailPrefix}
+    /// 1. Persona.Name (if a persona is linked)
+    /// 2. SongMetadata.ArtistName - links to /artist/{artistName}
+    /// 3. Creator.DisplayName - links to /artist/{displayName}
+    /// 4. Creator.User.Email (part before @) - links to /artist/{emailPrefix}
     /// </summary>
     private ArtistDisplayInfo GetArtistDisplayInfo(SongMetadata songMeta)
     {
-        // Priority 1: ArtistName from SongMetadata
+        // Priority 1: Persona name
+        if (songMeta.Persona != null && songMeta.Persona.IsEnabled && !string.IsNullOrWhiteSpace(songMeta.Persona.Name))
+        {
+            return new ArtistDisplayInfo
+            {
+                DisplayName = songMeta.Persona.Name,
+                LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.Persona.Name)}",
+                PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
+                    ? null
+                    : CreatorPersonaService.GetPersonaImageSasUrl(songMeta.Persona.ImageBlobPath, TimeSpan.FromHours(2))
+            };
+        }
+
+        // Priority 2: ArtistName from SongMetadata
         if (!string.IsNullOrWhiteSpace(songMeta.ArtistName))
         {
             // Strip email domain if it contains @ to avoid exposing email addresses
@@ -403,7 +422,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             };
         }
 
-        // Priority 2: DisplayName from Creator - link to /artist/{displayName} to show all songs with this effective artist name
+        // Priority 3: DisplayName from Creator - link to /artist/{displayName} to show all songs with this effective artist name
         if (songMeta.Creator != null && !string.IsNullOrWhiteSpace(songMeta.Creator.DisplayName))
         {
             return new ArtistDisplayInfo
@@ -413,7 +432,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             };
         }
 
-        // Priority 3: Email from Creator's User - use part before @ symbol for display and filtering
+        // Priority 4: Email from Creator's User - use part before @ symbol for display and filtering
         if (songMeta.Creator?.User?.Email != null)
         {
             var email = songMeta.Creator.User.Email;

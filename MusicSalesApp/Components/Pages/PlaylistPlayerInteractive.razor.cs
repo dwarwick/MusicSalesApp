@@ -1105,34 +1105,92 @@ namespace MusicSalesApp.Components.Pages
             }
         }
 
-        /// <summary>
-        /// Gets the display name for a song's artist using the priority:
-        /// 1. SongMetadata.ArtistName
-        /// 2. Creator.DisplayName
-        /// 3. Creator.User.Email
+                /// <summary>
+        /// Gets the artist display name for a song metadata entry, using persona name priority.
+        /// Priority: 1. Persona.Name (if a persona is linked to the song)
+        /// 2. SongMetadata.ArtistName
+        /// 3. Creator.DisplayName
+        /// 4. Creator.User.Email
         /// </summary>
         protected string GetArtistDisplayName(Models.SongMetadata metadata)
         {
-            // Priority 1: ArtistName from SongMetadata
-            if (!string.IsNullOrWhiteSpace(metadata.ArtistName))
+            if (metadata == null) return "Unknown Artist";
+            return metadata.GetEffectiveArtistName() is var name && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : "Unknown Artist";
+        }
+
+        /// <summary>
+        /// Gets the persona for the currently playing track (if any).
+        /// </summary>
+        protected Models.CreatorPersona GetCurrentTrackPersona()
+        {
+            if (_currentTrackIndex < 0 || _playlistInfo?.Tracks == null ||
+                _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return null;
+
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
             {
-                // Strip email domain if it contains @ to avoid exposing email addresses
-                return metadata.ArtistName.Contains('@') ? metadata.ArtistName.Split('@')[0] : metadata.ArtistName;
+                var persona = metadata.Persona;
+                return (persona != null && persona.IsEnabled) ? persona : null;
             }
 
-            // Priority 2: DisplayName from Creator
-            if (metadata.Creator != null && !string.IsNullOrWhiteSpace(metadata.Creator.DisplayName))
-            {
-                return metadata.Creator.DisplayName;
-            }
+            return null;
+        }
 
-            // Priority 3: Email from Creator's User - use part before @ symbol
-            if (metadata.Creator?.User?.Email != null)
-            {
-                return metadata.Creator.User.Email.Split('@')[0];
-            }
+        /// <summary>
+        /// Gets the Creator bio for the currently playing track.
+        /// Returns null when an active persona is already displayed or no bio is set.
+        /// </summary>
+        protected string GetCurrentTrackCreatorBio()
+        {
+            if (GetCurrentTrackPersona() != null)
+                return null;
 
-            return "Unknown Artist";
+            if (_currentTrackIndex < 0 || _playlistInfo?.Tracks == null ||
+                _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return null;
+
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
+                return metadata.Creator?.Bio;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the SongMetadata for the currently playing track, or null if unavailable.
+        /// </summary>
+        protected Models.SongMetadata GetCurrentTrackMetadata()
+        {
+            if (_currentTrackIndex < 0 || _playlistInfo?.Tracks == null ||
+                _currentTrackIndex >= _playlistInfo.Tracks.Count)
+                return null;
+
+            var track = _playlistInfo.Tracks[_currentTrackIndex];
+            _metadataLookup.TryGetValue(track.Name, out var metadata);
+            return metadata;
+        }
+
+        /// <summary>
+        /// Gets the artist browse URL for the currently playing track.
+        /// </summary>
+        protected string GetCurrentTrackArtistUrl()
+        {
+            var name = GetArtistDisplayName(GetCurrentTrackMetadata());
+            return $"/artist/{Uri.EscapeDataString(name)}";
+        }
+
+        /// <summary>
+        /// Gets the SAS URL for the current track's persona image.
+        /// </summary>
+        protected string GetCurrentTrackPersonaImageUrl()
+        {
+            var persona = GetCurrentTrackPersona();
+            if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
+                return null;
+            return CreatorPersonaService.GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromHours(2));
         }
 
         /// <summary>

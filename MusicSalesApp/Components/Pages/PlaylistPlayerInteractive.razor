@@ -38,9 +38,10 @@ else if (!string.IsNullOrEmpty(_error))
                     <h1 class="song-title">@GetDisplayTitle()</h1>
                 </div>
             </div>
+            
         </div>
 
-        <!-- Row 2: Action Buttons -->
+        
         <div class="action-buttons-row">
             <div class="action-controls">
                 <button class="play-button-large" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
@@ -73,6 +74,82 @@ else if (!string.IsNullOrEmpty(_error))
                     <div class="track-like-dislike">
                         <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
                     </div>
+                }
+
+                <!-- Persona info for playlist/genre mode -->
+                @if (!_isArtistMode)
+                {
+                    var playlistPersona = GetCurrentTrackPersona();
+                    var playlistCreatorBio = GetCurrentTrackCreatorBio();
+                    if (playlistPersona != null)
+                    {
+                        var playlistPersonaImgUrl = GetCurrentTrackPersonaImageUrl();
+                        <div class="playlist-persona-section">
+                            @if (!string.IsNullOrEmpty(playlistPersonaImgUrl))
+                            {
+                                <img src="@playlistPersonaImgUrl" alt="@playlistPersona.Name" class="persona-image persona-image-sm" />
+                            }
+                            <div class="persona-details">
+                                <span class="persona-name">@playlistPersona.Name</span>
+                                @if (!string.IsNullOrEmpty(playlistPersona.Bio))
+                                {
+                                    <p class="persona-bio">@playlistPersona.Bio</p>
+                                }
+                                @if (!string.IsNullOrEmpty(playlistPersona.WebsiteUrl))
+                                {
+                                    <a href="@playlistPersona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@playlistPersona.WebsiteUrl</a>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(playlistCreatorBio))
+                    {
+                        <div class="playlist-persona-section">
+                            <div class="persona-details">
+                                <span class="artist-name-info">
+                                    <a href="@GetCurrentTrackArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName(GetCurrentTrackMetadata())">@GetArtistDisplayName(GetCurrentTrackMetadata())</a>
+                                </span>
+                                <p class="persona-bio">@playlistCreatorBio</p>
+                            </div>
+                        </div>
+                    }
+                }
+                else                              
+                { @*<!-- Persona info for artist mode (playing all songs by an artist) -->*@  
+                    var currentPersona = GetCurrentTrackPersona();
+                    var artistCreatorBio = GetCurrentTrackCreatorBio();
+                    if (currentPersona != null)
+                    {
+                        var personaImgUrl = GetCurrentTrackPersonaImageUrl();
+                        <div class="playlist-persona-section">
+                            @if (!string.IsNullOrEmpty(personaImgUrl))
+                            {
+                                <img src="@personaImgUrl" alt="@currentPersona.Name" class="persona-image persona-image-sm" />
+                            }
+                            <div class="persona-details">
+                                <span class="persona-name">@currentPersona.Name</span>
+                                @if (!string.IsNullOrEmpty(currentPersona.Bio))
+                                {
+                                    <p class="persona-bio">@currentPersona.Bio</p>
+                                }
+                                @if (!string.IsNullOrEmpty(currentPersona.WebsiteUrl))
+                                {
+                                    <a href="@currentPersona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@currentPersona.WebsiteUrl</a>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(artistCreatorBio))
+                    {
+                        <div class="playlist-persona-section">
+                            <div class="persona-details">
+                                <span class="artist-name-info">
+                                    <a href="@GetCurrentTrackArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName(GetCurrentTrackMetadata())">@GetArtistDisplayName(GetCurrentTrackMetadata())</a>
+                                </span>
+                                <p class="persona-bio">@artistCreatorBio</p>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>

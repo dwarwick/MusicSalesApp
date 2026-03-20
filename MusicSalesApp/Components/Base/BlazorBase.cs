@@ -87,6 +87,9 @@ public abstract class BlazorBase : ComponentBase
     protected ICreatorService CreatorService { get; set; } = default!;
 
     [Inject]
+    protected ICreatorPersonaService CreatorPersonaService { get; set; } = default!;
+
+    [Inject]
     protected IDashboardService DashboardService { get; set; } = default!;
 
     [Inject]
