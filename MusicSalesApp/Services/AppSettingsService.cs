@@ -84,6 +84,11 @@ public class AppSettingsService : IAppSettingsService
     /// </summary>
     public const int DefaultMaxImageUploadSizeMB = 20;
 
+    /// <summary>
+    /// The key used for storing the application version number.
+    /// </summary>
+    public const string AppVersionKey = "AppVersion";
+
     public AppSettingsService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<AppSettingsService> logger)
@@ -389,5 +394,20 @@ public class AppSettingsService : IAppSettingsService
             return false;
 
         return end.Value > DateTime.UtcNow;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetAppVersionAsync()
+    {
+        return await GetSettingAsync(AppVersionKey);
+    }
+
+    /// <inheritdoc />
+    public async Task SetAppVersionAsync(string version)
+    {
+        await SetSettingAsync(
+            AppVersionKey,
+            version,
+            "Application version number displayed in the navigation menu");
     }
 }

@@ -139,4 +139,16 @@ public interface IAppSettingsService
     /// Returns true if the end time is in the future and not DateTime.MinValue.
     /// </summary>
     Task<bool> ShouldShowSiteMaintenanceNoticeAsync();
+
+    /// <summary>
+    /// Gets the application version number.
+    /// </summary>
+    /// <returns>The version string, or null if not set.</returns>
+    Task<string?> GetAppVersionAsync();
+
+    /// <summary>
+    /// Sets the application version number.
+    /// </summary>
+    /// <param name="version">The version string.</param>
+    Task SetAppVersionAsync(string version);
 }

@@ -200,6 +200,10 @@ public abstract class BUnitTestBase
             .Returns(Task.CompletedTask);
         MockAppSettingsService.Setup(x => x.GetMaxImageUploadSizeMBAsync())
             .ReturnsAsync(10);
+        MockAppSettingsService.Setup(x => x.GetAppVersionAsync())
+            .ReturnsAsync(default(string));
+        MockAppSettingsService.Setup(x => x.SetAppVersionAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
 
         // Setup default returns for IPasskeyService methods
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))

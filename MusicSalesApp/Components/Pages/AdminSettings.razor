@@ -126,6 +126,15 @@ else
                         Maximum file size in MB allowed for cover art image uploads (default 20). Changes take effect immediately for all users.
                     </small>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">App Version <span class="text-danger">*</span></label>
+                    <SfTextBox @bind-Value="_appVersion"
+                               Placeholder="Enter version number"
+                               CssClass="e-outline" />
+                    <small class="text-muted">
+                        Version number displayed in the navigation menu footer.
+                    </small>
+                </div>
             </div>
 
             <div class="alert alert-info">
