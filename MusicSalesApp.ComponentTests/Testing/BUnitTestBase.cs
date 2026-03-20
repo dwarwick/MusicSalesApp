@@ -120,6 +120,11 @@ public abstract class BUnitTestBase
             null!  // ILogger<UserManager<ApplicationUser>>
         );
 
+        // GetUserId reads from claims (no DB call) — set up to extract NameIdentifier claim
+        MockUserManager
+            .Setup(x => x.GetUserId(It.IsAny<ClaimsPrincipal>()))
+            .Returns((ClaimsPrincipal p) => p.FindFirstValue(ClaimTypes.NameIdentifier));
+
         // Configure WebHostEnvironment mock
         MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Development");
         MockWebHostEnvironment.Setup(x => x.ApplicationName).Returns("MusicSalesApp");

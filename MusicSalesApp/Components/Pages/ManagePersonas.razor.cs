@@ -75,10 +75,10 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
 
                 if (user.Identity?.IsAuthenticated == true)
                 {
-                    var appUser = await UserManager.GetUserAsync(user);
-                    if (appUser != null)
+                    var userIdInt = GetUserId(user);
+                    if (userIdInt.HasValue)
                     {
-                        _creatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
+                        _creatorId = await CreatorService.GetCreatorIdForUserAsync(userIdInt.Value);
                         if (_creatorId.HasValue)
                         {
                             await LoadPersonasAsync();

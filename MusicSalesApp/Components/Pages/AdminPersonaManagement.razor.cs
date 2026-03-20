@@ -31,11 +31,7 @@ public partial class AdminPersonaManagementModel : BlazorBase
             try
             {
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                var appUser = await UserManager.GetUserAsync(authState.User);
-                if (appUser != null)
-                {
-                    _adminUserId = appUser.Id;
-                }
+                _adminUserId = GetUserId(authState.User) ?? 0;
                 await LoadPersonasAsync();
             }
             catch (Exception ex)

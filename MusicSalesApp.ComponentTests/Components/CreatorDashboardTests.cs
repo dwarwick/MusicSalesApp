@@ -38,6 +38,9 @@ public class CreatorDashboardTests : BUnitTestBase
 
         var auth = TestContext.AddAuthorization();
         auth.SetAuthorized("creator@test.com");
+        auth.SetClaims(
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Email, "creator@test.com"));
         auth.SetPolicies("ManageOwnSongs");
     }
 

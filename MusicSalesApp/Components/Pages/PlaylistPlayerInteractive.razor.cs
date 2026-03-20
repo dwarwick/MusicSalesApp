@@ -416,8 +416,7 @@ namespace MusicSalesApp.Components.Pages
         private async Task LoadUserContext(System.Security.Claims.ClaimsPrincipal claimsPrincipal)
         {
             _isAdmin = claimsPrincipal.IsInRole(Common.Helpers.Roles.Admin);
-            var appUser = await UserManager.GetUserAsync(claimsPrincipal);
-            _currentUserId = appUser?.Id;
+            _currentUserId = GetUserId(claimsPrincipal);
 
             // Look up the current user's creator ID for self-tip prevention
             if (_currentUserId.HasValue)
