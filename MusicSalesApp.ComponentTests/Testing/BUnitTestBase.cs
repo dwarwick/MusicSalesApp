@@ -120,6 +120,11 @@ public abstract class BUnitTestBase
             null!  // ILogger<UserManager<ApplicationUser>>
         );
 
+        // GetUserId reads from claims (no DB call) — set up to extract NameIdentifier claim
+        MockUserManager
+            .Setup(x => x.GetUserId(It.IsAny<ClaimsPrincipal>()))
+            .Returns((ClaimsPrincipal p) => p.FindFirstValue(ClaimTypes.NameIdentifier));
+
         // Configure WebHostEnvironment mock
         MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Development");
         MockWebHostEnvironment.Setup(x => x.ApplicationName).Returns("MusicSalesApp");
@@ -478,6 +483,38 @@ public abstract class BUnitTestBase
         {
             // RendererInfo already set or services already retrieved - ignore
         }
+    }
+
+    /// <summary>
+    /// Sets up an authorized user with a <see cref="ClaimTypes.NameIdentifier"/> claim so that
+    /// <c>GetUserId(ClaimsPrincipal)</c> (claims-based, no DB call) returns the correct ID.
+    /// Also configures bUnit's authorization context so [Authorize] and AuthorizeView work.
+    /// </summary>
+    /// <param name="userId">The integer user ID to place in the NameIdentifier claim.</param>
+    /// <param name="userName">The user's name/email (used for the Name claim and bUnit auth context).</param>
+    /// <param name="roles">Optional roles to assign.</param>
+    /// <returns>The configured <see cref="BunitAuthorizationContext"/> for further customization.</returns>
+    protected BunitAuthorizationContext SetupAuthorizedUser(int userId, string userName = "testuser", params string[] roles)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Name, userName)
+        };
+
+        var identity = new ClaimsIdentity(claims, "TestAuthType");
+        var claimsPrincipal = new ClaimsPrincipal(identity);
+        var authState = new AuthenticationState(claimsPrincipal);
+        MockAuthStateProvider
+            .Setup(x => x.GetAuthenticationStateAsync())
+            .ReturnsAsync(authState);
+
+        var authContext = TestContext.AddAuthorization();
+        authContext.SetAuthorized(userName);
+        if (roles.Length > 0)
+            authContext.SetRoles(roles);
+
+        return authContext;
     }
 
     [TearDown]

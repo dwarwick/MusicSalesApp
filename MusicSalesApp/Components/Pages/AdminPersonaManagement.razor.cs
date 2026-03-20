@@ -31,11 +31,14 @@ public partial class AdminPersonaManagementModel : BlazorBase
             try
             {
                 var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-                var appUser = await UserManager.GetUserAsync(authState.User);
-                if (appUser != null)
+                var adminId = GetUserId(authState.User);
+                if (adminId == null)
                 {
-                    _adminUserId = appUser.Id;
+                    _errorMessage = "Unable to determine admin user identity. Please sign out and sign in again.";
+                    Logger.LogWarning("AdminPersonaManagement: unable to determine admin user id from authentication state.");
+                    return;
                 }
+                _adminUserId = adminId.Value;
                 await LoadPersonasAsync();
             }
             catch (Exception ex)

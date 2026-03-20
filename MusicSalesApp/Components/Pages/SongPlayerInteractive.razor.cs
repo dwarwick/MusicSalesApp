@@ -284,18 +284,18 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
                 _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
 
-                var user = await UserManager.GetUserAsync(authState.User);
-                _currentUserId = user?.Id;
-
-                if (user != null)
+                var currentUserId = GetUserId(authState.User);
+                if (currentUserId.HasValue)
                 {
+                    _currentUserId = currentUserId.Value;
+
                     if (_songMetadata.Creator != null)
                     {
-                        _isCreatorOfSong = _songMetadata.Creator.UserId == user.Id;
+                        _isCreatorOfSong = _songMetadata.Creator.UserId == currentUserId.Value;
                     }
                     else if (_songMetadata.CreatorId.HasValue && _songMetadata.CreatorId > 0)
                     {
-                        var creator = await CreatorService.GetCreatorByUserIdAsync(user.Id);
+                        var creator = await CreatorService.GetCreatorByUserIdAsync(currentUserId.Value);
                         _isCreatorOfSong = creator != null && creator.Id == _songMetadata.CreatorId.Value;
                     }
                 }

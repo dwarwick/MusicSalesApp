@@ -144,14 +144,14 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
                     return;
                 }
 
-                var appUser = await UserManager.GetUserAsync(user);
-                if (appUser == null)
+                var userIdInt = GetUserId(user);
+                if (!userIdInt.HasValue)
                 {
                     _errorMessage = "Unable to load user information.";
                     return;
                 }
 
-                _creatorId = await CreatorService.GetCreatorIdForUserAsync(appUser.Id);
+                _creatorId = await CreatorService.GetCreatorIdForUserAsync(userIdInt.Value);
                 if (_creatorId == null)
                 {
                     _errorMessage = "You must be an active creator to view the dashboard.";

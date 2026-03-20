@@ -72,10 +72,15 @@ public class ThemeService : IThemeService
 
         if (user.Identity?.IsAuthenticated == true)
         {
-            var appUser = await _userManager.GetUserAsync(user);
-            if (appUser != null && !string.IsNullOrEmpty(appUser.Theme))
+            var userId = _userManager.GetUserId(user);
+            if (!string.IsNullOrEmpty(userId) && int.TryParse(userId, out var userIdInt))
             {
-                _currentTheme = appUser.Theme;
+                await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+                var appUser = await dbContext.Users.FindAsync(userIdInt);
+                if (appUser != null && !string.IsNullOrEmpty(appUser.Theme))
+                {
+                    _currentTheme = appUser.Theme;
+                }
             }
         }
         else

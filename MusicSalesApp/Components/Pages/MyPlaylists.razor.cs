@@ -37,10 +37,10 @@ public partial class MyPlaylistsModel : BlazorBase
 
                 if (user.Identity?.IsAuthenticated == true)
                 {
-                    var appUser = await UserManager.GetUserAsync(user);
-                    if (appUser != null)
+                    var userIdInt = GetUserId(user);
+                    if (userIdInt.HasValue)
                     {
-                        _currentUserId = appUser.Id;
+                        _currentUserId = userIdInt.Value;
                         
                         // Check if user has active subscription
                         _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId);

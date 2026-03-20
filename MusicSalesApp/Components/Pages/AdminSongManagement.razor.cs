@@ -71,56 +71,61 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     protected List<Genre> _allGenres = new();
     protected bool _showGenreManagement = false;
     private string _currentAdminEmail = string.Empty;
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            // Load max image upload size from settings
-            try
-            {
-                var sizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
-                _maxImageFileSize = (long)sizeMB * 1024 * 1024;
-            }
-            catch
-            {
-                // Use default if setting cannot be loaded
-            }
-
-            // Load genres from database
-            await LoadGenresAsync();
-
-            // Get current admin email
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            if (user.Identity?.IsAuthenticated == true)
-            {
-                var appUser = await UserManager.GetUserAsync(user);
-                _currentAdminEmail = appUser?.Email ?? string.Empty;
-            }
-
-            // Pre-load the cache
-            await SongAdminService.RefreshCacheAsync();
-            
-            // Load all songs for the grid (including disabled songs for admin view)
-            await LoadSongsAsync();
-            
-            _totalCount = _allSongs.Count;
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Failed to load songs: {ex.Message}";
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
+    private bool _hasLoadedData = false;
+    private bool _imageDimensionsChecked = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _allSongs.Count > 0)
+        if (firstRender && !_hasLoadedData)
         {
+            _hasLoadedData = true;
+            try
+            {
+                // Load max image upload size from settings
+                try
+                {
+                    var sizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
+                    _maxImageFileSize = (long)sizeMB * 1024 * 1024;
+                }
+                catch
+                {
+                    // Use default if setting cannot be loaded
+                }
+
+                // Load genres from database
+                await LoadGenresAsync();
+
+                // Get current admin email
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var appUser = await UserManager.GetUserAsync(user);
+                    _currentAdminEmail = appUser?.Email ?? string.Empty;
+                }
+
+                // Pre-load the cache
+                await SongAdminService.RefreshCacheAsync();
+
+                // Load all songs for the grid (including disabled songs for admin view)
+                await LoadSongsAsync();
+
+                _totalCount = _allSongs.Count;
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = $"Failed to load songs: {ex.Message}";
+            }
+            finally
+            {
+                _isLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        if (!firstRender && _allSongs.Count > 0 && !_imageDimensionsChecked)
+        {
+            _imageDimensionsChecked = true;
             await CheckAllImageDimensions();
         }
     }

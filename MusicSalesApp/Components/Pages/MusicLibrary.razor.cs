@@ -99,6 +99,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
     protected SubscribeCtaDialogModel _subscribeCtaDialog;
+    private bool _hasLoadedData = false;
 
     /// <summary>
     /// Represents the artist display information for a song card.
@@ -124,26 +125,6 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _hubStreamCountHandler = OnStreamCountUpdated;
         StreamCountHubClient.OnStreamCountReceived += _hubStreamCountHandler;
         await StreamCountHubClient.StartAsync();
-
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
-        
-        // Check subscription status and load user context if authenticated
-        if (_isAuthenticated)
-        {
-            await LoadSubscriptionStatus();
-            _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
-            var appUser = await UserManager.GetUserAsync(authState.User);
-            _currentUserId = appUser?.Id;
-            Logger.LogInformation("MusicLibrary: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}", 
-                _isAuthenticated, _isAdmin, _currentUserId);
-        }
-        
-        // Load default stream qualifying seconds for songs without a creator
-        _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-
-        // Then load files - this will set _loading to false
-        await LoadFiles();
     }
 
     private void OnStreamCountUpdated(int songMetadataId, int newCount)
@@ -158,6 +139,40 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Load data on first render to avoid DbContext threading issues
+        // (OnInitializedAsync can be called multiple times during circuit reconnections)
+        if (firstRender && !_hasLoadedData)
+        {
+            _hasLoadedData = true;
+            try
+            {
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+                if (_isAuthenticated)
+                {
+                    await LoadSubscriptionStatus();
+                    _isAdmin = authState.User.IsInRole(Common.Helpers.Roles.Admin);
+                    _currentUserId = GetUserId(authState.User);
+                    Logger.LogInformation("MusicLibrary: Auth context loaded - _isAuthenticated={IsAuthenticated}, _isAdmin={IsAdmin}, _currentUserId={CurrentUserId}",
+                        _isAuthenticated, _isAdmin, _currentUserId);
+                }
+
+                _defaultStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
+                await LoadFiles();
+            }
+            catch (Exception ex)
+            {
+                _error = $"Error loading data: {ex.Message}";
+                Logger.LogError(ex, "Error loading MusicLibrary data");
+            }
+            finally
+            {
+                _loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
         // Handle return from PayPal tip approval or cancellation (once only)
         if (firstRender && !_tipReturnHandled && !string.IsNullOrEmpty(TipStatus)
             && (!string.IsNullOrEmpty(TipPayPalToken) || TipStatus == "cancelled"))

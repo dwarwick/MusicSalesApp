@@ -32,20 +32,26 @@ public class AdminSongStatusHistoryModel : ComponentBase
     protected string _errorMessage = string.Empty;
     protected List<SongStatusHistoryViewModel> _statusHistory = new();
     protected SfGrid<SongStatusHistoryViewModel> _grid;
+    private bool _hasLoadedData = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
+        if (firstRender && !_hasLoadedData)
         {
-            await LoadStatusHistoryAsync();
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Failed to load status history: {ex.Message}";
-        }
-        finally
-        {
-            _isLoading = false;
+            _hasLoadedData = true;
+            try
+            {
+                await LoadStatusHistoryAsync();
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = $"Failed to load status history: {ex.Message}";
+            }
+            finally
+            {
+                _isLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 

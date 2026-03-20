@@ -128,4 +128,18 @@ public abstract class BlazorBase : ComponentBase
 
     private ILogger _logger;
     protected ILogger Logger => _logger ??= LoggerFactory.CreateLogger(GetType());
+
+    /// <summary>
+    /// Gets the current user's integer ID from claims without making a database call.
+    /// Returns null if the user is not authenticated or the ID cannot be parsed.
+    /// </summary>
+    protected int? GetUserId(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user.Identity?.IsAuthenticated != true)
+            return null;
+        var userIdStr = UserManager.GetUserId(user);
+        if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var userId))
+            return userId;
+        return null;
+    }
 }

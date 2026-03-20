@@ -21,26 +21,35 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     protected bool _isProcessing = false;
     private int? _currentUserId = null;
     private int _previousSongMetadataId = 0;
+    private bool _needsDataReload = false;
     protected SfDialog _loginDialog;
+
+    protected override void OnParametersSet()
+    {
+        // Track parameter changes; actual DB work happens in OnAfterRenderAsync
+        if (SongMetadataId > 0 && SongMetadataId != _previousSongMetadataId)
+        {
+            _previousSongMetadataId = SongMetadataId;
+            _needsDataReload = true;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if ((firstRender || _needsDataReload) && SongMetadataId > 0)
         {
+            _needsDataReload = false;
             await LoadLikeCounts();
             await LoadUserLikeStatus();
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        // Only reload data when SongMetadataId actually changes
-        if (SongMetadataId > 0 && SongMetadataId != _previousSongMetadataId)
+        else if (_needsDataReload && SongMetadataId <= 0)
         {
-            _previousSongMetadataId = SongMetadataId;
-            await LoadLikeCounts();
-            await LoadUserLikeStatus();
+            // SongMetadataId not yet populated — clear stale data and wait
+            _needsDataReload = false;
+            _likeCount = 0;
+            _dislikeCount = 0;
+            _userLikeStatus = null;
         }
     }
 
@@ -67,11 +76,11 @@ public partial class LikeDislikeButtonsModel : BlazorBase
 
             if (user.Identity?.IsAuthenticated == true)
             {
-                var appUser = await UserManager.GetUserAsync(user);
-                if (appUser != null)
+                var userId = GetUserId(user);
+                if (userId.HasValue)
                 {
-                    _currentUserId = appUser.Id;
-                    _userLikeStatus = await SongLikeService.GetUserLikeStatusAsync(appUser.Id, SongMetadataId);
+                    _currentUserId = userId.Value;
+                    _userLikeStatus = await SongLikeService.GetUserLikeStatusAsync(userId.Value, SongMetadataId);
                 }
             }
         }

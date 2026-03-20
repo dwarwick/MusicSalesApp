@@ -185,8 +185,7 @@ public class MusicLibraryTests : BUnitTestBase
     public void MusicLibrary_DisplaysSongFromMetadata()
     {
         // Arrange - set up a song in metadata
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
+        SetupAuthorizedUser(1, "testuser");
         
         // Set up metadata with a song
         MockSongMetadataService.Setup(x => x.GetAllAsync())
@@ -222,8 +221,7 @@ public class MusicLibraryTests : BUnitTestBase
     public void MusicLibrary_HidesFilterRadioButtons_WhenShowHomePageFeatured()
     {
         // Arrange - authorize user so radio buttons would normally be visible
-        var authContext = TestContext.AddAuthorization();
-        authContext.SetAuthorized("testuser");
+        SetupAuthorizedUser(1, "testuser");
         
         MockSongMetadataService.Setup(x => x.GetAllAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());

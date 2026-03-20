@@ -56,10 +56,10 @@ public partial class SubmitTaxFormModel : BlazorBase
                 }
 
                 // Check if user is in a 24-hour TIN match cooldown period
-                var appUser = await UserManager.GetUserAsync(user);
-                if (appUser != null)
+                var userIdInt = GetUserId(user);
+                if (userIdInt.HasValue)
                 {
-                    var creator = await CreatorService.GetCreatorByUserIdAsync(appUser.Id);
+                    var creator = await CreatorService.GetCreatorByUserIdAsync(userIdInt.Value);
                     if (creator?.LastTinMatchFailedAt != null)
                     {
                         var cooldownEnd = creator.LastTinMatchFailedAt.Value.AddHours(24);
