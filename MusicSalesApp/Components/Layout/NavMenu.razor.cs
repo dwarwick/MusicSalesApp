@@ -17,6 +17,7 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
     protected bool _isMenuOpen = false;
     protected bool _isDarkTheme = false;
     protected SfSidebar _sidebar = default!;
+    protected string? _appVersion;
 
     // Site maintenance notification state
     protected bool _showMaintenanceWarning = false;
@@ -55,6 +56,7 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
             await MaintenanceHubClient.StartAsync();
             await InitializeTheme();
             await LoadMaintenanceNoticeAsync();
+            _appVersion = await AppSettingsService.GetAppVersionAsync();
             await InvokeAsync(StateHasChanged);
         }
     }

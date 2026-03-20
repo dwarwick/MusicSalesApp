@@ -138,6 +138,12 @@
                 <div class="copyright-notice">
                     © @DateTime.Now.Year Streamtunes
                 </div>
+                @if (!string.IsNullOrEmpty(_appVersion))
+                {
+                    <div class="copyright-notice">
+                        version: @_appVersion
+                    </div>
+                }
             </div>
         </div>
     </ChildContent>

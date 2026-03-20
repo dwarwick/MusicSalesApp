@@ -30,6 +30,8 @@ public class AdminSettingsModel : BlazorBase
     protected int _originalMaxAudioUploadSizeMB = 100;
     protected int _maxImageUploadSizeMB = 20;
     protected int _originalMaxImageUploadSizeMB = 20;
+    protected string _appVersion = string.Empty;
+    protected string _originalAppVersion = string.Empty;
 
     // Admin notification settings
     protected bool _notifyRegistration = true;
@@ -79,7 +81,8 @@ public class AdminSettingsModel : BlazorBase
                                    || _streamPayRateDisplay != _originalStreamPayRateDisplay
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds
                                    || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
-                                   || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB;
+                                   || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
+                                   || _appVersion != _originalAppVersion;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
                                              || _notifyEmailConfirmed != _originalNotifyEmailConfirmed
@@ -136,6 +139,9 @@ public class AdminSettingsModel : BlazorBase
 
         _maxImageUploadSizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
         _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+
+        _appVersion = await AppSettingsService.GetAppVersionAsync() ?? string.Empty;
+        _originalAppVersion = _appVersion;
 
         // Load admin notification settings
         _notifyRegistration = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyRegistrationKey);
@@ -207,6 +213,7 @@ public class AdminSettingsModel : BlazorBase
         _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
         _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
+        _appVersion = _originalAppVersion;
         _validationErrors.Clear();
         _successMessage = null;
         StateHasChanged();
@@ -271,6 +278,11 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Max image upload size cannot exceed 100 MB.");
             }
 
+            if (string.IsNullOrWhiteSpace(_appVersion))
+            {
+                _validationErrors.Add("App version cannot be empty.");
+            }
+
             if (_validationErrors.Any())
             {
                 StateHasChanged();
@@ -292,12 +304,16 @@ public class AdminSettingsModel : BlazorBase
             // Save the max image upload size
             await AppSettingsService.SetMaxImageUploadSizeMBAsync(_maxImageUploadSizeMB);
 
+            // Save the app version
+            await AppSettingsService.SetAppVersionAsync(_appVersion);
+
             // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+            _originalAppVersion = _appVersion;
             _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB";
 
             Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}, Max audio upload size: {MaxAudioMB} MB, Max image upload size: {MaxImageMB} MB", 
