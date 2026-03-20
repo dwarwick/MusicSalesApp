@@ -135,6 +135,8 @@ public abstract class BlazorBase : ComponentBase
     /// </summary>
     protected int? GetUserId(System.Security.Claims.ClaimsPrincipal user)
     {
+        if (user.Identity?.IsAuthenticated != true)
+            return null;
         var userIdStr = UserManager.GetUserId(user);
         if (!string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out var userId))
             return userId;
