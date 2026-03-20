@@ -1330,9 +1330,7 @@ namespace MusicSalesApp.Components.Pages
             {
                 var artist = GetArtistDisplayName(metadata);
                 var song = GetTrackTitle(_currentTrackIndex);
-                if (!string.IsNullOrEmpty(artist) && artist != "Unknown Artist")
-                    return $"{artist} - {song} - StreamTunes";
-                return $"{song} - StreamTunes";
+                return $"{artist} - {song} - StreamTunes";
             }
             return $"{GetDisplayTitle()} - StreamTunes";
         }
