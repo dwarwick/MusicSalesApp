@@ -151,9 +151,10 @@
         width: 60px;
     }
 
-    .playlist-player-container .action-controls {
+    body .playlist-player-container .action-controls {
         flex-wrap: wrap;
         gap: 16px;
+        height: auto;
     }
 
     .playlist-player-container .cart-button-large {

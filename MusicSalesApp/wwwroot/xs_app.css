@@ -435,9 +435,10 @@
             width: 50px;
         }
 
-        .playlist-player-container .action-controls {
+        #grid-container .playlist-player-container .action-controls {
             flex-wrap: wrap;
             gap: 12px;
+            height: auto;
         }
 
         .playlist-player-container .cart-button-large {
@@ -532,6 +533,23 @@
     .action-controls {        
         gap: 8px;
         height: auto;
+    }
+
+    /* Compact persona/bio on XS screens */
+    .playlist-persona-section {
+        padding: 4px 8px;
+        margin-bottom: 4px;
+        gap: 8px;
+    }
+
+    .persona-image-sm {
+        width: 40px;
+        height: 40px;
+    }
+
+    .persona-bio {
+        max-height: 3em;
+        font-size: 0.8rem;
     }
 
     /* Album image smaller on XS */
