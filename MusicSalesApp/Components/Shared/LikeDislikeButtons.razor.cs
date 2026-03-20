@@ -36,12 +36,20 @@ public partial class LikeDislikeButtonsModel : BlazorBase
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender || _needsDataReload)
+        if ((firstRender || _needsDataReload) && SongMetadataId > 0)
         {
             _needsDataReload = false;
             await LoadLikeCounts();
             await LoadUserLikeStatus();
             await InvokeAsync(StateHasChanged);
+        }
+        else if (_needsDataReload && SongMetadataId <= 0)
+        {
+            // SongMetadataId not yet populated — clear stale data and wait
+            _needsDataReload = false;
+            _likeCount = 0;
+            _dislikeCount = 0;
+            _userLikeStatus = null;
         }
     }
 
