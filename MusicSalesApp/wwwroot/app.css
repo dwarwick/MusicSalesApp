@@ -1806,6 +1806,9 @@ h1:focus {
     margin: 0;
     opacity: 0.8;
     max-width: 400px;
+    max-height: 4.5em;
+    overflow-y: auto;
+    line-height: 1.5;
 }
 
 .persona-website {
@@ -1815,7 +1818,7 @@ h1:focus {
 
 .playlist-persona-section {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     padding: 8px 16px;
     margin-bottom: 8px;

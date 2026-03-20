@@ -18,4 +18,7 @@ public static class UserHistoryEventTypes
     public const string ChargebackReceived = "ChargebackReceived";
     public const string PersonaEnabled = "PersonaEnabled";
     public const string PersonaDisabled = "PersonaDisabled";
+    public const string PersonaCreated = "PersonaCreated";
+    public const string PersonaUpdated = "PersonaUpdated";
+    public const string PersonaDeleted = "PersonaDeleted";
 }

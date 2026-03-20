@@ -110,13 +110,13 @@ else
                         }
                     </Template>
                 </GridColumn>
-                <GridColumn Field="@nameof(PersonaAdminViewModel.Bio)" HeaderText="Bio" Width="280">
+                <GridColumn Field="@nameof(PersonaAdminViewModel.Bio)" HeaderText="Bio" Width="280" ClipMode="Syncfusion.Blazor.Grids.ClipMode.EllipsisWithTooltip">
                     <Template>
                         @{
                             var persona = (context as PersonaAdminViewModel);
                             if (!string.IsNullOrEmpty(persona.Bio))
                             {
-                                <span class="text-truncate d-inline-block" style="max-width: 260px;" title="@persona.Bio">@persona.Bio</span>
+                                <span style="white-space: normal; word-break: break-word;">@persona.Bio</span>
                             }
                             else
                             {

@@ -103,12 +103,16 @@ public class CreatorPersonaService : ICreatorPersonaService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Created persona {PersonaId} for creator {CreatorId}", persona.Id, creatorId);
+
+        // Send notification emails and record user history
+        await SendPersonaChangeNotificationAsync(context, persona, "Created");
+
         return persona;
     }
 
     /// <inheritdoc />
     public async Task<CreatorPersona> UpdatePersonaAsync(int personaId, int creatorId, string name, string? bio,
-        string? websiteUrl, string? imageBlobPath, int? imageWidth, int? imageHeight)
+        string? websiteUrl, string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
@@ -132,6 +136,13 @@ public class CreatorPersonaService : ICreatorPersonaService
 
         await context.SaveChangesAsync();
         _logger.LogInformation("Updated persona {PersonaId} for creator {CreatorId}", personaId, creatorId);
+
+        // Send notification emails and record user history
+        if (sendNotification)
+        {
+            await SendPersonaChangeNotificationAsync(context, persona, "Updated");
+        }
+
         return persona;
     }
 
@@ -141,12 +152,23 @@ public class CreatorPersonaService : ICreatorPersonaService
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         var persona = await context.CreatorPersonas
+            .Include(p => p.Creator)
+                .ThenInclude(c => c.User)
             .FirstOrDefaultAsync(p => p.Id == personaId && p.CreatorId == creatorId);
         if (persona == null)
         {
             _logger.LogWarning("Persona {PersonaId} not found for creator {CreatorId}", personaId, creatorId);
             return false;
         }
+
+        // Capture details for notification before deleting
+        var personaName = persona.Name;
+        var personaBio = persona.Bio;
+        // Download image as base64 data URI before blob is deleted (SAS URLs would break)
+        var personaImageUrl = !string.IsNullOrEmpty(persona.ImageBlobPath)
+            ? await DownloadBlobAsBase64DataUriAsync(persona.ImageBlobPath)
+            : null;
+        var creatorEmail = persona.Creator?.User?.Email;
 
         // Delete the image from blob storage
         if (!string.IsNullOrEmpty(persona.ImageBlobPath))
@@ -167,6 +189,21 @@ public class CreatorPersonaService : ICreatorPersonaService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Deleted persona {PersonaId} for creator {CreatorId}", personaId, creatorId);
+
+        // Send notification emails and record user history
+        if (!string.IsNullOrEmpty(creatorEmail))
+        {
+            try
+            {
+                await _adminNotificationService.NotifyPersonaDeletedAsync(
+                    creatorId, creatorEmail, personaName, personaBio, personaImageUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send persona deleted notification for persona {PersonaId}", personaId);
+            }
+        }
+
         return true;
     }
 
@@ -406,6 +443,64 @@ public class CreatorPersonaService : ICreatorPersonaService
             .ToDictionaryAsync(x => x.PersonaId, x => x.Count);
     }
 
+    private async Task SendPersonaChangeNotificationAsync(AppDbContext context, CreatorPersona persona, string action)
+    {
+        try
+        {
+            // Load creator + user if not already loaded
+            if (persona.Creator == null)
+            {
+                await context.Entry(persona).Reference(p => p.Creator).LoadAsync();
+            }
+            if (persona.Creator?.User == null && persona.Creator != null)
+            {
+                await context.Entry(persona.Creator).Reference(c => c.User).LoadAsync();
+            }
+
+            var creatorEmail = persona.Creator?.User?.Email;
+            if (string.IsNullOrEmpty(creatorEmail))
+            {
+                _logger.LogWarning("Cannot send persona {Action} notification: creator email not found for persona {PersonaId}", action, persona.Id);
+                return;
+            }
+
+            string? personaImageUrl = null;
+            if (!string.IsNullOrEmpty(persona.ImageBlobPath))
+            {
+                try
+                {
+                    // Use base64 data URI so the image is embedded directly in the email
+                    // and doesn't break when the SAS token expires
+                    personaImageUrl = await DownloadBlobAsBase64DataUriAsync(persona.ImageBlobPath);
+                    // Fall back to SAS URL if base64 download fails
+                    if (string.IsNullOrEmpty(personaImageUrl))
+                    {
+                        personaImageUrl = GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromDays(1));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to generate image URL for persona {PersonaId}", persona.Id);
+                }
+            }
+
+            if (action == "Created")
+            {
+                await _adminNotificationService.NotifyPersonaCreatedAsync(
+                    persona.CreatorId, creatorEmail, persona.Name, persona.Bio, personaImageUrl);
+            }
+            else if (action == "Updated")
+            {
+                await _adminNotificationService.NotifyPersonaUpdatedAsync(
+                    persona.CreatorId, creatorEmail, persona.Name, persona.Bio, personaImageUrl);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send persona {Action} notification for persona {PersonaId}", action, persona.Id);
+        }
+    }
+
     private async Task SendPersonaStatusEmailAsync(CreatorPersona persona, bool isEnabled, string reason,
         string baseUrl, string creatorEmail)
     {
@@ -459,6 +554,35 @@ public class CreatorPersonaService : ICreatorPersonaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send persona status email for persona {PersonaId}", persona.Id);
+        }
+    }
+
+    /// <summary>
+    /// Downloads a blob's content and returns it as a base64 data URI (e.g., data:image/png;base64,...).
+    /// Returns null if the blob doesn't exist or the download fails.
+    /// </summary>
+    private async Task<string?> DownloadBlobAsBase64DataUriAsync(string blobPath)
+    {
+        if (_personaContainerClient == null || string.IsNullOrWhiteSpace(blobPath))
+            return null;
+
+        try
+        {
+            var blobClient = _personaContainerClient.GetBlobClient(blobPath);
+            if (!await blobClient.ExistsAsync())
+                return null;
+
+            var response = await blobClient.DownloadContentAsync();
+            var content = response.Value;
+            var contentType = content.Details.ContentType ?? "image/png";
+            var bytes = content.Content.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            return $"data:{contentType};base64,{base64}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to download blob {BlobPath} as base64", blobPath);
+            return null;
         }
     }
 

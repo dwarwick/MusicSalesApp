@@ -525,9 +525,9 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                         if (persona != null)
                         {
                             await CreatorPersonaService.UpdatePersonaAsync(
-                                vm.Id, _creatorId.Value,
-                                persona.Name, persona.Bio, persona.WebsiteUrl,
-                                null, dimensions.Width, dimensions.Height);
+                                    vm.Id, _creatorId.Value,
+                                    persona.Name, persona.Bio, persona.WebsiteUrl,
+                                    null, dimensions.Width, dimensions.Height, sendNotification: false);
                         }
                     }
                 }

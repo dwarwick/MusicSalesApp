@@ -31,8 +31,9 @@ public interface ICreatorPersonaService
     /// <summary>
     /// Updates an existing persona. Only the creator who owns it can update it.
     /// </summary>
+    /// <param name="sendNotification">When true (default), sends email notifications and records user history. Set to false for internal updates like dimension checks.</param>
     Task<CreatorPersona> UpdatePersonaAsync(int personaId, int creatorId, string name, string? bio, string? websiteUrl,
-        string? imageBlobPath, int? imageWidth, int? imageHeight);
+        string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true);
 
     /// <summary>
     /// Deletes a persona and its associated image from blob storage.

@@ -33,6 +33,7 @@ public class AdminNotificationService : IAdminNotificationService
     public const string NotifySongArtUpdatedKey = "AdminNotify_SongArtUpdated";
     public const string NotifyTipFraudPreventedKey = "AdminNotify_TipFraudPrevented";
     public const string NotifyChargebackReceivedKey = "AdminNotify_ChargebackReceived";
+    public const string NotifyPersonaChangedKey = "AdminNotify_PersonaChanged";
 
     public AdminNotificationService(
         IEmailService emailService,
@@ -281,6 +282,24 @@ public class AdminNotificationService : IAdminNotificationService
     }
 
     /// <inheritdoc />
+    public async Task NotifyPersonaCreatedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl)
+    {
+        await SendPersonaChangeNotificationsAsync(creatorId, creatorEmail, personaName, bio, personaImageUrl, "Created");
+    }
+
+    /// <inheritdoc />
+    public async Task NotifyPersonaUpdatedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl)
+    {
+        await SendPersonaChangeNotificationsAsync(creatorId, creatorEmail, personaName, bio, personaImageUrl, "Updated");
+    }
+
+    /// <inheritdoc />
+    public async Task NotifyPersonaDeletedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl)
+    {
+        await SendPersonaChangeNotificationsAsync(creatorId, creatorEmail, personaName, bio, personaImageUrl, "Deleted");
+    }
+
+    /// <inheritdoc />
     public async Task RecordUserHistoryAsync(int userId, string userEmail, string eventType, string description, string? oldValue = null, string? newValue = null)
     {
         try
@@ -492,6 +511,118 @@ public class AdminNotificationService : IAdminNotificationService
             </div>
         </div>
         ");
+
+        return body.ToString();
+    }
+
+    private async Task SendPersonaChangeNotificationsAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl, string action)
+    {
+        var encodedName = System.Web.HttpUtility.HtmlEncode(personaName);
+        var encodedBio = System.Web.HttpUtility.HtmlEncode(bio ?? string.Empty);
+        var encodedEmail = System.Web.HttpUtility.HtmlEncode(creatorEmail);
+
+        // Determine user history event type
+        var eventType = action switch
+        {
+            "Created" => UserHistoryEventTypes.PersonaCreated,
+            "Updated" => UserHistoryEventTypes.PersonaUpdated,
+            "Deleted" => UserHistoryEventTypes.PersonaDeleted,
+            _ => action
+        };
+
+        // Record user history
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        var creator = await context.Creators.FirstOrDefaultAsync(c => c.Id == creatorId);
+        var userId = creator?.UserId ?? 0;
+        await RecordUserHistoryAsync(userId, creatorEmail, eventType, $"Persona '{personaName}' {action.ToLower()} by creator");
+
+        // Build image HTML if available
+        var personaImageHtml = string.Empty;
+        if (!string.IsNullOrEmpty(personaImageUrl))
+        {
+            personaImageHtml = $@"
+                <div style='text-align: center; margin: 15px 0;'>
+                    <img src='{personaImageUrl}' alt='Persona image' style='max-width: 150px; max-height: 150px; border-radius: 50%; object-fit: cover;' />
+                </div>";
+        }
+
+        // Build bio HTML if available
+        var bioHtml = !string.IsNullOrEmpty(bio)
+            ? $"<p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Bio:</strong> {encodedBio}</p>"
+            : string.Empty;
+
+        // Send admin email
+        if (await IsNotificationEnabledAsync(NotifyPersonaChangedKey))
+        {
+            var adminSubject = $"StreamTunes Admin - Persona {action}: {personaName}";
+            var adminBody = BuildPersonaChangeEmailBody(encodedName, encodedEmail, bioHtml, personaImageHtml, action, isAdminEmail: true);
+            await SendAdminEmailAsync(adminSubject, adminBody);
+        }
+
+        // Send creator confirmation email
+        try
+        {
+            var creatorSubject = $"StreamTunes - Your Persona Has Been {action}: {personaName}";
+            var creatorBody = BuildPersonaChangeEmailBody(encodedName, encodedEmail, bioHtml, personaImageHtml, action, isAdminEmail: false);
+            await _emailService.SendEmailAsync(creatorEmail, creatorSubject, creatorBody);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send persona {Action} confirmation email to {Email}", action, creatorEmail);
+        }
+    }
+
+    private string BuildPersonaChangeEmailBody(string encodedName, string encodedEmail, string bioHtml, string personaImageHtml, string action, bool isAdminEmail)
+    {
+        var logoUrl = _emailService.GetLogoUrl();
+        var baseUrl = _emailService.GetAppBaseUrl();
+        var utcNow = DateTime.UtcNow;
+
+        var accentColor = action switch
+        {
+            "Created" => "#28a745",
+            "Deleted" => "#dc3545",
+            _ => "#0d6efd"
+        };
+
+        var title = isAdminEmail ? $"Persona {action}" : $"Your Persona Has Been {action}";
+        var intro = isAdminEmail
+            ? $"A creator has {action.ToLower()} a persona."
+            : $"Your persona <strong>{encodedName}</strong> has been {action.ToLower()} on StreamTunes.";
+
+        var body = new StringBuilder();
+        body.Append($@"
+        <div style='max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;'>
+            <div style='text-align: center; padding: 20px; background-color: #1a1a2e; border-radius: 8px 8px 0 0;'>
+                <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                <h1 style='color: #ffffff; margin: 10px 0 0 0; font-size: 24px;'>{title}</h1>
+            </div>
+            <div style='padding: 20px; background-color: #ffffff; border: 1px solid #e0e0e0; border-top: none;'>
+                <p style='font-size: 16px; color: #333;'>{intro}</p>
+                {personaImageHtml}
+                <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {accentColor};'>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Persona Name:</strong> {encodedName}</p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Creator Email:</strong> {encodedEmail}</p>
+                    {bioHtml}
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Action:</strong> <span style='background-color: {accentColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;'>{action}</span></p>
+                    <p style='font-size: 14px; color: #333; margin: 5px 0;'><strong>Date/Time (UTC):</strong> {utcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+                </div>");
+
+        if (!isAdminEmail)
+        {
+            var managePersonasUrl = $"{baseUrl.TrimEnd('/')}/creator/personas";
+            body.Append($@"
+                <div style='text-align: center; margin: 30px 0;'>
+                    <a href='{managePersonasUrl}' style='display: inline-block; padding: 15px 30px; background-color: #1a1a2e; color: white; text-decoration: none; border-radius: 5px; font-size: 16px;'>Manage My Personas</a>
+                </div>");
+        }
+
+        body.Append($@"
+                <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;'>
+                    <p style='color: #999; font-size: 12px;'>{(isAdminEmail ? "This is an automated admin notification from StreamTunes." : "Thank you for being a creator on StreamTunes!")}</p>
+                </div>
+            </div>
+        </div>");
 
         return body.ToString();
     }
