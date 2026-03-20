@@ -1114,10 +1114,10 @@ namespace MusicSalesApp.Components.Pages
         /// </summary>
         protected string GetArtistDisplayName(Models.SongMetadata metadata)
         {
-            if (metadata == null) return "Unknown Artist";
+            if (metadata == null) return ArtistDisplayNames.UnknownArtist;
             return metadata.GetEffectiveArtistName() is var name && !string.IsNullOrWhiteSpace(name)
                 ? name
-                : "Unknown Artist";
+                : ArtistDisplayNames.UnknownArtist;
         }
 
         /// <summary>
@@ -1199,7 +1199,7 @@ namespace MusicSalesApp.Components.Pages
         protected string GetTrackArtistName(int trackIndex)
         {
             if (trackIndex < 0 || trackIndex >= _playlistInfo?.Tracks?.Count)
-                return "Unknown Artist";
+                return ArtistDisplayNames.UnknownArtist;
 
             var track = _playlistInfo.Tracks[trackIndex];
             if (_metadataLookup.TryGetValue(track.Name, out var metadata))
@@ -1207,7 +1207,7 @@ namespace MusicSalesApp.Components.Pages
                 return GetArtistDisplayName(metadata);
             }
 
-            return "Unknown Artist";
+            return ArtistDisplayNames.UnknownArtist;
         }
 
         /// <summary>
@@ -1325,6 +1325,8 @@ namespace MusicSalesApp.Components.Pages
 
         protected string GetPageTitle()
         {
+            if (_loading)
+                return $"{GetDisplayTitle()} - StreamTunes";
             var metadata = GetCurrentTrackMetadata();
             if (metadata != null)
             {

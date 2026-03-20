@@ -412,6 +412,8 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
     protected string GetPageTitle()
     {
+        if (_loading)
+            return $"{GetDisplayTitle()} - StreamTunes";
         var artist = GetArtistDisplayName();
         var song = GetDisplayTitle();
         if (!string.IsNullOrEmpty(artist))
