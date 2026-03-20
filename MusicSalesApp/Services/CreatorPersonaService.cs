@@ -164,16 +164,30 @@ public class CreatorPersonaService : ICreatorPersonaService
         // Capture details for notification before deleting
         var personaName = persona.Name;
         var personaBio = persona.Bio;
-        // Download image as base64 data URI before blob is deleted (SAS URLs would break)
-        var personaImageUrl = !string.IsNullOrEmpty(persona.ImageBlobPath)
-            ? await DownloadBlobAsBase64DataUriAsync(persona.ImageBlobPath)
+        var personaImageBlobPath = persona.ImageBlobPath;
+        var personaImageUrl = !string.IsNullOrEmpty(personaImageBlobPath)
+            ? GetPersonaImageSasUrl(personaImageBlobPath, TimeSpan.FromDays(7))
             : null;
         var creatorEmail = persona.Creator?.User?.Email;
 
-        // Delete the image from blob storage
-        if (!string.IsNullOrEmpty(persona.ImageBlobPath))
+        // Send notification emails BEFORE deleting the blob so the SAS URL resolves
+        if (!string.IsNullOrEmpty(creatorEmail))
         {
-            await DeletePersonaImageFromStorageAsync(persona.ImageBlobPath);
+            try
+            {
+                await _adminNotificationService.NotifyPersonaDeletedAsync(
+                    creatorId, creatorEmail, personaName, personaBio, personaImageUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send persona deleted notification for persona {PersonaId}", personaId);
+            }
+        }
+
+        // Delete the image from blob storage
+        if (!string.IsNullOrEmpty(personaImageBlobPath))
+        {
+            await DeletePersonaImageFromStorageAsync(personaImageBlobPath);
         }
 
         // Clear PersonaId from any songs that reference this persona
@@ -189,20 +203,6 @@ public class CreatorPersonaService : ICreatorPersonaService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Deleted persona {PersonaId} for creator {CreatorId}", personaId, creatorId);
-
-        // Send notification emails and record user history
-        if (!string.IsNullOrEmpty(creatorEmail))
-        {
-            try
-            {
-                await _adminNotificationService.NotifyPersonaDeletedAsync(
-                    creatorId, creatorEmail, personaName, personaBio, personaImageUrl);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send persona deleted notification for persona {PersonaId}", personaId);
-            }
-        }
 
         return true;
     }
@@ -469,14 +469,7 @@ public class CreatorPersonaService : ICreatorPersonaService
             {
                 try
                 {
-                    // Use base64 data URI so the image is embedded directly in the email
-                    // and doesn't break when the SAS token expires
-                    personaImageUrl = await DownloadBlobAsBase64DataUriAsync(persona.ImageBlobPath);
-                    // Fall back to SAS URL if base64 download fails
-                    if (string.IsNullOrEmpty(personaImageUrl))
-                    {
-                        personaImageUrl = GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromDays(1));
-                    }
+                    personaImageUrl = GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromDays(7));
                 }
                 catch (Exception ex)
                 {
@@ -516,7 +509,7 @@ public class CreatorPersonaService : ICreatorPersonaService
             {
                 try
                 {
-                    var imageUrl = GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromDays(1));
+                    var imageUrl = GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromDays(7));
                     if (!string.IsNullOrEmpty(imageUrl))
                         personaImageHtml = $"<div style='text-align:center;margin:20px 0;'><img src='{imageUrl}' alt='Persona image' style='max-width:150px;border-radius:50%;'/></div>";
                 }
@@ -554,35 +547,6 @@ public class CreatorPersonaService : ICreatorPersonaService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send persona status email for persona {PersonaId}", persona.Id);
-        }
-    }
-
-    /// <summary>
-    /// Downloads a blob's content and returns it as a base64 data URI (e.g., data:image/png;base64,...).
-    /// Returns null if the blob doesn't exist or the download fails.
-    /// </summary>
-    private async Task<string?> DownloadBlobAsBase64DataUriAsync(string blobPath)
-    {
-        if (_personaContainerClient == null || string.IsNullOrWhiteSpace(blobPath))
-            return null;
-
-        try
-        {
-            var blobClient = _personaContainerClient.GetBlobClient(blobPath);
-            if (!await blobClient.ExistsAsync())
-                return null;
-
-            var response = await blobClient.DownloadContentAsync();
-            var content = response.Value;
-            var contentType = content.Details.ContentType ?? "image/png";
-            var bytes = content.Content.ToArray();
-            var base64 = Convert.ToBase64String(bytes);
-            return $"data:{contentType};base64,{base64}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to download blob {BlobPath} as base64", blobPath);
-            return null;
         }
     }
 
