@@ -1,7 +1,7 @@
 @page "/song/{SongTitle}"
 @inherits SongPlayerModel
 
-<PageTitle>@_displayTitle - Stream on StreamTunes</PageTitle>
+<PageTitle>@(!string.IsNullOrEmpty(_artistName) ? $"{_artistName} - {_displayTitle}" : _displayTitle) - StreamTunes</PageTitle>
 
 @* SEO-visible metadata rendered during static SSR *@
 <div class="song-seo-content" style="position: absolute; left: -9999px; overflow: hidden;">
