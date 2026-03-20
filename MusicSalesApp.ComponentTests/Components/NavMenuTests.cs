@@ -14,6 +14,59 @@ public class NavMenuTests : BUnitTestBase
     {
         base.BaseSetup();
         MockMaintenanceHubClient.Setup(x => x.StartAsync()).Returns(Task.CompletedTask);
+        MockAppSettingsService
+            .Setup(x => x.ShouldShowSiteMaintenanceNoticeAsync())
+            .ReturnsAsync(false);
+    }
+
+    [Test]
+    public void NavMenu_ShowsVersion_WhenGetAppVersionAsyncReturnsNonEmptyString()
+    {
+        // Arrange
+        MockAppSettingsService
+            .Setup(x => x.GetAppVersionAsync())
+            .ReturnsAsync("1.2.3");
+
+        // Act
+        var cut = TestContext.Render<NavMenu>();
+
+        // Wait for OnAfterRenderAsync data loading to complete
+        cut.WaitForState(() => cut.Markup.Contains("1.2.3"), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert – version is shown in the footer
+        Assert.That(cut.Markup, Does.Contain("version: 1.2.3"));
+    }
+
+    [Test]
+    public async Task NavMenu_HidesVersion_WhenGetAppVersionAsyncReturnsNull()
+    {
+        // Arrange
+        MockAppSettingsService
+            .Setup(x => x.GetAppVersionAsync())
+            .ReturnsAsync(default(string));
+
+        // Act
+        var cut = TestContext.Render<NavMenu>();
+        await cut.InvokeAsync(() => { });
+
+        // Assert – version div is not rendered
+        Assert.That(cut.Markup, Does.Not.Contain("version:"));
+    }
+
+    [Test]
+    public async Task NavMenu_HidesVersion_WhenGetAppVersionAsyncReturnsEmptyString()
+    {
+        // Arrange
+        MockAppSettingsService
+            .Setup(x => x.GetAppVersionAsync())
+            .ReturnsAsync(string.Empty);
+
+        // Act
+        var cut = TestContext.Render<NavMenu>();
+        await cut.InvokeAsync(() => { });
+
+        // Assert – version div is not rendered
+        Assert.That(cut.Markup, Does.Not.Contain("version:"));
     }
 
     [Test]

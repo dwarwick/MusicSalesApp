@@ -278,6 +278,8 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Max image upload size cannot exceed 100 MB.");
             }
 
+            _appVersion = _appVersion.Trim();
+
             if (string.IsNullOrWhiteSpace(_appVersion))
             {
                 _validationErrors.Add("App version cannot be empty.");
@@ -304,8 +306,11 @@ public class AdminSettingsModel : BlazorBase
             // Save the max image upload size
             await AppSettingsService.SetMaxImageUploadSizeMBAsync(_maxImageUploadSizeMB);
 
-            // Save the app version
-            await AppSettingsService.SetAppVersionAsync(_appVersion);
+            // Save the app version (only if changed)
+            if (_appVersion != _originalAppVersion)
+            {
+                await AppSettingsService.SetAppVersionAsync(_appVersion);
+            }
 
             // Update the original values to reflect the saved state
             _originalSubscriptionPrice = _subscriptionPrice;
