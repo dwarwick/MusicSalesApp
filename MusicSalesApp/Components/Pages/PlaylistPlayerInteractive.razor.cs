@@ -1323,6 +1323,20 @@ namespace MusicSalesApp.Components.Pages
             return string.Join("/", encodedSegments);
         }
 
+        protected string GetPageTitle()
+        {
+            var metadata = GetCurrentTrackMetadata();
+            if (metadata != null)
+            {
+                var artist = GetArtistDisplayName(metadata);
+                var song = GetTrackTitle(_currentTrackIndex);
+                if (!string.IsNullOrEmpty(artist) && artist != "Unknown Artist")
+                    return $"{artist} - {song} - StreamTunes";
+                return $"{song} - StreamTunes";
+            }
+            return $"{GetDisplayTitle()} - StreamTunes";
+        }
+
         protected string GetDisplayTitle()
         {
             if (_isRecommendedMode)

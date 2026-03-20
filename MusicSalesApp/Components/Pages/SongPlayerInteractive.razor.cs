@@ -410,6 +410,15 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         return string.Join("/", encodedSegments);
     }
 
+    protected string GetPageTitle()
+    {
+        var artist = GetArtistDisplayName();
+        var song = GetDisplayTitle();
+        if (!string.IsNullOrEmpty(artist))
+            return $"{artist} - {song} - StreamTunes";
+        return $"{song} - StreamTunes";
+    }
+
     protected string GetDisplayTitle()
     {
         if (_songMetadata != null && !string.IsNullOrEmpty(_songMetadata.SongTitle))

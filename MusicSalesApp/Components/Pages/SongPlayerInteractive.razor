@@ -3,6 +3,8 @@
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
 
+<PageTitle>@GetPageTitle()</PageTitle>
+
 <div class="song-player-container">
 @if (_loading || IsProcessingTipReturn)
 {
