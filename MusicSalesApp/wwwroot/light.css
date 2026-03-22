@@ -656,3 +656,13 @@ body {
     color: #28a745;
 }
 
+/* Admin Log Viewer */
+.log-viewer {
+    border: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+.log-content {
+    color: #212529;
+}
+
