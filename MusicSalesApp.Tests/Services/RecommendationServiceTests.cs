@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Data;
@@ -14,8 +13,6 @@ public class RecommendationServiceTests
 {
     private DbContextOptions<AppDbContext> _dbContextOptions;
     private Mock<ILogger<RecommendationService>> _mockLogger;
-    private Mock<IConfiguration> _mockConfiguration;
-    private Mock<IOpenAIEmbeddingService> _mockEmbeddingService;
 
     [SetUp]
     public void Setup()
@@ -25,15 +22,6 @@ public class RecommendationServiceTests
             .Options;
 
         _mockLogger = new Mock<ILogger<RecommendationService>>();
-        _mockConfiguration = new Mock<IConfiguration>();
-        _mockEmbeddingService = new Mock<IOpenAIEmbeddingService>();
-
-        // Setup default configuration values (Supabase not configured)
-        _mockConfiguration.Setup(c => c["Supabase:SUPABASE_URL"]).Returns("__REPLACE_WITH_SUPABASE_URL__");
-        _mockConfiguration.Setup(c => c["Supabase:SUPABASE_KEY"]).Returns("__REPLACE_WITH_SUPABASE_KEY__");
-        
-        // Setup embedding service as not configured by default
-        _mockEmbeddingService.Setup(e => e.IsConfigured).Returns(false);
     }
 
     private IDbContextFactory<AppDbContext> CreateDbContextFactory()
@@ -65,7 +53,7 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_NoLikes_ReturnsPopularSongs()
+    public async Task GenerateRecommendationsAsync_NoLikes_ReturnsPopularSongs()
     {
         // Arrange
         var songs = new List<SongMetadata>
@@ -82,10 +70,10 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -93,7 +81,7 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_WithLikes_ReturnsCollaborativeRecommendations()
+    public async Task GenerateRecommendationsAsync_WithLikes_ReturnsCollaborativeRecommendations()
     {
         // Arrange
         var songs = new List<SongMetadata>
@@ -117,10 +105,10 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -135,7 +123,7 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_ExcludesDislikedSongs()
+    public async Task GenerateRecommendationsAsync_ExcludesDislikedSongs()
     {
         // Arrange
         var songs = new List<SongMetadata>
@@ -156,10 +144,10 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         var recommendedSongIds = result.Select(r => r.SongMetadataId).ToList();
@@ -169,26 +157,16 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task HasFreshRecommendationsAsync_NoRecommendations_ReturnsFalse()
+    public async Task GetRecommendedPlaylistAsync_ReturnsCachedRecommendations()
     {
         // Arrange
-        await CreateAndSeedDatabase();
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
-
-        // Act
-        var result = await service.HasFreshRecommendationsAsync(userId: 1);
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public async Task HasFreshRecommendationsAsync_WithFreshRecommendations_ReturnsTrue()
-    {
-        // Arrange
-        var context = await CreateAndSeedDatabase();
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "song1.mp3", IsAlbumCover = false }
+        };
+        var context = await CreateAndSeedDatabase(songs);
         
-        // Add fresh recommendations
+        // Add cached recommendations
         context.RecommendedPlaylists.Add(new RecommendedPlaylist
         {
             UserId = 1,
@@ -199,39 +177,88 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.HasFreshRecommendationsAsync(userId: 1);
+        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
 
         // Assert
-        Assert.That(result, Is.True);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1));
+        Assert.That(result[0].SongMetadataId, Is.EqualTo(1));
     }
 
     [Test]
-    public async Task HasFreshRecommendationsAsync_WithOldRecommendations_ReturnsFalse()
+    public async Task GetRecommendedPlaylistAsync_ReturnsEmptyWhenNoCachedRecommendations()
     {
         // Arrange
-        var context = await CreateAndSeedDatabase();
-        
-        // Add old recommendations (more than 24 hours ago)
-        context.RecommendedPlaylists.Add(new RecommendedPlaylist
-        {
-            UserId = 1,
-            SongMetadataId = 1,
-            DisplayOrder = 1,
-            GeneratedAt = DateTime.UtcNow.AddHours(-25),
-            Score = 1.0
-        });
-        await context.SaveChangesAsync();
-
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        await CreateAndSeedDatabase();
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.HasFreshRecommendationsAsync(userId: 1);
+        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
 
         // Assert
-        Assert.That(result, Is.False);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task GetRecommendedPlaylistAsync_FiltersOutInactiveSongs()
+    {
+        // Arrange
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "active.mp3", IsAlbumCover = false, IsActive = true, IsEnabled = true },
+            new() { Id = 2, Mp3BlobPath = "inactive.mp3", IsAlbumCover = false, IsActive = false, IsEnabled = true }
+        };
+        var context = await CreateAndSeedDatabase(songs);
+        
+        context.RecommendedPlaylists.AddRange(
+            new RecommendedPlaylist { UserId = 1, SongMetadataId = 1, DisplayOrder = 1, GeneratedAt = DateTime.UtcNow, Score = 2.0 },
+            new RecommendedPlaylist { UserId = 1, SongMetadataId = 2, DisplayOrder = 2, GeneratedAt = DateTime.UtcNow, Score = 1.0 }
+        );
+        await context.SaveChangesAsync();
+
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+
+        // Assert
+        var ids = result.Select(r => r.SongMetadataId).ToList();
+        Assert.That(ids, Does.Contain(1));
+        Assert.That(ids, Does.Not.Contain(2));
+    }
+
+    [Test]
+    public async Task GenerateAllRecommendationsAsync_GeneratesForAllUsersWithLikes()
+    {
+        // Arrange
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "song1.mp3", IsAlbumCover = false, NumberOfStreams = 100 },
+            new() { Id = 2, Mp3BlobPath = "song2.mp3", IsAlbumCover = false, NumberOfStreams = 50 }
+        };
+        
+        var likes = new List<SongLike>
+        {
+            new() { Id = 1, UserId = 1, SongMetadataId = 1, IsLike = true },
+            new() { Id = 2, UserId = 2, SongMetadataId = 2, IsLike = true }
+        };
+        
+        await CreateAndSeedDatabase(songs, likes);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        await service.GenerateAllRecommendationsAsync();
+
+        // Assert — both users should now have recommendations
+        await using var context = new AppDbContext(_dbContextOptions);
+        var user1Recs = await context.RecommendedPlaylists.Where(r => r.UserId == 1).ToListAsync();
+        var user2Recs = await context.RecommendedPlaylists.Where(r => r.UserId == 2).ToListAsync();
+        Assert.That(user1Recs, Is.Not.Empty, "User 1 should have recommendations");
+        Assert.That(user2Recs, Is.Not.Empty, "User 2 should have recommendations");
     }
 
     [Test]
@@ -256,7 +283,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
         var result = await service.GenerateRecommendationsAsync(userId: 1);
@@ -273,7 +300,7 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_ExcludesAlbumCovers()
+    public async Task GenerateRecommendationsAsync_ExcludesAlbumCovers()
     {
         // Arrange
         var songs = new List<SongMetadata>
@@ -284,10 +311,10 @@ public class RecommendationServiceTests
         };
         
         await CreateAndSeedDatabase(songs);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         var recommendedSongIds = result.Select(r => r.SongMetadataId).ToList();
@@ -297,7 +324,7 @@ public class RecommendationServiceTests
     }
 
     [Test]
-    public async Task GetRecommendedPlaylistAsync_ReturnsMaxOf20Songs()
+    public async Task GenerateRecommendationsAsync_ReturnsMaxOf20Songs()
     {
         // Arrange
         var songs = Enumerable.Range(1, 30)
@@ -322,10 +349,10 @@ public class RecommendationServiceTests
             .ToList();
         
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
-        var result = await service.GetRecommendedPlaylistAsync(userId: 1);
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
 
         // Assert
         Assert.That(result.Count, Is.LessThanOrEqualTo(20));
@@ -349,7 +376,7 @@ public class RecommendationServiceTests
         };
 
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
         var result = await service.GenerateRecommendationsAsync(userId: 1);
@@ -383,7 +410,7 @@ public class RecommendationServiceTests
         };
 
         await CreateAndSeedDatabase(songs, likes);
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act
         var result = await service.GenerateRecommendationsAsync(userId: 1);
@@ -392,6 +419,72 @@ public class RecommendationServiceTests
         var recommendedSongIds = result.Select(r => r.SongMetadataId).ToList();
         Assert.That(recommendedSongIds, Does.Not.Contain(2), "Inactive song should be excluded from collaborative filtering");
         Assert.That(recommendedSongIds, Does.Contain(3), "Active song should still be recommended");
+    }
+
+    [Test]
+    public async Task GenerateRecommendationsAsync_PersistsRemovalEvenWhenNoNewRecommendationsGenerated()
+    {
+        // Arrange — seed only an inactive song so generation yields zero results.
+        // The pre-existing cached recommendation for that song must still be deleted.
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "inactive.mp3", IsAlbumCover = false, IsActive = false, IsEnabled = false }
+        };
+        var context = await CreateAndSeedDatabase(songs);
+
+        context.RecommendedPlaylists.Add(new RecommendedPlaylist
+        {
+            UserId = 1,
+            SongMetadataId = 1,
+            DisplayOrder = 1,
+            GeneratedAt = DateTime.UtcNow.AddDays(-1),
+            Score = 5.0
+        });
+        await context.SaveChangesAsync();
+
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
+
+        // Assert — result is empty (no playable songs) …
+        Assert.That(result, Is.Empty);
+
+        // … but the stale recommendation must have been deleted from the database
+        await using var verifyContext = new AppDbContext(_dbContextOptions);
+        var remaining = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 1).ToListAsync();
+        Assert.That(remaining, Is.Empty, "Stale recommendations should be removed even when no new ones are generated");
+    }
+
+    [Test]
+    public async Task GenerateAllRecommendationsAsync_SkipsUsersWithOnlyDislikes()
+    {
+        // Arrange — user 1 has only dislikes, user 2 has a like.
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "song1.mp3", IsAlbumCover = false, NumberOfStreams = 10 },
+            new() { Id = 2, Mp3BlobPath = "song2.mp3", IsAlbumCover = false, NumberOfStreams = 20 }
+        };
+
+        var likes = new List<SongLike>
+        {
+            new() { Id = 1, UserId = 1, SongMetadataId = 1, IsLike = false }, // dislike only
+            new() { Id = 2, UserId = 2, SongMetadataId = 2, IsLike = true }
+        };
+
+        await CreateAndSeedDatabase(songs, likes);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        await service.GenerateAllRecommendationsAsync();
+
+        // Assert — user 2 gets recommendations, user 1 (dislike-only) does not
+        await using var verifyContext = new AppDbContext(_dbContextOptions);
+        var user1Recs = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 1).ToListAsync();
+        var user2Recs = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 2).ToListAsync();
+
+        Assert.That(user1Recs, Is.Empty, "Dislike-only user should not have recommendations generated");
+        Assert.That(user2Recs, Is.Not.Empty, "User with a like should have recommendations generated");
     }
 
     [Test]
@@ -414,7 +507,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act - GenerateRecommendationsAsync clears old cached entries and rebuilds; inactive
         // songs must not appear in the regenerated results.
@@ -449,7 +542,7 @@ public class RecommendationServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object, _mockConfiguration.Object, _mockEmbeddingService.Object);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
 
         // Act - call GenerateRecommendationsAsync directly (in DEBUG builds GetRecommendedPlaylistAsync
         // always regenerates, so this directly exercises the regeneration path that the production
