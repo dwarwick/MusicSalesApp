@@ -1,77 +1,26 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
-using Supabase;
-using System.Text.Json.Serialization;
 
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for generating song recommendations using collaborative filtering via Supabase + pgvector.
-/// 
-/// <para>
-/// <b>Supabase Setup Requirements:</b>
-/// When Supabase is configured, this service expects the following setup in your Supabase database:
-/// </para>
-/// 
-/// <para>
-/// <b>1. song_likes table:</b>
-/// <code>
-/// CREATE TABLE song_likes (
-///     user_id INTEGER NOT NULL,
-///     song_metadata_id INTEGER NOT NULL,
-///     is_like BOOLEAN NOT NULL,
-///     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-///     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-///     embedding vector(384),
-///     PRIMARY KEY (user_id, song_metadata_id)
-/// );
-/// </code>
-/// </para>
-/// 
-/// <para>
-/// <b>2. get_recommendations RPC function:</b>
-/// <code>
-/// CREATE OR REPLACE FUNCTION get_recommendations(p_user_id INTEGER, p_limit INTEGER, p_exclude_songs INTEGER[])
-/// RETURNS TABLE(song_id INTEGER, score DOUBLE PRECISION) AS $$
-/// BEGIN
-///     -- Implement your recommendation logic using pgvector here
-///     -- Return song_id and recommendation score
-/// END;
-/// $$ LANGUAGE plpgsql;
-/// </code>
-/// </para>
-/// 
-/// <para>
-/// If Supabase is not configured, the service falls back to local collaborative filtering 
-/// using the SQL Server database.
-/// </para>
+/// Service for generating song recommendations using collaborative filtering.
+/// Recommendations are generated nightly via a Hangfire job and cached in the RecommendedPlaylists table.
 /// </summary>
 public class RecommendationService : IRecommendationService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<RecommendationService> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly IOpenAIEmbeddingService _embeddingService;
-    private readonly string _supabaseUrl;
-    private readonly string _supabaseKey;
     private const int MaxRecommendations = 20;
-    private const string SupabaseRpcFunctionName = "get_recommendations";
 
     public RecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
-        ILogger<RecommendationService> logger,
-        IConfiguration configuration,
-        IOpenAIEmbeddingService embeddingService)
+        ILogger<RecommendationService> logger)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _configuration = configuration;
-        _embeddingService = embeddingService;
-        _supabaseUrl = configuration["Supabase:SUPABASE_URL"] ?? string.Empty;
-        _supabaseKey = configuration["Supabase:SUPABASE_KEY"] ?? string.Empty;
     }
 
     /// <inheritdoc/>
@@ -79,33 +28,15 @@ public class RecommendationService : IRecommendationService
     {
         try
         {
-            // In DEBUG mode, always generate fresh recommendations
-#if DEBUG
-            return await GenerateRecommendationsAsync(userId);
-#else
-            // In RELEASE mode, check if fresh recommendations exist (within 24 hours)
-            if (await HasFreshRecommendationsAsync(userId))
-            {
-                await using var context = await _contextFactory.CreateDbContextAsync();
-                var cached = await context.RecommendedPlaylists
-                    .Include(rp => rp.SongMetadata)
-                        .ThenInclude(sm => sm.Creator)
-                            .ThenInclude(c => c.User)
-                    .Where(rp => rp.UserId == userId)
-                    .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled && rp.SongMetadata.IsActive) // Filter out disabled/inactive songs
-                    .OrderBy(rp => rp.DisplayOrder)
-                    .ToListAsync();
-
-                // If all cached recommendations were filtered out (e.g. songs became inactive/disabled),
-                // fall through to regenerate rather than returning an empty list for up to 24 hours.
-                if (cached.Count > 0)
-                {
-                    return cached;
-                }
-            }
-
-            return await GenerateRecommendationsAsync(userId);
-#endif
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            return await context.RecommendedPlaylists
+                .Include(rp => rp.SongMetadata)
+                    .ThenInclude(sm => sm.Creator)
+                        .ThenInclude(c => c.User)
+                .Where(rp => rp.UserId == userId)
+                .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled && rp.SongMetadata.IsActive)
+                .OrderBy(rp => rp.DisplayOrder)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
@@ -139,23 +70,9 @@ public class RecommendationService : IRecommendationService
                 .Select(sl => sl.SongMetadataId)
                 .ToListAsync();
 
-            List<(int SongId, double Score)> recommendedSongs;
+            var recommendedSongs = await GetLocalRecommendationsAsync(context, userId, userLikes, userDislikes);
 
-            // Try Supabase-based recommendations first if configured
-            if (!string.IsNullOrEmpty(_supabaseUrl) && !string.IsNullOrEmpty(_supabaseKey) && 
-                _supabaseUrl != "__REPLACE_WITH_SUPABASE_URL__" && _supabaseKey != "__REPLACE_WITH_SUPABASE_KEY__")
-            {
-                recommendedSongs = await GetSupabaseRecommendationsAsync(userId, userLikes, userDislikes);
-            }
-            else
-            {
-                // Fallback to local collaborative filtering
-                recommendedSongs = await GetLocalRecommendationsAsync(context, userId, userLikes, userDislikes);
-            }
-
-            // Validate that recommended song IDs exist in SQL Server SongMetadata table
-            // (Supabase may return IDs that don't exist locally)
-            // Also filter out disabled songs
+            // Validate recommended song IDs and filter out disabled/inactive songs
             var recommendedSongIds = recommendedSongs.Select(r => r.SongId).ToList();
             var validSongIds = await context.SongMetadata
                 .Where(sm => recommendedSongIds.Contains(sm.Id) && !sm.IsAlbumCover && sm.IsEnabled && sm.IsActive)
@@ -205,196 +122,45 @@ public class RecommendationService : IRecommendationService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> HasFreshRecommendationsAsync(int userId)
+    public async Task GenerateAllRecommendationsAsync()
     {
         try
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            
-            var cutoff = DateTime.UtcNow.AddHours(-24);
-            return await context.RecommendedPlaylists
-                .AnyAsync(rp => rp.UserId == userId && rp.GeneratedAt > cutoff);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error checking for fresh recommendations for user {UserId}", userId);
-            return false;
-        }
-    }
 
-    /// <inheritdoc/>
-    public async Task SyncLikesToSupabaseAsync()
-    {
-        if (string.IsNullOrEmpty(_supabaseUrl) || string.IsNullOrEmpty(_supabaseKey) ||
-            _supabaseUrl == "__REPLACE_WITH_SUPABASE_URL__" || _supabaseKey == "__REPLACE_WITH_SUPABASE_KEY__")
-        {
-            _logger.LogWarning("Supabase is not configured. Skipping sync.");
-            return;
-        }
-
-        try
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-
-            // Get all likes from SQL Server with song metadata for embedding generation
-            var allLikes = await context.SongLikes
-                .Include(sl => sl.SongMetadata)
-                .Select(sl => new
-                {
-                    sl.UserId,
-                    sl.SongMetadataId,
-                    sl.IsLike,
-                    sl.CreatedAt,
-                    sl.UpdatedAt,
-                    SongName = sl.SongMetadata != null ? sl.SongMetadata.Mp3BlobPath : null,
-                    AlbumName = sl.SongMetadata != null ? sl.SongMetadata.AlbumName : null,
-                    Genre = sl.SongMetadata != null ? sl.SongMetadata.Genre : null
-                })
+            // Find all users who have at least one like
+            var userIds = await context.SongLikes
+                .Select(sl => sl.UserId)
+                .Distinct()
                 .ToListAsync();
 
-            // Create Supabase client
-            var options = new SupabaseOptions
-            {
-                AutoRefreshToken = true,
-                AutoConnectRealtime = false
-            };
-            var supabase = new Client(_supabaseUrl, _supabaseKey, options);
-            await supabase.InitializeAsync();
+            _logger.LogInformation("Generating recommendations for {Count} users", userIds.Count);
 
-            // Generate embeddings for songs if OpenAI is configured
-            var songEmbeddings = new Dictionary<int, float[]>();
-            if (_embeddingService.IsConfigured)
-            {
-                // Get unique songs that need embeddings
-                var uniqueSongs = allLikes
-                    .GroupBy(l => l.SongMetadataId)
-                    .Select(g => g.First())
-                    .ToList();
-
-                foreach (var song in uniqueSongs)
-                {
-                    try
-                    {
-                        // Create embedding text from song metadata
-                        var songFileName = !string.IsNullOrEmpty(song.SongName) 
-                            ? Path.GetFileNameWithoutExtension(song.SongName) 
-                            : $"Song {song.SongMetadataId}";
-                        var embeddingText = $"{songFileName} {song.AlbumName ?? ""} {song.Genre ?? ""}".Trim();
-                        
-                        var embedding = await _embeddingService.GenerateEmbeddingAsync(embeddingText);
-                        if (embedding != null)
-                        {
-                            songEmbeddings[song.SongMetadataId] = embedding;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to generate embedding for song {SongId}", song.SongMetadataId);
-                    }
-                }
-
-                _logger.LogInformation("Generated embeddings for {Count} unique songs", songEmbeddings.Count);
-            }
-            else
-            {
-                _logger.LogWarning("OpenAI is not configured. Syncing likes without embeddings.");
-            }
-
-            // Sync likes to Supabase song_likes table
-            // See class documentation for required Supabase table schema
-            foreach (var like in allLikes)
+            var successCount = 0;
+            foreach (var userId in userIds)
             {
                 try
                 {
-                    var songLike = new SupabaseSongLike
-                    {
-                        UserId = like.UserId,
-                        SongMetadataId = like.SongMetadataId,
-                        IsLike = like.IsLike,
-                        CreatedAt = like.CreatedAt,
-                        UpdatedAt = like.UpdatedAt
-                    };
-
-                    // Add embedding if available
-                    if (songEmbeddings.TryGetValue(like.SongMetadataId, out var embedding))
-                    {
-                        songLike.Embedding = $"[{string.Join(",", embedding)}]";
-                    }
-
-                    await supabase.From<SupabaseSongLike>()
-                        .Upsert(songLike);
+                    await GenerateRecommendationsAsync(userId);
+                    successCount++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to sync like for user {UserId}, song {SongId}", 
-                        like.UserId, like.SongMetadataId);
+                    _logger.LogWarning(ex, "Failed to generate recommendations for user {UserId}", userId);
                 }
             }
 
-            _logger.LogInformation("Successfully synced {Count} likes to Supabase", allLikes.Count);
+            _logger.LogInformation("Successfully generated recommendations for {SuccessCount}/{TotalCount} users", successCount, userIds.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error syncing likes to Supabase");
+            _logger.LogError(ex, "Error generating recommendations for all users");
             throw;
         }
     }
 
     /// <summary>
-    /// Get recommendations using Supabase pgvector for similarity search
-    /// </summary>
-    private async Task<List<(int SongId, double Score)>> GetSupabaseRecommendationsAsync(
-        int userId, 
-        List<int> userLikes, 
-        List<int> userDislikes)
-    {
-        try
-        {
-            var options = new SupabaseOptions
-            {
-                AutoRefreshToken = true,
-                AutoConnectRealtime = false
-            };
-            var supabase = new Client(_supabaseUrl, _supabaseKey, options);
-            await supabase.InitializeAsync();
-
-            // Call the Supabase RPC function for collaborative filtering recommendations
-            // See class documentation for required Supabase setup
-            var result = await supabase.Rpc(SupabaseRpcFunctionName, new Dictionary<string, object>
-            {
-                { "p_user_id", userId },
-                { "p_limit", MaxRecommendations },
-                { "p_exclude_songs", userDislikes }
-            });
-
-            if (result.Content == null)
-            {
-                return new List<(int SongId, double Score)>();
-            }
-
-            // Parse result - the RPC returns a list of {song_id, score}
-            var recommendations = System.Text.Json.JsonSerializer.Deserialize<List<SupabaseRecommendation>>(
-                result.Content, 
-                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            // Filter out any recommendations with null scores
-            return recommendations?
-                .Where(r => r.Score.HasValue)
-                .Select(r => (r.SongId, r.Score!.Value))
-                .ToList() ?? new List<(int SongId, double Score)>();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Supabase recommendations failed, falling back to local recommendations");
-            
-            // Fallback to local recommendations
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            return await GetLocalRecommendationsAsync(context, userId, userLikes, userDislikes);
-        }
-    }
-
-    /// <summary>
-    /// Get recommendations using local collaborative filtering algorithm
+    /// Get recommendations using local collaborative filtering algorithm.
     /// "Users who liked X also liked Y"
     /// </summary>
     private async Task<List<(int SongId, double Score)>> GetLocalRecommendationsAsync(
@@ -521,50 +287,5 @@ public class RecommendationService : IRecommendationService
         }
 
         return results;
-    }
-
-    /// <summary>
-    /// Model for Supabase recommendation RPC result
-    /// </summary>
-    private class SupabaseRecommendation
-    {
-        [JsonPropertyName("song_id")]
-        public int SongId { get; set; }
-        public double? Score { get; set; }
-    }
-
-    /// <summary>
-    /// Model for syncing song likes to Supabase.
-    /// Maps to the song_likes table with composite primary key (user_id, song_metadata_id).
-    /// See class documentation for the required Supabase table schema.
-    /// </summary>
-    [Supabase.Postgrest.Attributes.Table("song_likes")]
-    private class SupabaseSongLike : Supabase.Postgrest.Models.BaseModel
-    {
-        // Composite primary key: (user_id, song_metadata_id)
-        // The PrimaryKey attribute marks the first column of the composite key
-        [Supabase.Postgrest.Attributes.PrimaryKey("user_id")]
-        [Supabase.Postgrest.Attributes.Column("user_id")]
-        public int UserId { get; set; }
-
-        // Second part of composite primary key
-        [Supabase.Postgrest.Attributes.Column("song_metadata_id")]
-        public int SongMetadataId { get; set; }
-
-        [Supabase.Postgrest.Attributes.Column("is_like")]
-        public bool IsLike { get; set; }
-
-        [Supabase.Postgrest.Attributes.Column("created_at")]
-        public DateTime CreatedAt { get; set; }
-
-        [Supabase.Postgrest.Attributes.Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
-
-        /// <summary>
-        /// Vector embedding for the song (384 dimensions from text-embedding-3-small)
-        /// Stored as a string in format "[0.1,0.2,...]" for Supabase pgvector
-        /// </summary>
-        [Supabase.Postgrest.Attributes.Column("embedding")]
-        public string Embedding { get; set; }
     }
 }

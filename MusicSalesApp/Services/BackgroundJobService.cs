@@ -28,10 +28,10 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.ProcessPendingPayoutsAsync(),
                 Cron.Weekly(DayOfWeek.Monday, 1));
 
-            // Schedule nightly sync of likes to Supabase at 2 AM UTC
+            // Schedule nightly recommendation generation at 2 AM UTC
             RecurringJob.AddOrUpdate<IRecommendationService>(
-                "sync-likes-to-supabase",
-                service => service.SyncLikesToSupabaseAsync(),
+                "generate-recommendations",
+                service => service.GenerateAllRecommendationsAsync(),
                 Cron.Daily(2));
 
             // Schedule daily cleanup job at 3 AM UTC

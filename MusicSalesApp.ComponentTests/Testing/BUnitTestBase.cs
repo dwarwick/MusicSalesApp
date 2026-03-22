@@ -251,8 +251,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync(new List<RecommendedPlaylist>());
         MockRecommendationService.Setup(x => x.GenerateRecommendationsAsync(It.IsAny<int>()))
             .ReturnsAsync(new List<RecommendedPlaylist>());
-        MockRecommendationService.Setup(x => x.HasFreshRecommendationsAsync(It.IsAny<int>()))
-            .ReturnsAsync(false);
+        MockRecommendationService.Setup(x => x.GenerateAllRecommendationsAsync())
+            .Returns(Task.CompletedTask);
 
         // Setup default returns for IPurchaseEmailService methods
         MockPurchaseEmailService.Setup(x => x.SendSongPurchaseConfirmationAsync(
