@@ -1,0 +1,19 @@
+/* Log viewer container */
+.log-viewer {
+    overflow-y: auto;
+    max-height: 70vh;
+    border-radius: 4px;
+}
+
+/* Monospace pre block – selectable, wrapping, scrollable */
+.log-content {
+    margin: 0;
+    padding: 1rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: text;
+    -webkit-user-select: text;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
