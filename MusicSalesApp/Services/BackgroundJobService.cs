@@ -28,6 +28,10 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.ProcessPendingPayoutsAsync(),
                 Cron.Weekly(DayOfWeek.Monday, 1));
 
+            // Remove the old Supabase sync job id so that stale Hangfire records
+            // from previous deployments don't keep firing after the method was removed.
+            RecurringJob.RemoveIfExists("sync-likes-to-supabase");
+
             // Schedule nightly recommendation generation at 2 AM UTC
             RecurringJob.AddOrUpdate<IRecommendationService>(
                 "generate-recommendations",
