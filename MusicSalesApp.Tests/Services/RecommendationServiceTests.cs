@@ -422,6 +422,72 @@ public class RecommendationServiceTests
     }
 
     [Test]
+    public async Task GenerateRecommendationsAsync_PersistsRemovalEvenWhenNoNewRecommendationsGenerated()
+    {
+        // Arrange — seed only an inactive song so generation yields zero results.
+        // The pre-existing cached recommendation for that song must still be deleted.
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "inactive.mp3", IsAlbumCover = false, IsActive = false, IsEnabled = false }
+        };
+        var context = await CreateAndSeedDatabase(songs);
+
+        context.RecommendedPlaylists.Add(new RecommendedPlaylist
+        {
+            UserId = 1,
+            SongMetadataId = 1,
+            DisplayOrder = 1,
+            GeneratedAt = DateTime.UtcNow.AddDays(-1),
+            Score = 5.0
+        });
+        await context.SaveChangesAsync();
+
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        var result = await service.GenerateRecommendationsAsync(userId: 1);
+
+        // Assert — result is empty (no playable songs) …
+        Assert.That(result, Is.Empty);
+
+        // … but the stale recommendation must have been deleted from the database
+        await using var verifyContext = new AppDbContext(_dbContextOptions);
+        var remaining = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 1).ToListAsync();
+        Assert.That(remaining, Is.Empty, "Stale recommendations should be removed even when no new ones are generated");
+    }
+
+    [Test]
+    public async Task GenerateAllRecommendationsAsync_SkipsUsersWithOnlyDislikes()
+    {
+        // Arrange — user 1 has only dislikes, user 2 has a like.
+        var songs = new List<SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "song1.mp3", IsAlbumCover = false, NumberOfStreams = 10 },
+            new() { Id = 2, Mp3BlobPath = "song2.mp3", IsAlbumCover = false, NumberOfStreams = 20 }
+        };
+
+        var likes = new List<SongLike>
+        {
+            new() { Id = 1, UserId = 1, SongMetadataId = 1, IsLike = false }, // dislike only
+            new() { Id = 2, UserId = 2, SongMetadataId = 2, IsLike = true }
+        };
+
+        await CreateAndSeedDatabase(songs, likes);
+        var service = new RecommendationService(CreateDbContextFactory(), _mockLogger.Object);
+
+        // Act
+        await service.GenerateAllRecommendationsAsync();
+
+        // Assert — user 2 gets recommendations, user 1 (dislike-only) does not
+        await using var verifyContext = new AppDbContext(_dbContextOptions);
+        var user1Recs = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 1).ToListAsync();
+        var user2Recs = await verifyContext.RecommendedPlaylists.Where(r => r.UserId == 2).ToListAsync();
+
+        Assert.That(user1Recs, Is.Empty, "Dislike-only user should not have recommendations generated");
+        Assert.That(user2Recs, Is.Not.Empty, "User with a like should have recommendations generated");
+    }
+
+    [Test]
     public async Task GenerateRecommendationsAsync_ExcludesInactiveSongsWhenPreviouslyCached()
     {
         // Arrange - seed an inactive song that already has a cached recommendation entry
