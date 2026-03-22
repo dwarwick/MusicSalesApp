@@ -1,7 +1,7 @@
 using Bunit;
 using Moq;
 using MusicSalesApp.ComponentTests.Testing;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Public;
 using MusicSalesApp.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;

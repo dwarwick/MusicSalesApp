@@ -1,6 +1,6 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.ComponentTests.Testing;
 using Moq;
 

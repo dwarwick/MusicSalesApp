@@ -1,4 +1,4 @@
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Admin;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Tests.Components;

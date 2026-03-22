@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Moq;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Public;
 using MusicSalesApp.ComponentTests.Testing;
 using System.Net;
 using System.Net.Http;

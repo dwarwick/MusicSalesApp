@@ -2,7 +2,7 @@ using Bunit;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Models;
 using System.Security.Claims;

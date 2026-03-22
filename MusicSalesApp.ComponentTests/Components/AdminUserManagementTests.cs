@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Admin;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
