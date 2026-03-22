@@ -20,11 +20,13 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
     private string? _tempFilePath;
     private bool _hasLoadedData = false;
 
-    // Pre-compiled regexes for performance
-    private static readonly Regex _infoWordRegex = new Regex(@"\binfo\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex _infoInfoRegex = new Regex(@"\b(info|information)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex _warningRegex = new Regex(@"\bwarning\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex _errorRegex = new Regex(@"\b(error|exception)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    // Pre-compiled regexes for performance.
+    // Each pattern matches both the full English word AND the Serilog bracketed short form
+    // so real log lines such as  "2026-03-22 12:13:33 [INF] Message..."  are coloured correctly.
+    private static readonly Regex _infoTriggerRegex = new Regex(@"\binfo\b|\[INF\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex _infoGreenRegex = new Regex(@"\b(info|information)\b|\[INF\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex _warningRegex = new Regex(@"\bwarning\b|\[WRN\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex _errorRegex = new Regex(@"\b(error|exception)\b|\[ERR\]|\[FTL\]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex _quotedRegex = new Regex(@"""[^""]*""|'[^']*'", RegexOptions.Compiled);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -131,10 +133,10 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
     ///
     /// Priority:
     ///   1 = orange  – text inside single or double quotes
-    ///   2 = red     – the words "error" or "exception"
-    ///   3 = yellow  – the word "warning"
-    ///   4 = green   – the words "info" or "information"
-    ///   5 = blue    – text that follows "info" until end of line
+    ///   2 = red     – "error" / "exception" / [ERR] / [FTL]
+    ///   3 = yellow  – "warning" / [WRN]
+    ///   4 = green   – "info" / "information" / [INF]
+    ///   5 = blue    – text that follows "info" / [INF] until end of line
     /// </summary>
     public static MarkupString BuildHighlightedMarkup(string content)
     {
@@ -160,8 +162,8 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
         var colorCode = new byte[length]; // 0=none, 1=orange, 2=red, 3=yellow, 4=green, 5=blue
         Array.Fill(priority, int.MaxValue);
 
-        // Priority 5 (lowest): blue – text that follows the word "info" until end of line
-        var infoMatch = _infoWordRegex.Match(rawLine);
+        // Priority 5 (lowest): blue – text that follows "info" / [INF] until end of line
+        var infoMatch = _infoTriggerRegex.Match(rawLine);
         if (infoMatch.Success)
         {
             var afterStart = infoMatch.Index + infoMatch.Length;
@@ -175,8 +177,8 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
             }
         }
 
-        // Priority 4: green – the keywords "info" / "information"
-        foreach (Match m in _infoInfoRegex.Matches(rawLine))
+        // Priority 4: green – "info" / "information" / [INF]
+        foreach (Match m in _infoGreenRegex.Matches(rawLine))
         {
             for (int i = m.Index; i < m.Index + m.Length; i++)
             {
@@ -188,7 +190,7 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
             }
         }
 
-        // Priority 3: yellow – the keyword "warning"
+        // Priority 3: yellow – "warning" / [WRN]
         foreach (Match m in _warningRegex.Matches(rawLine))
         {
             for (int i = m.Index; i < m.Index + m.Length; i++)
@@ -201,7 +203,7 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
             }
         }
 
-        // Priority 2: red – the keywords "error" / "exception"
+        // Priority 2: red – "error" / "exception" / [ERR] / [FTL]
         foreach (Match m in _errorRegex.Matches(rawLine))
         {
             for (int i = m.Index; i < m.Index + m.Length; i++)

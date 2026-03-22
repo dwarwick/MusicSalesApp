@@ -195,4 +195,54 @@ public class AdminLogsTests : BUnitTestBase
 
         Assert.That(markup.Value, Does.Contain('\n'));
     }
+
+    // -------------------------------------------------------------------------
+    // Serilog bracketed short-form level tokens [INF] [WRN] [ERR] [FTL]
+    // -------------------------------------------------------------------------
+
+    [Test]
+    public void HighlightLine_InfToken_IsColoredGreen()
+    {
+        var result = AdminLogsModel.HighlightLine("2026-03-22 12:13:33.469 -05:00 [INF] Application started.");
+
+        Assert.That(result, Does.Contain("color:#2ecc71"));
+        Assert.That(result, Does.Contain("[INF]"));
+    }
+
+    [Test]
+    public void HighlightLine_InfToken_MessageAfterToken_IsColoredBlue()
+    {
+        var result = AdminLogsModel.HighlightLine("2026-03-22 12:13:33.469 -05:00 [INF] Authorization failed.");
+
+        // The message text after [INF] should be blue
+        Assert.That(result, Does.Contain("color:#5b9bd5"));
+        Assert.That(result, Does.Contain("Authorization failed."));
+    }
+
+    [Test]
+    public void HighlightLine_WrnToken_IsColoredYellow()
+    {
+        var result = AdminLogsModel.HighlightLine("2026-03-22 12:13:33.469 -05:00 [WRN] Slow query detected.");
+
+        Assert.That(result, Does.Contain("color:#f0ad4e"));
+        Assert.That(result, Does.Contain("[WRN]"));
+    }
+
+    [Test]
+    public void HighlightLine_ErrToken_IsColoredRed()
+    {
+        var result = AdminLogsModel.HighlightLine("2026-03-22 12:13:33.469 -05:00 [ERR] Unhandled exception.");
+
+        Assert.That(result, Does.Contain("color:#e74c3c"));
+        Assert.That(result, Does.Contain("[ERR]"));
+    }
+
+    [Test]
+    public void HighlightLine_FtlToken_IsColoredRed()
+    {
+        var result = AdminLogsModel.HighlightLine("2026-03-22 12:13:33.469 -05:00 [FTL] Fatal crash.");
+
+        Assert.That(result, Does.Contain("color:#e74c3c"));
+        Assert.That(result, Does.Contain("[FTL]"));
+    }
 }
