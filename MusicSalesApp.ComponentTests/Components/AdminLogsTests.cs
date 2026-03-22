@@ -196,6 +196,25 @@ public class AdminLogsTests : BUnitTestBase
         Assert.That(markup.Value, Does.Contain('\n'));
     }
 
+    [Test]
+    public void BuildHighlightedMarkup_WindowsLineEndings_NoTrailingCarriageReturn()
+    {
+        // Windows \r\n must not leave a trailing \r before the \n
+        var content = "line one\r\ninfo line two\r\nline three";
+        var markup = AdminLogsModel.BuildHighlightedMarkup(content);
+
+        Assert.That(markup.Value, Does.Not.Contain('\r'));
+    }
+
+    [Test]
+    public void BuildHighlightedMarkup_OldMacLineEndings_Normalised()
+    {
+        var content = "line one\rline two\rline three";
+        var markup = AdminLogsModel.BuildHighlightedMarkup(content);
+
+        Assert.That(markup.Value, Does.Not.Contain('\r'));
+    }
+
     // -------------------------------------------------------------------------
     // Serilog bracketed short-form level tokens [INF] [WRN] [ERR] [FTL]
     // -------------------------------------------------------------------------

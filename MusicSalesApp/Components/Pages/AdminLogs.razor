@@ -20,6 +20,11 @@
         <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
     }
 
+    @if (!string.IsNullOrEmpty(_truncationMessage))
+    {
+        <SfMessage Severity="MessageSeverity.Warning">@_truncationMessage</SfMessage>
+    }
+
     @if (!_isLoading && _logFiles.Count == 0)
     {
         <SfMessage Severity="MessageSeverity.Info">No log files found.</SfMessage>

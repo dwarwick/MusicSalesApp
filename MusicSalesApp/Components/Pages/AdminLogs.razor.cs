@@ -12,8 +12,13 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
 {
     private const string LogsFolder = "logs";
 
+    /// <summary>Maximum number of bytes to read from a log file to prevent
+    /// excessive memory / CPU usage on very large files.</summary>
+    private const int MaxLogReadBytes = 512 * 1024; // 512 KB
+
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
+    protected string _truncationMessage = string.Empty;
     protected List<string> _logFiles = new();
     protected string? _selectedLogFile;
     protected MarkupString _logContent = new MarkupString(string.Empty);
@@ -57,7 +62,7 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
 
     private void LoadLogFiles()
     {
-        var logsDir = Path.Combine(Environment.ContentRootPath, LogsFolder);
+        var logsDir = GetLogsDirectory();
         if (!Directory.Exists(logsDir))
         {
             _logFiles = new List<string>();
@@ -70,6 +75,16 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
             .ToList();
     }
 
+    /// <summary>
+    /// Returns the absolute path to the logs directory.
+    /// IWebHostEnvironment.ContentRootPath is used because ASP.NET Core /IIS
+    /// sets the working directory to the content root before Program.cs runs,
+    /// making it equivalent to the Directory.GetCurrentDirectory() call in the
+    /// Serilog bootstrap configuration.
+    /// </summary>
+    private string GetLogsDirectory() =>
+        Path.Combine(Environment.ContentRootPath, LogsFolder);
+
     protected async Task OnFileSelectionChanged(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName) || fileName == _selectedLogFile)
@@ -79,6 +94,7 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
         _isLoading = true;
         _logContent = new MarkupString(string.Empty);
         _errorMessage = string.Empty;
+        _truncationMessage = string.Empty;
         await InvokeAsync(StateHasChanged);
 
         try
@@ -100,8 +116,30 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
     {
         DeleteTempFile();
 
-        var logsDir = Path.Combine(Environment.ContentRootPath, LogsFolder);
+        // Security: reject any fileName that contains directory separators or
+        // is not in the known allowlist built from the actual logs folder.
+        if (string.IsNullOrEmpty(fileName) ||
+            Path.GetFileName(fileName) != fileName ||
+            !_logFiles.Contains(fileName))
+        {
+            _errorMessage = "Invalid log file selection.";
+            return;
+        }
+
+        var logsDir = GetLogsDirectory();
         var sourcePath = Path.Combine(logsDir, fileName);
+
+        // Belt-and-suspenders: verify the resolved absolute path is inside logsDir.
+        // Trim any trailing separator from fullLogsDir before appending one, so the
+        // check works correctly even if Path.GetFullPath returns a root path like C:\.
+        var fullLogsDir = Path.GetFullPath(logsDir)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullSourcePath = Path.GetFullPath(sourcePath);
+        if (!fullSourcePath.StartsWith(fullLogsDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            _errorMessage = "Invalid log file selection.";
+            return;
+        }
 
         if (!File.Exists(sourcePath))
         {
@@ -113,7 +151,32 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
         _tempFilePath = Path.Combine(Path.GetTempPath(), $"logview_{Guid.NewGuid():N}.tmp");
         File.Copy(sourcePath, _tempFilePath, overwrite: false);
 
-        var content = await File.ReadAllTextAsync(_tempFilePath);
+        string content;
+        bool truncated = false;
+        var fileLength = new FileInfo(_tempFilePath).Length;
+        if (fileLength > MaxLogReadBytes)
+        {
+            truncated = true;
+            var buffer = new byte[MaxLogReadBytes];
+            using var fs = new FileStream(_tempFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            fs.Seek(-MaxLogReadBytes, SeekOrigin.End);
+            // ReadExactlyAsync (available since .NET 7) guarantees the buffer is fully filled,
+            // avoiding partial reads that can occur on network-mounted or non-local filesystems.
+            await fs.ReadExactlyAsync(buffer);
+            content = Encoding.UTF8.GetString(buffer);
+            // Drop any partial first line caused by seeking into the middle of the file
+            var firstNewline = content.IndexOf('\n');
+            if (firstNewline >= 0)
+                content = content[(firstNewline + 1)..];
+        }
+        else
+        {
+            content = await File.ReadAllTextAsync(_tempFilePath);
+        }
+
+        if (truncated)
+            _truncationMessage = $"Large file — showing last {MaxLogReadBytes / 1024} KB only.";
+
         _logContent = BuildHighlightedMarkup(content);
     }
 
@@ -140,8 +203,11 @@ public partial class AdminLogsModel : BlazorBase, IAsyncDisposable
     /// </summary>
     public static MarkupString BuildHighlightedMarkup(string content)
     {
-        var lines = content.Split('\n');
-        var sb = new StringBuilder(content.Length * 2);
+        // Normalize line endings – Serilog on Windows writes \r\n; normalizing
+        // here prevents a trailing \r appearing at the end of each rendered line.
+        var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        var sb = new StringBuilder(normalized.Length * 2);
 
         foreach (var line in lines)
         {
