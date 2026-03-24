@@ -1,6 +1,6 @@
 using Bunit;
 using MusicSalesApp.ComponentTests.Testing;
-using MusicSalesApp.Components.Pages.Public;
+using MusicSalesApp.Components.Pages.Public.Legal;
 
 namespace MusicSalesApp.ComponentTests.Components;
 
