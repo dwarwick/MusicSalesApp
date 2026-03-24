@@ -11,6 +11,11 @@ namespace MusicSalesApp.Models;
 /// </summary>
 public class Creator
 {
+    /// <summary>
+    /// Maximum character length for <see cref="LastTaxFormErrorMessage"/>. Must match the
+    /// <c>[MaxLength]</c> attribute on the property and the database column definition.
+    /// </summary>
+    public const int LastTaxFormErrorMessageMaxLength = 1000;
     [Key]
     public int Id { get; set; }
 
@@ -194,6 +199,14 @@ public class Creator
     /// Used to enforce the 24-hour cooldown period between TIN match attempts.
     /// </summary>
     public DateTime? LastTinMatchFailedAt { get; set; }
+
+    /// <summary>
+    /// The error message from the last tax form validation failure (e.g., TaxBandits rejected
+    /// the request before it reached the IRS). Cleared when the tax form status advances
+    /// beyond Pending.
+    /// </summary>
+    [MaxLength(LastTaxFormErrorMessageMaxLength)]
+    public string? LastTaxFormErrorMessage { get; set; }
 
     /// <summary>
     /// Checks if both PayPal and tax form onboarding are complete.

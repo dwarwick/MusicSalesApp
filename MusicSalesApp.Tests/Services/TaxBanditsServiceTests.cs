@@ -1040,5 +1040,209 @@ public class TaxBanditsServiceTests
         Assert.That(result.ErrorMessage, Does.Contain("configuration"));
     }
 
+    [Test]
+    public async Task RequestInstantTinMatchAsync_ParsesErrorsArray_WhenHttpNonSuccess()
+    {
+        // Arrange — simulate a 400 Bad Request response with Errors array
+        // (similar to TaxBandits returning validation errors like invalid middle name)
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+
+        var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
+        var tinMatchErrorJson = JsonSerializer.Serialize(new
+        {
+            StatusCode = 400,
+            StatusName = "BadRequest",
+            StatusMessage = "Validation error has occurred",
+            Errors = new[]
+            {
+                new { Id = "F72-100162", Name = "MiddleNm", Message = "Middle Name is Invalid. The Middle Name can have Alphabets, Numbers and Special Characters ( & - ).  Other special characters are not allowed." }
+            }
+        });
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    // First call: auth request
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    // Second call: TIN match request returns 400
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                    {
+                        Content = new StringContent(tinMatchErrorJson)
+                    };
+                }
+            });
+
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "SSN",
+            TIN = "123-45-6789",
+            FirstNm = "John",
+            MiddleNm = "A.",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act
+        var result = await _service.RequestInstantTinMatchAsync(request);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Middle Name is Invalid"));
+        Assert.That(result.ErrorMessage, Does.Not.Contain("HTTP 400"));
+    }
+
+    [Test]
+    public async Task RequestInstantTinMatchAsync_JoinsMultipleErrors_WhenHttpNonSuccess()
+    {
+        // Arrange — simulate a 400 response with multiple Errors
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+
+        var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
+        var tinMatchErrorJson = JsonSerializer.Serialize(new
+        {
+            StatusCode = 400,
+            StatusName = "BadRequest",
+            StatusMessage = "Validation error has occurred",
+            Errors = new[]
+            {
+                new { Id = "E1", Name = "MiddleNm", Message = "Middle Name is Invalid." },
+                new { Id = "E2", Name = "FirstNm", Message = "First Name is required." }
+            }
+        });
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                    {
+                        Content = new StringContent(tinMatchErrorJson)
+                    };
+                }
+            });
+
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "SSN",
+            TIN = "123-45-6789",
+            FirstNm = "John",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act
+        var result = await _service.RequestInstantTinMatchAsync(request);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain("Middle Name is Invalid."));
+        Assert.That(result.ErrorMessage, Does.Contain("First Name is required."));
+        Assert.That(result.ErrorMessage, Does.Contain(" | "));
+    }
+
+    [Test]
+    public async Task RequestInstantTinMatchAsync_FallsBackToStatusMessage_WhenNoErrorsArray()
+    {
+        // Arrange — simulate a 400 response with StatusMessage but no Errors array
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
+        var mockSection = new Mock<IConfigurationSection>();
+        mockSection.Setup(s => s.Value).Returns("true");
+        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
+        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+
+        var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
+        var errorJson = JsonSerializer.Serialize(new
+        {
+            StatusCode = 401,
+            StatusMessage = "Unauthorized access"
+        });
+
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(authResponseJson)
+                    };
+                }
+                else
+                {
+                    return new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    {
+                        Content = new StringContent(errorJson)
+                    };
+                }
+            });
+
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "SSN",
+            TIN = "123-45-6789",
+            FirstNm = "John",
+            LastNm = "Doe",
+            UserId = 1
+        };
+
+        // Act
+        var result = await _service.RequestInstantTinMatchAsync(request);
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Is.EqualTo("Unauthorized access"));
+    }
+
     #endregion
 }
