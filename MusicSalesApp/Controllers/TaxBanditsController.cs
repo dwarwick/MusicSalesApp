@@ -257,7 +257,7 @@ public class TaxBanditsController : ControllerBase
                         "TaxFormCompleted",
                         true,
                         "Your tax form has been completed successfully!",
-                        "Completed");
+                        nameof(TaxFormStatus.Completed));
 
                     if (!string.IsNullOrWhiteSpace(userEmail))
                     {
@@ -285,7 +285,7 @@ public class TaxBanditsController : ControllerBase
                         "TaxFormStatus",
                         false,
                         "TIN verification failed. You may retry after 24 hours.",
-                        "Failed");
+                        nameof(TaxFormStatus.Failed));
                 }
                 else
                 {
@@ -478,24 +478,34 @@ public class TaxBanditsController : ControllerBase
                     }
                     else
                     {
-                        // Instant TIN Match API call failed — log error but don't fail the webhook
+                        // Instant TIN Match API call failed (validation error or HTTP error)
+                        // This means TaxBandits rejected the request before it reached the IRS.
                         _logger.LogError(
                             "Instant TIN Match API call failed for user {UserId}: {Error}",
                             w9Request.UserId, tinMatchResponse.ErrorMessage);
 
-                        // Update tax form status to TinMatchInProgress and let admin handle it
+                        // Set status back to Pending so the user can retry immediately (no cooldown)
                         var creator = await _creatorService.GetCreatorByUserIdAsync(w9Request.UserId);
                         if (creator != null)
                         {
-                            await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+                            await _creatorService.UpdateTaxFormStatusAsync(
+                                creator.Id, TaxFormStatus.Pending, tinMatchResponse.ErrorMessage);
+                        }
+
+                        // Send email to admin (with error details) and user (with instructions)
+                        if (!string.IsNullOrWhiteSpace(userEmail))
+                        {
+                            await _creatorEmailService.SendTaxFormProcessingErrorEmailAsync(
+                                userEmail, baseUrl, submissionId,
+                                tinMatchResponse.ErrorMessage ?? "Unknown TIN match validation error");
                         }
 
                         await BroadcastWebhookStatusAsync(
                             w9Request.UserId,
                             "TaxFormStatus",
-                            true,
-                            "Your tax form is completed. TIN verification is in progress.",
-                            "TinMatchInProgress");
+                            false,
+                            "There was a problem validating your tax form. Please review your information and try again.",
+                            nameof(TaxFormStatus.Pending));
                     }
                 }
                 else
@@ -672,7 +682,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormCompleted",
                 true,
                 "Your tax form has been completed successfully!",
-                "Completed");
+                nameof(TaxFormStatus.Completed));
 
             if (!string.IsNullOrWhiteSpace(userEmail))
             {
@@ -703,7 +713,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 false,
                 "TIN verification failed. You may retry after 24 hours.",
-                "Failed");
+                nameof(TaxFormStatus.Failed));
         }
         else if (string.Equals(tinStatusCode, TinStatusCodeOnHold, StringComparison.OrdinalIgnoreCase))
         {
@@ -723,7 +733,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 true,
                 "Your tax form is completed. TIN verification is in progress and will update automatically when complete.",
-                "TinMatchInProgress");
+                nameof(TaxFormStatus.TinMatchInProgress));
         }
         else
         {
@@ -743,7 +753,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 true,
                 "Your tax form is completed. TIN verification is in progress.",
-                "TinMatchInProgress");
+                nameof(TaxFormStatus.TinMatchInProgress));
         }
     }
 
@@ -945,7 +955,7 @@ public class TaxBanditsController : ControllerBase
                     "TaxFormCompleted",
                     true,
                     "Your tax form has been completed successfully!",
-                    "Completed");
+                    nameof(TaxFormStatus.Completed));
 
                 // Send success/welcome email to user and admin notification (with country code for W-8)
                 if (!string.IsNullOrWhiteSpace(userEmail))

@@ -373,7 +373,18 @@
                                 else if (_creatorTaxFormStatus == "Pending")
                                 {
                                     <p class="text-warning"><strong>Status: Pending</strong></p>
-                                    <p>Please complete your tax form to activate your creator account.</p>
+                                    @if (!string.IsNullOrWhiteSpace(_lastTaxFormErrorMessage))
+                                    {
+                                        <div class="alert alert-danger mb-3" role="alert" aria-live="assertive">
+                                            <strong>Your previous tax form submission had an error:</strong>
+                                            <br />@_lastTaxFormErrorMessage
+                                            <br /><small>Please correct the issue and resubmit your tax form.</small>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p>Please complete your tax form to activate your creator account.</p>
+                                    }
                                     <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
                                 }
                                 else if (_creatorTaxFormStatus == "TinMatchInProgress")

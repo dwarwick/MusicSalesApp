@@ -58,6 +58,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _isActiveCreator = false;
     protected string _creatorOnboardingStatus = null;
     protected string _creatorTaxFormStatus = null;
+    protected string _lastTaxFormErrorMessage = null;
     protected TimeSpan? _tinMatchCooldownRemaining = null;
     private System.Threading.Timer _cooldownTimer;
     protected string _creatorReferralUrl = null;
@@ -779,6 +780,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
+                _lastTaxFormErrorMessage = creator.LastTaxFormErrorMessage;
                 
                 // Calculate TIN match cooldown remaining if status is Failed
                 if (creator.TaxFormStatus == TaxFormStatus.Failed && creator.LastTinMatchFailedAt.HasValue)
@@ -814,6 +816,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _isActiveCreator = false;
                 _creatorOnboardingStatus = null;
                 _creatorTaxFormStatus = null;
+                _lastTaxFormErrorMessage = null;
                 
                 // For new creators, use current app settings values
                 _creatorStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();

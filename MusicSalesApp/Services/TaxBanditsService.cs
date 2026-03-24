@@ -923,7 +923,28 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 {
                     using var doc = JsonDocument.Parse(responseBody);
                     var root = doc.RootElement;
-                    if (root.TryGetProperty("StatusMessage", out var msgEl))
+
+                    // Check for Errors array first (validation errors like invalid middle name)
+                    if (root.TryGetProperty("Errors", out var errors) &&
+                        errors.ValueKind == JsonValueKind.Array &&
+                        errors.GetArrayLength() > 0)
+                    {
+                        var errorMessages = new List<string>();
+                        foreach (var err in errors.EnumerateArray())
+                        {
+                            if (err.TryGetProperty("Message", out var msgElement))
+                            {
+                                var msg = msgElement.GetString();
+                                if (!string.IsNullOrWhiteSpace(msg))
+                                    errorMessages.Add(msg);
+                            }
+                        }
+                        if (errorMessages.Count > 0)
+                        {
+                            errorMsg = string.Join(" | ", errorMessages);
+                        }
+                    }
+                    else if (root.TryGetProperty("StatusMessage", out var msgEl))
                     {
                         errorMsg = msgEl.GetString() ?? errorMsg;
                     }

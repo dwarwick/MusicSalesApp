@@ -467,4 +467,120 @@ public class TaxBanditsControllerTests
         // Verify creator activation was attempted
         _mockCreatorService.Verify(s => s.ActivateCreatorAsync(It.IsAny<int>()), Times.Once);
     }
+
+    [Test]
+    public async Task HandleW9CompleteWebhook_BroadcastsGenericMessage_WhenTinMatchApiFails()
+    {
+        // Arrange - set up in-memory DB with a creator and existing W9Request
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"TaxBanditsTest_TinMatchFail_{Guid.NewGuid()}")
+            .Options;
+
+        using (var seedContext = new AppDbContext(options))
+        {
+            var user = new ApplicationUser { Id = 99, UserName = "tinmatch@test.com", Email = "tinmatch@test.com" };
+            seedContext.Users.Add(user);
+            seedContext.W9Requests.Add(new W9Request
+            {
+                UserId = 99,
+                Email = "tinmatch@test.com",
+                SubmissionId = "sub-tinmatch-fail",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var mockDbFactory = new Mock<IDbContextFactory<AppDbContext>>();
+        mockDbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new AppDbContext(options));
+
+        // Skip signature verification
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
+
+        // TIN match API returns failure with a raw technical error message
+        var rawApiError = "Middle Name is Invalid. The Middle Name can have Alphabets, Numbers and Special Characters ( & - ).";
+        _mockTaxBanditsService
+            .Setup(s => s.RequestInstantTinMatchAsync(It.IsAny<InstantTinMatchRequest>()))
+            .ReturnsAsync(new InstantTinMatchResponse { Success = false, ErrorMessage = rawApiError });
+
+        _mockCreatorService
+            .Setup(s => s.GetCreatorByUserIdAsync(99))
+            .ReturnsAsync(new Creator { Id = 10, UserId = 99 });
+        _mockCreatorService
+            .Setup(s => s.UpdateTaxFormStatusAsync(It.IsAny<int>(), It.IsAny<TaxFormStatus>(), It.IsAny<string>()))
+            .ReturnsAsync(new Creator { Id = 10, UserId = 99 });
+
+        // Capture the arguments passed to SignalR SendAsync
+        WebhookStatusMessage broadcastedMessage = null;
+        var mockClientProxy = new Mock<IClientProxy>();
+        mockClientProxy
+            .Setup(p => p.SendCoreAsync(
+                It.IsAny<string>(),
+                It.IsAny<object[]>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, object[], CancellationToken>((method, args, _) =>
+            {
+                if (method == "ReceiveWebhookStatus" && args.Length > 0)
+                {
+                    broadcastedMessage = args[0] as WebhookStatusMessage;
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        var mockClients = new Mock<IHubClients>();
+        mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
+        var mockHub = new Mock<IHubContext<WebhookStatusHub>>();
+        mockHub.Setup(h => h.Clients).Returns(mockClients.Object);
+
+        var controller = new TaxBanditsController(
+            mockDbFactory.Object,
+            _mockUserManager.Object,
+            _mockRoleManager.Object,
+            _mockCreatorService.Object,
+            _mockCreatorEmailService.Object,
+            _mockTaxBanditsService.Object,
+            _mockConfiguration.Object,
+            _mockLogger.Object,
+            mockHub.Object,
+            _mockAdminNotificationService.Object);
+
+        var webhookBody = @"{
+            ""FormType"": ""FORMW9"",
+            ""FormW9"": {
+                ""SubmissionId"": ""sub-tinmatch-fail"",
+                ""PayeeRef"": ""tinmatch@test.com"",
+                ""W9Status"": ""COMPLETED"",
+                ""RecipientId"": ""rec-99"",
+                ""FormData"": {
+                    ""TINType"": ""SSN"",
+                    ""TIN"": ""987654321"",
+                    ""FirstNm"": ""Jane"",
+                    ""LastNm"": ""Doe""
+                }
+            }
+        }";
+
+        var context = new DefaultHttpContext();
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(webhookBody));
+        context.Request.ContentLength = webhookBody.Length;
+        controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        // Act
+        var result = await controller.HandleW9CompleteWebhook();
+
+        // Assert — webhook returns success (200 OK with "success" status)
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+
+        // Assert — the broadcast message is the generic user-safe message, NOT the raw API error
+        Assert.That(broadcastedMessage, Is.Not.Null, "A SignalR broadcast should have been sent");
+        Assert.That(broadcastedMessage!.Message, Does.Not.Contain(rawApiError),
+            "Raw API error text must not be broadcast to the user via SignalR");
+        Assert.That(broadcastedMessage.Message, Does.Contain("problem validating your tax form"),
+            "Broadcast should use the generic user-safe message");
+        Assert.That(broadcastedMessage.NewStatus, Is.EqualTo(nameof(TaxFormStatus.Pending)),
+            "Broadcast status should match the TaxFormStatus enum name");
+        Assert.That(broadcastedMessage.IsSuccess, Is.False);
+    }
 }
