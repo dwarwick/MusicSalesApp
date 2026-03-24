@@ -1374,6 +1374,113 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region UpdateTaxFormStatusAsync Error Message Tests
+
+    [Test]
+    public async Task UpdateTaxFormStatusAsync_StoresErrorMessage_WhenStatusIsPending()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, TaxFormStatus = TaxFormStatus.TinMatchInProgress };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var errorMessage = "Middle Name is Invalid. The Middle Name can have Alphabets, Numbers and Special Characters ( & - ).";
+
+        // Act
+        var result = await _service.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending, errorMessage);
+
+        // Assert
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+        Assert.That(result.LastTaxFormErrorMessage, Is.EqualTo(errorMessage));
+
+        // Verify persistence
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.LastTaxFormErrorMessage, Is.EqualTo(errorMessage));
+    }
+
+    [Test]
+    public async Task UpdateTaxFormStatusAsync_ClearsErrorMessage_WhenStatusIsCompleted()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            TaxFormStatus = TaxFormStatus.Pending,
+            LastTaxFormErrorMessage = "Previous error"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Completed);
+
+        // Assert
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.Completed));
+        Assert.That(result.LastTaxFormErrorMessage, Is.Null);
+        Assert.That(result.TaxFormCompletedAt, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task UpdateTaxFormStatusAsync_ClearsErrorMessage_WhenStatusIsTinMatchInProgress()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            TaxFormStatus = TaxFormStatus.Pending,
+            LastTaxFormErrorMessage = "Previous error"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _service.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.TinMatchInProgress);
+
+        // Assert
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.TinMatchInProgress));
+        Assert.That(result.LastTaxFormErrorMessage, Is.Null);
+    }
+
+    [Test]
+    public async Task UpdateTaxFormStatusAsync_ClearsErrorMessage_WhenPendingWithNoError()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            TaxFormStatus = TaxFormStatus.Pending,
+            LastTaxFormErrorMessage = "Old error"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Act — set to Pending with no error message (normal re-send, not error retry)
+        var result = await _service.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
+
+        // Assert — error cleared because errorMessage defaults to null
+        Assert.That(result.TaxFormStatus, Is.EqualTo(TaxFormStatus.Pending));
+        Assert.That(result.LastTaxFormErrorMessage, Is.Null);
+    }
+
+    #endregion
+
     #region DeleteCreatorSongAsync Cleanup Tests
 
     [Test]

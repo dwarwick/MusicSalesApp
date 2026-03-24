@@ -196,6 +196,14 @@ public class Creator
     public DateTime? LastTinMatchFailedAt { get; set; }
 
     /// <summary>
+    /// The error message from the last tax form validation failure (e.g., TaxBandits rejected
+    /// the request before it reached the IRS). Cleared when the tax form status advances
+    /// beyond Pending.
+    /// </summary>
+    [MaxLength(1000)]
+    public string? LastTaxFormErrorMessage { get; set; }
+
+    /// <summary>
     /// Checks if both PayPal and tax form onboarding are complete.
     /// </summary>
     [NotMapped]

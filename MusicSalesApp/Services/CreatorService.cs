@@ -124,7 +124,7 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
-    public async Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status)
+    public async Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status, string? errorMessage = null)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
@@ -136,6 +136,9 @@ public class CreatorService : ICreatorService
 
         creator.TaxFormStatus = status;
         creator.UpdatedAt = DateTime.UtcNow;
+
+        // Store the error message when reverting to Pending; clear it for all other statuses
+        creator.LastTaxFormErrorMessage = status == TaxFormStatus.Pending ? errorMessage : null;
 
         if (status == TaxFormStatus.Completed)
         {

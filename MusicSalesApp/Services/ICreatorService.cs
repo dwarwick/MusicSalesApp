@@ -33,8 +33,9 @@ public interface ICreatorService
     /// </summary>
     /// <param name="creatorId">The creator ID</param>
     /// <param name="status">The new tax form status</param>
+    /// <param name="errorMessage">Optional error message to store (only kept when status is Pending; cleared otherwise)</param>
     /// <returns>The updated creator</returns>
-    Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status);
+    Task<Creator> UpdateTaxFormStatusAsync(int creatorId, TaxFormStatus status, string? errorMessage = null);
 
     /// <summary>
     /// Records the timestamp of a failed Instant TIN Match for 24-hour cooldown enforcement.
