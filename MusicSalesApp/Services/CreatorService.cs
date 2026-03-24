@@ -138,7 +138,11 @@ public class CreatorService : ICreatorService
         creator.UpdatedAt = DateTime.UtcNow;
 
         // Store the error message when reverting to Pending; clear it for all other statuses
-        creator.LastTaxFormErrorMessage = status == TaxFormStatus.Pending ? errorMessage : null;
+        // Truncate to column max length (1000 chars) to prevent SQL truncation errors
+        const int maxErrorMessageLength = 1000;
+        creator.LastTaxFormErrorMessage = status == TaxFormStatus.Pending
+            ? errorMessage?[..Math.Min(errorMessage.Length, maxErrorMessageLength)]
+            : null;
 
         if (status == TaxFormStatus.Completed)
         {

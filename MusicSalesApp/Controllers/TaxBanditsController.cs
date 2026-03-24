@@ -504,8 +504,8 @@ public class TaxBanditsController : ControllerBase
                             w9Request.UserId,
                             "TaxFormStatus",
                             false,
-                            $"Tax form validation error: {tinMatchResponse.ErrorMessage}. Please correct the issue and resubmit.",
-                            "Pending");
+                            "There was a problem validating your tax form. Please review your information and try again.",
+                            nameof(TaxFormStatus.Pending));
                     }
                 }
                 else
