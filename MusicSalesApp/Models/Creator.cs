@@ -11,6 +11,11 @@ namespace MusicSalesApp.Models;
 /// </summary>
 public class Creator
 {
+    /// <summary>
+    /// Maximum character length for <see cref="LastTaxFormErrorMessage"/>. Must match the
+    /// <c>[MaxLength]</c> attribute on the property and the database column definition.
+    /// </summary>
+    public const int LastTaxFormErrorMessageMaxLength = 1000;
     [Key]
     public int Id { get; set; }
 
@@ -200,7 +205,7 @@ public class Creator
     /// the request before it reached the IRS). Cleared when the tax form status advances
     /// beyond Pending.
     /// </summary>
-    [MaxLength(1000)]
+    [MaxLength(LastTaxFormErrorMessageMaxLength)]
     public string? LastTaxFormErrorMessage { get; set; }
 
     /// <summary>

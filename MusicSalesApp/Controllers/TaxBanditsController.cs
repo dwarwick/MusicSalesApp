@@ -257,7 +257,7 @@ public class TaxBanditsController : ControllerBase
                         "TaxFormCompleted",
                         true,
                         "Your tax form has been completed successfully!",
-                        "Completed");
+                        nameof(TaxFormStatus.Completed));
 
                     if (!string.IsNullOrWhiteSpace(userEmail))
                     {
@@ -285,7 +285,7 @@ public class TaxBanditsController : ControllerBase
                         "TaxFormStatus",
                         false,
                         "TIN verification failed. You may retry after 24 hours.",
-                        "Failed");
+                        nameof(TaxFormStatus.Failed));
                 }
                 else
                 {
@@ -682,7 +682,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormCompleted",
                 true,
                 "Your tax form has been completed successfully!",
-                "Completed");
+                nameof(TaxFormStatus.Completed));
 
             if (!string.IsNullOrWhiteSpace(userEmail))
             {
@@ -713,7 +713,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 false,
                 "TIN verification failed. You may retry after 24 hours.",
-                "Failed");
+                nameof(TaxFormStatus.Failed));
         }
         else if (string.Equals(tinStatusCode, TinStatusCodeOnHold, StringComparison.OrdinalIgnoreCase))
         {
@@ -733,7 +733,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 true,
                 "Your tax form is completed. TIN verification is in progress and will update automatically when complete.",
-                "TinMatchInProgress");
+                nameof(TaxFormStatus.TinMatchInProgress));
         }
         else
         {
@@ -753,7 +753,7 @@ public class TaxBanditsController : ControllerBase
                 "TaxFormStatus",
                 true,
                 "Your tax form is completed. TIN verification is in progress.",
-                "TinMatchInProgress");
+                nameof(TaxFormStatus.TinMatchInProgress));
         }
     }
 
@@ -955,7 +955,7 @@ public class TaxBanditsController : ControllerBase
                     "TaxFormCompleted",
                     true,
                     "Your tax form has been completed successfully!",
-                    "Completed");
+                    nameof(TaxFormStatus.Completed));
 
                 // Send success/welcome email to user and admin notification (with country code for W-8)
                 if (!string.IsNullOrWhiteSpace(userEmail))
