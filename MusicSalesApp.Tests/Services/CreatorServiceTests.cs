@@ -1479,6 +1479,39 @@ public class CreatorServiceTests
         Assert.That(result.LastTaxFormErrorMessage, Is.Null);
     }
 
+    [Test]
+    public async Task UpdateTaxFormStatusAsync_TruncatesErrorMessage_WhenExceedsMaxLength()
+    {
+        // Arrange
+        var user = new ApplicationUser { UserName = "test@test.com", Email = "test@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, TaxFormStatus = TaxFormStatus.TinMatchInProgress };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        // Build a message that exceeds the column max length
+        var longMessage = new string('E', Creator.LastTaxFormErrorMessageMaxLength + 500);
+        Assert.That(longMessage.Length, Is.GreaterThan(Creator.LastTaxFormErrorMessageMaxLength));
+
+        // Act — should not throw
+        Creator result = null!;
+        Assert.DoesNotThrowAsync(async () =>
+        {
+            result = await _service.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending, longMessage);
+        });
+
+        // Assert — stored value is capped at the column limit
+        Assert.That(result.LastTaxFormErrorMessage, Has.Length.EqualTo(Creator.LastTaxFormErrorMessageMaxLength));
+        Assert.That(result.LastTaxFormErrorMessage, Is.EqualTo(longMessage[..Creator.LastTaxFormErrorMessageMaxLength]));
+
+        // Verify persistence
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.Creators.FindAsync(creator.Id);
+        Assert.That(saved!.LastTaxFormErrorMessage, Has.Length.EqualTo(Creator.LastTaxFormErrorMessageMaxLength));
+    }
+
     #endregion
 
     #region DeleteCreatorSongAsync Cleanup Tests
