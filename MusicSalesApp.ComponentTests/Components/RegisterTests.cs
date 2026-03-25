@@ -1,5 +1,5 @@
 using Bunit;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.ComponentTests.Testing;
 using Moq;
 

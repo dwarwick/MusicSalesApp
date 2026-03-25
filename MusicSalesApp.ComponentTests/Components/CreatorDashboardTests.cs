@@ -1,7 +1,7 @@
 using Bunit;
 using Moq;
 using MusicSalesApp.ComponentTests.Testing;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Creator;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Security.Claims;

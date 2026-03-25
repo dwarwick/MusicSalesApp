@@ -1,5 +1,5 @@
 using Bunit;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Creator;
 using MusicSalesApp.ComponentTests.Testing;
 
 namespace MusicSalesApp.ComponentTests.Components;

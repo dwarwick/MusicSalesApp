@@ -1,7 +1,7 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using MusicSalesApp.Components.Pages;
+using MusicSalesApp.Components.Pages.Admin;
 using MusicSalesApp.ComponentTests.Testing;
 
 namespace MusicSalesApp.ComponentTests.Components;
