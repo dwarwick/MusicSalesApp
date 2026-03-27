@@ -189,7 +189,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             if (_jsModule == null)
             {
                 _dotNetRef = DotNetObjectReference.Create(this);
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/MusicLibrary.razor.js");
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Public/MusicLibrary.razor.js");
 
                 // Load saved volume from localStorage
                 var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");

@@ -118,7 +118,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         {
             invokedJs = true;
             _dotNetRef = DotNetObjectReference.Create(this);
-            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SongPlayerInteractive.razor.js");
+            _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/SongPlayerInteractive.razor.js");
             await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS, GetSongMetadataId(), GetStreamQualifyingSeconds());
             await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef, IsProgressBarRestricted(), PREVIEW_DURATION_SECONDS);
             await _jsModule.InvokeVoidAsync("setupVolumeBarDrag", _volumeBarContainer, _audioElement, _dotNetRef);
