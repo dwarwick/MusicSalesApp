@@ -22,13 +22,13 @@ public class LogoutPageModel : PageModel
     {
         await _signInManager.SignOutAsync();
         _logger.LogInformation("User logged out successfully");
-        return Redirect("/login");
+        return Redirect("/");
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
         await _signInManager.SignOutAsync();
         _logger.LogInformation("User logged out successfully");
-        return Redirect("/login");
+        return Redirect("/");
     }
 }

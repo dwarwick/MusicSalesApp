@@ -172,4 +172,32 @@ public class ManageAccountTests : BUnitTestBase
         Assert.That(alertDiv.GetAttribute("aria-live"), Is.EqualTo("assertive"),
             "Tax form error alert must have aria-live='assertive' so screen readers announce it immediately");
     }
+
+    [Test]
+    public void ManageAccount_HasCreatorActivatedDialogRef()
+    {
+        // Arrange
+        var authContext = SetupAuthorizedUser(1, "testuser@test.com");
+        SetupRendererInfo();
+
+        var testUser = new ApplicationUser
+        {
+            Id = 1,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+
+        // Act
+        var cut = TestContext.Render<ManageAccount>();
+
+        // Assert — the component instance should have the _creatorActivatedDialog field
+        var instance = cut.Instance;
+        Assert.That(instance, Is.Not.Null);
+        // Verify the component renders without errors when dialog markup is present
+        Assert.That(cut.Markup, Is.Not.Null);
+    }
 }

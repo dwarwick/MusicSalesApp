@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -110,6 +111,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected SfDialog _suspendAccountDialog;
     protected SfDialog _deleteAccountDialog;
     protected SfDialog _stopSellingDialog;
+    protected SfDialog _creatorActivatedDialog;
+    private bool _wasActiveCreatorBefore;
     
     // Toast for webhook status notifications
     protected SfToast _toastRef;
@@ -153,6 +156,15 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
                         await LoadCreatorStatus();
+
+                        // If creator was just activated (DB says active but user's session
+                        // doesn't have the Creator role yet), show the congratulations popup.
+                        // This handles the case where the TaxBandits webhook fires before
+                        // the user returns to this page, so the SignalR message is missed.
+                        if (_isActiveCreator && !user.IsInRole(Roles.Creator))
+                        {
+                            await ShowCreatorActivatedDialog();
+                        }
 
                         // Subscribe to SignalR webhook status updates
                         _webhookStatusHandler = OnWebhookStatusReceived;
@@ -955,8 +967,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             }
             else if (result.IsActive)
             {
-                _successMessage = "Congratulations! Your creator account is now active. You can start uploading music!";
                 await LoadCreatorStatus();
+                await ShowCreatorActivatedDialog();
             }
             else if (result.TaxFormPending)
             {
@@ -994,9 +1006,9 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             }
             else if (result.IsActive)
             {
-                _successMessage = "Congratulations! Your creator account is now active. You can start uploading and selling your music!";
                 _isActiveCreator = true;
                 _creatorOnboardingStatus = "Completed";
+                await ShowCreatorActivatedDialog();
             }
             else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
             {
@@ -1020,6 +1032,19 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             _completingOnboarding = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    protected async Task ShowCreatorActivatedDialog()
+    {
+        if (_creatorActivatedDialog != null)
+        {
+            await _creatorActivatedDialog.ShowAsync();
+        }
+    }
+
+    protected void LogoutAfterCreatorActivation()
+    {
+        NavigationManager.NavigateTo("/account/logout", forceLoad: true);
     }
 
     protected void NavigateToTaxForm()
@@ -1176,7 +1201,13 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                     message.WebhookType.Contains("Creator", StringComparison.OrdinalIgnoreCase) ||
                     message.WebhookType.Contains("TaxForm", StringComparison.OrdinalIgnoreCase))
                 {
+                    _wasActiveCreatorBefore = _isActiveCreator;
                     await LoadCreatorStatus();
+
+                    if (_isActiveCreator && !_wasActiveCreatorBefore)
+                    {
+                        await ShowCreatorActivatedDialog();
+                    }
                 }
 
                 StateHasChanged();
