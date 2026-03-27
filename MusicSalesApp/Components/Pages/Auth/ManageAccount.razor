@@ -678,3 +678,20 @@
         </FooterTemplate>
     </DialogTemplates>
 </SfDialog>
+
+<!-- Creator Activated Congratulations Dialog -->
+<SfDialog @ref="_creatorActivatedDialog" Width="450px" IsModal="true" ShowCloseIcon="false" Visible="false">
+    <DialogTemplates>
+        <Header>Creator Account Activated</Header>
+        <Content>
+            <div class="text-center mb-3">
+                <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+            </div>
+            <p>Congratulations! Your creator account has been successfully activated.</p>
+            <p>To access your new creator features, you will need to log out and log back in so that your updated permissions take effect.</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Log Out" OnClick="LogoutAfterCreatorActivation" IconCss="fas fa-arrow-right-from-bracket" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

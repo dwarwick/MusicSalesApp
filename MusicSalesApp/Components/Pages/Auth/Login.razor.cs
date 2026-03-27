@@ -19,16 +19,10 @@ public partial class LoginModel : BlazorBase
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if already logged in
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (authState.User?.Identity?.IsAuthenticated == true)
-        {
-            NavigationManager.NavigateTo("/", forceLoad: true);
-            return;
-        }
-
-        // Get antiforgery token
+        // HttpContext is only available during SSR/prerender, not during interactive rendering.
         var httpContext = HttpContextAccessor.HttpContext;
+
+        // Get antiforgery token (SSR only)
         if (httpContext != null)
         {
             var tokens = Antiforgery.GetAndStoreTokens(httpContext);

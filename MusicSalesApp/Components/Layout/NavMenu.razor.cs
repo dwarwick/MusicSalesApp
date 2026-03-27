@@ -196,9 +196,15 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
         _isMenuOpen = !_isMenuOpen;
     }
 
-    protected void CloseMenu()
+    protected void CloseMenu(Syncfusion.Blazor.Navigations.MenuEventArgs<MenuItem> args)
     {
         _isMenuOpen = false;
+
+        // Logout must be a full page load to properly clear the auth cookie
+        if (args.Item?.Url == "/logout")
+        {
+            NavigationManager.NavigateTo("/account/logout", forceLoad: true);
+        }
     }
 
     public ValueTask DisposeAsync()
