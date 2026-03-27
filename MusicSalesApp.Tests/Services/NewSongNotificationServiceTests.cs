@@ -40,7 +40,7 @@ public class NewSongNotificationServiceTests
             .ReturnsAsync(_dbContext);
 
         // Default configuration
-        _mockConfiguration.Setup(x => x["App:BaseUrl"]).Returns("https://streamtunes.net");
+        _mockConfiguration.Setup(x => x["BaseUrl"]).Returns("https://streamtunes.net");
 
         // Default email service setup
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))

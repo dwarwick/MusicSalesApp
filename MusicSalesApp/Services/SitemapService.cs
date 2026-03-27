@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services;
 
@@ -41,7 +42,7 @@ public class SitemapService : ISitemapService
             var allMetadata = await _songMetadataService.GetAllAsync();
 
             // Get base URL from configuration
-            var baseUrl = _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
+            var baseUrl = _configuration.GetBaseUrl();
             baseUrl = baseUrl.TrimEnd('/');
 
             // Separate songs and albums

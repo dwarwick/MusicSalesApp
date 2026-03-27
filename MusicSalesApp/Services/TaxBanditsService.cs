@@ -46,7 +46,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
         string clientId,
         string userToken,
         string clientSecret,
-        bool useSandbox = true,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(clientId)) throw new ArgumentException("clientId is required.", nameof(clientId));
@@ -59,10 +58,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
         var iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var jws = CreateJwsHs256(clientId, userToken, clientSecret, iat);
 
-        // 2) Get URL from configuration or use defaults
-        var url = useSandbox
-            ? _configuration["TaxBandits:SandboxAuthUrl"] ?? "https://testoauth.expressauth.net/v2/tbsauth"
-            : _configuration["TaxBandits:ProductionAuthUrl"] ?? "https://oauth.expressauth.net/v2/tbsauth";
+        // 2) Get URL from configuration
+        var url = _configuration["TaxBandits:AuthUrl"];
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
 
@@ -152,8 +149,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var userToken = _configuration["TaxBandits:UserToken"];
             var businessId = _configuration["TaxBandits:BusinessId"];
 
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
-
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
                 string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
             {
@@ -165,7 +160,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Get access token
-            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
             {
@@ -177,9 +172,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request with query parameters (not a request body)
-            var apiUrl = useSandbox
-                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
-                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
 
             var deleteUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Delete?PayeeRef={Uri.EscapeDataString(payeeRef)}";
 
@@ -296,8 +289,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var userToken = _configuration["TaxBandits:UserToken"];
             var businessId = _configuration["TaxBandits:BusinessId"];
 
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
-
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
                 string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
             {
@@ -311,7 +302,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Get access token
-            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
             {
@@ -325,9 +316,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request
-            var apiUrl = useSandbox
-                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
-                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
 
             // Build TxnData array with all transactions grouped by recipient
             // TaxBandits API structure: TxnData[] -> each has Business, Recipients[] where each recipient has Txns[]
@@ -554,7 +543,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var clientSecret = _configuration["TaxBandits:ClientSecret"];
             var userToken = _configuration["TaxBandits:UserToken"];
             var businessId = _configuration["TaxBandits:BusinessId"];
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
                 string.IsNullOrWhiteSpace(userToken) || string.IsNullOrWhiteSpace(businessId))
@@ -564,7 +552,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 return response;
             }
 
-            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, cancellationToken);
             if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
             {
                 response.Success = false;
@@ -572,9 +560,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 return response;
             }
 
-            var apiUrl = useSandbox
-                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
-                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/";
+            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
 
             var statusUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Status?PayeeRef={Uri.EscapeDataString(payeeRef)}&BusinessId={Uri.EscapeDataString(businessId)}";
 
@@ -684,7 +670,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var clientId = _configuration["TaxBandits:ClientId"];
             var clientSecret = _configuration["TaxBandits:ClientSecret"];
             var userToken = _configuration["TaxBandits:UserToken"];
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
                 string.IsNullOrWhiteSpace(userToken))
@@ -698,12 +683,8 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var iat = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var jws = CreateJwsHs256(clientId, userToken, clientSecret, iat);
 
-            // Transient token endpoint
-            var url = useSandbox
-                ? _configuration["TaxBandits:SandboxAuthUrl"]?.Replace("/tbsauth", "/transienttoken")
-                    ?? "https://testoauth.expressauth.net/v2/transienttoken"
-                : _configuration["TaxBandits:ProductionAuthUrl"]?.Replace("/tbsauth", "/transienttoken")
-                    ?? "https://oauth.expressauth.net/v2/transienttoken";
+            // Transient token endpoint — derive from AuthUrl by replacing /tbsauth with /transienttoken
+            var url = _configuration["TaxBandits:AuthUrl"]?.Replace("/tbsauth", "/transienttoken");
 
             var requestBody = new { Origins = origins };
             var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
@@ -798,8 +779,6 @@ public sealed class TaxBanditsService : ITaxBanditsService
             var businessId = _configuration["TaxBandits:BusinessId"];
             var tinStatusWebhookRef = _configuration["TaxBandits:TinStatusWebhookRef"];
 
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
-
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret) ||
                 string.IsNullOrWhiteSpace(userToken))
             {
@@ -811,7 +790,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Get access token
-            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox, cancellationToken);
+            var authResponse = await GetAccessTokenAsync(clientId, userToken, clientSecret, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(authResponse.AccessToken))
             {
@@ -823,9 +802,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request
-            var apiUrl = useSandbox
-                ? _configuration["TaxBandits:SandboxApiUrl"] ?? "https://testapi.taxbandits.com/v1.7.3/"
-                : _configuration["TaxBandits:ProductionApiUrl"] ?? "https://api.taxbandits.com/v1.7.3/";
+            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
 
             var requestBody = new Dictionary<string, object?>
             {

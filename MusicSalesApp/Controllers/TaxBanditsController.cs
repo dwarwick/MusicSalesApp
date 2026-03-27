@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
@@ -210,7 +211,7 @@ public class TaxBanditsController : ControllerBase
                 return Ok(new { status = "no_matching_creators" });
             }
 
-            var baseUrl = GetBaseUrl();
+            var baseUrl = _configuration.GetBaseUrl();
 
             // Process TIN match result for all creators with TinMatchInProgress
             // In practice, there should typically be only one at a time
@@ -347,7 +348,7 @@ public class TaxBanditsController : ControllerBase
     {
         string? userEmail = null;
         string? submissionId = null;
-        var baseUrl = GetBaseUrl();
+        var baseUrl = _configuration.GetBaseUrl();
 
         try
         {
@@ -825,7 +826,7 @@ public class TaxBanditsController : ControllerBase
     {
         string? userEmail = null;
         string? submissionId = null;
-        var baseUrl = GetBaseUrl();
+        var baseUrl = _configuration.GetBaseUrl();
 
         try
         {
@@ -1521,11 +1522,4 @@ public class TaxBanditsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Gets the base URL for constructing email links.
-    /// </summary>
-    private string GetBaseUrl()
-    {
-        return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
-    }
 }

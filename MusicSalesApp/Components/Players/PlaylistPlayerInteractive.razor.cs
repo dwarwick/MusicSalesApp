@@ -348,7 +348,7 @@ namespace MusicSalesApp.Components.Players
             {
                 invokedJs = true;
                 _dotNetRef = DotNetObjectReference.Create(this);
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/PlaylistPlayerInteractive.razor.js");
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Players/PlaylistPlayerInteractive.razor.js");
 
                 await _jsModule.InvokeVoidAsync("initAudioPlayer", _audioElement, _dotNetRef, IsCurrentTrackRestricted(), PREVIEW_DURATION_SECONDS, GetCurrentTrackMetadataId(), GetCurrentTrackStreamQualifyingSeconds());
                 await _jsModule.InvokeVoidAsync("setupProgressBarDrag", _progressBarContainer, _audioElement, _dotNetRef);
