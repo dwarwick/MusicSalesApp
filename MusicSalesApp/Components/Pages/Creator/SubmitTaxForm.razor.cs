@@ -86,14 +86,14 @@ public partial class SubmitTaxFormModel : BlazorBase
                     return;
                 }
 
-                Logger.LogInformation("Tax form token received successfully. BusinessId: {BusinessId}, UseSandbox: {UseSandbox}",
-                    response.BusinessId, response.UseSandbox);
+                Logger.LogInformation("Tax form token received successfully. BusinessId: {BusinessId}",
+                    response.BusinessId);
 
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
 
                 // Load JS module and initialize the Drop-in UI
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/SubmitTaxForm.razor.js");
+                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Creator/SubmitTaxForm.razor.js");
                 
                 var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
                 Logger.LogInformation("Initializing TaxBandits Drop-in UI with return URL: {ReturnUrl}", $"{baseUrl}/manage-account");
@@ -101,7 +101,7 @@ public partial class SubmitTaxFormModel : BlazorBase
                     response.TransientToken,
                     response.PayeeRef,
                     response.BusinessId,
-                    response.UseSandbox,
+                    response.ScriptUrl,
                     $"{baseUrl}/manage-account",
                     DotNetObjectReference.Create(this));
             }
@@ -132,6 +132,6 @@ public class TaxFormTokenResponse
     public string? TransientToken { get; set; }
     public string? PayeeRef { get; set; }
     public string? BusinessId { get; set; }
-    public bool UseSandbox { get; set; }
+    public string? ScriptUrl { get; set; }
     public string? ErrorMessage { get; set; }
 }

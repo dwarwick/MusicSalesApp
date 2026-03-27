@@ -31,11 +31,11 @@ public class TaxBanditsServiceTests
         _mockEmailService = new Mock<IEmailService>();
         
         // Setup default configuration values
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxUrl"])
+        _mockConfiguration.Setup(c => c["TaxBandits:AuthUrl"])
             .Returns("https://testoauth.expressauth.net/v2/tbsauth");
-        _mockConfiguration.Setup(c => c["TaxBandits:ProductionUrl"])
-            .Returns("https://oauth.expressauth.net/v2/tbsauth");
-        
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"])
+            .Returns("https://testapi.taxbandits.com/v1.7.3/");
+
         _service = new TaxBanditsService(
             _httpClient, 
             _mockLogger.Object, 
@@ -97,12 +97,15 @@ public class TaxBanditsServiceTests
     }
 
     [Test]
-    public async Task GetAccessTokenAsync_UsesProductionUrl_WhenUseSandboxIsFalse()
+    public async Task GetAccessTokenAsync_UsesConfiguredAuthUrl()
     {
         // Arrange
         var clientId = "test-client-id";
         var userToken = "test-user-token";
         var clientSecret = "test-secret";
+
+        _mockConfiguration.Setup(c => c["TaxBandits:AuthUrl"])
+            .Returns("https://custom-auth.example.com/v2/tbsauth");
 
         var expectedResponse = new TaxBanditsAuthResponse
         {
@@ -124,13 +127,12 @@ public class TaxBanditsServiceTests
                 "SendAsync",
                 ItExpr.Is<HttpRequestMessage>(req =>
                     req.Method == HttpMethod.Get &&
-                    req.RequestUri.ToString().Contains("oauth.expressauth.net") &&
-                    !req.RequestUri.ToString().Contains("testoauth")),
+                    req.RequestUri.ToString().Contains("custom-auth.example.com")),
                 ItExpr.IsAny<CancellationToken>())
             .ReturnsAsync(httpResponse);
 
         // Act
-        var result = await _service.GetAccessTokenAsync(clientId, userToken, clientSecret, useSandbox: false);
+        var result = await _service.GetAccessTokenAsync(clientId, userToken, clientSecret);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -278,10 +280,6 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns((string)null);
         
         // Setup the IConfigurationSection for GetValue<bool>
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         // Act
         var result = await _service.DeleteW9Async("test@example.com");
 
@@ -303,12 +301,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         // First call returns auth token
         var authResponse = new TaxBanditsAuthResponse
         {
@@ -371,12 +364,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         // First call returns auth token
         var authResponse = new TaxBanditsAuthResponse
         {
@@ -439,12 +427,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         var authResponse = new TaxBanditsAuthResponse
         {
             StatusCode = 200,
@@ -523,13 +506,8 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
@@ -616,13 +594,8 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
@@ -704,13 +677,8 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns(clientSecret);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns(userToken);
         _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns(businessId);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v1.7.3/");
         _mockConfiguration.Setup(c => c["EmailSettings:CustomerServiceEmail"]).Returns("admin@streamtunes.net");
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         _mockEmailService.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
@@ -818,11 +786,6 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
-        
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         // Act
         var result = await _service.GetTransientTokenAsync(new List<string> { "https://example.com" });
 
@@ -838,12 +801,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
-        
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:AuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
         var tokenResponse = new
         {
             StatusCode = 200,
@@ -888,12 +846,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
-        
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:AuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
         var httpResponse = new HttpResponseMessage(HttpStatusCode.InternalServerError)
         {
             Content = new StringContent("{\"StatusMessage\": \"Internal server error\"}")
@@ -924,12 +877,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client-id");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-user-token");
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxAuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
-        
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
+        _mockConfiguration.Setup(c => c["TaxBandits:AuthUrl"]).Returns("https://testoauth.expressauth.net/v2/tbsauth");
         var errorResponse = new
         {
             StatusCode = 400,
@@ -1018,11 +966,6 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns((string)null);
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns((string)null);
-
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-
         var request = new InstantTinMatchRequest
         {
             TINType = "SSN",
@@ -1048,10 +991,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
 
         var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
         var tinMatchErrorJson = JsonSerializer.Serialize(new
@@ -1119,10 +1059,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
 
         var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
         var tinMatchErrorJson = JsonSerializer.Serialize(new
@@ -1189,10 +1126,7 @@ public class TaxBanditsServiceTests
         _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
         _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
-        var mockSection = new Mock<IConfigurationSection>();
-        mockSection.Setup(s => s.Value).Returns("true");
-        _mockConfiguration.Setup(c => c.GetSection("TaxBandits:UseSandbox")).Returns(mockSection.Object);
-        _mockConfiguration.Setup(c => c["TaxBandits:SandboxApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://testapi.taxbandits.com/v2.0");
 
         var authResponseJson = JsonSerializer.Serialize(new { AccessToken = "test-token", TokenType = "Bearer", ExpiresIn = 3600, StatusCode = 200 });
         var errorJson = JsonSerializer.Serialize(new

@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services
@@ -390,7 +391,7 @@ namespace MusicSalesApp.Services
         /// <inheritdoc />
         public string GetAppBaseUrl()
         {
-            return _configuration["App:BaseUrl"] ?? "https://streamtunes.net";
+            return _configuration.GetBaseUrl();
         }
 
         /// <inheritdoc />

@@ -31,7 +31,7 @@ public class SitemapServiceTests
         Directory.CreateDirectory(_tempDirectory);
 
         // Setup mocks
-        _mockConfiguration.Setup(x => x["App:BaseUrl"]).Returns("https://streamtunes.net");
+        _mockConfiguration.Setup(x => x["BaseUrl"]).Returns("https://streamtunes.net");
         _mockEnvironment.Setup(x => x.WebRootPath).Returns(_tempDirectory);
 
         _service = new SitemapService(
@@ -295,7 +295,7 @@ public class SitemapServiceTests
     public async Task GenerateSitemapAsync_UsesConfiguredBaseUrl()
     {
         // Arrange
-        _mockConfiguration.Setup(x => x["App:BaseUrl"]).Returns("https://custom-domain.com");
+        _mockConfiguration.Setup(x => x["BaseUrl"]).Returns("https://custom-domain.com");
 
         var songs = new List<SongMetadata>
         {

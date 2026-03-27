@@ -516,11 +516,11 @@ public class CreatorController : ControllerBase
                 });
             }
 
-            var useSandbox = _configuration.GetValue<bool>("TaxBandits:UseSandbox", true);
             var businessId = _configuration["TaxBandits:BusinessId"];
+            var scriptUrl = _configuration["TaxBandits:ScriptUrl"];
 
-            _logger.LogInformation("Tax form token generated for user {UserId}. BusinessId: {BusinessId}, UseSandbox: {UseSandbox}, TokenLength: {TokenLength}",
-                user.Id, businessId, useSandbox, tokenResult.TransientToken?.Length ?? 0);
+            _logger.LogInformation("Tax form token generated for user {UserId}. BusinessId: {BusinessId}, TokenLength: {TokenLength}",
+                user.Id, businessId, tokenResult.TransientToken?.Length ?? 0);
 
             return Ok(new TaxFormTokenResponse
             {
@@ -528,7 +528,7 @@ public class CreatorController : ControllerBase
                 TransientToken = tokenResult.TransientToken,
                 PayeeRef = payeeRef,
                 BusinessId = businessId,
-                UseSandbox = useSandbox
+                ScriptUrl = scriptUrl
             });
         }
         catch (Exception ex)
@@ -662,7 +662,7 @@ public class TaxFormTokenResponse
     public string? TransientToken { get; set; }
     public string? PayeeRef { get; set; }
     public string? BusinessId { get; set; }
-    public bool UseSandbox { get; set; }
+    public string? ScriptUrl { get; set; }
     public string? ErrorMessage { get; set; }
 }
 

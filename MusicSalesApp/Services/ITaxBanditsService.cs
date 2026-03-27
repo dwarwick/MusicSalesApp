@@ -15,14 +15,12 @@ public interface ITaxBanditsService
     /// <param name="clientId">The TaxBandits client ID.</param>
     /// <param name="userToken">The TaxBandits user token.</param>
     /// <param name="clientSecret">The TaxBandits client secret.</param>
-    /// <param name="useSandbox">Whether to use sandbox environment (default: true).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The authentication response containing the access token.</returns>
     Task<TaxBanditsAuthResponse> GetAccessTokenAsync(
         string clientId,
         string userToken,
         string clientSecret,
-        bool useSandbox = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>

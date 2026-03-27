@@ -8,10 +8,10 @@ let dotNetRef = null;
 
 /**
  * Dynamically loads the TaxBandits Drop-in script.
- * @param {boolean} useSandbox - Whether to use the sandbox environment.
+ * @param {string} scriptUrl - The URL of the TaxBandits Drop-in script.
  * @returns {Promise} Resolves when the script is loaded.
  */
-function loadTaxBanditsScript(useSandbox) {
+function loadTaxBanditsScript(scriptUrl) {
     return new Promise((resolve, reject) => {
         // Check if loadFormWH is already available from a previous load
         if (typeof loadFormWH === 'function') {
@@ -19,9 +19,6 @@ function loadTaxBanditsScript(useSandbox) {
             resolve();
             return;
         }
-        const scriptUrl = useSandbox
-            ? 'https://js.taxbandits.io/SB/Web/Dropin/v1.0.0/dropinWhCertificate.js'
-            : 'https://js.taxbandits.io/Web/Dropin/v1.0.0/dropinWhCertificate.js';
         console.log('[TaxForm] Loading TaxBandits script from:', scriptUrl);
         const script = document.createElement('script');
         script.src = scriptUrl;
@@ -42,21 +39,21 @@ function loadTaxBanditsScript(useSandbox) {
  * @param {string} transientToken - The transient token from the server.
  * @param {string} payeeRef - The PayeeRef (email) for the recipient.
  * @param {string} businessId - The TaxBandits BusinessId.
- * @param {boolean} useSandbox - Whether to use the sandbox environment.
+ * @param {string} scriptUrl - The URL of the TaxBandits Drop-in script.
  * @param {string} returnUrl - The URL to redirect to after form completion.
  * @param {object} dotNetObjRef - .NET object reference for callbacks.
  */
-export async function initTaxForm(transientToken, payeeRef, businessId, useSandbox, returnUrl, dotNetObjRef) {
+export async function initTaxForm(transientToken, payeeRef, businessId, scriptUrl, returnUrl, dotNetObjRef) {
     dotNetRef = dotNetObjRef;
 
     console.log('[TaxForm] Initializing tax form with:',
         'businessId:', businessId,
-        'useSandbox:', useSandbox,
+        'scriptUrl:', scriptUrl,
         'returnUrl:', returnUrl,
         'tokenLength:', transientToken ? transientToken.length : 0);
 
     try {
-        await loadTaxBanditsScript(useSandbox);
+        await loadTaxBanditsScript(scriptUrl);
 
         // Listen for messages from the TaxBandits iframe
         window.addEventListener('message', handleTaxBanditsMessage);
@@ -79,9 +76,13 @@ export async function initTaxForm(transientToken, payeeRef, businessId, useSandb
         console.log('[TaxForm] Calling loadFormWH with payload keys:', Object.keys(payLoad));
 
         // loadFormWH(transientToken, payLoad) is the API from dropinWhCertificate.js
-        await loadFormWH(transientToken, payLoad);
-
-        console.log('[TaxForm] loadFormWH completed successfully');
+        // Don't await — loadFormWH renders an iframe and may not resolve until the user
+        // completes/cancels the form, which would cause Blazor's JS interop to time out.
+        loadFormWH(transientToken, payLoad).then(() => {
+            console.log('[TaxForm] loadFormWH completed successfully');
+        }).catch((err) => {
+            console.error('[TaxForm] loadFormWH error:', err);
+        });
     } catch (error) {
         console.error('[TaxForm] Error initializing TaxBandits form:', error);
     }
