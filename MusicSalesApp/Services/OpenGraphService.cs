@@ -170,9 +170,16 @@ public class OpenGraphService : IOpenGraphService
                 var imagePath = !string.IsNullOrEmpty(coverImage.ImageBlobPath) 
                     ? coverImage.ImageBlobPath 
                     : coverImage.BlobPath;
-                var fbImagePath = await GetOrCreateFacebookImageAsync(imagePath);
-                imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
-                isFacebookImage = fbImagePath != imagePath;
+                if (!string.IsNullOrEmpty(imagePath))
+                {
+                    var fbImagePath = await GetOrCreateFacebookImageAsync(imagePath);
+                    imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
+                    isFacebookImage = fbImagePath != imagePath;
+                }
+                else
+                {
+                    imageUrl = GetAbsoluteUrl("/favicon.ico");
+                }
             }
             else
             {

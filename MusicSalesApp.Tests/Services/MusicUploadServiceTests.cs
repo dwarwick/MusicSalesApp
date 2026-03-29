@@ -521,6 +521,33 @@ public class MusicUploadServiceTests
                 audioStream, audioFileName, albumArtStream, albumArtFileName));
     }
 
+    [Test]
+    public async Task UploadMusicWithAlbumArtAsync_ValidPair_CallsPreGenerateFacebookImage()
+    {
+        // Arrange
+        var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("audio content"));
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var audioFileName = "Lipstick and Leather_mastered.mp3";
+        var albumArtFileName = "Lipstick and Leather.jpeg";
+
+        _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
+        _mockMusicService.Setup(s => s.IsValidAudioFileAsync(It.IsAny<Stream>(), audioFileName))
+            .ReturnsAsync(true);
+        _mockMusicService.Setup(s => s.IsMp3File(audioFileName)).Returns(true);
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+        _mockOpenGraphService.Setup(s => s.PreGenerateFacebookImageAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _service.UploadMusicWithAlbumArtAsync(
+            audioStream, audioFileName, albumArtStream, albumArtFileName, creatorId: 1);
+
+        // Assert
+        _mockOpenGraphService.Verify(s => s.PreGenerateFacebookImageAsync(
+            "Lipstick and Leather/Lipstick and Leather.jpeg"), Times.Once);
+    }
+
     #endregion
 
     #region UploadAlbumCoverAsync Tests
@@ -718,6 +745,28 @@ public class MusicUploadServiceTests
             "My Test Album/cover_cover.png",
             It.IsAny<Stream>(),
             "image/png"), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadAlbumCoverAsync_ValidAlbumCover_CallsPreGenerateFacebookImage()
+    {
+        // Arrange
+        var albumArtStream = new MemoryStream(Encoding.UTF8.GetBytes("image content"));
+        var albumArtFileName = "cover.jpeg";
+        var albumName = "My Test Album";
+
+        _mockStorageService.Setup(s => s.EnsureContainerExistsAsync()).Returns(Task.CompletedTask);
+        _mockStorageService.Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+        _mockOpenGraphService.Setup(s => s.PreGenerateFacebookImageAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _service.UploadAlbumCoverAsync(albumArtStream, albumArtFileName, albumName);
+
+        // Assert
+        _mockOpenGraphService.Verify(s => s.PreGenerateFacebookImageAsync(
+            "My Test Album/cover_cover.jpeg"), Times.Once);
     }
 
     #endregion
