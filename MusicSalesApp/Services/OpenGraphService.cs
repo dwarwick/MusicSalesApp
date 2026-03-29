@@ -86,12 +86,14 @@ public class OpenGraphService : IOpenGraphService
             }
 
             // Get Facebook-optimized image URL (or fall back to original/favicon)
+            // Use a direct SAS URL to Azure Blob Storage so Facebook's crawler can
+            // fetch the image without round-tripping through the app server.
             string imageUrl;
             bool isFacebookImage = false;
             if (!string.IsNullOrEmpty(imageBlobPath))
             {
                 var fbImagePath = await GetOrCreateFacebookImageAsync(imageBlobPath);
-                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(fbImagePath)}");
+                imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
                 isFacebookImage = fbImagePath != imageBlobPath;
             }
             else
@@ -158,7 +160,9 @@ public class OpenGraphService : IOpenGraphService
             var coverImage = albumMetadata.FirstOrDefault(m => m.IsAlbumCover);
             var albumTracks = albumMetadata.Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath)).ToList();
 
-            // Use the full blob path for the image URL
+            // Use the full blob path for the image URL.
+            // Use a direct SAS URL to Azure Blob Storage so Facebook's crawler can
+            // fetch the image without round-tripping through the app server.
             string imageUrl;
             bool isFacebookImage = false;
             if (coverImage != null)
@@ -167,7 +171,7 @@ public class OpenGraphService : IOpenGraphService
                     ? coverImage.ImageBlobPath 
                     : coverImage.BlobPath;
                 var fbImagePath = await GetOrCreateFacebookImageAsync(imagePath);
-                imageUrl = GetAbsoluteUrl($"/api/music/{SafeEncodePath(fbImagePath)}");
+                imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
                 isFacebookImage = fbImagePath != imagePath;
             }
             else
@@ -244,6 +248,22 @@ public class OpenGraphService : IOpenGraphService
         {
             _logger.LogWarning(ex, "Failed to create Facebook-optimized image for {Path}, using original", originalImagePath);
             return originalImagePath;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task PreGenerateFacebookImageAsync(string imageBlobPath)
+    {
+        if (string.IsNullOrEmpty(imageBlobPath))
+            return;
+
+        try
+        {
+            await GetOrCreateFacebookImageAsync(imageBlobPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to pre-generate Facebook image for {Path}", imageBlobPath);
         }
     }
 

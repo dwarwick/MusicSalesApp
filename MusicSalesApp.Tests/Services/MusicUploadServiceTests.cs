@@ -12,6 +12,7 @@ public class MusicUploadServiceTests
     private Mock<IAzureStorageService> _mockStorageService;
     private Mock<IMusicService> _mockMusicService;
     private Mock<ISongMetadataService> _mockMetadataService;
+    private Mock<IOpenGraphService> _mockOpenGraphService;
     private Mock<ILogger<MusicUploadService>> _mockLogger;
     private MusicUploadService _service;
 
@@ -21,11 +22,13 @@ public class MusicUploadServiceTests
         _mockStorageService = new Mock<IAzureStorageService>();
         _mockMusicService = new Mock<IMusicService>();
         _mockMetadataService = new Mock<ISongMetadataService>();
+        _mockOpenGraphService = new Mock<IOpenGraphService>();
         _mockLogger = new Mock<ILogger<MusicUploadService>>();
         _service = new MusicUploadService(
             _mockStorageService.Object,
             _mockMusicService.Object,
             _mockMetadataService.Object,
+            _mockOpenGraphService.Object,
             _mockLogger.Object);
     }
 

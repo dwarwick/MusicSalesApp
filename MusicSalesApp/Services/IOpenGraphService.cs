@@ -18,4 +18,11 @@ public interface IOpenGraphService
     /// <param name="albumName">The name of the album (URL encoded)</param>
     /// <returns>HTML string containing meta tags, or empty string if album not found</returns>
     Task<string> GenerateAlbumMetaTagsAsync(string albumName);
+
+    /// <summary>
+    /// Pre-generates the Facebook-optimized image (1200x630) for a given image blob path.
+    /// Call this during upload so the image is ready before Facebook's crawler requests it.
+    /// </summary>
+    /// <param name="imageBlobPath">The blob path of the original image</param>
+    Task PreGenerateFacebookImageAsync(string imageBlobPath);
 }
