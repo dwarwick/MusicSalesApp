@@ -46,6 +46,9 @@ public class OpenGraphServiceTests
         _mockStorageService.Setup(s => s.ExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
         // Setup storage service to return empty stream for DownloadAsync by default
         _mockStorageService.Setup(s => s.DownloadAsync(It.IsAny<string>())).ReturnsAsync(new MemoryStream());
+        // Setup storage service to return a SAS URI containing the blob path
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns((string path, TimeSpan _) => new Uri($"https://blob.azure.test/{path}?sv=2024&sig=test"));
 
         _service = new OpenGraphService(
             _mockSongMetadataService.Object,
@@ -491,4 +494,50 @@ public class OpenGraphServiceTests
         var topPixel = outputBitmap.GetPixel(600, 0);
         Assert.That(topPixel, Is.EqualTo(SkiaSharp.SKColors.Black));
     }
+
+    #region PreGenerateFacebookImageAsync Tests
+
+    [Test]
+    public async Task PreGenerateFacebookImageAsync_WithValidPath_CallsGetOrCreate()
+    {
+        // Arrange
+        var imagePath = "folder/cover.jpg";
+        _mockStorageService.Setup(s => s.ExistsAsync("folder/cover_fb.png")).ReturnsAsync(true);
+
+        // Act
+        await _service.PreGenerateFacebookImageAsync(imagePath);
+
+        // Assert - should check if FB image exists
+        _mockStorageService.Verify(s => s.ExistsAsync("folder/cover_fb.png"), Times.Once);
+    }
+
+    [Test]
+    public async Task PreGenerateFacebookImageAsync_WithNullPath_DoesNotThrow()
+    {
+        // Act & Assert - should not throw
+        await _service.PreGenerateFacebookImageAsync(null);
+        _mockStorageService.Verify(s => s.ExistsAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task PreGenerateFacebookImageAsync_WithEmptyPath_DoesNotThrow()
+    {
+        // Act & Assert - should not throw
+        await _service.PreGenerateFacebookImageAsync(string.Empty);
+        _mockStorageService.Verify(s => s.ExistsAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task PreGenerateFacebookImageAsync_WhenStorageThrows_DoesNotThrow()
+    {
+        // Arrange
+        var imagePath = "folder/cover.jpg";
+        _mockStorageService.Setup(s => s.ExistsAsync(It.IsAny<string>()))
+            .ThrowsAsync(new Exception("Storage error"));
+
+        // Act & Assert - should swallow the exception
+        Assert.DoesNotThrowAsync(() => _service.PreGenerateFacebookImageAsync(imagePath));
+    }
+
+    #endregion
 }

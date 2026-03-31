@@ -6,6 +6,7 @@ using Hangfire.Dashboard;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -357,6 +358,19 @@ try
     }
 
     // Configure the HTTP request pipeline.
+    // Forward headers from reverse proxies (Cloudflare, IIS) so Request.Scheme
+    // reflects the original client request. This ensures OG meta tag URLs
+    // (og:image, og:url) use https:// instead of http://.
+    // KnownIPNetworks and KnownProxies are cleared so Cloudflare (non-loopback)
+    // forwarded headers are honoured in production.
+    var forwardedHeadersOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    };
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    app.UseForwardedHeaders(forwardedHeadersOptions);
+
     if (!app.Environment.IsDevelopment())
     {
         app.UseExceptionHandler("/Error", createScopeForErrors: true);

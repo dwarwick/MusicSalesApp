@@ -15,6 +15,7 @@ namespace MusicSalesApp.Services
         private readonly IAzureStorageService _storageService;
         private readonly IMusicService _musicService;
         private readonly ISongMetadataService _metadataService;
+        private readonly IOpenGraphService _openGraphService;
         private readonly ILogger<MusicUploadService> _logger;
 
         private const string MasteredSuffix = "_mastered";
@@ -23,11 +24,13 @@ namespace MusicSalesApp.Services
             IAzureStorageService storageService,
             IMusicService musicService,
             ISongMetadataService metadataService,
+            IOpenGraphService openGraphService,
             ILogger<MusicUploadService> logger)
         {
             _storageService = storageService;
             _musicService = musicService;
             _metadataService = metadataService;
+            _openGraphService = openGraphService;
             _logger = logger;
         }
 
@@ -257,6 +260,9 @@ namespace MusicSalesApp.Services
                 albumArtStream.Position = 0;
                 await _storageService.UploadAsync(albumArtPath, albumArtStream, imageContentType);
 
+                // Pre-generate Facebook-optimized image so it's ready for social sharing
+                await _openGraphService.PreGenerateFacebookImageAsync(albumArtPath);
+
                 // Save metadata to database - single record with both MP3 and image paths
                 await _metadataService.UpsertAsync(new Models.SongMetadata
                 {
@@ -473,6 +479,9 @@ namespace MusicSalesApp.Services
             {
                 albumArtStream.Position = 0;
                 await _storageService.UploadAsync(albumCoverPath, albumArtStream, imageContentType);
+
+                // Pre-generate Facebook-optimized image so it's ready for social sharing
+                await _openGraphService.PreGenerateFacebookImageAsync(albumCoverPath);
 
                 // Save metadata to database
                 await _metadataService.UpsertAsync(new Models.SongMetadata
