@@ -93,7 +93,7 @@ public class OpenGraphService : IOpenGraphService
             if (!string.IsNullOrEmpty(imageBlobPath))
             {
                 var fbImagePath = await GetOrCreateFacebookImageAsync(imageBlobPath);
-                imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
+                imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).AbsoluteUri;
                 isFacebookImage = fbImagePath != imageBlobPath;
             }
             else
@@ -173,7 +173,7 @@ public class OpenGraphService : IOpenGraphService
                 if (!string.IsNullOrEmpty(imagePath))
                 {
                     var fbImagePath = await GetOrCreateFacebookImageAsync(imagePath);
-                    imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).ToString();
+                    imageUrl = _storageService.GetReadSasUri(fbImagePath, TimeSpan.FromDays(365)).AbsoluteUri;
                     isFacebookImage = fbImagePath != imagePath;
                 }
                 else
