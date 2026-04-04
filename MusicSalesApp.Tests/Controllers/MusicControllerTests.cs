@@ -16,6 +16,7 @@ public class MusicControllerTests
     private Mock<IAzureStorageService> _mockStorageService;
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IStreamCountService> _mockStreamCountService;
+    private Mock<ISongMetadataService> _mockSongMetadataService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -26,6 +27,7 @@ public class MusicControllerTests
         _mockStorageService = new Mock<IAzureStorageService>();
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockStreamCountService = new Mock<IStreamCountService>();
+        _mockSongMetadataService = new Mock<ISongMetadataService>();
         _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
@@ -37,6 +39,7 @@ public class MusicControllerTests
             _mockStorageService.Object,
             _mockSubscriptionService.Object,
             _mockStreamCountService.Object,
+            _mockSongMetadataService.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
 
@@ -296,5 +299,165 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetSongs_ReturnsAllActiveSongsWithSasUrls()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                SongTitle = "Test Song",
+                ArtistName = "Test Artist",
+                Genre = "Rock",
+                Mp3BlobPath = "folder/test.mp3",
+                ImageBlobPath = "folder/test.jpg",
+                NumberOfStreams = 42,
+                TrackLength = 180.5
+            },
+            new SongMetadata
+            {
+                Id = 2,
+                SongTitle = "Another Song",
+                Genre = "Pop",
+                Mp3BlobPath = "folder/another.mp3",
+                NumberOfStreams = 10,
+                TrackLength = 200.0
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs, Is.Not.Null);
+        Assert.That(songs, Has.Count.EqualTo(2));
+        Assert.That(songs[0].SongTitle, Is.EqualTo("Test Song"));
+        Assert.That(songs[0].ArtistName, Is.EqualTo("Test Artist"));
+        Assert.That(songs[0].Genre, Is.EqualTo("Rock"));
+        Assert.That(songs[0].StreamCount, Is.EqualTo(42));
+        Assert.That(songs[0].TrackLengthSeconds, Is.EqualTo(180.5));
+        Assert.That(songs[0].AlbumArtUrl, Is.EqualTo(sasUri.ToString()));
+        Assert.That(songs[0].StreamUrl, Is.EqualTo(sasUri.ToString()));
+    }
+
+    [Test]
+    public async Task GetSongs_ExcludesEntriesWithoutMp3BlobPath()
+    {
+        // Arrange - include an image-only entry (album cover)
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "folder/song.mp3",
+                ImageBlobPath = "folder/song.jpg",
+                SongTitle = "Real Song"
+            },
+            new SongMetadata
+            {
+                Id = 2,
+                ImageBlobPath = "folder/cover.jpg",
+                IsAlbumCover = true
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs, Has.Count.EqualTo(1));
+        Assert.That(songs[0].SongTitle, Is.EqualTo("Real Song"));
+    }
+
+    [Test]
+    public async Task GetSongs_FallsBackToFileNameWhenNoSongTitle()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "folder/My Great Song.mp3",
+                SongTitle = null
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs[0].SongTitle, Is.EqualTo("My Great Song"));
+    }
+
+    [Test]
+    public async Task GetSongs_ReturnsNullAlbumArtUrlWhenNoImageBlobPath()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "folder/song.mp3",
+                ImageBlobPath = null,
+                SongTitle = "No Art Song"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs[0].AlbumArtUrl, Is.Null);
+    }
+
+    [Test]
+    public async Task GetSongs_ReturnsEmptyListWhenNoSongs()
+    {
+        // Arrange
+        _mockSongMetadataService.Setup(s => s.GetAllAsync())
+            .ReturnsAsync(new List<SongMetadata>());
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs, Is.Empty);
     }
 }

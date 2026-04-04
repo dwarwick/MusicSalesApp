@@ -15,6 +15,7 @@ namespace MusicSalesApp.Controllers
         private readonly IAzureStorageService _storageService;
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
+        private readonly ISongMetadataService _songMetadataService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
 
@@ -22,14 +23,54 @@ namespace MusicSalesApp.Controllers
             IAzureStorageService storageService,
             ISubscriptionService subscriptionService,
             IStreamCountService streamCountService,
+            ISongMetadataService songMetadataService,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
         {
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
+            _songMetadataService = songMetadataService;
             _userManager = userManager;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// Returns all active songs with metadata, album art SAS URLs, and streaming SAS URLs.
+        /// Used by the MAUI Android app to populate the music library.
+        /// </summary>
+        [HttpGet("songs")]
+        [ResponseCache(Duration = 300)] // Cache for 5 minutes
+        public async Task<IActionResult> GetSongs()
+        {
+            var allMetadata = await _songMetadataService.GetAllAsync();
+            var sasLifetime = TimeSpan.FromHours(24);
+
+            var songs = allMetadata
+                .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
+                .Select(m => MapToSongListItem(m, sasLifetime))
+                .ToList();
+
+            return Ok(songs);
+        }
+
+        private SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime)
+        {
+            return new SongListItemDto
+            {
+                Id = m.Id,
+                SongTitle = !string.IsNullOrEmpty(m.SongTitle)
+                    ? m.SongTitle
+                    : Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? string.Empty),
+                ArtistName = m.GetEffectiveArtistName(),
+                Genre = m.Genre ?? string.Empty,
+                AlbumArtUrl = !string.IsNullOrEmpty(m.ImageBlobPath)
+                    ? _storageService.GetReadSasUri(m.ImageBlobPath, sasLifetime).ToString()
+                    : null,
+                StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
+                StreamCount = m.NumberOfStreams,
+                TrackLengthSeconds = m.TrackLength
+            };
         }
 
         // Legacy / fallback streaming endpoint (server proxy)
