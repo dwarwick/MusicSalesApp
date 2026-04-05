@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Models;
@@ -16,6 +17,9 @@ namespace MusicSalesApp.Controllers
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
         private readonly ISongMetadataService _songMetadataService;
+        private readonly ISongLikeService _songLikeService;
+        private readonly IAppSettingsService _appSettingsService;
+        private readonly ICreatorPersonaService _creatorPersonaService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
 
@@ -24,6 +28,9 @@ namespace MusicSalesApp.Controllers
             ISubscriptionService subscriptionService,
             IStreamCountService streamCountService,
             ISongMetadataService songMetadataService,
+            ISongLikeService songLikeService,
+            IAppSettingsService appSettingsService,
+            ICreatorPersonaService creatorPersonaService,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
         {
@@ -31,6 +38,9 @@ namespace MusicSalesApp.Controllers
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
             _songMetadataService = songMetadataService;
+            _songLikeService = songLikeService;
+            _appSettingsService = appSettingsService;
+            _creatorPersonaService = creatorPersonaService;
             _userManager = userManager;
             _logger = logger;
         }
@@ -66,6 +76,9 @@ namespace MusicSalesApp.Controllers
                 Genre = m.Genre ?? string.Empty,
                 AlbumArtUrl = !string.IsNullOrEmpty(m.ImageBlobPath)
                     ? _storageService.GetReadSasUri(m.ImageBlobPath, sasLifetime).ToString()
+                    : null,
+                PersonaImageUrl = m.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
+                    ? _creatorPersonaService.GetPersonaImageSasUrl(m.Persona.ImageBlobPath, sasLifetime)
                     : null,
                 StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
                 StreamCount = m.NumberOfStreams,
@@ -160,6 +173,17 @@ namespace MusicSalesApp.Controllers
         }
 
         /// <summary>
+        /// Returns the number of continuous playback seconds required before a stream is counted.
+        /// Used by the MAUI app to know when to call RecordStream.
+        /// </summary>
+        [HttpGet("stream-qualifying-seconds")]
+        public async Task<IActionResult> GetStreamQualifyingSeconds()
+        {
+            var seconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+            return Ok(new { streamQualifyingSeconds = seconds });
+        }
+
+        /// <summary>
         /// Accepts a cropped image upload (as a binary blob from canvas) and stores it in Azure Blob Storage.
         /// The target blob path is supplied via query string. Only authenticated users may call this.
         /// </summary>
@@ -189,6 +213,76 @@ namespace MusicSalesApp.Controllers
 
             await _storageService.UploadAsync(blobPath, ms, "image/png");
             return Ok(new { blobPath });
+        }
+
+        /// <summary>
+        /// Returns like and dislike counts for multiple songs in a single request.
+        /// Used by the MAUI app to populate like/dislike counts on song cards.
+        /// </summary>
+        /// <param name="ids">Comma-separated song metadata IDs</param>
+        [HttpGet("likes/bulk")]
+        public async Task<IActionResult> GetBulkLikeCounts([FromQuery] string ids)
+        {
+            if (string.IsNullOrWhiteSpace(ids))
+                return Ok(Array.Empty<object>());
+
+            var songIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out var id) ? id : -1)
+                .Where(id => id > 0)
+                .ToList();
+
+            if (songIds.Count == 0)
+                return Ok(Array.Empty<object>());
+
+            var counts = await _songLikeService.GetBulkLikeDislikeCountsAsync(songIds);
+
+            var result = songIds.Select(id =>
+            {
+                counts.TryGetValue(id, out var c);
+                return new { songMetadataId = id, likeCount = c.likeCount, dislikeCount = c.dislikeCount };
+            });
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Toggle like for a song. Requires authentication.
+        /// </summary>
+        [HttpPost("like/{songMetadataId:int}")]
+        [Authorize]
+        public async Task<IActionResult> ToggleLike(int songMetadataId)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return Unauthorized();
+
+            var isLiked = await _songLikeService.ToggleLikeAsync(user.Id, songMetadataId);
+            var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
+
+            return Ok(new { isLiked, likeCount, dislikeCount });
+        }
+
+        /// <summary>
+        /// Toggle dislike for a song. Requires authentication.
+        /// </summary>
+        [HttpPost("dislike/{songMetadataId:int}")]
+        [Authorize]
+        public async Task<IActionResult> ToggleDislike(int songMetadataId)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return Unauthorized();
+
+            var isDisliked = await _songLikeService.ToggleDislikeAsync(user.Id, songMetadataId);
+            var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
+
+            return Ok(new { isDisliked, likeCount, dislikeCount });
         }
 
         private static string NormalizeContentType(string original, string fileName)

@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -515,6 +517,7 @@ public class LikedSongsPlaylistTests
     private Mock<ILogger<PlaylistService>> _mockLogger;
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<ISongLikeService> _mockSongLikeService;
+    private Mock<IHubContext<LikeCountHub>> _mockHubContext;
     private PlaylistService _playlistService;
     private SongLikeService _songLikeService;
     private AppDbContext _context;
@@ -539,8 +542,15 @@ public class LikedSongsPlaylistTests
         _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
             .ReturnsAsync(() => new AppDbContext(_contextOptions));
 
+        // Mock hub context for SongLikeService
+        _mockHubContext = new Mock<IHubContext<LikeCountHub>>();
+        var mockClients = new Mock<IHubClients>();
+        var mockClientProxy = new Mock<IClientProxy>();
+        mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
+        _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
+
         // Create real SongLikeService for integration testing
-        _songLikeService = new SongLikeService(_mockContextFactory.Object);
+        _songLikeService = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object);
 
         _playlistService = new PlaylistService(
             _mockContextFactory.Object, 

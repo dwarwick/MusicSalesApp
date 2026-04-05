@@ -51,4 +51,12 @@ public interface ISongLikeService
     /// <param name="songMetadataIds">The song metadata IDs</param>
     /// <returns>Dictionary mapping songMetadataId to likeCount</returns>
     Task<Dictionary<int, int>> GetBulkLikeCountsAsync(IEnumerable<int> songMetadataIds);
+
+    /// <summary>
+    /// Get both like and dislike counts for multiple songs in a single query.
+    /// More efficient than calling GetLikeCountsAsync for each song individually.
+    /// </summary>
+    /// <param name="songMetadataIds">The song metadata IDs</param>
+    /// <returns>Dictionary mapping songMetadataId to (likeCount, dislikeCount)</returns>
+    Task<Dictionary<int, (int likeCount, int dislikeCount)>> GetBulkLikeDislikeCountsAsync(IEnumerable<int> songMetadataIds);
 }

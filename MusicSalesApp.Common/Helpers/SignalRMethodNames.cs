@@ -12,4 +12,16 @@ public static class SignalRMethodNames
     /// clients can refresh their maintenance banner/dialog in real time.
     /// </summary>
     public const string ReceiveMaintenanceUpdate = "ReceiveMaintenanceUpdate";
+
+    /// <summary>
+    /// Broadcast by StreamCountService after a song's stream count is incremented.
+    /// Payload: (int songMetadataId, int newCount)
+    /// </summary>
+    public const string ReceiveStreamCountUpdate = "ReceiveStreamCountUpdate";
+
+    /// <summary>
+    /// Broadcast by SongLikeService after a song's like/dislike counts change.
+    /// Payload: (int songMetadataId, int likeCount, int dislikeCount)
+    /// </summary>
+    public const string ReceiveLikeCountUpdate = "ReceiveLikeCountUpdate";
 }

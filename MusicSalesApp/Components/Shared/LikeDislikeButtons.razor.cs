@@ -4,7 +4,7 @@ using Syncfusion.Blazor.Popups;
 
 namespace MusicSalesApp.Components.Shared;
 
-public partial class LikeDislikeButtonsModel : BlazorBase
+public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
 {
     [Parameter]
     public int SongMetadataId { get; set; }
@@ -36,6 +36,13 @@ public partial class LikeDislikeButtonsModel : BlazorBase
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            // Subscribe to real-time like count updates from other clients
+            LikeCountHubClient.OnLikeCountReceived += HandleLikeCountReceived;
+            await LikeCountHubClient.StartAsync();
+        }
+
         if ((firstRender || _needsDataReload) && SongMetadataId > 0)
         {
             _needsDataReload = false;
@@ -172,6 +179,20 @@ public partial class LikeDislikeButtonsModel : BlazorBase
     protected string GetDislikeButtonTitle()
     {
         return _userLikeStatus == false ? "Remove dislike" : "Dislike this song";
+    }
+
+    private void HandleLikeCountReceived(int songMetadataId, int likeCount, int dislikeCount)
+    {
+        if (songMetadataId != SongMetadataId) return;
+
+        _likeCount = likeCount;
+        _dislikeCount = dislikeCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        LikeCountHubClient.OnLikeCountReceived -= HandleLikeCountReceived;
     }
 
     protected async Task HandleUnauthenticatedClick()

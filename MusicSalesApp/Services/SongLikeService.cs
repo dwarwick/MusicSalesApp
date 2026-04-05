@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -10,10 +13,14 @@ namespace MusicSalesApp.Services;
 public class SongLikeService : ISongLikeService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IHubContext<LikeCountHub> _hubContext;
 
-    public SongLikeService(IDbContextFactory<AppDbContext> contextFactory)
+    public SongLikeService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        IHubContext<LikeCountHub> hubContext)
     {
         _contextFactory = contextFactory;
+        _hubContext = hubContext;
     }
 
     /// <inheritdoc/>
@@ -57,6 +64,7 @@ public class SongLikeService : ISongLikeService
                 // User already liked, remove the like
                 context.SongLikes.Remove(existingLike);
                 await context.SaveChangesAsync();
+                await BroadcastLikeCountsAsync(songMetadataId);
                 return false;
             }
             else
@@ -66,6 +74,7 @@ public class SongLikeService : ISongLikeService
                 existingLike.UpdatedAt = DateTime.UtcNow;
                 context.Entry(existingLike).State = EntityState.Modified;
                 await context.SaveChangesAsync();
+                await BroadcastLikeCountsAsync(songMetadataId);
                 return true;
             }
         }
@@ -82,6 +91,7 @@ public class SongLikeService : ISongLikeService
             };
             context.SongLikes.Add(newLike);
             await context.SaveChangesAsync();
+            await BroadcastLikeCountsAsync(songMetadataId);
             return true;
         }
     }
@@ -101,6 +111,7 @@ public class SongLikeService : ISongLikeService
                 // User already disliked, remove the dislike
                 context.SongLikes.Remove(existingLike);
                 await context.SaveChangesAsync();
+                await BroadcastLikeCountsAsync(songMetadataId);
                 return false;
             }
             else
@@ -110,6 +121,7 @@ public class SongLikeService : ISongLikeService
                 existingLike.UpdatedAt = DateTime.UtcNow;
                 context.Entry(existingLike).State = EntityState.Modified;
                 await context.SaveChangesAsync();
+                await BroadcastLikeCountsAsync(songMetadataId);
                 return true;
             }
         }
@@ -126,8 +138,19 @@ public class SongLikeService : ISongLikeService
             };
             context.SongLikes.Add(newDislike);
             await context.SaveChangesAsync();
+            await BroadcastLikeCountsAsync(songMetadataId);
             return true;
         }
+    }
+
+    /// <summary>
+    /// Broadcasts updated like/dislike counts to all connected clients via SignalR.
+    /// </summary>
+    private async Task BroadcastLikeCountsAsync(int songMetadataId)
+    {
+        var (likeCount, dislikeCount) = await GetLikeCountsAsync(songMetadataId);
+        await _hubContext.Clients.All.SendAsync(
+            SignalRMethodNames.ReceiveLikeCountUpdate, songMetadataId, likeCount, dislikeCount);
     }
 
     /// <inheritdoc/>
@@ -158,5 +181,30 @@ public class SongLikeService : ISongLikeService
         return likes
             .GroupBy(id => id)
             .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<int, (int likeCount, int dislikeCount)>> GetBulkLikeDislikeCountsAsync(IEnumerable<int> songMetadataIds)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var ids = songMetadataIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, (int likeCount, int dislikeCount)>();
+
+        var counts = await context.SongLikes
+            .Where(sl => ids.Contains(sl.SongMetadataId))
+            .GroupBy(sl => sl.SongMetadataId)
+            .Select(g => new
+            {
+                SongMetadataId = g.Key,
+                LikeCount = g.Count(sl => sl.IsLike),
+                DislikeCount = g.Count(sl => !sl.IsLike)
+            })
+            .ToListAsync();
+
+        return counts.ToDictionary(
+            c => c.SongMetadataId,
+            c => (c.LikeCount, c.DislikeCount));
     }
 }

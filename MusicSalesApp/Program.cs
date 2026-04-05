@@ -262,6 +262,7 @@ try
     builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
+    builder.Services.AddScoped<ILikeCountHubClient, LikeCountHubClient>();
     builder.Services.AddScoped<IWebhookStatusHubClient, WebhookStatusHubClient>();
     builder.Services.AddScoped<IMaintenanceHubClient, MaintenanceHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
@@ -427,6 +428,7 @@ try
 
     // Map SignalR hubs for real-time updates
     app.MapHub<MusicSalesApp.Hubs.StreamCountHub>("/streamcounthub");
+    app.MapHub<MusicSalesApp.Hubs.LikeCountHub>("/likecounthub");
     app.MapHub<MusicSalesApp.Hubs.WebhookStatusHub>("/webhookstatushub");
     app.MapHub<MusicSalesApp.Hubs.MaintenanceHub>("/maintenancehub");
 

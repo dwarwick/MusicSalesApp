@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Hubs;
 
@@ -123,7 +124,7 @@ public class StreamCountService : IStreamCountService
         NotifyStreamCountUpdated(songMetadataId, newCount);
 
         // Broadcast to all connected clients via SignalR for cross-tab updates
-        await _hubContext.Clients.All.SendAsync("ReceiveStreamCountUpdate", songMetadataId, newCount);
+        await _hubContext.Clients.All.SendAsync(SignalRMethodNames.ReceiveStreamCountUpdate, songMetadataId, newCount);
 
         return newCount;
     }

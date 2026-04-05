@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using MusicSalesApp.Data;
+using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -10,6 +12,7 @@ namespace MusicSalesApp.Tests.Services;
 public class SongLikeServiceTests
 {
     private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
+    private Mock<IHubContext<LikeCountHub>> _mockHubContext;
     private SongLikeService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -29,7 +32,14 @@ public class SongLikeServiceTests
         _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
             .ReturnsAsync(() => new AppDbContext(_contextOptions));
 
-        _service = new SongLikeService(_mockContextFactory.Object);
+        // Mock IHubContext for SignalR broadcasting
+        _mockHubContext = new Mock<IHubContext<LikeCountHub>>();
+        var mockClients = new Mock<IHubClients>();
+        var mockClientProxy = new Mock<IClientProxy>();
+        mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
+        _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
+
+        _service = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object);
     }
 
     [TearDown]

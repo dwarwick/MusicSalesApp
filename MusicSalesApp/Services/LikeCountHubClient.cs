@@ -5,14 +5,15 @@ using MusicSalesApp.Common.Helpers;
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Interface for the stream count SignalR client that listens for real-time updates.
+/// Interface for the like-count SignalR client that listens for real-time updates.
 /// </summary>
-public interface IStreamCountHubClient : IAsyncDisposable
+public interface ILikeCountHubClient : IAsyncDisposable
 {
     /// <summary>
-    /// Event fired when a stream count is updated from another client/tab.
+    /// Event fired when a song's like/dislike counts are updated from another client/tab.
+    /// Parameters: songMetadataId, likeCount, dislikeCount
     /// </summary>
-    event Action<int, int> OnStreamCountReceived;
+    event Action<int, int, int> OnLikeCountReceived;
 
     /// <summary>
     /// Starts the SignalR connection if not already started.
@@ -26,29 +27,29 @@ public interface IStreamCountHubClient : IAsyncDisposable
 }
 
 /// <summary>
-/// SignalR client service for receiving real-time stream count updates.
+/// SignalR client service for receiving real-time like/dislike count updates.
 /// </summary>
-public class StreamCountHubClient : IStreamCountHubClient
+public class LikeCountHubClient : ILikeCountHubClient
 {
     private readonly HubConnection _hubConnection;
     private bool _isStarted;
 
-    public event Action<int, int> OnStreamCountReceived;
+    public event Action<int, int, int> OnLikeCountReceived;
 
     public bool IsConnected => _hubConnection.State == HubConnectionState.Connected;
 
-    public StreamCountHubClient(NavigationManager navigationManager)
+    public LikeCountHubClient(NavigationManager navigationManager)
     {
-        var hubUrl = navigationManager.ToAbsoluteUri("/streamcounthub");
-        
+        var hubUrl = navigationManager.ToAbsoluteUri("/likecounthub");
+
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl)
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<int, int>(SignalRMethodNames.ReceiveStreamCountUpdate, (songMetadataId, newCount) =>
+        _hubConnection.On<int, int, int>(SignalRMethodNames.ReceiveLikeCountUpdate, (songMetadataId, likeCount, dislikeCount) =>
         {
-            OnStreamCountReceived?.Invoke(songMetadataId, newCount);
+            OnLikeCountReceived?.Invoke(songMetadataId, likeCount, dislikeCount);
         });
     }
 
@@ -65,8 +66,7 @@ public class StreamCountHubClient : IStreamCountHubClient
         catch (Exception ex)
         {
             // Connection failed - this is not critical, local events still work
-            // Log for debugging purposes but don't throw
-            System.Diagnostics.Debug.WriteLine($"SignalR hub connection failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"LikeCountHub connection failed: {ex.Message}");
         }
     }
 

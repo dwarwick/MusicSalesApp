@@ -47,6 +47,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongLikeService> MockSongLikeService { get; private set; } = default!;
     protected Mock<IStreamCountService> MockStreamCountService { get; private set; } = default!;
     protected Mock<IStreamCountHubClient> MockStreamCountHubClient { get; private set; } = default!;
+    protected Mock<ILikeCountHubClient> MockLikeCountHubClient { get; private set; } = default!;
     protected Mock<IWebhookStatusHubClient> MockWebhookStatusHubClient { get; private set; } = default!;
     protected Mock<IMaintenanceHubClient> MockMaintenanceHubClient { get; private set; } = default!;
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
@@ -88,6 +89,7 @@ public abstract class BUnitTestBase
         MockSongLikeService = new Mock<ISongLikeService>();
         MockStreamCountService = new Mock<IStreamCountService>();
         MockStreamCountHubClient = new Mock<IStreamCountHubClient>();
+        MockLikeCountHubClient = new Mock<ILikeCountHubClient>();
         MockWebhookStatusHubClient = new Mock<IWebhookStatusHubClient>();
         MockMaintenanceHubClient = new Mock<IMaintenanceHubClient>();
         MockRecommendationService = new Mock<IRecommendationService>();
@@ -238,6 +240,12 @@ public abstract class BUnitTestBase
         MockStreamCountHubClient.Setup(x => x.StartAsync())
             .Returns(Task.CompletedTask);
         MockStreamCountHubClient.Setup(x => x.IsConnected)
+            .Returns(true);
+
+        // Setup default returns for ILikeCountHubClient methods
+        MockLikeCountHubClient.Setup(x => x.StartAsync())
+            .Returns(Task.CompletedTask);
+        MockLikeCountHubClient.Setup(x => x.IsConnected)
             .Returns(true);
 
         // Setup default returns for IWebhookStatusHubClient methods
@@ -419,6 +427,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongLikeService>(MockSongLikeService.Object);
         TestContext.Services.AddSingleton<IStreamCountService>(MockStreamCountService.Object);
         TestContext.Services.AddSingleton<IStreamCountHubClient>(MockStreamCountHubClient.Object);
+        TestContext.Services.AddSingleton<ILikeCountHubClient>(MockLikeCountHubClient.Object);
         TestContext.Services.AddSingleton<IWebhookStatusHubClient>(MockWebhookStatusHubClient.Object);
         TestContext.Services.AddSingleton<IMaintenanceHubClient>(MockMaintenanceHubClient.Object);
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);

@@ -17,6 +17,9 @@ public class MusicControllerTests
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IStreamCountService> _mockStreamCountService;
     private Mock<ISongMetadataService> _mockSongMetadataService;
+    private Mock<ISongLikeService> _mockSongLikeService;
+    private Mock<IAppSettingsService> _mockAppSettingsService;
+    private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -28,6 +31,9 @@ public class MusicControllerTests
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockStreamCountService = new Mock<IStreamCountService>();
         _mockSongMetadataService = new Mock<ISongMetadataService>();
+        _mockSongLikeService = new Mock<ISongLikeService>();
+        _mockAppSettingsService = new Mock<IAppSettingsService>();
+        _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
@@ -40,6 +46,9 @@ public class MusicControllerTests
             _mockSubscriptionService.Object,
             _mockStreamCountService.Object,
             _mockSongMetadataService.Object,
+            _mockSongLikeService.Object,
+            _mockAppSettingsService.Object,
+            _mockCreatorPersonaService.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
 
@@ -459,5 +468,265 @@ public class MusicControllerTests
         var okResult = (OkObjectResult)result;
         var songs = okResult.Value as List<SongListItemDto>;
         Assert.That(songs, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetSongs_IncludesPersonaImageUrlWhenPersonaHasImage()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var personaSasUrl = "https://storage.blob.core.windows.net/persona/image.jpg?sig=test";
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                SongTitle = "Persona Song",
+                Mp3BlobPath = "folder/song.mp3",
+                ImageBlobPath = "folder/cover.jpg",
+                PersonaId = 1,
+                Persona = new CreatorPersona
+                {
+                    Id = 1,
+                    Name = "Stage Name",
+                    ImageBlobPath = "personas/avatar.jpg",
+                    IsEnabled = true
+                }
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+        _mockCreatorPersonaService
+            .Setup(s => s.GetPersonaImageSasUrl("personas/avatar.jpg", It.IsAny<TimeSpan>()))
+            .Returns(personaSasUrl);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs, Has.Count.EqualTo(1));
+        Assert.That(songs[0].PersonaImageUrl, Is.EqualTo(personaSasUrl));
+    }
+
+    [Test]
+    public async Task GetSongs_ReturnsNullPersonaImageUrlWhenNoPersona()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                SongTitle = "No Persona Song",
+                Mp3BlobPath = "folder/song.mp3"
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+
+        // Act
+        var result = await _controller.GetSongs();
+
+        // Assert
+        var okResult = (OkObjectResult)result;
+        var songs = okResult.Value as List<SongListItemDto>;
+        Assert.That(songs, Has.Count.EqualTo(1));
+        Assert.That(songs[0].PersonaImageUrl, Is.Null);
+    }
+
+    // --- GetBulkLikeCounts tests ---
+
+    [Test]
+    public async Task GetBulkLikeCounts_WithValidIds_ReturnsLikeDislikeCounts()
+    {
+        // Arrange
+        var counts = new Dictionary<int, (int likeCount, int dislikeCount)>
+        {
+            { 1, (5, 2) },
+            { 2, (10, 3) }
+        };
+        _mockSongLikeService.Setup(s => s.GetBulkLikeDislikeCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(counts);
+
+        // Act
+        var result = await _controller.GetBulkLikeCounts("1,2");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var items = (okResult.Value as System.Collections.IEnumerable)!.Cast<object>().ToList();
+        Assert.That(items, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetBulkLikeCounts_WithEmptyIds_ReturnsEmptyArray()
+    {
+        // Act
+        var result = await _controller.GetBulkLikeCounts("");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var items = (okResult.Value as System.Collections.IEnumerable)!.Cast<object>().ToList();
+        Assert.That(items, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetBulkLikeCounts_WithInvalidIds_ReturnsEmptyArray()
+    {
+        // Act
+        var result = await _controller.GetBulkLikeCounts("abc,xyz");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var items = (okResult.Value as System.Collections.IEnumerable)!.Cast<object>().ToList();
+        Assert.That(items, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetBulkLikeCounts_ReturnZeroForMissingIds()
+    {
+        // Arrange - id 3 is not in the dictionary so should get 0/0
+        var counts = new Dictionary<int, (int likeCount, int dislikeCount)>
+        {
+            { 1, (5, 2) }
+        };
+        _mockSongLikeService.Setup(s => s.GetBulkLikeDislikeCountsAsync(It.IsAny<IEnumerable<int>>()))
+            .ReturnsAsync(counts);
+
+        // Act
+        var result = await _controller.GetBulkLikeCounts("1,3");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var items = (okResult.Value as System.Collections.IEnumerable)!.Cast<object>().ToList();
+        Assert.That(items, Has.Count.EqualTo(2));
+        // Item for id=3 should have 0 counts via TryGetValue default
+        var item3 = items[1];
+        var likeCountProp = item3.GetType().GetProperty("likeCount");
+        Assert.That((int)likeCountProp!.GetValue(item3)!, Is.EqualTo(0));
+    }
+
+    // --- ToggleLike tests ---
+
+    [Test]
+    public async Task ToggleLike_WithValidIdAndAuthUser_ReturnsOk()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.ToggleLikeAsync(user.Id, 42))
+            .ReturnsAsync(true);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(42))
+            .ReturnsAsync((10, 3));
+
+        // Act
+        var result = await _controller.ToggleLike(42);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var value = okResult.Value!;
+        Assert.That((bool)value.GetType().GetProperty("isLiked")!.GetValue(value)!, Is.True);
+        Assert.That((int)value.GetType().GetProperty("likeCount")!.GetValue(value)!, Is.EqualTo(10));
+        Assert.That((int)value.GetType().GetProperty("dislikeCount")!.GetValue(value)!, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task ToggleLike_WithInvalidId_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.ToggleLike(0);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task ToggleLike_WithNoUser_ReturnsUnauthorized()
+    {
+        // Arrange
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+
+        // Act
+        var result = await _controller.ToggleLike(42);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
+    // --- ToggleDislike tests ---
+
+    [Test]
+    public async Task ToggleDislike_WithValidIdAndAuthUser_ReturnsOk()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.ToggleDislikeAsync(user.Id, 42))
+            .ReturnsAsync(true);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(42))
+            .ReturnsAsync((5, 7));
+
+        // Act
+        var result = await _controller.ToggleDislike(42);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var value = okResult.Value!;
+        Assert.That((bool)value.GetType().GetProperty("isDisliked")!.GetValue(value)!, Is.True);
+        Assert.That((int)value.GetType().GetProperty("likeCount")!.GetValue(value)!, Is.EqualTo(5));
+        Assert.That((int)value.GetType().GetProperty("dislikeCount")!.GetValue(value)!, Is.EqualTo(7));
+    }
+
+    [Test]
+    public async Task ToggleDislike_WithInvalidId_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.ToggleDislike(0);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task ToggleDislike_WithNoUser_ReturnsUnauthorized()
+    {
+        // Arrange
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+
+        // Act
+        var result = await _controller.ToggleDislike(42);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
+    [Test]
+    public async Task GetStreamQualifyingSeconds_ReturnsValueFromSettings()
+    {
+        // Arrange
+        _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
+
+        // Act
+        var result = await _controller.GetStreamQualifyingSeconds();
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
     }
 }
