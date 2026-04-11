@@ -1,3 +1,4 @@
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 
@@ -8,6 +9,7 @@ public partial class HomeModel : BlazorBase
     protected string _subscriptionPrice = "3.99";
     protected bool _hasActiveSubscription = false;
     protected bool _isAuthenticated = false;
+    protected bool _isEmailVerified = false;
     protected List<RecommendedPlaylist> _recommendedPlaylist = new();
     protected Playlist _likedSongsPlaylist = null;
     protected int _likedSongsCount = 0;
@@ -32,6 +34,7 @@ public partial class HomeModel : BlazorBase
             if (appUser != null)
             {
                 _currentUserId = appUser.Id;
+                _isEmailVerified = !await UserManager.IsInRoleAsync(appUser, Roles.NonValidatedUser);
             }
             await LoadSubscriptionStatusAsync();
             await LoadRecommendedPlaylistAsync();

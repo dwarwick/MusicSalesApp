@@ -6,6 +6,7 @@ using Hangfire.Dashboard;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Components; // for NavigationManager when creating HttpClient
 using Microsoft.AspNetCore.Components.Authorization;
@@ -13,6 +14,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Azure.Storage.Blobs;
 using MusicSalesApp;
 using MusicSalesApp.Common.Helpers;
@@ -24,6 +26,7 @@ using MusicSalesApp.Services;
 using Syncfusion.Blazor;
 using Serilog;
 using Serilog.Events;
+using System.Text;
 
 var logDirectory = Path.Combine(Directory.GetCurrentDirectory(), "logs");
 Directory.CreateDirectory(logDirectory);
@@ -109,6 +112,25 @@ try
         options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<int>("Auth:ExpireMinutes", 300));
         options.SlidingExpiration = true;
     });
+
+    // Add JWT Bearer authentication for mobile clients (MAUI app)
+    var jwtKey = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey must be configured");
+    var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MusicSalesApp";
+    var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MusicSalesApp.Maui";
+    builder.Services.AddAuthentication()
+        .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwtIssuer,
+                ValidAudience = jwtAudience,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            };
+        });
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -224,14 +246,23 @@ try
 
     builder.Services.AddAuthorizationCore(options =>
     {
+        // Default policy accepts both cookie and JWT bearer authentication
+        options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder(
+            IdentityConstants.ApplicationScheme,
+            JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .Build();
+
         var type = typeof(Permissions);
         var permissionNames = type.GetFields().Select(permission => permission.Name);
         foreach (var name in permissionNames)
         {
             options.AddPolicy(
                 name,
-                policyBuilder => policyBuilder.RequireAssertion(
-                    context => context.User.HasClaim(claim => claim.Type == CustomClaimTypes.Permission && claim.Value == name)));
+                policyBuilder => policyBuilder
+                    .AddAuthenticationSchemes(IdentityConstants.ApplicationScheme, JwtBearerDefaults.AuthenticationScheme)
+                    .RequireAssertion(
+                        context => context.User.HasClaim(claim => claim.Type == CustomClaimTypes.Permission && claim.Value == name)));
         }
     });
 
@@ -245,6 +276,7 @@ try
     builder.Services.AddScoped<IEmailService, EmailService>();
     builder.Services.AddScoped<IPurchaseEmailService, PurchaseEmailService>();
     builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
+    builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();

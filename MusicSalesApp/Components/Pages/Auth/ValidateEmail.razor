@@ -1,0 +1,76 @@
+@page "/validate-email"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inherits ValidateEmailModel
+
+<PageTitle>Validate Email</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <SfCard>
+                <CardHeader Title="Email Verification Required" />
+                <CardContent>
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <SfMessage Severity="MessageSeverity.Success">@successMessage</SfMessage>
+                    }
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <SfMessage Severity="MessageSeverity.Error">@errorMessage</SfMessage>
+                    }
+                    @if (!string.IsNullOrEmpty(infoMessage))
+                    {
+                        <SfMessage Severity="MessageSeverity.Info">@infoMessage</SfMessage>
+                    }
+
+                    @if (_emailAlreadyVerified)
+                    {
+                        <div class="mb-4">
+                            <p>Your email is already verified. You have full access to the site.</p>
+                        </div>
+                        <div class="d-grid">
+                            <SfButton OnClick="GoToHome" IsPrimary="true" Content="Go to Home" CssClass="e-btn e-primary" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-4">
+                            <p>Please check <strong>@_currentEmail</strong> for a verification link to complete your registration. The link will expire in <strong>10 minutes</strong>.</p>
+
+                            @if (!canResendEmail)
+                            {
+                                <p class="text-muted">You can request a new verification email in @FormatRemainingTime(secondsRemaining).</p>
+                            }
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <SfButton OnClick="ResendVerificationEmail"
+                                    Disabled="@(!canResendEmail || isSubmitting)"
+                                    IsPrimary="true"
+                                    Content="@(isSubmitting ? "Sending..." : "Resend Verification Email")"
+                                    CssClass="e-btn e-primary" />
+                        </div>
+
+                        <hr class="my-4" />
+
+                        <h5>Change Email Address</h5>
+                        <p class="text-muted">Made a typo? Update your email address below:</p>
+
+                        <div class="mb-3">
+                            <label for="newEmail" class="e-label">New Email Address</label>
+                            <SfTextBox ID="newEmail" @bind-Value="NewEmail" Placeholder="Enter new email" CssClass="e-outline" />
+                        </div>
+                        <SfButton OnClick="ChangeEmail" Disabled="@isSubmitting" Content="@(isSubmitting ? "Updating..." : "Update Email & Send New Verification")" CssClass="e-btn e-outline w-100" />
+
+                        <hr class="my-4" />
+                        <div class="text-center">
+                            <a href="/">Continue browsing</a>
+                        </div>
+                    }
+                </CardContent>
+            </SfCard>
+        </div>
+    </div>
+</div>

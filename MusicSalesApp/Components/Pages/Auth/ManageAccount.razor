@@ -1,7 +1,10 @@
 @page "/manage-account"
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Models
 @using Syncfusion.Blazor.Notifications
+@attribute [Authorize(Policy = Permissions.ValidatedUser)]
 @inherits ManageAccountModel
 
 <PageTitle>Manage Account</PageTitle>

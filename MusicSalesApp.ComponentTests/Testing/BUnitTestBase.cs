@@ -53,6 +53,7 @@ public abstract class BUnitTestBase
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
+    protected Mock<IAccountDeletionService> MockAccountDeletionService { get; private set; } = default!;
     protected Mock<IEmailService> MockEmailService { get; private set; } = default!;
     protected Mock<ICreatorService> MockCreatorService { get; private set; } = default!;
     protected Mock<ICreatorPersonaService> MockCreatorPersonaService { get; private set; } = default!;
@@ -95,6 +96,7 @@ public abstract class BUnitTestBase
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
+        MockAccountDeletionService = new Mock<IAccountDeletionService>();
         MockEmailService = new Mock<IEmailService>();
         MockCreatorService = new Mock<ICreatorService>();
         MockCreatorPersonaService = new Mock<ICreatorPersonaService>();
@@ -291,6 +293,10 @@ public abstract class BUnitTestBase
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        // Setup default return for IAccountDeletionService
+        MockAccountDeletionService.Setup(x => x.DeleteAccountAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(IdentityResult.Success);
+
         // Setup default returns for IEmailService methods
         MockEmailService.Setup(x => x.SendEmailAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -433,6 +439,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);
+        TestContext.Services.AddSingleton<IAccountDeletionService>(MockAccountDeletionService.Object);
         TestContext.Services.AddSingleton<IEmailService>(MockEmailService.Object);
         TestContext.Services.AddSingleton<ICreatorService>(MockCreatorService.Object);
         TestContext.Services.AddSingleton<ICreatorPersonaService>(MockCreatorPersonaService.Object);

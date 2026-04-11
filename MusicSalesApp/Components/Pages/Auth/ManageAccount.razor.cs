@@ -123,6 +123,9 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     [Inject]
     private IDbContextFactory<AppDbContext> DbContextFactory { get; set; }
 
+    [Inject]
+    private IAccountDeletionService AccountDeletionService { get; set; }
+
     [SupplyParameterFromQuery(Name = "success")]
     public bool? Success { get; set; }
 
@@ -591,22 +594,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         try
         {
-            // Delete creator personas and their images before account deletion
-            var creatorId = await CreatorService.GetCreatorIdForUserAsync(_currentUser.Id);
-            if (creatorId.HasValue)
-            {
-                try
-                {
-                    await CreatorPersonaService.DeleteAllPersonasForCreatorAsync(creatorId.Value);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Failed to delete creator personas before account deletion for user {UserId}", _currentUser.Id);
-                    // Don't block account deletion if persona cleanup fails
-                }
-            }
-
-            var result = await UserManager.DeleteAsync(_currentUser);
+            var result = await AccountDeletionService.DeleteAccountAsync(_currentUser);
             
             if (result.Succeeded)
             {

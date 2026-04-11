@@ -229,9 +229,18 @@
             else if (!_isActiveCreator)
             {
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
-                    <a href="/manage-account" class="e-control e-btn cta-button cta-button-register">
-                        Get Started
-                    </a>
+                    @if (_isEmailVerified)
+                    {
+                        <a href="/manage-account" class="e-control e-btn cta-button cta-button-register">
+                            Get Started
+                        </a>
+                    }
+                    else
+                    {
+                        <a href="/validate-email" class="e-control e-btn cta-button cta-button-register">
+                            Validate Your Email for Full Functionality
+                        </a>
+                    }
                 </div>
             }
         </section>

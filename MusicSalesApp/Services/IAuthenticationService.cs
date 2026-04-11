@@ -51,11 +51,21 @@ public interface IAuthenticationService
 
     /// <summary>
     /// Verifies the user's email address using the provided token.
+    /// The token is URL-decoded before validation (for web verification links).
     /// </summary>
     /// <param name="userId">The ID of the user to verify.</param>
     /// <param name="token">The verification token sent to the user's email.</param>
     /// <returns>A tuple indicating success and an error message if applicable.</returns>
     Task<(bool Success, string Error)> VerifyEmailAsync(string userId, string token);
+
+    /// <summary>
+    /// Confirms the user's email and promotes from NonValidatedUser to User role.
+    /// The token is used as-is without URL-decoding (for mobile verification).
+    /// </summary>
+    /// <param name="userId">The ID of the user to verify.</param>
+    /// <param name="token">The raw confirmation token (not URL-encoded).</param>
+    /// <returns>A tuple indicating success and an error message if applicable.</returns>
+    Task<(bool Success, string Error)> ConfirmEmailAndPromoteRoleAsync(string userId, string token);
 
     /// <summary>
     /// Updates the user's email address and sends a new verification email.

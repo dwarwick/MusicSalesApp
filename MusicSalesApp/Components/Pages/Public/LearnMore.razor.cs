@@ -1,3 +1,4 @@
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages.Public;
@@ -7,6 +8,7 @@ public partial class LearnMoreModel : BlazorBase
     protected string _streamPayRateDisplay = "0.005";
     protected int _streamQualifyingSeconds = 30;
     protected bool _isAuthenticated = false;
+    protected bool _isEmailVerified = false;
     protected bool _isActiveCreator = false;
 
     protected override async Task OnInitializedAsync()
@@ -24,6 +26,7 @@ public partial class LearnMoreModel : BlazorBase
                 var appUser = await UserManager.GetUserAsync(authState.User);
                 if (appUser != null)
                 {
+                    _isEmailVerified = !await UserManager.IsInRoleAsync(appUser, Roles.NonValidatedUser);
                     _isActiveCreator = await CreatorService.IsActiveCreatorAsync(appUser.Id);
                 }
             }

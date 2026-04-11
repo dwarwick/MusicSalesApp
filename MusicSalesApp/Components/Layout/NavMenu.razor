@@ -73,6 +73,12 @@
                         <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
                         <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
 
+                        <AuthorizeView Policy="@Permissions.NonValidatedUser">
+                            <Authorized>
+                                <MenuItem Url="/validate-email" Text="Validate my Email" IconCss="fas fa-envelope-circle-check"></MenuItem>
+                            </Authorized>
+                        </AuthorizeView>
+
                         <AuthorizeView Policy="@Permissions.ValidatedUser">
                             <Authorized>
                                 <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="fas fa-list"></MenuItem>

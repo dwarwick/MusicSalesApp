@@ -96,12 +96,11 @@ public class LoginPageModel : PageModel
         {
             _logger.LogInformation("User {Username} logged in successfully", username);
             
-            // Check if email is verified - if not, redirect to register page with verification info
+            // Check if email is verified - if not, redirect to validate-email page
             if (!user.EmailConfirmed)
             {
                 _logger.LogInformation("User {Username} logged in but email not verified, redirecting to verification page", username);
-                var encodedEmail = HttpUtility.UrlEncode(user.Email);
-                return Redirect($"/register?needsVerification=true&email={encodedEmail}");
+                return Redirect("/validate-email");
             }
             
             // Validate returnUrl to prevent open redirect vulnerability

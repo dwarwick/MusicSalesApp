@@ -194,10 +194,12 @@ public class AuthenticationService : IAuthenticationService
 
             if (user.EmailConfirmed)
             {
+                // Email already confirmed — ensure role is promoted
+                await PromoteToUserRoleAsync(user, userId);
                 return (true, "Email is already verified");
             }
 
-            // URL-decode the token
+            // URL-decode the token (web verification links are URL-encoded)
             var decodedToken = HttpUtility.UrlDecode(token);
             
             var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
@@ -208,22 +210,7 @@ public class AuthenticationService : IAuthenticationService
                 return (false, "Email verification failed. The link may have expired. Please request a new verification email.");
             }
 
-            // Remove from NonValidatedUser role and add to User role
-            if (await _userManager.IsInRoleAsync(user, Roles.NonValidatedUser))
-            {
-                await _userManager.RemoveFromRoleAsync(user, Roles.NonValidatedUser);
-            }
-
-            // Ensure User role exists
-            if (!await _roleManager.RoleExistsAsync(Roles.User))
-            {
-                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.User, NormalizedName = Roles.User.ToUpper() });
-            }
-
-            if (!await _userManager.IsInRoleAsync(user, Roles.User))
-            {
-                await _userManager.AddToRoleAsync(user, Roles.User);
-            }
+            await PromoteToUserRoleAsync(user, userId);
 
             _logger.LogInformation("Email verified for user {UserId}", userId);
             return (true, string.Empty);
@@ -231,6 +218,50 @@ public class AuthenticationService : IAuthenticationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying email for user {UserId}", userId);
+            return (false, "Unexpected error verifying email");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Success, string Error)> ConfirmEmailAndPromoteRoleAsync(string userId, string token)
+    {
+        try
+        {
+            if (!int.TryParse(userId, out _))
+            {
+                return (false, "Invalid user ID");
+            }
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+
+            if (user.EmailConfirmed)
+            {
+                // Email already confirmed — ensure role is promoted
+                await PromoteToUserRoleAsync(user, userId);
+                return (true, "Email is already verified");
+            }
+
+            // Use token as-is (no URL decoding — caller provides raw token)
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(";", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Email confirmation failed for user {UserId}: {Errors}", userId, errors);
+                return (false, "Email verification failed. Please request a new verification code.");
+            }
+
+            await PromoteToUserRoleAsync(user, userId);
+
+            _logger.LogInformation("Email confirmed and role promoted for user {UserId}", userId);
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error confirming email for user {UserId}", userId);
             return (false, "Unexpected error verifying email");
         }
     }
@@ -376,6 +407,29 @@ public class AuthenticationService : IAuthenticationService
         return minutes > 0 
             ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {seconds} second{(seconds != 1 ? "s" : "")}"
             : $"{seconds} second{(seconds != 1 ? "s" : "")}";
+    }
+
+    /// <summary>
+    /// Removes the user from NonValidatedUser role and adds to User role.
+    /// </summary>
+    private async Task PromoteToUserRoleAsync(ApplicationUser user, string userId)
+    {
+        if (await _userManager.IsInRoleAsync(user, Roles.NonValidatedUser))
+        {
+            await _userManager.RemoveFromRoleAsync(user, Roles.NonValidatedUser);
+        }
+
+        if (!await _roleManager.RoleExistsAsync(Roles.User))
+        {
+            await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.User, NormalizedName = Roles.User.ToUpper() });
+        }
+
+        if (!await _userManager.IsInRoleAsync(user, Roles.User))
+        {
+            await _userManager.AddToRoleAsync(user, Roles.User);
+        }
+
+        _logger.LogInformation("Role promoted from NonValidatedUser to User for user {UserId}", userId);
     }
 
     /// <inheritdoc />

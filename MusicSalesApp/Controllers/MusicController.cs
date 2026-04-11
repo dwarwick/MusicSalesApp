@@ -82,7 +82,8 @@ namespace MusicSalesApp.Controllers
                     : null,
                 StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
                 StreamCount = m.NumberOfStreams,
-                TrackLengthSeconds = m.TrackLength
+                TrackLengthSeconds = m.TrackLength,
+                CreatorUserId = m.Creator?.UserId
             };
         }
 

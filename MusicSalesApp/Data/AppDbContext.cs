@@ -32,6 +32,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<BlockedTipAttempt> BlockedTipAttempts { get; set; }
     public DbSet<ChargebackLog> ChargebackLogs { get; set; }
     public DbSet<CreatorPersona> CreatorPersonas { get; set; }
+    public DbSet<MobileVerificationCode> MobileVerificationCodes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
