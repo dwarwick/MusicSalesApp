@@ -286,6 +286,93 @@ namespace MusicSalesApp.Controllers
             return Ok(new { isDisliked, likeCount, dislikeCount });
         }
 
+        /// <summary>
+        /// Returns per-user like/dislike status for a batch of songs.
+        /// </summary>
+        [HttpGet("likes/user-status")]
+        [Authorize]
+        public async Task<IActionResult> GetBulkUserLikeStatus([FromQuery] string ids)
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return Unauthorized();
+
+            var songIds = ParseIds(ids);
+            if (songIds.Count == 0)
+                return Ok(Array.Empty<object>());
+
+            var statuses = await _songLikeService.GetBulkUserLikeStatusAsync(user.Id, songIds);
+
+            var result = statuses.Select(kvp => new
+            {
+                songMetadataId = kvp.Key,
+                userLikeStatus = kvp.Value
+            });
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Returns a single song DTO by title (for deep linking from shared URLs).
+        /// </summary>
+        [HttpGet("song-by-title/{*title}")]
+        public async Task<IActionResult> GetSongByTitle(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+                return BadRequest(new { error = "Title is required" });
+
+            var decodedTitle = Uri.UnescapeDataString(title);
+            var allSongs = await _songMetadataService.GetAllAsync();
+            var song = allSongs.FirstOrDefault(s =>
+                s.Mp3BlobPath != null &&
+                string.Equals(s.SongTitle, decodedTitle, StringComparison.OrdinalIgnoreCase));
+
+            if (song == null)
+                return NotFound(new { error = "Song not found" });
+
+            var sasLifetime = TimeSpan.FromHours(24);
+            var streamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
+
+            var albumArtUrl = !string.IsNullOrEmpty(song.ImageBlobPath)
+                ? _storageService.GetReadSasUri(song.ImageBlobPath, sasLifetime).ToString()
+                : (string)null;
+
+            var personaImageUrl = song.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
+                ? _creatorPersonaService.GetPersonaImageSasUrl(song.Persona.ImageBlobPath, sasLifetime)
+                : (string)null;
+
+            var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
+            var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(song.Id);
+
+            return Ok(new
+            {
+                id = song.Id,
+                songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath),
+                artistName = song.GetEffectiveArtistName(),
+                genre = song.Genre ?? "Unknown",
+                albumArtUrl,
+                personaImageUrl,
+                streamUrl,
+                streamCount,
+                trackLengthSeconds = song.TrackLength,
+                creatorUserId = song.Creator?.UserId,
+                likeCount,
+                dislikeCount
+            });
+        }
+
+        private static List<int> ParseIds(string idsString)
+        {
+            if (string.IsNullOrWhiteSpace(idsString))
+                return [];
+
+            return idsString
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(s => int.TryParse(s, out var id) ? id : -1)
+                .Where(id => id > 0)
+                .ToList();
+        }
+
         private static string NormalizeContentType(string original, string fileName)
         {
             if (!string.IsNullOrWhiteSpace(original) && original != "application/octet-stream")

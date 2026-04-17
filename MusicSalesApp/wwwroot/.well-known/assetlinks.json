@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.streamtunes.musicsalesapp.maui",
+      "sha256_cert_fingerprints": [
+        "4A:3D:53:08:76:F4:86:9A:8B:0B:EA:65:E2:8D:68:80:77:14:7E:80:80:96:8F:B2:FC:80:C8:FC:E2:95:F6:23"
+      ]
+    }
+  }
+]

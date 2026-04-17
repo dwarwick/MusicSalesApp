@@ -65,6 +65,42 @@ public class OpenGraphService : IOpenGraphService
                 return string.Empty;
             }
 
+            return await BuildSongMetaTagsAsync(songMetadata, allMetadata);
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GenerateSongMetaTagsByIdAsync(int songId)
+    {
+        try
+        {
+            var songMetadata = await _songMetadataService.GetByIdAsync(songId);
+            if (songMetadata == null)
+            {
+                return string.Empty;
+            }
+
+            var allMetadata = await _songMetadataService.GetAllAsync();
+            return await BuildSongMetaTagsAsync(songMetadata, allMetadata);
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Builds OG meta tag HTML for a song metadata record.
+    /// Shared by both title-based and ID-based lookups.
+    /// </summary>
+    private async Task<string> BuildSongMetaTagsAsync(SongMetadata songMetadata, List<SongMetadata> allMetadata)
+    {
+            var decodedTitle = songMetadata.SongTitle ?? Path.GetFileNameWithoutExtension(songMetadata.Mp3BlobPath ?? "");
+
             // Find the associated image for this song using BlobPath or ImageBlobPath
             // First try using the image from the song metadata record itself
             string imageBlobPath = null;
@@ -103,10 +139,13 @@ public class OpenGraphService : IOpenGraphService
 
             var displayTitle = !string.IsNullOrEmpty(songMetadata.SongTitle) ? songMetadata.SongTitle : decodedTitle;
 
+            // og:url should point to the canonical song page URL
+            var canonicalUrl = GetAbsoluteUrl($"/song/{Uri.EscapeDataString(displayTitle)}");
+
             var tags = new Dictionary<string, string>
             {
                 ["fb:app_id"] = _configuration["Facebook:AppId"] ?? "",
-                ["og:url"] = GetCurrentUrl(),
+                ["og:url"] = canonicalUrl,
                 ["og:type"] = "music.song",
                 ["og:title"] = displayTitle,
                 ["og:image"] = imageUrl,
@@ -126,11 +165,6 @@ public class OpenGraphService : IOpenGraphService
             }
 
             return GenerateMetaTagsHtml(tags);
-        }
-        catch (Exception)
-        {
-            return string.Empty;
-        }
     }
 
     /// <summary>

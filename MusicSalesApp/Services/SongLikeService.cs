@@ -207,4 +207,23 @@ public class SongLikeService : ISongLikeService
             c => c.SongMetadataId,
             c => (c.LikeCount, c.DislikeCount));
     }
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<int, bool?>> GetBulkUserLikeStatusAsync(int userId, IEnumerable<int> songMetadataIds)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var ids = songMetadataIds.ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, bool?>();
+
+        var userLikes = await context.SongLikes
+            .Where(sl => sl.UserId == userId && ids.Contains(sl.SongMetadataId))
+            .Select(sl => new { sl.SongMetadataId, sl.IsLike })
+            .ToListAsync();
+
+        return userLikes.ToDictionary(
+            ul => ul.SongMetadataId,
+            ul => (bool?)ul.IsLike);
+    }
 }

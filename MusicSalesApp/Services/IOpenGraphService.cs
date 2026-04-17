@@ -20,6 +20,12 @@ public interface IOpenGraphService
     Task<string> GenerateAlbumMetaTagsAsync(string albumName);
 
     /// <summary>
+    /// Generates Open Graph meta tags for a song looked up by database ID.
+    /// Used by /share/{id} to avoid URL-encoding issues with song titles.
+    /// </summary>
+    Task<string> GenerateSongMetaTagsByIdAsync(int songId);
+
+    /// <summary>
     /// Pre-generates the Facebook-optimized image (1200x630) for a given image blob path.
     /// Call this during upload so the image is ready before Facebook's crawler requests it.
     /// </summary>

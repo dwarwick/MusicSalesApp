@@ -434,6 +434,8 @@ try
     });
 
     // required for /.well-known/* to be served from wwwroot
+    // Handle /share/{id} before Blazor to avoid SSR lifecycle issues
+    app.UseMiddleware<MusicSalesApp.Middleware.ShareRedirectMiddleware>();
     app.UseStaticFiles();
 
     app.UseAuthentication();

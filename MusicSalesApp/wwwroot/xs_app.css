@@ -481,9 +481,10 @@
         gap: 4px;
     }
 
-    .playlist-player-container .fb-share-btn .fb-icon {
-        width: 14px;
-        height: 14px;
+    .playlist-player-container .fb-share-btn .fb-logo-box {
+        width: 16px;
+        height: 16px;
+        font-size: 11px;
     }
 
     .playlist-player-container .fb-share-btn .share-text {
