@@ -18,7 +18,6 @@ namespace MusicSalesApp.Controllers
         private readonly IStreamCountService _streamCountService;
         private readonly ISongMetadataService _songMetadataService;
         private readonly ISongLikeService _songLikeService;
-        private readonly IAppSettingsService _appSettingsService;
         private readonly ICreatorPersonaService _creatorPersonaService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
@@ -29,7 +28,6 @@ namespace MusicSalesApp.Controllers
             IStreamCountService streamCountService,
             ISongMetadataService songMetadataService,
             ISongLikeService songLikeService,
-            IAppSettingsService appSettingsService,
             ICreatorPersonaService creatorPersonaService,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
@@ -39,7 +37,6 @@ namespace MusicSalesApp.Controllers
             _streamCountService = streamCountService;
             _songMetadataService = songMetadataService;
             _songLikeService = songLikeService;
-            _appSettingsService = appSettingsService;
             _creatorPersonaService = creatorPersonaService;
             _userManager = userManager;
             _logger = logger;
@@ -80,6 +77,9 @@ namespace MusicSalesApp.Controllers
                 PersonaImageUrl = m.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
                     ? _creatorPersonaService.GetPersonaImageSasUrl(m.Persona.ImageBlobPath, sasLifetime)
                     : null,
+                PersonaBio = m.Persona is { IsEnabled: true, Bio: not null and not "" }
+                    ? m.Persona.Bio
+                    : m.Creator?.Bio,
                 StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
                 StreamCount = m.NumberOfStreams,
                 TrackLengthSeconds = m.TrackLength,
@@ -171,17 +171,6 @@ namespace MusicSalesApp.Controllers
             var count = await _streamCountService.GetStreamCountAsync(songMetadataId);
             
             return Ok(new { songMetadataId, streamCount = count });
-        }
-
-        /// <summary>
-        /// Returns the number of continuous playback seconds required before a stream is counted.
-        /// Used by the MAUI app to know when to call RecordStream.
-        /// </summary>
-        [HttpGet("stream-qualifying-seconds")]
-        public async Task<IActionResult> GetStreamQualifyingSeconds()
-        {
-            var seconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
-            return Ok(new { streamQualifyingSeconds = seconds });
         }
 
         /// <summary>
@@ -341,6 +330,10 @@ namespace MusicSalesApp.Controllers
                 ? _creatorPersonaService.GetPersonaImageSasUrl(song.Persona.ImageBlobPath, sasLifetime)
                 : (string)null;
 
+            var personaBio = song.Persona is { IsEnabled: true, Bio: not null and not "" }
+                ? song.Persona.Bio
+                : song.Creator?.Bio;
+
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(song.Id);
 
@@ -352,6 +345,7 @@ namespace MusicSalesApp.Controllers
                 genre = song.Genre ?? "Unknown",
                 albumArtUrl,
                 personaImageUrl,
+                personaBio,
                 streamUrl,
                 streamCount,
                 trackLengthSeconds = song.TrackLength,
