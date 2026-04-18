@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,7 @@ public class MobileAuthController : ControllerBase
     private readonly ISubscriptionService _subscriptionService;
     private readonly IEmailService _emailService;
     private readonly IAccountEmailService _accountEmailService;
+    private readonly IAccountDeletionService _accountDeletionService;
     private readonly IAdminNotificationService _adminNotificationService;
     private readonly AppDbContext _context;
     private readonly ILogger<MobileAuthController> _logger;
@@ -41,6 +43,7 @@ public class MobileAuthController : ControllerBase
         ISubscriptionService subscriptionService,
         IEmailService emailService,
         IAccountEmailService accountEmailService,
+        IAccountDeletionService accountDeletionService,
         IAdminNotificationService adminNotificationService,
         AppDbContext context,
         ILogger<MobileAuthController> logger)
@@ -51,6 +54,7 @@ public class MobileAuthController : ControllerBase
         _subscriptionService = subscriptionService;
         _emailService = emailService;
         _accountEmailService = accountEmailService;
+        _accountDeletionService = accountDeletionService;
         _adminNotificationService = adminNotificationService;
         _context = context;
         _logger = logger;
@@ -274,6 +278,56 @@ public class MobileAuthController : ControllerBase
 
         _logger.LogInformation("Email changed from mobile for user {UserId} to {NewEmail}", user.Id, request.NewEmail);
         return Ok(new { message = "Email updated. A new verification code has been sent." });
+    }
+
+    [Authorize]
+    [HttpDelete("account")]
+    public async Task<IActionResult> DeleteAccount()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(new { message = "Invalid authentication." });
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+            return NotFound(new { message = "User not found." });
+
+        // Check for active (non-cancelled) subscription
+        var hasActiveSubscription = await _context.Subscriptions
+            .AnyAsync(s => s.UserId == user.Id && s.EndDate == null);
+
+        if (hasActiveSubscription)
+            return Conflict(new { message = "You must cancel your active subscription before deleting your account." });
+
+        // Capture user info before deletion
+        var userEmail = user.Email ?? string.Empty;
+        var userName = user.UserName ?? userEmail;
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+        var result = await _accountDeletionService.DeleteAccountAsync(user);
+
+        if (!result.Succeeded)
+        {
+            var errors = string.Join("; ", result.Errors.Select(e => e.Description));
+            _logger.LogError("Account deletion failed for user {UserId}: {Errors}", userId, errors);
+            return StatusCode(500, new { message = "Failed to delete account. Please try again." });
+        }
+
+        // Send account deleted email (fire-and-forget, don't fail the response)
+        if (!string.IsNullOrEmpty(userEmail))
+        {
+            try
+            {
+                await _accountEmailService.SendAccountDeletedEmailAsync(userEmail, userName, baseUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send account deleted email for {Email}", userEmail);
+            }
+        }
+
+        _logger.LogInformation("Account deleted via mobile for user {UserId} ({Email})", userId, userEmail);
+        return Ok(new { message = "Your account has been permanently deleted." });
     }
 
     // --- Helper methods ---
