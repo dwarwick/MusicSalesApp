@@ -18,7 +18,6 @@ public class MusicControllerTests
     private Mock<IStreamCountService> _mockStreamCountService;
     private Mock<ISongMetadataService> _mockSongMetadataService;
     private Mock<ISongLikeService> _mockSongLikeService;
-    private Mock<IAppSettingsService> _mockAppSettingsService;
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
@@ -32,7 +31,6 @@ public class MusicControllerTests
         _mockStreamCountService = new Mock<IStreamCountService>();
         _mockSongMetadataService = new Mock<ISongMetadataService>();
         _mockSongLikeService = new Mock<ISongLikeService>();
-        _mockAppSettingsService = new Mock<IAppSettingsService>();
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockLogger = new Mock<ILogger<MusicController>>();
         
@@ -47,7 +45,6 @@ public class MusicControllerTests
             _mockStreamCountService.Object,
             _mockSongMetadataService.Object,
             _mockSongLikeService.Object,
-            _mockAppSettingsService.Object,
             _mockCreatorPersonaService.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
@@ -714,19 +711,5 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
-    }
-
-    [Test]
-    public async Task GetStreamQualifyingSeconds_ReturnsValueFromSettings()
-    {
-        // Arrange
-        _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
-
-        // Act
-        var result = await _controller.GetStreamQualifyingSeconds();
-
-        // Assert
-        var okResult = result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
     }
 }

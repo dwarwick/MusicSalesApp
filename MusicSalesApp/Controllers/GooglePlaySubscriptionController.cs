@@ -1,0 +1,89 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Data;
+using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+
+namespace MusicSalesApp.Controllers;
+
+[Route("api/subscription/google-play")]
+[ApiController]
+public class GooglePlaySubscriptionController : ControllerBase
+{
+    private readonly ISubscriptionService _subscriptionService;
+    private readonly IGooglePlayVerificationService _verificationService;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<GooglePlaySubscriptionController> _logger;
+
+    public GooglePlaySubscriptionController(
+        ISubscriptionService subscriptionService,
+        IGooglePlayVerificationService verificationService,
+        UserManager<ApplicationUser> userManager,
+        IConfiguration configuration,
+        ILogger<GooglePlaySubscriptionController> logger)
+    {
+        _subscriptionService = subscriptionService;
+        _verificationService = verificationService;
+        _userManager = userManager;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Called by the MAUI app after a successful Google Play purchase to verify and record the subscription.
+    /// </summary>
+    [HttpPost("verify")]
+    [Authorize(Roles = "Admin,User")]
+    public async Task<IActionResult> VerifyAndRecordPurchase([FromBody] GooglePlayPurchaseRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PurchaseToken))
+            return BadRequest("PurchaseToken is required.");
+
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized();
+
+        var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
+
+        // Verify with Google Play Developer API
+        var subscriptionInfo = await _verificationService.VerifySubscriptionAsync(request.PurchaseToken, productId);
+        if (subscriptionInfo == null)
+            return BadRequest(new { success = false, error = "Could not verify purchase with Google Play." });
+
+        // Only allow active subscriptions
+        if (subscriptionInfo.SubscriptionState != "SUBSCRIPTION_STATE_ACTIVE")
+        {
+            _logger.LogWarning("Google Play subscription verification returned state {State} for user {UserId}",
+                subscriptionInfo.SubscriptionState, user.Id);
+            return BadRequest(new { success = false, error = $"Subscription is not active (state: {subscriptionInfo.SubscriptionState})." });
+        }
+
+        var orderId = subscriptionInfo.OrderId ?? request.OrderId ?? "";
+        var monthlyPrice = decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], out var price) ? price : 3.99m;
+
+        // Check if we already have this token recorded
+        var existing = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
+        if (existing != null)
+        {
+            // Already recorded — just return success
+            return Ok(new { success = true, subscriptionId = existing.Id, status = existing.Status });
+        }
+
+        // Create new subscription record
+        var subscription = await _subscriptionService.CreateGooglePlaySubscriptionAsync(
+            user.Id, request.PurchaseToken, orderId, monthlyPrice);
+
+        // Acknowledge the purchase so Google doesn't auto-refund
+        if (!subscriptionInfo.IsAcknowledged)
+        {
+            await _verificationService.AcknowledgeSubscriptionAsync(request.PurchaseToken, productId);
+        }
+
+        return Ok(new { success = true, subscriptionId = subscription.Id, status = subscription.Status });
+    }
+}
+
+public record GooglePlayPurchaseRequest(string PurchaseToken, string OrderId = "");

@@ -14,4 +14,9 @@ public interface ISubscriptionService
     Task<bool> DeletePendingSubscriptionAsync(int userId);
     Task<Subscription> GetPendingSubscriptionAsync(int userId);
     Task ActivateSubscriptionAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate);
+
+    // Google Play billing methods
+    Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice);
+    Task<Subscription> GetSubscriptionByGooglePlayTokenAsync(string purchaseToken);
+    Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null);
 }

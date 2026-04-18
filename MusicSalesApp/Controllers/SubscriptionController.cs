@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Net.Http.Headers;
@@ -28,6 +29,7 @@ public class SubscriptionController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IPurchaseEmailService _purchaseEmailService;
     private readonly IAccountEmailService _accountEmailService;
+    private readonly IGooglePlayVerificationService _googlePlayVerificationService;
 
     /// <summary>
     /// Initializes a new instance of the SubscriptionController.
@@ -40,6 +42,7 @@ public class SubscriptionController : ControllerBase
     /// <param name="httpClientFactory">Factory for creating HTTP clients for PayPal API calls.</param>
     /// <param name="purchaseEmailService">Service for sending purchase confirmation emails.</param>
     /// <param name="accountEmailService">Service for sending account-related confirmation emails.</param>
+    /// <param name="googlePlayVerificationService">Service for Google Play billing operations.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
         IAppSettingsService appSettingsService,
@@ -48,7 +51,8 @@ public class SubscriptionController : ControllerBase
         ILogger<SubscriptionController> logger,
         IHttpClientFactory httpClientFactory,
         IPurchaseEmailService purchaseEmailService,
-        IAccountEmailService accountEmailService)
+        IAccountEmailService accountEmailService,
+        IGooglePlayVerificationService googlePlayVerificationService)
     {
         _subscriptionService = subscriptionService;
         _appSettingsService = appSettingsService;
@@ -58,6 +62,7 @@ public class SubscriptionController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _purchaseEmailService = purchaseEmailService;
         _accountEmailService = accountEmailService;
+        _googlePlayVerificationService = googlePlayVerificationService;
     }
 
     [HttpGet("status")]
@@ -88,6 +93,7 @@ public class SubscriptionController : ControllerBase
             nextBillingDate = subscription.NextBillingDate,
             monthlyPrice = subscription.MonthlyPrice,
             paypalSubscriptionId = subscription.PayPalSubscriptionId,
+            billingSource = subscription.BillingSource,
             isSubscriptionBlocked = user.IsSubscriptionBlocked
         });
     }
@@ -320,12 +326,11 @@ public class SubscriptionController : ControllerBase
             return BadRequest("No active subscription found");
         }
 
-        // Cancel with PayPal
-        var cancelled = await CancelPayPalSubscriptionAsync(subscription.PayPalSubscriptionId);
+        // Route cancellation to the correct billing provider
+        var cancelled = await CancelWithProviderAsync(subscription);
         if (!cancelled)
         {
-            _logger.LogWarning("Failed to cancel PayPal subscription {SubscriptionId}", subscription.PayPalSubscriptionId);
-            return BadRequest("Failed to cancel PayPal subscription");
+            return BadRequest($"Failed to cancel subscription with {subscription.BillingSource}");
         }
 
         // Update local database
@@ -701,6 +706,36 @@ public class SubscriptionController : ControllerBase
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Routes subscription cancellation to the correct billing provider based on BillingSource.
+    /// </summary>
+    private async Task<bool> CancelWithProviderAsync(Subscription subscription)
+    {
+        switch (subscription.BillingSource)
+        {
+            case BillingSources.GooglePlay:
+                var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
+                var gpCancelled = await _googlePlayVerificationService.CancelSubscriptionAsync(
+                    subscription.GooglePlayPurchaseToken, productId);
+                if (!gpCancelled)
+                    _logger.LogWarning("Failed to cancel Google Play subscription for user {UserId}", subscription.UserId);
+                return gpCancelled;
+
+            case BillingSources.Apple:
+                // Apple does not support server-initiated cancellation.
+                // The subscription is marked cancelled locally; the user must manage it in iOS Settings.
+                _logger.LogInformation("Apple subscription for user {UserId} marked cancelled locally. User must cancel in iOS Settings.", subscription.UserId);
+                return true;
+
+            case BillingSources.PayPal:
+            default:
+                var ppCancelled = await CancelPayPalSubscriptionAsync(subscription.PayPalSubscriptionId);
+                if (!ppCancelled)
+                    _logger.LogWarning("Failed to cancel PayPal subscription {SubscriptionId}", subscription.PayPalSubscriptionId);
+                return ppCancelled;
+        }
     }
 
     private async Task<bool> CancelPayPalSubscriptionAsync(string subscriptionId)

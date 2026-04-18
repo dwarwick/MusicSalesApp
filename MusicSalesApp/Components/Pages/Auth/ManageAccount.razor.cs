@@ -46,6 +46,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected DateTime? _endDate;
     protected DateTime? _nextBillingDate;
     protected string _paypalSubscriptionId;
+    protected string _billingSource;
     protected string _subscriptionPrice = "3.99";
     protected bool _agreeToTerms = false;
     protected bool _subscribing = false;
@@ -644,6 +645,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _endDate = response.EndDate;
                 _nextBillingDate = response.NextBillingDate;
                 _paypalSubscriptionId = response.PaypalSubscriptionId;
+                _billingSource = response.BillingSource;
                 _subscriptionPrice = response.SubscriptionPrice ?? "3.99";
             }
         }
@@ -1229,6 +1231,7 @@ public class SubscriptionStatusResponse
     public DateTime? NextBillingDate { get; set; }
     public decimal MonthlyPrice { get; set; }
     public string PaypalSubscriptionId { get; set; }
+    public string BillingSource { get; set; }
     public string SubscriptionPrice { get; set; }
 }
 

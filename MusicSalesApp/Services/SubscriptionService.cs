@@ -255,4 +255,87 @@ public class SubscriptionService : ISubscriptionService
 
         _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.Id, subscription.UserId);
     }
+
+    // --- Google Play billing methods ---
+
+    public async Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        // Cancel any existing active subscriptions for this user
+        var existingSubscriptions = await context.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.Active)
+            .ToListAsync();
+
+        foreach (var existing in existingSubscriptions)
+        {
+            existing.Status = SubscriptionStatuses.Cancelled;
+            existing.CancelledAt = DateTime.UtcNow;
+        }
+
+        var subscription = new Subscription
+        {
+            UserId = userId,
+            BillingSource = BillingSources.GooglePlay,
+            GooglePlayPurchaseToken = purchaseToken,
+            GooglePlayOrderId = orderId,
+            Status = SubscriptionStatuses.Active,
+            StartDate = DateTime.UtcNow,
+            LastPaymentDate = DateTime.UtcNow,
+            MonthlyPrice = monthlyPrice,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        context.Subscriptions.Add(subscription);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Created Google Play subscription {SubscriptionId} for user {UserId}, order {OrderId}",
+            subscription.Id, userId, orderId);
+
+        return subscription;
+    }
+
+    public async Task<Subscription> GetSubscriptionByGooglePlayTokenAsync(string purchaseToken)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.GooglePlayPurchaseToken == purchaseToken);
+    }
+
+    public async Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.GooglePlayPurchaseToken == purchaseToken);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning("Google Play subscription with token {PurchaseToken} not found", purchaseToken[..Math.Min(20, purchaseToken.Length)]);
+            return;
+        }
+
+        subscription.Status = status;
+
+        if (expiryTime.HasValue)
+        {
+            subscription.EndDate = expiryTime.Value;
+            subscription.NextBillingDate = expiryTime.Value;
+        }
+
+        if (status == SubscriptionStatuses.Cancelled || status == SubscriptionStatuses.Suspended || status == SubscriptionStatuses.Expired)
+        {
+            subscription.CancelledAt ??= DateTime.UtcNow;
+        }
+
+        if (status == SubscriptionStatuses.Active)
+        {
+            subscription.LastPaymentDate = DateTime.UtcNow;
+        }
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated Google Play subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+    }
 }

@@ -35,4 +35,23 @@ public class Subscription
     public DateTime? LastPaymentDate { get; set; }
 
     public DateTime? NextBillingDate { get; set; }
+
+    /// <summary>
+    /// Billing source: "PayPal" or "GooglePlay". Defaults to PayPal for existing records.
+    /// Use <see cref="BillingSources"/> constants.
+    /// </summary>
+    [MaxLength(20)]
+    public string BillingSource { get; set; } = BillingSources.PayPal;
+
+    /// <summary>
+    /// Google Play purchase token used for server-side verification. Null for PayPal subscriptions.
+    /// </summary>
+    [MaxLength(500)]
+    public string GooglePlayPurchaseToken { get; set; }
+
+    /// <summary>
+    /// Google Play order ID for the subscription. Null for PayPal subscriptions.
+    /// </summary>
+    [MaxLength(100)]
+    public string GooglePlayOrderId { get; set; }
 }

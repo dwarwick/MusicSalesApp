@@ -157,6 +157,7 @@
                     <div class="subscription-details">
                         <p><strong>Status:</strong> @_subscriptionStatus</p>
                         <p><strong>Monthly Price:</strong> $@_monthlyPrice</p>
+                        <p><strong>Billed via:</strong> @(_billingSource ?? "PayPal")</p>
                         @if (_startDate.HasValue)
                         {
                             <p><strong>Started:</strong> @_startDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
