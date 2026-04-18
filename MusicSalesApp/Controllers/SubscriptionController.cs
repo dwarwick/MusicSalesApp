@@ -15,7 +15,7 @@ namespace MusicSalesApp.Controllers;
 /// </summary>
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(Roles = "Admin,User")]
+[Authorize(Roles = "Admin,User", AuthenticationSchemes = "Identity.Application,Bearer")]
 public class SubscriptionController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;

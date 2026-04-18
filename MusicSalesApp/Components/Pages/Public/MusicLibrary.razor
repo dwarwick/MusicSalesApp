@@ -185,6 +185,7 @@ else
                             <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
                         </div>
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
+                        <ReportButton SongMetadataId="GetSongMetadataId(f.Name)" />
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
                         </div>

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -19,6 +20,7 @@ namespace MusicSalesApp.Controllers
         private readonly ISongMetadataService _songMetadataService;
         private readonly ISongLikeService _songLikeService;
         private readonly ICreatorPersonaService _creatorPersonaService;
+        private readonly IReportedSongService _reportedSongService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
 
@@ -29,6 +31,7 @@ namespace MusicSalesApp.Controllers
             ISongMetadataService songMetadataService,
             ISongLikeService songLikeService,
             ICreatorPersonaService creatorPersonaService,
+            IReportedSongService reportedSongService,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
         {
@@ -38,6 +41,7 @@ namespace MusicSalesApp.Controllers
             _songMetadataService = songMetadataService;
             _songLikeService = songLikeService;
             _creatorPersonaService = creatorPersonaService;
+            _reportedSongService = reportedSongService;
             _userManager = userManager;
             _logger = logger;
         }
@@ -383,6 +387,43 @@ namespace MusicSalesApp.Controllers
                 ".aac" => "audio/aac",
                 _ => "application/octet-stream"
             };
+        }
+
+        [HttpPost("report/{songMetadataId:int}")]
+        [Authorize(Policy = Permissions.ValidatedUser)]
+        public async Task<IActionResult> ReportSong(int songMetadataId, [FromBody] ReportSongRequest request)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            if (request == null || string.IsNullOrWhiteSpace(request.Reason))
+                return BadRequest(new { error = "Reason is required" });
+
+            if (!ReportReasonTypes.All.Contains(request.Reason))
+                return BadRequest(new { error = "Invalid report reason" });
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return Unauthorized();
+
+            try
+            {
+                await _reportedSongService.ReportSongAsync(user.Id, songMetadataId, request.Reason);
+                return Ok(new { message = "Report submitted successfully" });
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("already reported"))
+            {
+                return Conflict(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+        }
+
+        public class ReportSongRequest
+        {
+            public string Reason { get; set; } = string.Empty;
         }
     }
 }

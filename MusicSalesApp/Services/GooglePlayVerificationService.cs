@@ -21,44 +21,62 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
             ?? throw new InvalidOperationException("GooglePlay:PackageName is not configured.");
 
         var credentialsPath = configuration["GooglePlay:ServiceAccountKeyPath"];
-        GoogleCredential credential;
+        GoogleCredential credential = null;
 
-        if (!string.IsNullOrEmpty(credentialsPath) && File.Exists(credentialsPath))
+        try
         {
-            // GoogleCredential.FromFile is deprecated in favor of CredentialFactory, but
-            // the migration path is not yet stable. Suppress until a clean alternative exists.
-#pragma warning disable CS0618
-            using var stream = new FileStream(credentialsPath, FileMode.Open, FileAccess.Read);
-            credential = GoogleCredential.FromStream(stream)
-                .CreateScoped(AndroidPublisherService.Scope.Androidpublisher);
-#pragma warning restore CS0618
-        }
-        else
-        {
-            var inlineJson = configuration["GooglePlay:ServiceAccountKeyJson"];
-            if (!string.IsNullOrEmpty(inlineJson))
+            if (!string.IsNullOrEmpty(credentialsPath) && File.Exists(credentialsPath))
             {
 #pragma warning disable CS0618
-                credential = GoogleCredential.FromJson(inlineJson)
+                using var stream = new FileStream(credentialsPath, FileMode.Open, FileAccess.Read);
+                credential = GoogleCredential.FromStream(stream)
                     .CreateScoped(AndroidPublisherService.Scope.Androidpublisher);
 #pragma warning restore CS0618
             }
             else
             {
-                credential = GoogleCredential.GetApplicationDefault()
-                    .CreateScoped(AndroidPublisherService.Scope.Androidpublisher);
+                var inlineJson = configuration["GooglePlay:ServiceAccountKeyJson"];
+                if (!string.IsNullOrEmpty(inlineJson))
+                {
+#pragma warning disable CS0618
+                    credential = GoogleCredential.FromJson(inlineJson)
+                        .CreateScoped(AndroidPublisherService.Scope.Androidpublisher);
+#pragma warning restore CS0618
+                }
+                else
+                {
+                    credential = GoogleCredential.GetApplicationDefault()
+                        .CreateScoped(AndroidPublisherService.Scope.Androidpublisher);
+                }
             }
         }
-
-        _publisherService = new AndroidPublisherService(new BaseClientService.Initializer
+        catch (Exception ex)
         {
-            HttpClientInitializer = credential,
-            ApplicationName = "StreamTunes Server"
-        });
+            _logger.LogWarning(ex, "Google Play credentials not available. Google Play billing features will be disabled.");
+        }
+
+        if (credential != null)
+        {
+            _publisherService = new AndroidPublisherService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = "StreamTunes Server"
+            });
+        }
+        else
+        {
+            _logger.LogWarning("Google Play Publisher Service not initialized — no valid credentials found.");
+        }
     }
 
     public async Task<GooglePlaySubscriptionInfo> VerifySubscriptionAsync(string purchaseToken, string productId)
     {
+        if (_publisherService == null)
+        {
+            _logger.LogError("Cannot verify Google Play subscription — service not initialized (missing credentials)");
+            return null;
+        }
+
         try
         {
             var request = _publisherService.Purchases.Subscriptionsv2.Get(_packageName, purchaseToken);
@@ -102,6 +120,12 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
 
     public async Task<bool> AcknowledgeSubscriptionAsync(string purchaseToken, string productId)
     {
+        if (_publisherService == null)
+        {
+            _logger.LogError("Cannot acknowledge Google Play subscription — service not initialized (missing credentials)");
+            return false;
+        }
+
         try
         {
             // Use the v1 subscriptions API which has the Acknowledge endpoint
@@ -130,6 +154,12 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
 
     public async Task<bool> CancelSubscriptionAsync(string purchaseToken, string productId)
     {
+        if (_publisherService == null)
+        {
+            _logger.LogError("Cannot cancel Google Play subscription — service not initialized (missing credentials)");
+            return false;
+        }
+
         try
         {
             var request = _publisherService.Purchases.Subscriptions.Cancel(

@@ -1,0 +1,81 @@
+@page "/admin/reported-songs"
+@rendermode InteractiveServer
+@inherits AdminReportedSongsModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Reported Songs</PageTitle>
+
+<h3>Reported Songs</h3>
+
+@if (_loading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading reports...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger" role="alert">
+        <strong>Error:</strong> @_error
+    </div>
+}
+else
+{
+    <SfGrid @ref="_grid"
+            TValue="ReportedSongViewModel"
+            DataSource="@_reports"
+            AllowPaging="true"
+            AllowSorting="true"
+            AllowFiltering="true"
+            Height="100%" Width="100%">
+        <GridPageSettings PageSize="20"></GridPageSettings>
+        <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+        <GridColumns>
+            <GridColumn Field="@nameof(ReportedSongViewModel.SongTitle)" HeaderText="Song Title" Width="200"></GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.CreatorEmail)" HeaderText="Creator Email" Width="200"></GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.ReporterEmail)" HeaderText="Reporter Email" Width="200"></GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.Reason)" HeaderText="Reason" Width="180"></GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.CreatedAt)" HeaderText="Reported" Width="170" Format="yyyy-MM-dd HH:mm"></GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.SongStatus)" HeaderText="Song Status" Width="120">
+                <Template>
+                    @{
+                        var item = (context as ReportedSongViewModel)!;
+                        <span class="badge @(item.SongStatus == "Active" ? "bg-success" : "bg-secondary")">@item.SongStatus</span>
+                    }
+                </Template>
+            </GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionStatus)" HeaderText="Resolution" Width="130">
+                <Template>
+                    @{
+                        var item = (context as ReportedSongViewModel)!;
+                        var badgeClass = item.ResolutionStatus switch
+                        {
+                            "Accepted" => "bg-danger",
+                            "Rejected" => "bg-info",
+                            _ => "bg-warning text-dark"
+                        };
+                        <span class="badge @badgeClass">@item.ResolutionStatus</span>
+                    }
+                </Template>
+            </GridColumn>
+            <GridColumn Field="@nameof(ReportedSongViewModel.ResolutionDateTime)" HeaderText="Resolved" Width="170" Format="yyyy-MM-dd HH:mm"></GridColumn>
+            <GridColumn HeaderText="Action" Width="160" AllowFiltering="false" AllowSorting="false">
+                <Template>
+                    @{
+                        var item = (context as ReportedSongViewModel)!;
+                        @if (item.ResolutionStatus == "Pending")
+                        {
+                            <SfButton CssClass="e-btn e-small e-danger" OnClick="() => ResolveReport(item.Id, true)">Accept</SfButton>
+                            <SfButton CssClass="e-btn e-small e-info ms-1" OnClick="() => ResolveReport(item.Id, false)">Reject</SfButton>
+                        }
+                    }
+                </Template>
+            </GridColumn>
+        </GridColumns>
+    </SfGrid>
+}

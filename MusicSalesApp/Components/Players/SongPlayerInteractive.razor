@@ -145,6 +145,7 @@ else if (!string.IsNullOrEmpty(_error))
                 {
                     <div class="d-flex">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
+                        <ReportButton SongMetadataId="GetSongMetadataId()" />
                         @if (CanShowTipButton())
                         {
                             <button class="tip-heart-button" @onclick="ShowTipDialog" title="Tip Creator">

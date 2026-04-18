@@ -33,6 +33,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<ChargebackLog> ChargebackLogs { get; set; }
     public DbSet<CreatorPersona> CreatorPersonas { get; set; }
     public DbSet<MobileVerificationCode> MobileVerificationCodes { get; set; }
+    public DbSet<ReportedSong> ReportedSongs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -483,5 +484,27 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(sm => sm.PersonaId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // Configure ReportedSong entity
+        builder.Entity<ReportedSong>()
+            .HasOne(rs => rs.SongMetadata)
+            .WithMany()
+            .HasForeignKey(rs => rs.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ReportedSong>()
+            .HasOne(rs => rs.ReportingUser)
+            .WithMany()
+            .HasForeignKey(rs => rs.ReportingUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Unique index: one report per user per song
+        builder.Entity<ReportedSong>()
+            .HasIndex(rs => new { rs.SongMetadataId, rs.ReportingUserId })
+            .IsUnique();
+
+        // Index on ReportingUserId for efficient lookups
+        builder.Entity<ReportedSong>()
+            .HasIndex(rs => rs.ReportingUserId);
     }
 }

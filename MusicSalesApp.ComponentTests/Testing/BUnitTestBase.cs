@@ -63,6 +63,7 @@ public abstract class BUnitTestBase
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
+    protected Mock<IReportedSongService> MockReportedSongService { get; private set; } = default!;
     protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
@@ -106,6 +107,7 @@ public abstract class BUnitTestBase
         MockFileMatchingService = new Mock<IFileMatchingService>();
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockTipService = new Mock<ITipService>();
+        MockReportedSongService = new Mock<IReportedSongService>();
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -449,6 +451,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
+        TestContext.Services.AddSingleton<IReportedSongService>(MockReportedSongService.Object);
         TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

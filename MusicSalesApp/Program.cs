@@ -120,6 +120,10 @@ try
     builder.Services.AddAuthentication()
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
+            // Map JWT standard claim names (e.g. "role", "sub") to their
+            // Microsoft ClaimTypes equivalents so that [Authorize(Roles = "...")]
+            // and User.FindFirstValue(ClaimTypes.NameIdentifier) work correctly.
+            options.MapInboundClaims = true;
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -308,6 +312,7 @@ try
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
+    builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
     
     // Register TaxBanditsService with HttpClient
     builder.Services.AddHttpClient<ITaxBanditsService, TaxBanditsService>();

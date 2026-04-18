@@ -19,6 +19,7 @@ public class MusicControllerTests
     private Mock<ISongMetadataService> _mockSongMetadataService;
     private Mock<ISongLikeService> _mockSongLikeService;
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
+    private Mock<IReportedSongService> _mockReportedSongService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -32,6 +33,7 @@ public class MusicControllerTests
         _mockSongMetadataService = new Mock<ISongMetadataService>();
         _mockSongLikeService = new Mock<ISongLikeService>();
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
+        _mockReportedSongService = new Mock<IReportedSongService>();
         _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
@@ -46,6 +48,7 @@ public class MusicControllerTests
             _mockSongMetadataService.Object,
             _mockSongLikeService.Object,
             _mockCreatorPersonaService.Object,
+            _mockReportedSongService.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
 
@@ -711,5 +714,111 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
+    // --- ReportSong Tests ---
+
+    [Test]
+    public async Task ReportSong_WithValidRequest_ReturnsOk()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockReportedSongService.Setup(s => s.ReportSongAsync(1, 42, "Copyright Violation"))
+            .ReturnsAsync(new ReportedSong { Id = 1 });
+
+        var request = new MusicController.ReportSongRequest { Reason = "Copyright Violation" };
+
+        // Act
+        var result = await _controller.ReportSong(42, request);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockReportedSongService.Verify(s => s.ReportSongAsync(1, 42, "Copyright Violation"), Times.Once);
+    }
+
+    [Test]
+    public async Task ReportSong_WithInvalidSongId_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.ReportSong(0, new MusicController.ReportSongRequest { Reason = "Copyright Violation" });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task ReportSong_WithEmptyReason_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.ReportSong(42, new MusicController.ReportSongRequest { Reason = "" });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task ReportSong_WithInvalidReason_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.ReportSong(42, new MusicController.ReportSongRequest { Reason = "Invalid Reason" });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task ReportSong_WhenNotAuthenticated_ReturnsUnauthorized()
+    {
+        // Arrange
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+
+        var request = new MusicController.ReportSongRequest { Reason = "Copyright Violation" };
+
+        // Act
+        var result = await _controller.ReportSong(42, request);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
+    [Test]
+    public async Task ReportSong_WhenSongNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockReportedSongService.Setup(s => s.ReportSongAsync(1, 999, "Copyright Violation"))
+            .ThrowsAsync(new InvalidOperationException("Song with ID 999 not found."));
+
+        var request = new MusicController.ReportSongRequest { Reason = "Copyright Violation" };
+
+        // Act
+        var result = await _controller.ReportSong(999, request);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task ReportSong_WhenAlreadyReported_ReturnsConflict()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockReportedSongService.Setup(s => s.ReportSongAsync(1, 42, "Copyright Violation"))
+            .ThrowsAsync(new InvalidOperationException("You have already reported this song."));
+
+        var request = new MusicController.ReportSongRequest { Reason = "Copyright Violation" };
+
+        // Act
+        var result = await _controller.ReportSong(42, request);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
     }
 }

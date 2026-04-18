@@ -23,6 +23,7 @@ public class MobileAuthControllerTests
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IEmailService> _mockEmailService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
+    private Mock<IAccountDeletionService> _mockAccountDeletionService;
     private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private Mock<ILogger<MobileAuthController>> _mockLogger;
     private AppDbContext _context;
@@ -62,6 +63,7 @@ public class MobileAuthControllerTests
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockEmailService = new Mock<IEmailService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
+        _mockAccountDeletionService = new Mock<IAccountDeletionService>();
         _mockAdminNotificationService = new Mock<IAdminNotificationService>();
         _mockLogger = new Mock<ILogger<MobileAuthController>>();
 
@@ -97,6 +99,7 @@ public class MobileAuthControllerTests
             _mockSubscriptionService.Object,
             _mockEmailService.Object,
             _mockAccountEmailService.Object,
+            _mockAccountDeletionService.Object,
             _mockAdminNotificationService.Object,
             _context,
             _mockLogger.Object);

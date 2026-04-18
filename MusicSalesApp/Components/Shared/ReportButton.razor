@@ -1,0 +1,42 @@
+@inherits ReportButtonModel
+
+<AuthorizeView Roles="User">
+    <Authorized>
+        <SfButton CssClass="report-button" OnClick="ShowReportDialog" title="Report this song">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6z"/>
+            </svg>
+        </SfButton>
+    </Authorized>
+</AuthorizeView>
+
+<SfDialog @ref="_reportDialog" Width="420px" IsModal="true" Visible="false">
+    <DialogTemplates>
+        <Header>Report Song</Header>
+        <Content>
+            @if (_isSubmitting)
+            {
+                <p>Submitting report...</p>
+            }
+            else if (_submitted)
+            {
+                <p style="color: green;">Report submitted successfully. Thank you.</p>
+            }
+            else
+            {
+                <p>Why are you reporting this song?</p>
+                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                    <SfButton CssClass="e-outline" OnClick='() => SubmitReport("Copyright Violation")'>Copyright Violation</SfButton>
+                    <SfButton CssClass="e-outline" OnClick='() => SubmitReport("Terms of Use Violation")'>Terms of Use Violation</SfButton>
+                </div>
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <p style="color: red; margin-top: 12px;">@_errorMessage</p>
+                }
+            }
+        </Content>
+    </DialogTemplates>
+    <DialogButtons>
+        <DialogButton Content="Close" OnClick="CloseDialog" />
+    </DialogButtons>
+</SfDialog>
