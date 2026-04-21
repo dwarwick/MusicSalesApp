@@ -44,6 +44,12 @@ public class AccountDeletionService : IAccountDeletionService
             .Where(up => up.UserId == userId)
             .ExecuteDeleteAsync();
 
+        // Delete the user's Playlist rows (both system and custom) — the user
+        // is being deleted, so all of their playlists go with them.
+        await dbContext.Playlists
+            .Where(p => p.UserId == userId)
+            .ExecuteDeleteAsync();
+
         // Delete Tips where user is the tipper (required FK, NoAction)
         await dbContext.Tips
             .Where(t => t.TipperUserId == userId)

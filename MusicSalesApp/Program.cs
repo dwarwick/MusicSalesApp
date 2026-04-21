@@ -313,6 +313,7 @@ try
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
     builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
+    builder.Services.AddScoped<IMobileSongMapper, MobileSongMapper>();
     
     // Register TaxBanditsService with HttpClient
     builder.Services.AddHttpClient<ITaxBanditsService, TaxBanditsService>();

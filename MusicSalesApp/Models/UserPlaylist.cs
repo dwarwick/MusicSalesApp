@@ -27,4 +27,10 @@ public class UserPlaylist
     public SongMetadata SongMetadata { get; set; }
 
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Order within the playlist (lower values appear first).
+    /// Assigned on insert (max + 1) and updated by user drag-reorder.
+    /// </summary>
+    public int SortOrder { get; set; }
 }

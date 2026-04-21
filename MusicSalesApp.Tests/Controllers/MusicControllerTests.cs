@@ -20,6 +20,7 @@ public class MusicControllerTests
     private Mock<ISongLikeService> _mockSongLikeService;
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<IReportedSongService> _mockReportedSongService;
+    private Mock<IMobileSongMapper> _mockSongMapper;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -34,6 +35,7 @@ public class MusicControllerTests
         _mockSongLikeService = new Mock<ISongLikeService>();
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockReportedSongService = new Mock<IReportedSongService>();
+        _mockSongMapper = new Mock<IMobileSongMapper>();
         _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
@@ -49,6 +51,7 @@ public class MusicControllerTests
             _mockSongLikeService.Object,
             _mockCreatorPersonaService.Object,
             _mockReportedSongService.Object,
+            _mockSongMapper.Object,
             _mockUserManager.Object,
             _mockLogger.Object);
 

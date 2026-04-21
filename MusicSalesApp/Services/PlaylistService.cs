@@ -171,7 +171,8 @@ public class PlaylistService : IPlaylistService
                         .ThenInclude(c => c.User)
                 .Where(up => up.PlaylistId == playlistId)
                 .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled && up.SongMetadata.IsActive) // Filter out disabled/inactive songs
-                .OrderBy(up => up.AddedAt)
+                .OrderBy(up => up.SortOrder)
+                .ThenBy(up => up.Id)
                 .ToListAsync();
         }
         catch (Exception ex)
@@ -214,13 +215,20 @@ public class PlaylistService : IPlaylistService
                 return false;
             }
 
+            // Assign next SortOrder value (max + 1) so new song appears at the end
+            var maxSortOrder = await context.UserPlaylists
+                .Where(up => up.PlaylistId == playlistId)
+                .Select(up => (int?)up.SortOrder)
+                .MaxAsync() ?? 0;
+
             // Add song to playlist
             var userPlaylist = new UserPlaylist
             {
                 UserId = userId,
                 PlaylistId = playlistId,
                 SongMetadataId = songMetadataId,
-                AddedAt = DateTime.UtcNow
+                AddedAt = DateTime.UtcNow,
+                SortOrder = maxSortOrder + 1
             };
 
             context.UserPlaylists.Add(userPlaylist);
@@ -407,6 +415,11 @@ public class PlaylistService : IPlaylistService
                 .Where(up => !likedSongMetadataIds.Contains(up.SongMetadataId))
                 .ToList();
 
+            // Track the next SortOrder value so newly added liked songs append in order
+            var nextSortOrder = currentPlaylistSongs.Count > 0
+                ? currentPlaylistSongs.Max(up => up.SortOrder)
+                : 0;
+
             // Add new liked songs to the playlist
             foreach (var songMetadataId in songsToAdd)
             {
@@ -423,7 +436,8 @@ public class PlaylistService : IPlaylistService
                     UserId = userId,
                     PlaylistId = likedSongsPlaylist.Id,
                     SongMetadataId = songMetadataId,
-                    AddedAt = DateTime.UtcNow
+                    AddedAt = DateTime.UtcNow,
+                    SortOrder = ++nextSortOrder
                 };
 
                 context.UserPlaylists.Add(userPlaylist);
@@ -443,6 +457,59 @@ public class PlaylistService : IPlaylistService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error syncing Liked Songs playlist for user {UserId}", userId);
+            throw;
+        }
+    }
+
+    public async Task<bool> ReorderPlaylistAsync(int playlistId, int userId, IReadOnlyList<int> userPlaylistIdsInOrder)
+    {
+        if (userPlaylistIdsInOrder == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+
+            // Verify the playlist belongs to the user
+            var playlist = await context.Playlists
+                .FirstOrDefaultAsync(p => p.Id == playlistId && p.UserId == userId);
+
+            if (playlist == null)
+            {
+                _logger.LogWarning("Playlist {PlaylistId} not found or user {UserId} doesn't own it", playlistId, userId);
+                return false;
+            }
+
+            // Load all UserPlaylist rows for this playlist in one query
+            var existing = await context.UserPlaylists
+                .Where(up => up.PlaylistId == playlistId)
+                .ToListAsync();
+
+            var existingIds = existing.Select(up => up.Id).ToHashSet();
+
+            // Every supplied id must belong to this playlist; reject if any stranger is present
+            if (userPlaylistIdsInOrder.Any(id => !existingIds.Contains(id)))
+            {
+                _logger.LogWarning("Reorder rejected for playlist {PlaylistId}: supplied ids do not all belong to the playlist", playlistId);
+                return false;
+            }
+
+            var byId = existing.ToDictionary(up => up.Id);
+            for (int i = 0; i < userPlaylistIdsInOrder.Count; i++)
+            {
+                byId[userPlaylistIdsInOrder[i]].SortOrder = i + 1;
+            }
+
+            await context.SaveChangesAsync();
+            _logger.LogInformation("Reordered {Count} songs in playlist {PlaylistId} for user {UserId}",
+                userPlaylistIdsInOrder.Count, playlistId, userId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reordering playlist {PlaylistId}", playlistId);
             throw;
         }
     }

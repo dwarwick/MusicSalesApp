@@ -21,6 +21,7 @@ namespace MusicSalesApp.Controllers
         private readonly ISongLikeService _songLikeService;
         private readonly ICreatorPersonaService _creatorPersonaService;
         private readonly IReportedSongService _reportedSongService;
+        private readonly IMobileSongMapper _songMapper;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
 
@@ -32,6 +33,7 @@ namespace MusicSalesApp.Controllers
             ISongLikeService songLikeService,
             ICreatorPersonaService creatorPersonaService,
             IReportedSongService reportedSongService,
+            IMobileSongMapper songMapper,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
         {
@@ -42,6 +44,7 @@ namespace MusicSalesApp.Controllers
             _songLikeService = songLikeService;
             _creatorPersonaService = creatorPersonaService;
             _reportedSongService = reportedSongService;
+            _songMapper = songMapper;
             _userManager = userManager;
             _logger = logger;
         }
@@ -59,36 +62,10 @@ namespace MusicSalesApp.Controllers
 
             var songs = allMetadata
                 .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-                .Select(m => MapToSongListItem(m, sasLifetime))
+                .Select(m => _songMapper.MapToSongListItem(m, sasLifetime))
                 .ToList();
 
             return Ok(songs);
-        }
-
-        private SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime)
-        {
-            return new SongListItemDto
-            {
-                Id = m.Id,
-                SongTitle = !string.IsNullOrEmpty(m.SongTitle)
-                    ? m.SongTitle
-                    : Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? string.Empty),
-                ArtistName = m.GetEffectiveArtistName(),
-                Genre = m.Genre ?? string.Empty,
-                AlbumArtUrl = !string.IsNullOrEmpty(m.ImageBlobPath)
-                    ? _storageService.GetReadSasUri(m.ImageBlobPath, sasLifetime).ToString()
-                    : null,
-                PersonaImageUrl = m.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
-                    ? _creatorPersonaService.GetPersonaImageSasUrl(m.Persona.ImageBlobPath, sasLifetime)
-                    : null,
-                PersonaBio = m.Persona is { IsEnabled: true, Bio: not null and not "" }
-                    ? m.Persona.Bio
-                    : m.Creator?.Bio,
-                StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
-                StreamCount = m.NumberOfStreams,
-                TrackLengthSeconds = m.TrackLength,
-                CreatorUserId = m.Creator?.UserId
-            };
         }
 
         // Legacy / fallback streaming endpoint (server proxy)

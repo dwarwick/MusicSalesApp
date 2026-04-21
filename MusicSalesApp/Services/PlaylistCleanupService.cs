@@ -83,9 +83,25 @@ public class PlaylistCleanupService : IPlaylistCleanupService
                     context.UserPlaylists.RemoveRange(userPlaylistSongs);
                     totalRemoved += userPlaylistSongs.Count;
                 }
+
+                // Delete the user's custom (non-system) playlists themselves.
+                // The system "Liked Songs" playlist is preserved; it will be
+                // re-populated from actual likes on next sync.
+                var customPlaylists = await context.Playlists
+                    .Where(p => p.UserId == userId && !p.IsSystemGenerated)
+                    .ToListAsync();
+
+                if (customPlaylists.Any())
+                {
+                    _logger.LogInformation(
+                        "Deleting {Count} custom playlists for user {UserId} with lapsed subscription",
+                        customPlaylists.Count,
+                        userId);
+                    context.Playlists.RemoveRange(customPlaylists);
+                }
             }
 
-            if (totalRemoved > 0)
+            if (context.ChangeTracker.HasChanges())
             {
                 await context.SaveChangesAsync();
                 _logger.LogInformation("Successfully removed {Count} songs from playlists", totalRemoved);

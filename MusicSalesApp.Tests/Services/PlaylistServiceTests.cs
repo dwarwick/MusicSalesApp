@@ -751,3 +751,249 @@ public class LikedSongsPlaylistTests
         Assert.That(likedSongIds, Does.Not.Contain(song3.Id));
     }
 }
+
+// Tests for SortOrder and drag-reorder functionality (added with MAUI playlists feature)
+[TestFixture]
+public class PlaylistReorderTests
+{
+    private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
+    private Mock<ILogger<PlaylistService>> _mockLogger;
+    private Mock<ISubscriptionService> _mockSubscriptionService;
+    private Mock<ISongLikeService> _mockSongLikeService;
+    private PlaylistService _service;
+    private AppDbContext _context;
+    private DbContextOptions<AppDbContext> _contextOptions;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _contextOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"ReorderTestDb_{Guid.NewGuid()}")
+            .Options;
+        _context = new AppDbContext(_contextOptions);
+
+        _mockLogger = new Mock<ILogger<PlaylistService>>();
+        _mockSubscriptionService = new Mock<ISubscriptionService>();
+        _mockSongLikeService = new Mock<ISongLikeService>();
+
+        _mockContextFactory = new Mock<IDbContextFactory<AppDbContext>>();
+        _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
+            .ReturnsAsync(() => new AppDbContext(_contextOptions));
+
+        _service = new PlaylistService(
+            _mockContextFactory.Object,
+            _mockLogger.Object,
+            _mockSubscriptionService.Object,
+            _mockSongLikeService.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _context.Database.EnsureDeleted();
+        _context.Dispose();
+    }
+
+    private async Task<(Playlist playlist, List<SongMetadata> songs)> SeedPlaylistWithSongsAsync(int userId, int songCount)
+    {
+        var playlist = new Playlist { UserId = userId, PlaylistName = "Test", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        _context.Playlists.Add(playlist);
+        await _context.SaveChangesAsync();
+
+        var songs = new List<SongMetadata>();
+        for (int i = 0; i < songCount; i++)
+        {
+            var song = new SongMetadata
+            {
+                Mp3BlobPath = $"song{i}.mp3",
+                IsActive = true,
+                IsEnabled = true,
+                IsAlbumCover = false,
+                SongTitle = $"Song {i}"
+            };
+            _context.SongMetadata.Add(song);
+            songs.Add(song);
+        }
+        await _context.SaveChangesAsync();
+        return (playlist, songs);
+    }
+
+    [Test]
+    public async Task AddSongToPlaylistAsync_AssignsIncrementingSortOrder()
+    {
+        var userId = 1;
+        var (playlist, songs) = await SeedPlaylistWithSongsAsync(userId, 3);
+
+        foreach (var song in songs)
+        {
+            var ok = await _service.AddSongToPlaylistAsync(userId, playlist.Id, song.Id);
+            Assert.That(ok, Is.True);
+        }
+
+        var entries = await _context.UserPlaylists
+            .Where(up => up.PlaylistId == playlist.Id)
+            .OrderBy(up => up.Id)
+            .ToListAsync();
+        Assert.That(entries.Select(e => e.SortOrder), Is.EqualTo(new[] { 1, 2, 3 }));
+    }
+
+    [Test]
+    public async Task GetPlaylistSongsAsync_ReturnsSongsInSortOrder()
+    {
+        var userId = 1;
+        var (playlist, songs) = await SeedPlaylistWithSongsAsync(userId, 3);
+
+        // Insert out of order
+        _context.UserPlaylists.AddRange(
+            new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[0].Id, SortOrder = 3 },
+            new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[1].Id, SortOrder = 1 },
+            new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[2].Id, SortOrder = 2 });
+        await _context.SaveChangesAsync();
+
+        var result = await _service.GetPlaylistSongsAsync(playlist.Id);
+        Assert.That(result.Select(up => up.SongMetadataId),
+            Is.EqualTo(new[] { songs[1].Id, songs[2].Id, songs[0].Id }));
+    }
+
+    [Test]
+    public async Task ReorderPlaylistAsync_RewritesSortOrderSequentially()
+    {
+        var userId = 1;
+        var (playlist, songs) = await SeedPlaylistWithSongsAsync(userId, 3);
+        var up1 = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[0].Id, SortOrder = 1 };
+        var up2 = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[1].Id, SortOrder = 2 };
+        var up3 = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[2].Id, SortOrder = 3 };
+        _context.UserPlaylists.AddRange(up1, up2, up3);
+        await _context.SaveChangesAsync();
+
+        // Reverse order
+        var ok = await _service.ReorderPlaylistAsync(playlist.Id, userId, new[] { up3.Id, up2.Id, up1.Id });
+        Assert.That(ok, Is.True);
+
+        using var verify = new AppDbContext(_contextOptions);
+        var entries = await verify.UserPlaylists.Where(x => x.PlaylistId == playlist.Id).ToListAsync();
+        Assert.That(entries.Single(x => x.Id == up3.Id).SortOrder, Is.EqualTo(1));
+        Assert.That(entries.Single(x => x.Id == up2.Id).SortOrder, Is.EqualTo(2));
+        Assert.That(entries.Single(x => x.Id == up1.Id).SortOrder, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task ReorderPlaylistAsync_RejectsForeignUser()
+    {
+        var ownerId = 1;
+        var (playlist, songs) = await SeedPlaylistWithSongsAsync(ownerId, 2);
+        var up1 = new UserPlaylist { UserId = ownerId, PlaylistId = playlist.Id, SongMetadataId = songs[0].Id, SortOrder = 1 };
+        var up2 = new UserPlaylist { UserId = ownerId, PlaylistId = playlist.Id, SongMetadataId = songs[1].Id, SortOrder = 2 };
+        _context.UserPlaylists.AddRange(up1, up2);
+        await _context.SaveChangesAsync();
+
+        // A different user tries to reorder
+        var ok = await _service.ReorderPlaylistAsync(playlist.Id, userId: 999, new[] { up2.Id, up1.Id });
+        Assert.That(ok, Is.False);
+    }
+
+    [Test]
+    public async Task ReorderPlaylistAsync_RejectsIdsNotInPlaylist()
+    {
+        var userId = 1;
+        var (playlist, songs) = await SeedPlaylistWithSongsAsync(userId, 2);
+        var up1 = new UserPlaylist { UserId = userId, PlaylistId = playlist.Id, SongMetadataId = songs[0].Id, SortOrder = 1 };
+        _context.UserPlaylists.Add(up1);
+        await _context.SaveChangesAsync();
+
+        var ok = await _service.ReorderPlaylistAsync(playlist.Id, userId, new[] { up1.Id, 9999 });
+        Assert.That(ok, Is.False);
+    }
+}
+
+// Tests for cleanup hardening added with MAUI playlists feature
+[TestFixture]
+public class PlaylistCleanupHardeningTests
+{
+    private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
+    private Mock<ILogger<PlaylistCleanupService>> _mockLogger;
+    private PlaylistCleanupService _service;
+    private DbContextOptions<AppDbContext> _contextOptions;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _contextOptions = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: $"CleanupTestDb_{Guid.NewGuid()}")
+            .Options;
+
+        _mockLogger = new Mock<ILogger<PlaylistCleanupService>>();
+        _mockContextFactory = new Mock<IDbContextFactory<AppDbContext>>();
+        _mockContextFactory.Setup(f => f.CreateDbContextAsync(default))
+            .ReturnsAsync(() => new AppDbContext(_contextOptions));
+
+        _service = new PlaylistCleanupService(_mockContextFactory.Object, _mockLogger.Object);
+    }
+
+    [Test]
+    public async Task Cleanup_DeletesCustomPlaylists_PreservesSystemPlaylist_ForLapsedUser()
+    {
+        using var seed = new AppDbContext(_contextOptions);
+        var userId = 42;
+        seed.Subscriptions.Add(new Subscription
+        {
+            UserId = userId,
+            Status = "CANCELLED",
+            StartDate = DateTime.UtcNow.AddDays(-60),
+            EndDate = DateTime.UtcNow.AddDays(-10)
+        });
+        var custom = new Playlist { UserId = userId, PlaylistName = "Mine", IsSystemGenerated = false };
+        var system = new Playlist { UserId = userId, PlaylistName = "Liked Songs", IsSystemGenerated = true };
+        seed.Playlists.AddRange(custom, system);
+        await seed.SaveChangesAsync();
+
+        seed.UserPlaylists.AddRange(
+            new UserPlaylist { UserId = userId, PlaylistId = custom.Id, SongMetadataId = 1 },
+            new UserPlaylist { UserId = userId, PlaylistId = system.Id, SongMetadataId = 2 });
+        await seed.SaveChangesAsync();
+
+        var removed = await _service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync();
+
+        Assert.That(removed, Is.EqualTo(2));
+
+        using var verify = new AppDbContext(_contextOptions);
+        var playlists = await verify.Playlists.Where(p => p.UserId == userId).ToListAsync();
+        Assert.That(playlists, Has.Count.EqualTo(1));
+        Assert.That(playlists[0].IsSystemGenerated, Is.True);
+        Assert.That(playlists[0].PlaylistName, Is.EqualTo("Liked Songs"));
+        Assert.That(await verify.UserPlaylists.CountAsync(up => up.UserId == userId), Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task Cleanup_LeavesActiveSubscriberUntouched()
+    {
+        using var seed = new AppDbContext(_contextOptions);
+        var userId = 7;
+        // Lapsed row is what makes cleanup look at the user...
+        seed.Subscriptions.Add(new Subscription
+        {
+            UserId = userId,
+            Status = "CANCELLED",
+            EndDate = DateTime.UtcNow.AddDays(-5)
+        });
+        // ...but there's also an active subscription, so the user is skipped.
+        seed.Subscriptions.Add(new Subscription
+        {
+            UserId = userId,
+            Status = "ACTIVE",
+            EndDate = DateTime.UtcNow.AddDays(30)
+        });
+        var custom = new Playlist { UserId = userId, PlaylistName = "Keep Me", IsSystemGenerated = false };
+        seed.Playlists.Add(custom);
+        await seed.SaveChangesAsync();
+        seed.UserPlaylists.Add(new UserPlaylist { UserId = userId, PlaylistId = custom.Id, SongMetadataId = 1 });
+        await seed.SaveChangesAsync();
+
+        var removed = await _service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync();
+        Assert.That(removed, Is.EqualTo(0));
+
+        using var verify = new AppDbContext(_contextOptions);
+        Assert.That(await verify.Playlists.CountAsync(p => p.UserId == userId), Is.EqualTo(1));
+        Assert.That(await verify.UserPlaylists.CountAsync(up => up.UserId == userId), Is.EqualTo(1));
+    }
+}

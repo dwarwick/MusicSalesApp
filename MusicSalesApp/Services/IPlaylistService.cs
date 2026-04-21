@@ -68,4 +68,11 @@ public interface IPlaylistService
     /// Adds newly liked songs and removes unliked songs
     /// </summary>
     Task SyncLikedSongsPlaylistAsync(int userId);
+
+    /// <summary>
+    /// Reorder the songs in a playlist. The list of UserPlaylist ids supplied
+    /// must all belong to the playlist and the user; each item is assigned a
+    /// SortOrder of (index + 1).
+    /// </summary>
+    Task<bool> ReorderPlaylistAsync(int playlistId, int userId, IReadOnlyList<int> userPlaylistIdsInOrder);
 }
