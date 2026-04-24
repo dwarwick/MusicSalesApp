@@ -763,6 +763,43 @@ h1:focus {
     text-overflow: ellipsis;
 }
 
+.card-stream-count {
+    justify-content: space-between;
+    width: 100%;
+}
+
+.card-stream-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.card-stream-info span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-stream-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.card-stream-report {
+    display: inline-flex;
+    align-items: center;
+}
+
+.card-stream-actions .tip-heart-card,
+.card-stream-actions .report-button {
+    margin-left: 0;
+}
+
 .card-genre {
     margin: -8px 0 -14px 0;
 }

@@ -490,6 +490,13 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     /// Returns true if the user has an active subscription that hasn't been cancelled yet.
     /// </summary>
     protected bool HasActiveSubscription => _hasSubscription && !_endDate.HasValue;
+    protected bool HasCancelledSubscriptionAccess => _hasSubscription && _endDate.HasValue;
+    protected bool CanCreateNewSubscription => !_hasSubscription ||
+        _subscriptionStatus == SubscriptionStatuses.Cancelled ||
+        _subscriptionStatus == SubscriptionStatuses.Expired;
+    protected string SubscribeButtonLabel => HasCancelledSubscriptionAccess || _subscriptionStatus == SubscriptionStatuses.Expired
+        ? "Start New Subscription"
+        : "Sign Up for Monthly Subscription";
 
     protected async Task ShowSuspendConfirmDialog()
     {

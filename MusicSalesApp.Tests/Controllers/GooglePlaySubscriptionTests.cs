@@ -118,6 +118,60 @@ public class GooglePlaySubscriptionTests
         Assert.That(json, Does.Contain("\"billingSource\":\"GooglePlay\""));
     }
 
+    [Test]
+    public async Task GetSubscriptionStatus_ReturnsCancelledAccessDetails_WhenCancelledButStillInsideBillingPeriod()
+    {
+        var subscription = new Subscription
+        {
+            Id = 3,
+            UserId = 1,
+            Status = SubscriptionStatuses.Cancelled,
+            BillingSource = BillingSources.GooglePlay,
+            EndDate = DateTime.UtcNow.AddDays(7),
+            MonthlyPrice = 3.99m,
+            GooglePlayPurchaseToken = "gp-token-456"
+        };
+
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync(subscription);
+        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
+
+        var result = await _controller.GetSubscriptionStatus();
+        var ok = result as OkObjectResult;
+
+        Assert.That(ok, Is.Not.Null);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok!.Value);
+        Assert.That(json, Does.Contain("\"hasSubscription\":true"));
+        Assert.That(json, Does.Contain("\"status\":\"CANCELLED\""));
+        Assert.That(json, Does.Contain("\"billingSource\":\"GooglePlay\""));
+    }
+
+    [Test]
+    public async Task GetSubscriptionStatus_ReturnsExpiredStatusWithoutAccess_WhenLatestSubscriptionExpired()
+    {
+        var subscription = new Subscription
+        {
+            Id = 4,
+            UserId = 1,
+            Status = SubscriptionStatuses.Expired,
+            BillingSource = BillingSources.GooglePlay,
+            EndDate = DateTime.UtcNow.AddDays(-1),
+            MonthlyPrice = 3.99m,
+            GooglePlayPurchaseToken = "gp-token-789"
+        };
+
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+        _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync(subscription);
+        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
+
+        var result = await _controller.GetSubscriptionStatus();
+        var ok = result as OkObjectResult;
+
+        Assert.That(ok, Is.Not.Null);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok!.Value);
+        Assert.That(json, Does.Contain("\"hasSubscription\":false"));
+        Assert.That(json, Does.Contain("\"status\":\"EXPIRED\""));
+    }
+
     // --- Cancel routing ---
 
     [Test]

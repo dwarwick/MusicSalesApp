@@ -21,12 +21,24 @@ public class SubscriptionService : ISubscriptionService
     public async Task<Subscription> GetActiveSubscriptionAsync(int userId)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
-        
+        await NormalizeExpiredSubscriptionsAsync(context, userId);
+
         var now = DateTime.UtcNow;
         return await context.Subscriptions
             .Where(s => s.UserId == userId)
             .Where(s => (s.Status == SubscriptionStatuses.Active && s.LastPaymentDate != null && (s.EndDate == null || s.EndDate > now)) ||
                                  (s.Status == SubscriptionStatuses.Cancelled && s.EndDate > now))
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<Subscription> GetLatestSubscriptionAsync(int userId)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        await NormalizeExpiredSubscriptionsAsync(context, userId);
+
+        return await context.Subscriptions
+            .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
     }
@@ -337,5 +349,30 @@ public class SubscriptionService : ISubscriptionService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Updated Google Play subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+    }
+
+    private async Task NormalizeExpiredSubscriptionsAsync(AppDbContext context, int userId)
+    {
+        var now = DateTime.UtcNow;
+        var subscriptionsToExpire = await context.Subscriptions
+            .Where(s => s.UserId == userId)
+            .Where(s => s.EndDate.HasValue && s.EndDate.Value <= now)
+            .Where(s => s.Status == SubscriptionStatuses.Active ||
+                        s.Status == SubscriptionStatuses.Cancelled ||
+                        s.Status == SubscriptionStatuses.Suspended)
+            .ToListAsync();
+
+        if (subscriptionsToExpire.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var subscription in subscriptionsToExpire)
+        {
+            subscription.Status = SubscriptionStatuses.Expired;
+            subscription.CancelledAt ??= subscription.EndDate;
+        }
+
+        await context.SaveChangesAsync();
     }
 }

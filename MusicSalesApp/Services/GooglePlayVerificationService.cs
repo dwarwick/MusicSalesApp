@@ -1,6 +1,7 @@
 using Google.Apis.AndroidPublisher.v3;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
+using Microsoft.Extensions.Hosting;
 
 namespace MusicSalesApp.Services;
 
@@ -13,15 +14,56 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
     private readonly AndroidPublisherService _publisherService;
     private readonly string _packageName;
     private readonly ILogger<GooglePlayVerificationService> _logger;
+    private readonly string _initializationError;
 
-    public GooglePlayVerificationService(IConfiguration configuration, ILogger<GooglePlayVerificationService> logger)
+    internal static string ResolveCredentialsPath(string configuredPath, string contentRootPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return null;
+        }
+
+        return Path.IsPathRooted(configuredPath)
+            ? configuredPath
+            : Path.GetFullPath(Path.Combine(contentRootPath, configuredPath));
+    }
+
+    internal static string DescribeCredentialConfigurationIssue(string credentialsPath, string inlineJson)
+    {
+        if (!string.IsNullOrWhiteSpace(credentialsPath) && !File.Exists(credentialsPath))
+        {
+            return "Configured Google Play service account key file was not found on the server.";
+        }
+
+        if (string.IsNullOrWhiteSpace(credentialsPath) && string.IsNullOrWhiteSpace(inlineJson))
+        {
+            return "Google Play service account credentials are not configured on the server.";
+        }
+
+        return "Google Play service account credentials could not be loaded on the server.";
+    }
+
+    internal static string DescribeGoogleApiAccessIssue(string reason, string message)
+    {
+        if (string.Equals(reason, "accessNotConfigured", StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrWhiteSpace(message) && message.Contains("has not been used in project", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Google Play Android Developer API is disabled for the Google Cloud project behind the service account. Enable the Android Publisher API in Google Cloud Console, wait a few minutes, and retry.";
+        }
+
+        return "Google Play API access was denied. Check the service account permissions in Play Console.";
+    }
+
+    public GooglePlayVerificationService(IConfiguration configuration, IHostEnvironment environment, ILogger<GooglePlayVerificationService> logger)
     {
         _logger = logger;
         _packageName = configuration["GooglePlay:PackageName"]
             ?? throw new InvalidOperationException("GooglePlay:PackageName is not configured.");
 
-        var credentialsPath = configuration["GooglePlay:ServiceAccountKeyPath"];
+        var credentialsPath = ResolveCredentialsPath(configuration["GooglePlay:ServiceAccountKeyPath"], environment.ContentRootPath);
+        var inlineJson = configuration["GooglePlay:ServiceAccountKeyJson"];
         GoogleCredential credential = null;
+        _initializationError = DescribeCredentialConfigurationIssue(credentialsPath, inlineJson);
 
         try
         {
@@ -35,7 +77,6 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
             }
             else
             {
-                var inlineJson = configuration["GooglePlay:ServiceAccountKeyJson"];
                 if (!string.IsNullOrEmpty(inlineJson))
                 {
 #pragma warning disable CS0618
@@ -52,7 +93,7 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Google Play credentials not available. Google Play billing features will be disabled.");
+            _logger.LogWarning(ex, "Google Play credentials not available. {InitializationError}", _initializationError);
         }
 
         if (credential != null)
@@ -65,7 +106,7 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
         }
         else
         {
-            _logger.LogWarning("Google Play Publisher Service not initialized — no valid credentials found.");
+            _logger.LogWarning("Google Play Publisher Service not initialized — {InitializationError}", _initializationError);
         }
     }
 
@@ -73,8 +114,8 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
     {
         if (_publisherService == null)
         {
-            _logger.LogError("Cannot verify Google Play subscription — service not initialized (missing credentials)");
-            return null;
+            _logger.LogError("Cannot verify Google Play subscription — service not initialized. {InitializationError}", _initializationError);
+            throw new GooglePlayVerificationException(_initializationError ?? "Google Play verification is not configured on the server.");
         }
 
         try
@@ -85,7 +126,7 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
             if (subscription == null)
             {
                 _logger.LogWarning("Google Play returned null for purchase token verification");
-                return null;
+                throw new GooglePlayVerificationException("Google Play returned an empty verification response for this purchase.");
             }
 
             // Parse expiry time from the line items
@@ -108,13 +149,26 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
         }
         catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            _logger.LogWarning("Google Play subscription not found for token (may be invalid or expired)");
-            return null;
+            _logger.LogWarning(ex, "Google Play subscription not found for token (may be invalid or expired)");
+            throw new GooglePlayVerificationException("Google Play could not find this purchase token for the configured app.", ex);
+        }
+        catch (Google.GoogleApiException ex) when (
+            ex.HttpStatusCode == System.Net.HttpStatusCode.Forbidden ||
+            ex.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            _logger.LogError(ex, "Google Play API access was denied during subscription verification");
+            var reason = ex.Error?.Errors?.FirstOrDefault()?.Reason;
+            throw new GooglePlayVerificationException(DescribeGoogleApiAccessIssue(reason, ex.Message), ex);
+        }
+        catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.BadRequest)
+        {
+            _logger.LogError(ex, "Google Play rejected the purchase token or product configuration");
+            throw new GooglePlayVerificationException("Google Play rejected the purchase token or product configuration.", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to verify Google Play subscription");
-            return null;
+            throw new GooglePlayVerificationException("Google Play verification failed on the server.", ex);
         }
     }
 

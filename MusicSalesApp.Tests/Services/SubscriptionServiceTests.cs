@@ -150,6 +150,60 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task GetActiveSubscriptionAsync_ReturnsCancelledSubscription_WhenStillInsideBillingPeriod()
+    {
+        const int userId = 1;
+
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = userId,
+                Status = SubscriptionStatuses.Cancelled,
+                EndDate = DateTime.UtcNow.AddDays(5),
+                MonthlyPrice = 3.99m,
+                CreatedAt = DateTime.UtcNow,
+                LastPaymentDate = DateTime.UtcNow.AddDays(-20)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.GetActiveSubscriptionAsync(userId);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+    }
+
+    [Test]
+    public async Task GetLatestSubscriptionAsync_ExpiresCancelledSubscription_WhenBillingPeriodHasEnded()
+    {
+        const int userId = 1;
+
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = userId,
+                Status = SubscriptionStatuses.Cancelled,
+                EndDate = DateTime.UtcNow.AddMinutes(-5),
+                MonthlyPrice = 3.99m,
+                CreatedAt = DateTime.UtcNow,
+                CancelledAt = DateTime.UtcNow.AddDays(-2),
+                LastPaymentDate = DateTime.UtcNow.AddDays(-20)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.GetLatestSubscriptionAsync(userId);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Expired));
+
+        var hasActiveSubscription = await _service.HasActiveSubscriptionAsync(userId);
+        Assert.That(hasActiveSubscription, Is.False);
+    }
+
+    [Test]
     public async Task UpdateSubscriptionStatusAsync_UpdatesStatus()
     {
         // Arrange

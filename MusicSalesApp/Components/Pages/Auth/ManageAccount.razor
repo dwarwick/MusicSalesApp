@@ -186,11 +186,25 @@
                         }
                     </div>
                 }
-                else
+
+                @if (CanCreateNewSubscription)
                 {
                     <div class="subscription-description">
-                        <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
-                        <p>Enjoy unlimited streaming of all music on our platform.</p>
+                        @if (HasCancelledSubscriptionAccess)
+                        {
+                            <h3>Start a new subscription at any time.</h3>
+                            <p>Your current subscription remains available until @_endDate?.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt"). If you subscribe again now, your new subscription will take over immediately.</p>
+                        }
+                        else if (_subscriptionStatus == SubscriptionStatuses.Expired)
+                        {
+                            <h3>Your previous subscription has expired.</h3>
+                            <p>Start a new subscription to restore unlimited streaming access.</p>
+                        }
+                        else
+                        {
+                            <h3>Subscribe for just $@_subscriptionPrice per month!</h3>
+                            <p>Enjoy unlimited streaming of all music on our platform.</p>
+                        }
                         
                         <div class="subscription-terms mt-3">
                             <h4>Subscription Terms:</h4>
@@ -208,7 +222,7 @@
                         
                         @if (!_subscribing)
                         {
-                            <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="e-primary mt-2">Sign Up for Monthly Subscription</SfButton>
+                            <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="e-primary mt-2">@SubscribeButtonLabel</SfButton>
                         }
                         else
                         {

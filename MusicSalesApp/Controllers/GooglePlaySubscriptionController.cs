@@ -36,7 +36,7 @@ public class GooglePlaySubscriptionController : ControllerBase
     /// Called by the MAUI app after a successful Google Play purchase to verify and record the subscription.
     /// </summary>
     [HttpPost("verify")]
-    [Authorize(Roles = "Admin,User")]
+    [Authorize(Roles = "Admin,User", AuthenticationSchemes = "Identity.Application,Bearer")]
     public async Task<IActionResult> VerifyAndRecordPurchase([FromBody] GooglePlayPurchaseRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.PurchaseToken))
@@ -49,7 +49,17 @@ public class GooglePlaySubscriptionController : ControllerBase
         var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
 
         // Verify with Google Play Developer API
-        var subscriptionInfo = await _verificationService.VerifySubscriptionAsync(request.PurchaseToken, productId);
+        GooglePlaySubscriptionInfo subscriptionInfo;
+        try
+        {
+            subscriptionInfo = await _verificationService.VerifySubscriptionAsync(request.PurchaseToken, productId);
+        }
+        catch (GooglePlayVerificationException ex)
+        {
+            _logger.LogWarning(ex, "Google Play verification failed for user {UserId}", user.Id);
+            return BadRequest(new { success = false, error = ex.Message });
+        }
+
         if (subscriptionInfo == null)
             return BadRequest(new { success = false, error = "Could not verify purchase with Google Play." });
 

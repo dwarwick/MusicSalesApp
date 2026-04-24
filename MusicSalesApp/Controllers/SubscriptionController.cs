@@ -71,11 +71,12 @@ public class SubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+        var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+        var latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+        var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
         
-        if (subscription == null)
+        if (latestSubscription == null)
         {
-            var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
             return Ok(new
             {
                 hasSubscription = false,
@@ -86,15 +87,16 @@ public class SubscriptionController : ControllerBase
 
         return Ok(new
         {
-            hasSubscription = true,
-            status = subscription.Status,
-            startDate = subscription.StartDate,
-            endDate = subscription.EndDate,
-            nextBillingDate = subscription.NextBillingDate,
-            monthlyPrice = subscription.MonthlyPrice,
-            paypalSubscriptionId = subscription.PayPalSubscriptionId,
-            billingSource = subscription.BillingSource,
-            isSubscriptionBlocked = user.IsSubscriptionBlocked
+            hasSubscription = activeSubscription != null,
+            status = latestSubscription.Status,
+            startDate = latestSubscription.StartDate,
+            endDate = latestSubscription.EndDate,
+            nextBillingDate = latestSubscription.NextBillingDate,
+            monthlyPrice = latestSubscription.MonthlyPrice,
+            paypalSubscriptionId = latestSubscription.PayPalSubscriptionId,
+            billingSource = latestSubscription.BillingSource,
+            isSubscriptionBlocked = user.IsSubscriptionBlocked,
+            subscriptionPrice = subscriptionPrice.ToString("F2")
         });
     }
 

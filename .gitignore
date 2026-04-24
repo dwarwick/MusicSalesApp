@@ -363,6 +363,7 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /MusicSalesApp/appsettings.Development.json
+/MusicSalesApp/App_Data/Secrets/
 /MusicSalesApp/wwwroot/sitemap.xml
 **/bin\\*
 /MusicSalesApp/appsettings.Test.json

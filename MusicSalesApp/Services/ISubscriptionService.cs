@@ -5,6 +5,7 @@ namespace MusicSalesApp.Services;
 public interface ISubscriptionService
 {
     Task<Subscription> GetActiveSubscriptionAsync(int userId);
+    Task<Subscription> GetLatestSubscriptionAsync(int userId);
     Task<bool> HasActiveSubscriptionAsync(int userId);
     Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice);
     Task<bool> CancelSubscriptionAsync(int userId);
