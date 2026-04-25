@@ -401,6 +401,65 @@
         height: 11px;
         fill: currentColor;
     }
+
+    .home-container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    /* Hero Section - phones should stack content first, then animation */
+    .hero-section {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        text-align: left;
+        gap: 1.25rem;
+        padding: 1.5rem 0;
+    }
+
+    .hero-content {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .hero-title {
+        font-size: 2.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .hero-subtitle {
+        font-size: 1rem;
+        max-width: 100%;
+        margin-bottom: 1.25rem;
+    }
+
+    .hero-cta {
+        justify-content: flex-start;
+        gap: 0.75rem;
+    }
+
+    .hero-visual {
+        width: 100%;
+        justify-content: center;
+        margin-left: 0;
+    }
+
+    .cta-primary,
+    .cta-secondary {
+        padding: 12px 24px;
+        font-size: 0.9rem;
+    }
+
+    .cta-large {
+        padding: 14px 32px;
+        font-size: 1rem;
+    }
+
+    .hero-animation {
+        width: 180px;
+        height: 180px;
+    }
 }
 
 /* Landscape Mobile Optimization - for devices with limited viewport height */
@@ -567,32 +626,38 @@
         margin: 0 auto;
     }
 
-    /* Hero Section - SM Breakpoint */
+    /* Hero Section - landscape should stay side-by-side to avoid the stacked mobile layout */
     .hero-section {
-        flex-direction: column;
-        text-align: center;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        text-align: left;
         gap: 1.5rem;
         padding: 1.5rem 0;
     }
 
     .hero-content {
-        min-width: 100%;
+        min-width: 0;
+        max-width: 28rem;
     }
 
     .hero-title {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
+        font-size: 2.75rem;
+        margin-bottom: 0.75rem;
     }
 
     .hero-subtitle {
         font-size: 1rem;
-        max-width: 100%;
-        margin-bottom: 1.5rem;
+        max-width: 28rem;
+        margin-bottom: 1.25rem;
     }
 
     .hero-cta {
-        justify-content: center;
+        justify-content: flex-start;
         gap: 0.75rem;
+    }
+
+    .hero-visual {
+        margin-left: auto;
     }
 
     .cta-primary,
@@ -607,8 +672,8 @@
     }
 
     .hero-animation {
-        width: 180px;
-        height: 180px;
+        width: 160px;
+        height: 160px;
     }
 
     /* Features Section - SM Breakpoint */
@@ -800,5 +865,38 @@
 
     .dashboard-filters {
         width: 100%;
+    }
+}
+
+@media (max-width: 992px) and (max-height: 600px) and (orientation: landscape) {
+    .hero-section {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        text-align: left;
+        gap: 1.25rem;
+    }
+
+    .hero-content {
+        max-width: 100%;
+    }
+
+    .hero-subtitle {
+        max-width: 100%;
+    }
+
+    .hero-cta {
+        justify-content: flex-start;
+    }
+
+    .hero-visual {
+        width: 100%;
+        justify-content: center;
+        margin-left: 0;
+    }
+
+    .hero-animation {
+        width: 140px;
+        height: 140px;
     }
 }

@@ -20,7 +20,7 @@ public class MusicControllerTests
     private Mock<ISongLikeService> _mockSongLikeService;
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<IReportedSongService> _mockReportedSongService;
-    private Mock<IMobileSongMapper> _mockSongMapper;
+    private IMobileSongMapper _songMapper;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -35,7 +35,7 @@ public class MusicControllerTests
         _mockSongLikeService = new Mock<ISongLikeService>();
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockReportedSongService = new Mock<IReportedSongService>();
-        _mockSongMapper = new Mock<IMobileSongMapper>();
+        _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
         _mockLogger = new Mock<ILogger<MusicController>>();
         
         // Mock UserManager with required dependencies
@@ -51,7 +51,7 @@ public class MusicControllerTests
             _mockSongLikeService.Object,
             _mockCreatorPersonaService.Object,
             _mockReportedSongService.Object,
-            _mockSongMapper.Object,
+            _songMapper,
             _mockUserManager.Object,
             _mockLogger.Object);
 
@@ -329,7 +329,8 @@ public class MusicControllerTests
                 Mp3BlobPath = "folder/test.mp3",
                 ImageBlobPath = "folder/test.jpg",
                 NumberOfStreams = 42,
-                TrackLength = 180.5
+                TrackLength = 180.5,
+                DisplayOnHomePage = true
             },
             new SongMetadata
             {
@@ -360,6 +361,7 @@ public class MusicControllerTests
         Assert.That(songs[0].Genre, Is.EqualTo("Rock"));
         Assert.That(songs[0].StreamCount, Is.EqualTo(42));
         Assert.That(songs[0].TrackLengthSeconds, Is.EqualTo(180.5));
+        Assert.That(songs[0].DisplayOnHomePage, Is.True);
         Assert.That(songs[0].AlbumArtUrl, Is.EqualTo(sasUri.ToString()));
         Assert.That(songs[0].StreamUrl, Is.EqualTo(sasUri.ToString()));
     }

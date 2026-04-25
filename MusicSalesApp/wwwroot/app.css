@@ -1097,12 +1097,14 @@ h1:focus {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 2rem;
 }
 
 .hero-content {
-    flex: 1;
-    min-width: 300px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 34rem;
 }
 
 .hero-title {
@@ -1113,12 +1115,15 @@ h1:focus {
 
 .hero-subtitle {
     line-height: 1.6;
+    max-width: 32rem;
 }
 
 .hero-cta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-start;
+    gap: 1rem;
 }
 
 .hero-visual {
@@ -1126,10 +1131,12 @@ h1:focus {
     display: flex;
     justify-content: center;
     align-items: center;
+    margin-left: auto;
 }
 
 .hero-animation {
     animation: float 3s ease-in-out infinite;
+    display: block;
 }
 
 @keyframes float {

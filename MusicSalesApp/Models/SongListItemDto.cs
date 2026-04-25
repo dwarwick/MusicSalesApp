@@ -16,6 +16,7 @@ public class SongListItemDto
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
     public double? TrackLengthSeconds { get; set; }
+    public bool DisplayOnHomePage { get; set; }
     /// <summary>
     /// The ApplicationUser.Id of the creator who uploaded this song.
     /// Used by mobile clients to detect "creator listening to own song" for playback rules.

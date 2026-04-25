@@ -313,8 +313,16 @@
 
     /* Hero Section - MD Breakpoint */
     .hero-section {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        text-align: left;
         gap: 1.5rem;
         padding: 1.5rem 0;
+    }
+
+    .hero-content {
+        min-width: 0;
+        max-width: 28rem;
     }
 
     .hero-title {
@@ -329,7 +337,12 @@
     }
 
     .hero-cta {
+        justify-content: flex-start;
         gap: 0.875rem;
+    }
+
+    .hero-visual {
+        margin-left: auto;
     }
 
     .cta-primary,
