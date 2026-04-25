@@ -14,10 +14,15 @@ namespace MusicSalesApp.Components.Layout;
 
 public class NavMenuModel : BlazorBase, IAsyncDisposable
 {
+    private const string TestEnvironmentName = "Test";
+    protected const string TestingServerBannerText = "This is the Streamtunes Testing Server. The Production server URL is";
+    protected const string ProductionServerUrl = "https://streamtunes.net";
+
     protected bool _isMenuOpen = false;
     protected bool _isDarkTheme = false;
     protected SfSidebar _sidebar = default!;
     protected string? _appVersion;
+    protected bool ShowTestingServerBanner => Environment.IsEnvironment(TestEnvironmentName);
 
     // Site maintenance notification state
     protected bool _showMaintenanceWarning = false;

@@ -534,6 +534,24 @@ body {
     color: #fff !important;
 }
 
+.test-server-banner {
+    background-color: rgba(255, 193, 7, 0.15);
+    border-bottom-color: #ffc107;
+}
+
+.test-server-banner-label {
+    color: #ffe082;
+}
+
+.test-server-banner-link {
+    color: #ffecb3;
+}
+
+.test-server-banner-link:hover,
+.test-server-banner-link:focus {
+    color: #fff3cd;
+}
+
 /* Planned Maintenance Notice - Dark Theme */
 .maintenance-banner {
     background-color: rgba(255, 193, 7, 0.15);

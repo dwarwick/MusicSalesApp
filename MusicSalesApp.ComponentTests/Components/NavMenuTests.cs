@@ -70,6 +70,43 @@ public class NavMenuTests : BUnitTestBase
     }
 
     [Test]
+    public void NavMenu_ShowsTestingServerBanner_WhenRunningInTestEnvironment()
+    {
+        // Arrange
+        MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Test");
+
+        // Act
+        var cut = TestContext.Render<NavMenu>();
+
+        // Assert
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("test-server-banner"));
+            Assert.That(cut.Markup, Does.Contain("This is the Streamtunes Testing Server. The Production server URL is"));
+            Assert.That(cut.Markup, Does.Contain("href=\"https://streamtunes.net\""));
+            Assert.That(cut.Markup, Does.Contain("target=\"_blank\""));
+            Assert.That(cut.Markup, Does.Contain("rel=\"noopener noreferrer\""));
+        });
+    }
+
+    [Test]
+    public void NavMenu_HidesTestingServerBanner_WhenNotRunningInTestEnvironment()
+    {
+        // Arrange
+        MockWebHostEnvironment.Setup(x => x.EnvironmentName).Returns("Production");
+
+        // Act
+        var cut = TestContext.Render<NavMenu>();
+
+        // Assert
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("test-server-banner"));
+            Assert.That(cut.Markup, Does.Not.Contain("This is the Streamtunes Testing Server. The Production server URL is"));
+        });
+    }
+
+    [Test]
     public void NavMenu_ShowsBannerAndDialog_WhenMaintenanceActiveAndNotAcknowledged()
     {
         // Arrange

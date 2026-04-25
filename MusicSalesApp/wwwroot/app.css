@@ -1442,6 +1442,34 @@ h1:focus {
     min-width: 100px;
 }
 
+.test-server-banner {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    border-bottom: 1px solid;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.test-server-banner-label,
+.test-server-banner-link {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.test-server-banner-link {
+    text-decoration: underline;
+}
+
+.test-server-banner-link:hover,
+.test-server-banner-link:focus {
+    text-decoration-thickness: 2px;
+}
+
 /* Planned Maintenance Notice */
 .maintenance-banner {
     width: 100%;

@@ -24,6 +24,17 @@
     </div>
 </SfAppBar>
 
+@if (ShowTestingServerBanner)
+{
+    <div class="test-server-banner">
+        <span class="test-server-banner-label">@TestingServerBannerText</span>
+        <a class="test-server-banner-link"
+           href="@ProductionServerUrl"
+           target="_blank"
+           rel="noopener noreferrer">@ProductionServerUrl</a>
+    </div>
+}
+
 @if (_showMaintenanceWarning)
 {
     <div class="maintenance-banner">
