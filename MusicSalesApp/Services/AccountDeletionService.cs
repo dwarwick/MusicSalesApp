@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -30,7 +31,17 @@ public class AccountDeletionService : IAccountDeletionService
     public async Task<IdentityResult> DeleteAccountAsync(ApplicationUser user)
     {
         var userId = user.Id;
-        var creatorId = await _creatorService.GetCreatorIdForUserAsync(userId);
+        var creator = await _creatorService.GetCreatorByUserIdAsync(userId);
+        if (creator?.IsActive == true)
+        {
+            return IdentityResult.Failed(new IdentityError
+            {
+                Code = AccountDeletionErrorCodes.ActiveCreatorMustStopSellingFirst,
+                Description = "You must stop being a creator before deleting your account."
+            });
+        }
+
+        var creatorId = creator?.Id;
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
 
@@ -58,6 +69,16 @@ public class AccountDeletionService : IAccountDeletionService
         // Delete BlockedTipAttempts where user is the tipper (required FK, NoAction)
         await dbContext.BlockedTipAttempts
             .Where(b => b.TipperUserId == userId)
+            .ExecuteDeleteAsync();
+
+        // Delete report rows where the user reported a song (required FK, NoAction)
+        await dbContext.ReportedSongs
+            .Where(r => r.ReportingUserId == userId)
+            .ExecuteDeleteAsync();
+
+        // Delete any pending mobile verification codes for this user.
+        await dbContext.MobileVerificationCodes
+            .Where(code => code.UserId == userId)
             .ExecuteDeleteAsync();
 
         // If user is a creator, clean up Creator-referencing NoAction FKs

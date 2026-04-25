@@ -11,6 +11,7 @@ using MusicSalesApp.Controllers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using System.Security.Claims;
 
 namespace MusicSalesApp.Tests.Controllers;
 
@@ -597,6 +598,54 @@ public class MobileAuthControllerTests
         var result = await _controller.Login(new MobileLoginRequest { Email = "user100@test.com", Password = "Pass123!" });
 
         Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+    }
+
+    [Test]
+    public async Task Login_InactiveCreator_DoesNotMarkMobileSessionAsCreator()
+    {
+        var user = CreateTestUser(emailConfirmed: true);
+        _context.Users.Add(user);
+        _context.Creators.Add(new Creator { UserId = user.Id, IsActive = false });
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByEmailAsync(user.Email!)).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.FindByNameAsync(user.Email!)).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.CheckPasswordAsync(user, "Pass123!")).ReturnsAsync(true);
+        _mockUserManager.Setup(x => x.ResetAccessFailedCountAsync(user)).ReturnsAsync(IdentityResult.Success);
+
+        var result = await _controller.Login(new MobileLoginRequest { Email = user.Email!, Password = "Pass123!" });
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value?.GetType().GetProperty("IsCreator")?.GetValue(ok.Value), Is.EqualTo(false));
+        Assert.That(ok.Value?.GetType().GetProperty("CreatorId")?.GetValue(ok.Value), Is.Null);
+    }
+
+    #endregion
+
+    #region DeleteAccount Tests
+
+    [Test]
+    public async Task DeleteAccount_ActiveCreatorRequirement_ReturnsConflict()
+    {
+        var user = CreateTestUser(emailConfirmed: true);
+        _controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())], "TestAuth"));
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+        _mockAccountDeletionService.Setup(x => x.DeleteAccountAsync(user)).ReturnsAsync(
+            IdentityResult.Failed(new IdentityError
+            {
+                Code = AccountDeletionErrorCodes.ActiveCreatorMustStopSellingFirst,
+                Description = "You must stop being a creator before deleting your account."
+            }));
+
+        var result = await _controller.DeleteAccount();
+
+        var conflict = result as ConflictObjectResult;
+        Assert.That(conflict, Is.Not.Null);
+        Assert.That(conflict!.Value?.GetType().GetProperty("message")?.GetValue(conflict.Value)?.ToString(),
+            Does.Contain("stop being a creator"));
     }
 
     #endregion

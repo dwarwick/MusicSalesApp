@@ -576,6 +576,13 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             _errorMessage = "You cannot delete your account with an active subscription. You must cancel your active subscription and then try again.";
             return;
         }
+
+        if (_isActiveCreator)
+        {
+            _errorMessage = "Active creators must stop being a creator before deleting the account.";
+            return;
+        }
+
         await _accountClosureDialog.HideAsync();
         await _deleteAccountDialog.ShowAsync();
     }

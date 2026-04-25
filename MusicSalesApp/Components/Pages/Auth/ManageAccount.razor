@@ -607,12 +607,12 @@
                     
                     <div class="alert alert-warning mt-3">
                         <h6>Suspend Account</h6>
-                        <p>You will not be able to log in, and you will not receive any communications from us. If you decide to re-enable your account in the future, you will still have access to your owned songs.</p>
+                        <p>You will not be able to log in, and you will not receive any communications from us. If you decide to re-enable your account in the future, your account can be restored.</p>
                     </div>
                     
                     <div class="alert alert-danger mt-3">
                         <h6>Delete Account Permanently</h6>
-                        <p>All your data including purchases, playlists, and subscriptions will be permanently deleted. You will no longer have access to your music if you create a new account in the future. <strong>This action cannot be undone!</strong></p>
+                        <p>All your account data including playlists and subscription records will be permanently deleted. If you create a new account in the future, your deleted playlists and settings will not be restored. <strong>This action cannot be undone!</strong></p>
                     </div>
                 </div>
             }
@@ -664,7 +664,7 @@
         <Header>Delete Account</Header>
         <Content>
             <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
-            <p>All your data including purchases, playlists, and subscriptions will be permanently deleted.</p>
+            <p>All your account data including playlists and subscription records will be permanently deleted.</p>
             <p>Type your email address to confirm:</p>
             <SfTextBox @bind-Value="_accountActionConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
         </Content>

@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -55,8 +56,8 @@ public class AccountDeletionServiceTests
             .ReturnsAsync(IdentityResult.Success);
 
         // Default: user is not a creator
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(It.IsAny<int>()))
-            .ReturnsAsync((int?)null);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(It.IsAny<int>()))
+            .ReturnsAsync((Creator)null!);
 
         _service = new AccountDeletionService(
             _mockContextFactory.Object,
@@ -201,6 +202,56 @@ public class AccountDeletionServiceTests
     }
 
     [Test]
+    public async Task DeleteAccountAsync_NonCreator_DeletesReportedSongs()
+    {
+        // Arrange
+        var user = CreateTestUser();
+        var song = CreateSongMetadata();
+        await _context.SaveChangesAsync();
+
+        _context.ReportedSongs.Add(new ReportedSong
+        {
+            SongMetadataId = song.Id,
+            ReportingUserId = user.Id,
+            Reason = ReportReasonTypes.TermsOfUseViolation
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.DeleteAccountAsync(user);
+
+        // Assert
+        await using var verifyContext = new AppDbContext(_contextOptions);
+        var reports = await verifyContext.ReportedSongs.Where(r => r.ReportingUserId == user.Id).ToListAsync();
+        Assert.That(reports, Is.Empty, "All ReportedSong rows for the user should be deleted");
+    }
+
+    [Test]
+    public async Task DeleteAccountAsync_NonCreator_DeletesMobileVerificationCodes()
+    {
+        // Arrange
+        var user = CreateTestUser();
+        await _context.SaveChangesAsync();
+
+        _context.MobileVerificationCodes.Add(new MobileVerificationCode
+        {
+            UserId = user.Id,
+            Code = "123456",
+            Purpose = MobileVerificationPurpose.EmailVerification,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10)
+        });
+        await _context.SaveChangesAsync();
+
+        // Act
+        await _service.DeleteAccountAsync(user);
+
+        // Assert
+        await using var verifyContext = new AppDbContext(_contextOptions);
+        var codes = await verifyContext.MobileVerificationCodes.Where(code => code.UserId == user.Id).ToListAsync();
+        Assert.That(codes, Is.Empty, "All MobileVerificationCode rows for the user should be deleted");
+    }
+
+    [Test]
     public async Task DeleteAccountAsync_NonCreator_DoesNotAffectOtherUsersRecords()
     {
         // Arrange
@@ -271,8 +322,8 @@ public class AccountDeletionServiceTests
         _context.SongStreams.Add(new SongStream { SongMetadataId = song.Id, CreatorId = creator.Id, StreamerUserId = otherUser.Id });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -298,8 +349,8 @@ public class AccountDeletionServiceTests
         _context.Tips.Add(new Tip { TipperUserId = otherUser.Id, CreatorId = creator.Id, Amount = 20.00m, PayPalOrderId = "O2" });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -326,8 +377,8 @@ public class AccountDeletionServiceTests
         });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -346,8 +397,8 @@ public class AccountDeletionServiceTests
         var creator = CreateCreator(user.Id);
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
         _mockCreatorPersonaService.Setup(x => x.DeleteAllPersonasForCreatorAsync(creator.Id))
             .ReturnsAsync(3);
 
@@ -358,6 +409,27 @@ public class AccountDeletionServiceTests
         _mockCreatorPersonaService.Verify(
             x => x.DeleteAllPersonasForCreatorAsync(creator.Id), Times.Once,
             "Should call DeleteAllPersonasForCreatorAsync for the creator");
+    }
+
+    [Test]
+    public async Task DeleteAccountAsync_ActiveCreator_ReturnsFailureAndDoesNotDeleteUser()
+    {
+        // Arrange
+        var user = CreateTestUser();
+        var creator = CreateCreator(user.Id);
+        creator.IsActive = true;
+        await _context.SaveChangesAsync();
+
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
+
+        // Act
+        var result = await _service.DeleteAccountAsync(user);
+
+        // Assert
+        Assert.That(result.Succeeded, Is.False);
+        Assert.That(result.Errors.Single().Code, Is.EqualTo(AccountDeletionErrorCodes.ActiveCreatorMustStopSellingFirst));
+        _mockUserManager.Verify(x => x.DeleteAsync(It.IsAny<ApplicationUser>()), Times.Never);
     }
 
     [Test]
@@ -390,8 +462,8 @@ public class AccountDeletionServiceTests
         });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -431,8 +503,8 @@ public class AccountDeletionServiceTests
         _context.Tips.Add(new Tip { TipperUserId = otherUser.Id, CreatorId = creator.Id, Amount = 10.00m, PayPalOrderId = "O2" });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -461,8 +533,8 @@ public class AccountDeletionServiceTests
         var creator = CreateCreator(user.Id);
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
         _mockCreatorPersonaService.Setup(x => x.DeleteAllPersonasForCreatorAsync(creator.Id))
             .ThrowsAsync(new InvalidOperationException("Blob storage unavailable"));
 
@@ -482,8 +554,8 @@ public class AccountDeletionServiceTests
         var creator = CreateCreator(user.Id);
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
         _mockCreatorPersonaService.Setup(x => x.DeleteAllPersonasForCreatorAsync(creator.Id))
             .ThrowsAsync(new InvalidOperationException("Blob storage unavailable"));
 
@@ -715,8 +787,8 @@ public class AccountDeletionServiceTests
         _context.SongStreams.Add(new SongStream { SongMetadataId = song.Id, StreamerUserId = user.Id, CreatorId = creator.Id });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);
@@ -744,8 +816,8 @@ public class AccountDeletionServiceTests
         _context.Tips.Add(new Tip { TipperUserId = otherUser.Id, CreatorId = creator.Id, Amount = 10.00m, PayPalOrderId = "O2" });
         await _context.SaveChangesAsync();
 
-        _mockCreatorService.Setup(x => x.GetCreatorIdForUserAsync(user.Id))
-            .ReturnsAsync(creator.Id);
+        _mockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(user.Id))
+            .ReturnsAsync(creator);
 
         // Act
         await _service.DeleteAccountAsync(user);

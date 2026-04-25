@@ -308,6 +308,13 @@ public class MobileAuthController : ControllerBase
 
         if (!result.Succeeded)
         {
+            var activeCreatorError = result.Errors.FirstOrDefault(e => e.Code == AccountDeletionErrorCodes.ActiveCreatorMustStopSellingFirst);
+            if (activeCreatorError != null)
+            {
+                _logger.LogInformation("Blocked mobile account deletion for active creator user {UserId}", userId);
+                return Conflict(new { message = activeCreatorError.Description });
+            }
+
             var errors = string.Join("; ", result.Errors.Select(e => e.Description));
             _logger.LogError("Account deletion failed for user {UserId}: {Errors}", userId, errors);
             return StatusCode(500, new { message = "Failed to delete account. Please try again." });
@@ -365,7 +372,7 @@ public class MobileAuthController : ControllerBase
 
         var hasSubscription = await _subscriptionService.HasActiveSubscriptionAsync(user.Id);
 
-        var creator = await _context.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
+        var creator = await _context.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id && c.IsActive);
 
         return new MobileLoginResponse
         {

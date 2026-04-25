@@ -358,6 +358,7 @@ public class SitemapServiceTests
         // Verify all static policy pages are included
         Assert.That(content, Does.Contain("/privacy-policy"), "Should include Privacy Policy page");
         Assert.That(content, Does.Contain("/terms-of-use"), "Should include Terms of Use page");
+        Assert.That(content, Does.Contain("/account-deletion"), "Should include Account Deletion page");
         Assert.That(content, Does.Contain("/creator-agreement"), "Should include Creator Agreement page");
         Assert.That(content, Does.Contain("/user-refund-policy"), "Should include User Refund Policy page");
     }
