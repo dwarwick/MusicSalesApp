@@ -42,6 +42,7 @@ public class MobileSongMapper : IMobileSongMapper
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
             TrackLengthSeconds = m.TrackLength,
+            DisplayOnHomePage = m.DisplayOnHomePage,
             CreatorUserId = m.Creator?.UserId
         };
     }
