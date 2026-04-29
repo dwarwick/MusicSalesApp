@@ -267,6 +267,38 @@ public class AuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async Task<(bool Success, string Error)> MarkEmailVerifiedAndPromoteRoleAsync(ApplicationUser user)
+    {
+        try
+        {
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+
+            if (!user.EmailConfirmed)
+            {
+                user.EmailConfirmed = true;
+                var updateResult = await _userManager.UpdateAsync(user);
+                if (!updateResult.Succeeded)
+                {
+                    var errors = string.Join(";", updateResult.Errors.Select(e => e.Description));
+                    _logger.LogWarning("Failed to mark email verified for user {UserId}: {Errors}", user.Id, errors);
+                    return (false, errors);
+                }
+            }
+
+            await PromoteToUserRoleAsync(user, user.Id.ToString());
+            return (true, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking email verified for user {UserId}", user?.Id);
+            return (false, "Unexpected error verifying email");
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<(bool Success, string Error)> UpdateEmailAsync(string currentEmail, string newEmail, string baseUrl)
     {
         try

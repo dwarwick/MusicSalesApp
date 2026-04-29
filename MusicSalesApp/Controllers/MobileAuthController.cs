@@ -2,7 +2,9 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +15,7 @@ using MusicSalesApp.Extensions;
 using MusicSalesApp.Middleware;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using AppAuthenticationService = MusicSalesApp.Services.IAuthenticationService;
 
 namespace MusicSalesApp.Controllers;
 
@@ -22,8 +25,10 @@ namespace MusicSalesApp.Controllers;
 public class MobileAuthController : ControllerBase
 {
     private readonly IConfiguration _configuration;
+    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IAuthenticationService _authService;
+    private readonly AppAuthenticationService _authService;
+    private readonly IMobileExternalAuthTokenService _mobileExternalAuthTokenService;
     private readonly ISubscriptionService _subscriptionService;
     private readonly IEmailService _emailService;
     private readonly IAccountEmailService _accountEmailService;
@@ -38,8 +43,10 @@ public class MobileAuthController : ControllerBase
 
     public MobileAuthController(
         IConfiguration configuration,
+        SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        IAuthenticationService authService,
+        AppAuthenticationService authService,
+        IMobileExternalAuthTokenService mobileExternalAuthTokenService,
         ISubscriptionService subscriptionService,
         IEmailService emailService,
         IAccountEmailService accountEmailService,
@@ -49,8 +56,10 @@ public class MobileAuthController : ControllerBase
         ILogger<MobileAuthController> logger)
     {
         _configuration = configuration;
+        _signInManager = signInManager;
         _userManager = userManager;
         _authService = authService;
+        _mobileExternalAuthTokenService = mobileExternalAuthTokenService;
         _subscriptionService = subscriptionService;
         _emailService = emailService;
         _accountEmailService = accountEmailService;
@@ -58,6 +67,118 @@ public class MobileAuthController : ControllerBase
         _adminNotificationService = adminNotificationService;
         _context = context;
         _logger = logger;
+    }
+
+    [HttpGet("google/start")]
+    [SkipMobileApiKey]
+    public IActionResult StartGoogleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientId"]) ||
+            string.IsNullOrWhiteSpace(_configuration["Authentication:Google:ClientSecret"]))
+        {
+            return StatusCode(503, new { message = "Google sign-in is not configured." });
+        }
+
+        var redirectUri = Url.ActionLink(nameof(GoogleCallback), values: null, protocol: Request.Scheme);
+        if (string.IsNullOrWhiteSpace(redirectUri))
+        {
+            return StatusCode(500, new { message = "Unable to start Google sign-in." });
+        }
+
+        var properties = _signInManager.ConfigureExternalAuthenticationProperties(
+            ExternalLoginProviders.Google,
+            redirectUri);
+
+        return Challenge(properties, ExternalLoginProviders.Google);
+    }
+
+    [HttpGet("google/callback")]
+    [SkipMobileApiKey]
+    public async Task<IActionResult> GoogleCallback()
+    {
+        var callbackUrl = GetMobileExternalAuthCallbackUrl();
+
+        try
+        {
+            var info = await _signInManager.GetExternalLoginInfoAsync();
+            if (info == null || !string.Equals(info.LoginProvider, ExternalLoginProviders.Google, StringComparison.Ordinal))
+            {
+                return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                {
+                    ["error"] = "Google sign-in could not be completed."
+                }));
+            }
+
+            if (!TryGetGoogleEmail(info.Principal, out var email))
+            {
+                return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                {
+                    ["error"] = "Google account did not provide a verified email address."
+                }));
+            }
+
+            var user = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
+            if (user == null)
+            {
+                user = await _userManager.FindByEmailAsync(email);
+                if (user != null)
+                {
+                    var (linked, linkError) = await EnsureExternalLoginAsync(user, info.LoginProvider, info.ProviderKey);
+                    if (!linked)
+                    {
+                        return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                        {
+                            ["error"] = linkError
+                        }));
+                    }
+
+                    var (promoted, promoteError) = await _authService.MarkEmailVerifiedAndPromoteRoleAsync(user);
+                    if (!promoted)
+                    {
+                        return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                        {
+                            ["error"] = promoteError
+                        }));
+                    }
+                }
+            }
+
+            if (user == null)
+            {
+                var pendingToken = _mobileExternalAuthTokenService.ProtectPendingRegistration(
+                    new MobilePendingExternalRegistrationTokenPayload(
+                        info.LoginProvider,
+                        info.ProviderKey,
+                        email,
+                        info.Principal.Identity?.Name ?? string.Empty));
+
+                return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                {
+                    ["requiresRegistration"] = bool.TrueString,
+                    ["pendingRegistrationToken"] = pendingToken,
+                    ["email"] = email
+                }));
+            }
+
+            if (user.IsSuspended)
+            {
+                return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                {
+                    ["error"] = "Your account has been suspended."
+                }));
+            }
+
+            var exchangeToken = _mobileExternalAuthTokenService.ProtectLoginExchange(user.Id);
+            return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+            {
+                ["exchangeToken"] = exchangeToken,
+                ["email"] = user.Email ?? string.Empty
+            }));
+        }
+        finally
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
     }
 
     [HttpPost("register")]
@@ -120,6 +241,94 @@ public class MobileAuthController : ControllerBase
 
         // Reset lockout on success
         await _userManager.ResetAccessFailedCountAsync(user);
+
+        var loginResponse = await BuildLoginResponseAsync(user);
+        return Ok(loginResponse);
+    }
+
+    [HttpPost("google/exchange")]
+    public async Task<IActionResult> ExchangeGoogleLogin([FromBody] MobileGoogleExchangeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ExchangeToken))
+            return BadRequest(new { message = "Exchange token is required." });
+
+        if (!_mobileExternalAuthTokenService.TryUnprotectLoginExchange(request.ExchangeToken, out var payload))
+            return BadRequest(new { message = "Google sign-in token is invalid or expired." });
+
+        var user = await _userManager.FindByIdAsync(payload.UserId.ToString());
+        if (user == null)
+            return Unauthorized(new { message = "User not found." });
+
+        if (user.IsSuspended)
+            return Unauthorized(new { message = "Your account has been suspended." });
+
+        var loginResponse = await BuildLoginResponseAsync(user);
+        return Ok(loginResponse);
+    }
+
+    [HttpPost("google/register")]
+    public async Task<IActionResult> RegisterWithGoogle([FromBody] MobileGoogleRegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PendingRegistrationToken))
+            return BadRequest(new { message = "Pending registration token is required." });
+
+        if (!request.AcceptTermsOfUse || !request.AcceptPrivacyPolicy || !request.AcceptRefundPolicy)
+        {
+            return BadRequest(new { message = "You must accept the Terms of Use, Privacy Policy, and Refund Policy to register." });
+        }
+
+        if (!_mobileExternalAuthTokenService.TryUnprotectPendingRegistration(request.PendingRegistrationToken, out var payload))
+            return BadRequest(new { message = "Google registration token is invalid or expired." });
+
+        if (!string.Equals(payload.LoginProvider, ExternalLoginProviders.Google, StringComparison.Ordinal))
+            return BadRequest(new { message = "Invalid external login provider." });
+
+        var existingLoginUser = await _userManager.FindByLoginAsync(payload.LoginProvider, payload.ProviderKey);
+        if (existingLoginUser != null)
+        {
+            if (existingLoginUser.IsSuspended)
+                return Unauthorized(new { message = "Your account has been suspended." });
+
+            var existingLoginResponse = await BuildLoginResponseAsync(existingLoginUser);
+            return Ok(existingLoginResponse);
+        }
+
+        var user = await _userManager.FindByEmailAsync(payload.Email);
+        var isNewUser = false;
+
+        if (user == null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = payload.Email,
+                Email = payload.Email,
+                EmailConfirmed = true
+            };
+
+            var createResult = await _userManager.CreateAsync(user);
+            if (!createResult.Succeeded)
+            {
+                return BadRequest(new { message = string.Join("; ", createResult.Errors.Select(e => e.Description)) });
+            }
+
+            isNewUser = true;
+        }
+
+        if (user.IsSuspended)
+            return Unauthorized(new { message = "Your account has been suspended." });
+
+        var (linkSuccess, linkError) = await EnsureExternalLoginAsync(user, payload.LoginProvider, payload.ProviderKey);
+        if (!linkSuccess)
+            return BadRequest(new { message = linkError });
+
+        var (promoteSuccess, promoteError) = await _authService.MarkEmailVerifiedAndPromoteRoleAsync(user);
+        if (!promoteSuccess)
+            return StatusCode(500, new { message = promoteError });
+
+        if (isNewUser)
+        {
+            await NotifyGoogleRegistrationAsync(user);
+        }
 
         var loginResponse = await BuildLoginResponseAsync(user);
         return Ok(loginResponse);
@@ -364,6 +573,20 @@ public class MobileAuthController : ControllerBase
         }
     }
 
+    private async Task NotifyGoogleRegistrationAsync(ApplicationUser user)
+    {
+        try
+        {
+            await _adminNotificationService.NotifyUserRegisteredAsync(user.Email ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send admin registration notification for Google user {Email}", user.Email);
+        }
+
+        await SendPostVerificationNotificationsAsync(user);
+    }
+
     private async Task<MobileLoginResponse> BuildLoginResponseAsync(ApplicationUser user)
     {
         var roles = await _userManager.GetRolesAsync(user);
@@ -418,6 +641,62 @@ public class MobileAuthController : ControllerBase
         var handler = new JwtSecurityTokenHandler();
         var token = handler.CreateToken(tokenDescriptor);
         return handler.WriteToken(token);
+    }
+
+    private string GetMobileExternalAuthCallbackUrl()
+    {
+        return _configuration["MobileExternalAuth:CallbackUrl"] ?? "streamtunes://auth";
+    }
+
+    private static string BuildMobileExternalAuthCallback(string callbackUrl, IDictionary<string, string> parameters)
+    {
+        var query = new QueryBuilder();
+        foreach (var parameter in parameters)
+        {
+            if (!string.IsNullOrWhiteSpace(parameter.Value))
+            {
+                query.Add(parameter.Key, parameter.Value);
+            }
+        }
+
+        return callbackUrl + query.ToQueryString();
+    }
+
+    private static bool TryGetGoogleEmail(ClaimsPrincipal principal, out string email)
+    {
+        email = principal.FindFirstValue(ClaimTypes.Email)
+            ?? principal.FindFirstValue("email")
+            ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var emailVerified = principal.FindFirstValue("email_verified");
+        return !string.Equals(emailVerified, bool.FalseString, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<(bool Success, string Error)> EnsureExternalLoginAsync(
+        ApplicationUser user,
+        string loginProvider,
+        string providerKey)
+    {
+        var existingLogins = await _userManager.GetLoginsAsync(user);
+        if (existingLogins.Any(login =>
+                string.Equals(login.LoginProvider, loginProvider, StringComparison.Ordinal) &&
+                string.Equals(login.ProviderKey, providerKey, StringComparison.Ordinal)))
+        {
+            return (true, string.Empty);
+        }
+
+        var result = await _userManager.AddLoginAsync(user, new UserLoginInfo(loginProvider, providerKey, loginProvider));
+        if (!result.Succeeded)
+        {
+            return (false, string.Join("; ", result.Errors.Select(error => error.Description)));
+        }
+
+        return (true, string.Empty);
     }
 
     private async Task<(bool Success, string Error)> GenerateAndSendCodeAsync(
@@ -577,4 +856,17 @@ public class MobileLoginResponse
     public bool HasActiveSubscription { get; set; }
     public bool IsCreator { get; set; }
     public int? CreatorId { get; set; }
+}
+
+public class MobileGoogleExchangeRequest
+{
+    public string ExchangeToken { get; set; } = string.Empty;
+}
+
+public class MobileGoogleRegisterRequest
+{
+    public string PendingRegistrationToken { get; set; } = string.Empty;
+    public bool AcceptTermsOfUse { get; set; }
+    public bool AcceptPrivacyPolicy { get; set; }
+    public bool AcceptRefundPolicy { get; set; }
 }

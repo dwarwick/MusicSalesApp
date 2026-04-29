@@ -5,6 +5,7 @@ using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -117,7 +118,8 @@ try
     var jwtKey = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey must be configured");
     var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MusicSalesApp";
     var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MusicSalesApp.Maui";
-    builder.Services.AddAuthentication()
+    var authenticationBuilder = builder.Services.AddAuthentication();
+    authenticationBuilder
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
             // Map JWT standard claim names (e.g. "role", "sub") to their
@@ -135,6 +137,20 @@ try
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
             };
         });
+
+    var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+    var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+    if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+    {
+        authenticationBuilder.AddGoogle(ExternalLoginProviders.Google, options =>
+        {
+            options.ClientId = googleClientId;
+            options.ClientSecret = googleClientSecret;
+            options.SignInScheme = IdentityConstants.ExternalScheme;
+            options.SaveTokens = true;
+            options.CallbackPath = "/signin-google-mobile";
+        });
+    }
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -275,6 +291,7 @@ try
     builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
     builder.Services.AddScoped<ServerAuthenticationStateProvider>();
     builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
+    builder.Services.AddSingleton<IMobileExternalAuthTokenService, MobileExternalAuthTokenService>();
     builder.Services.AddScoped<IMusicService, MusicService>();
     builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
     builder.Services.AddScoped<IEmailService, EmailService>();

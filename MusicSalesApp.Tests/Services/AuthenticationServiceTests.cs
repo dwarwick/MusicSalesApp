@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Net;
@@ -235,6 +236,28 @@ public class AuthenticationServiceTests
         // Assert
         Assert.That(success, Is.True);
         Assert.That(error, Is.Empty);
+    }
+
+    [Test]
+    public async Task MarkEmailVerifiedAndPromoteRoleAsync_UnverifiedUser_UpdatesEmailAndPromotesRole()
+    {
+        var user = new ApplicationUser { Id = 42, Email = "test@example.com", EmailConfirmed = false };
+
+        _mockUserManager.Setup(um => um.UpdateAsync(user)).ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(um => um.IsInRoleAsync(user, Roles.NonValidatedUser)).ReturnsAsync(true);
+        _mockUserManager.Setup(um => um.RemoveFromRoleAsync(user, Roles.NonValidatedUser)).ReturnsAsync(IdentityResult.Success);
+        _mockRoleManager.Setup(rm => rm.RoleExistsAsync(Roles.User)).ReturnsAsync(true);
+        _mockUserManager.Setup(um => um.IsInRoleAsync(user, Roles.User)).ReturnsAsync(false);
+        _mockUserManager.Setup(um => um.AddToRoleAsync(user, Roles.User)).ReturnsAsync(IdentityResult.Success);
+
+        var (success, error) = await _service.MarkEmailVerifiedAndPromoteRoleAsync(user);
+
+        Assert.That(success, Is.True);
+        Assert.That(error, Is.Empty);
+        Assert.That(user.EmailConfirmed, Is.True);
+        _mockUserManager.Verify(um => um.UpdateAsync(user), Times.Once);
+        _mockUserManager.Verify(um => um.RemoveFromRoleAsync(user, Roles.NonValidatedUser), Times.Once);
+        _mockUserManager.Verify(um => um.AddToRoleAsync(user, Roles.User), Times.Once);
     }
 
     private class StubHttpMessageHandler : HttpMessageHandler

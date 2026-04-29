@@ -10,6 +10,12 @@ public class RequireMobileApiKeyAttribute : Attribute, IAsyncActionFilter
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
+        if (context.ActionDescriptor.EndpointMetadata.OfType<SkipMobileApiKeyAttribute>().Any())
+        {
+            await next();
+            return;
+        }
+
         var configuration = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
         var expectedKey = configuration["MobileApiKey"];
 

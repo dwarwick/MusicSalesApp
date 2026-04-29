@@ -21,6 +21,7 @@
   <ItemGroup>
     <PackageReference Include="Fido2" Version="4.0.0" />
     <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.73.0.4094" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
     <!-- Pin transitive dep from Fido2 → Fido2.Models to fix CVE-2026-26127 -->
     <PackageReference Include="Microsoft.Bcl.Memory" Version="9.0.14" />

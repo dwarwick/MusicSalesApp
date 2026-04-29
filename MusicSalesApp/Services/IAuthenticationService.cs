@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
 
@@ -66,6 +67,14 @@ public interface IAuthenticationService
     /// <param name="token">The raw confirmation token (not URL-encoded).</param>
     /// <returns>A tuple indicating success and an error message if applicable.</returns>
     Task<(bool Success, string Error)> ConfirmEmailAndPromoteRoleAsync(string userId, string token);
+
+    /// <summary>
+    /// Marks the user's email as verified and ensures they are in the User role.
+    /// Used by trusted auth flows such as externally verified sign-in providers.
+    /// </summary>
+    /// <param name="user">The user to update.</param>
+    /// <returns>A tuple indicating success and an error message if applicable.</returns>
+    Task<(bool Success, string Error)> MarkEmailVerifiedAndPromoteRoleAsync(ApplicationUser user);
 
     /// <summary>
     /// Updates the user's email address and sends a new verification email.

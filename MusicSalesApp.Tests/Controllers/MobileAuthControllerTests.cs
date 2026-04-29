@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Common.Helpers;
@@ -12,6 +15,7 @@ using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using System.Security.Claims;
+using AspNetAuthenticationService = Microsoft.AspNetCore.Authentication.IAuthenticationService;
 
 namespace MusicSalesApp.Tests.Controllers;
 
@@ -19,14 +23,17 @@ namespace MusicSalesApp.Tests.Controllers;
 public class MobileAuthControllerTests
 {
     private Mock<IConfiguration> _mockConfiguration;
+    private Mock<SignInManager<ApplicationUser>> _mockSignInManager;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IAuthenticationService> _mockAuthService;
+    private Mock<AspNetAuthenticationService> _mockAspNetAuthenticationService;
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IEmailService> _mockEmailService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IAccountDeletionService> _mockAccountDeletionService;
     private Mock<IAdminNotificationService> _mockAdminNotificationService;
     private Mock<ILogger<MobileAuthController>> _mockLogger;
+    private IMobileExternalAuthTokenService _mobileExternalAuthTokenService;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
     private SqliteConnection _connection;
@@ -51,6 +58,9 @@ public class MobileAuthControllerTests
         _mockConfiguration.Setup(c => c["Jwt:SecretKey"]).Returns("TestSecretKeyThatIsAtLeast32CharactersLong!");
         _mockConfiguration.Setup(c => c["Jwt:Issuer"]).Returns("TestIssuer");
         _mockConfiguration.Setup(c => c["Jwt:Audience"]).Returns("TestAudience");
+        _mockConfiguration.Setup(c => c["MobileExternalAuth:CallbackUrl"]).Returns("streamtunes://auth");
+        _mockConfiguration.Setup(c => c["Authentication:Google:ClientId"]).Returns("google-client-id");
+        _mockConfiguration.Setup(c => c["Authentication:Google:ClientSecret"]).Returns("google-client-secret");
 
         var configSection = new Mock<IConfigurationSection>();
         configSection.Setup(s => s.Value).Returns("60");
@@ -60,13 +70,23 @@ public class MobileAuthControllerTests
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
             store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
+        var contextAccessor = new Mock<IHttpContextAccessor>();
+        var claimsFactory = new Mock<IUserClaimsPrincipalFactory<ApplicationUser>>();
+        _mockSignInManager = new Mock<SignInManager<ApplicationUser>>(
+            _mockUserManager.Object,
+            contextAccessor.Object,
+            claimsFactory.Object,
+            null!, null!, null!, null!);
+
         _mockAuthService = new Mock<IAuthenticationService>();
+        _mockAspNetAuthenticationService = new Mock<AspNetAuthenticationService>();
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockEmailService = new Mock<IEmailService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockAccountDeletionService = new Mock<IAccountDeletionService>();
         _mockAdminNotificationService = new Mock<IAdminNotificationService>();
         _mockLogger = new Mock<ILogger<MobileAuthController>>();
+        _mobileExternalAuthTokenService = new MobileExternalAuthTokenService(CreateDataProtectionProvider());
 
         // Default setups
         _mockEmailService.Setup(x => x.GetEmailLogoHtml()).Returns("<div>Logo</div>");
@@ -79,6 +99,9 @@ public class MobileAuthControllerTests
         _mockAccountEmailService.Setup(x => x.SendAccountCreatedEmailAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
+        _mockAspNetAuthenticationService
+            .Setup(x => x.SignOutAsync(It.IsAny<HttpContext>(), IdentityConstants.ExternalScheme, null))
+            .Returns(Task.CompletedTask);
 
         _controller = CreateController();
     }
@@ -95,8 +118,10 @@ public class MobileAuthControllerTests
     {
         var controller = new MobileAuthController(
             _mockConfiguration.Object,
+            _mockSignInManager.Object,
             _mockUserManager.Object,
             _mockAuthService.Object,
+            _mobileExternalAuthTokenService,
             _mockSubscriptionService.Object,
             _mockEmailService.Object,
             _mockAccountEmailService.Object,
@@ -105,12 +130,30 @@ public class MobileAuthControllerTests
             _context,
             _mockLogger.Object);
 
+        var services = new ServiceCollection()
+            .AddSingleton(_mockAspNetAuthenticationService.Object)
+            .BuildServiceProvider();
+
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = services
+        };
+        httpContext.Request.Scheme = "https";
+        httpContext.Request.Host = new HostString("streamtunes.net");
+
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext()
+            HttpContext = httpContext
         };
 
         return controller;
+    }
+
+    private static IDataProtectionProvider CreateDataProtectionProvider()
+    {
+        var directory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        directory.Create();
+        return DataProtectionProvider.Create(directory);
     }
 
     private ApplicationUser CreateTestUser(int id = TestUserId, bool emailConfirmed = false)
@@ -210,6 +253,130 @@ public class MobileAuthControllerTests
         var result = await _controller.Register(new MobileRegisterRequest { Email = "user100@test.com", Password = "Pass123!" });
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    #endregion
+
+    #region Google Auth Tests
+
+    [Test]
+    public async Task GoogleCallback_NewGoogleUser_RedirectsWithPendingRegistration()
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.Email, "new-google@test.com"),
+            new Claim("email_verified", bool.TrueString),
+            new Claim(ClaimTypes.Name, "New Google User")
+        }, ExternalLoginProviders.Google));
+        var externalLogin = new ExternalLoginInfo(principal, ExternalLoginProviders.Google, "google-provider-key", ExternalLoginProviders.Google);
+
+        _mockSignInManager.Setup(x => x.GetExternalLoginInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync(externalLogin);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-google@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.GoogleCallback();
+
+        var redirect = result as RedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Does.StartWith("streamtunes://auth"));
+
+        var query = QueryHelpers.ParseQuery(new Uri(redirect.Url!).Query);
+        Assert.That(query["requiresRegistration"].ToString(), Is.EqualTo(bool.TrueString));
+        Assert.That(query["pendingRegistrationToken"].ToString(), Is.Not.Empty);
+        Assert.That(query["email"].ToString(), Is.EqualTo("new-google@test.com"));
+    }
+
+    [Test]
+    public async Task RegisterWithGoogle_NewUser_CreatesVerifiedUserAndLinksGoogleLogin()
+    {
+        ApplicationUser createdUser = null!;
+        var payload = new MobilePendingExternalRegistrationTokenPayload(
+            ExternalLoginProviders.Google,
+            "google-provider-key",
+            "new-google@test.com",
+            "New Google User");
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(payload);
+
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-google@test.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.CreateAsync(It.IsAny<ApplicationUser>()))
+            .Callback<ApplicationUser>(user =>
+            {
+                createdUser = user;
+                user.Id = 321;
+            })
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetRolesAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync((true, string.Empty));
+
+        var result = await _controller.RegisterWithGoogle(new MobileGoogleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = true,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(createdUser, Is.Not.Null);
+        Assert.That(createdUser.Email, Is.EqualTo("new-google@test.com"));
+        Assert.That(createdUser.EmailConfirmed, Is.True);
+        _mockUserManager.Verify(x => x.AddLoginAsync(
+            It.IsAny<ApplicationUser>(),
+            It.Is<UserLoginInfo>(login =>
+                login.LoginProvider == ExternalLoginProviders.Google &&
+                login.ProviderKey == "google-provider-key")), Times.Once);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()), Times.Once);
+        _mockAdminNotificationService.Verify(x => x.NotifyUserRegisteredAsync("new-google@test.com"), Times.Once);
+    }
+
+    [Test]
+    public async Task RegisterWithGoogle_ExistingUserByEmail_LinksGoogleLoginAndPromotesRole()
+    {
+        var existingUser = CreateTestUser(id: 42, emailConfirmed: false);
+        var payload = new MobilePendingExternalRegistrationTokenPayload(
+            ExternalLoginProviders.Google,
+            "google-provider-key",
+            existingUser.Email!,
+            "Existing User");
+        var token = _mobileExternalAuthTokenService.ProtectPendingRegistration(payload);
+
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync(existingUser.Email!))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(existingUser))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(existingUser, It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetRolesAsync(existingUser))
+            .ReturnsAsync(new List<string> { Roles.User });
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser))
+            .ReturnsAsync((true, string.Empty));
+
+        var result = await _controller.RegisterWithGoogle(new MobileGoogleRegisterRequest
+        {
+            PendingRegistrationToken = token,
+            AcceptTermsOfUse = true,
+            AcceptPrivacyPolicy = true,
+            AcceptRefundPolicy = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockUserManager.Verify(x => x.CreateAsync(It.IsAny<ApplicationUser>()), Times.Never);
+        _mockUserManager.Verify(x => x.AddLoginAsync(existingUser, It.IsAny<UserLoginInfo>()), Times.Once);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser), Times.Once);
     }
 
     #endregion
