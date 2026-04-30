@@ -301,36 +301,26 @@ namespace MusicSalesApp.Controllers
                 return NotFound(new { error = "Song not found" });
 
             var sasLifetime = TimeSpan.FromHours(24);
-            var streamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
-
-            var albumArtUrl = !string.IsNullOrEmpty(song.ImageBlobPath)
-                ? _storageService.GetReadSasUri(song.ImageBlobPath, sasLifetime).ToString()
-                : (string)null;
-
-            var personaImageUrl = song.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
-                ? _creatorPersonaService.GetPersonaImageSasUrl(song.Persona.ImageBlobPath, sasLifetime)
-                : (string)null;
-
-            var personaBio = song.Persona is { IsEnabled: true, Bio: not null and not "" }
-                ? song.Persona.Bio
-                : song.Creator?.Bio;
+            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime);
+            mappedSong.StreamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
 
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(song.Id);
 
             return Ok(new
             {
-                id = song.Id,
-                songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath),
-                artistName = song.GetEffectiveArtistName(),
-                genre = song.Genre ?? "Unknown",
-                albumArtUrl,
-                personaImageUrl,
-                personaBio,
-                streamUrl,
+                id = mappedSong.Id,
+                songTitle = mappedSong.SongTitle,
+                artistName = mappedSong.ArtistName,
+                genre = mappedSong.Genre,
+                albumArtUrl = mappedSong.AlbumArtUrl,
+                personaImageUrl = mappedSong.PersonaImageUrl,
+                personaBio = mappedSong.PersonaBio,
+                streamUrl = mappedSong.StreamUrl,
                 streamCount,
-                trackLengthSeconds = song.TrackLength,
-                creatorUserId = song.Creator?.UserId,
+                trackLengthSeconds = mappedSong.TrackLengthSeconds,
+                creatorId = mappedSong.CreatorId,
+                creatorUserId = mappedSong.CreatorUserId,
                 likeCount,
                 dislikeCount
             });

@@ -52,6 +52,7 @@ public class MobilePlaylistSongDto
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
     public double? TrackLengthSeconds { get; set; }
+    public int? CreatorId { get; set; }
     public int? CreatorUserId { get; set; }
 }
 

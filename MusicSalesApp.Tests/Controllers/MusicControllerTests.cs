@@ -330,7 +330,9 @@ public class MusicControllerTests
                 ImageBlobPath = "folder/test.jpg",
                 NumberOfStreams = 42,
                 TrackLength = 180.5,
-                DisplayOnHomePage = true
+                DisplayOnHomePage = true,
+                CreatorId = 77,
+                Creator = new Creator { Id = 77, UserId = 88 }
             },
             new SongMetadata
             {
@@ -362,6 +364,8 @@ public class MusicControllerTests
         Assert.That(songs[0].StreamCount, Is.EqualTo(42));
         Assert.That(songs[0].TrackLengthSeconds, Is.EqualTo(180.5));
         Assert.That(songs[0].DisplayOnHomePage, Is.True);
+        Assert.That(songs[0].CreatorId, Is.EqualTo(77));
+        Assert.That(songs[0].CreatorUserId, Is.EqualTo(88));
         Assert.That(songs[0].AlbumArtUrl, Is.EqualTo(sasUri.ToString()));
         Assert.That(songs[0].StreamUrl, Is.EqualTo(sasUri.ToString()));
     }
@@ -544,6 +548,47 @@ public class MusicControllerTests
         var songs = okResult.Value as List<SongListItemDto>;
         Assert.That(songs, Has.Count.EqualTo(1));
         Assert.That(songs[0].PersonaImageUrl, Is.Null);
+    }
+
+    [Test]
+    public async Task GetSongByTitle_IncludesCreatorIdentifiers()
+    {
+        // Arrange
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var song = new SongMetadata
+        {
+            Id = 5,
+            SongTitle = "Deep Link Song",
+            ArtistName = "Artist",
+            Genre = "Rock",
+            Mp3BlobPath = "folder/deep-link.mp3",
+            ImageBlobPath = "folder/deep-link.jpg",
+            TrackLength = 123.4,
+            CreatorId = 55,
+            Creator = new Creator { Id = 55, UserId = 99 }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync([song]);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>()))
+            .Returns(sasUri);
+        _mockStreamCountService.Setup(s => s.GetStreamCountAsync(song.Id)).ReturnsAsync(321);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(song.Id)).ReturnsAsync((7, 2));
+
+        // Act
+        var result = await _controller.GetSongByTitle("Deep%20Link%20Song");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        Assert.That(okResult.Value, Is.Not.Null);
+
+        var creatorId = okResult.Value!.GetType().GetProperty("creatorId")!.GetValue(okResult.Value);
+        var creatorUserId = okResult.Value.GetType().GetProperty("creatorUserId")!.GetValue(okResult.Value);
+        var streamCount = okResult.Value.GetType().GetProperty("streamCount")!.GetValue(okResult.Value);
+
+        Assert.That(creatorId, Is.EqualTo(55));
+        Assert.That(creatorUserId, Is.EqualTo(99));
+        Assert.That(streamCount, Is.EqualTo(321));
     }
 
     // --- GetBulkLikeCounts tests ---

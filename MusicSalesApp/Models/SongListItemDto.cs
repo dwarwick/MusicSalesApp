@@ -18,6 +18,11 @@ public class SongListItemDto
     public double? TrackLengthSeconds { get; set; }
     public bool DisplayOnHomePage { get; set; }
     /// <summary>
+    /// The Creator.Id that owns this song.
+    /// Used by mobile clients to create tracked tip orders.
+    /// </summary>
+    public int? CreatorId { get; set; }
+    /// <summary>
     /// The ApplicationUser.Id of the creator who uploaded this song.
     /// Used by mobile clients to detect "creator listening to own song" for playback rules.
     /// </summary>

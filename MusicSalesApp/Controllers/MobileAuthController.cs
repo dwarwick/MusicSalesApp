@@ -645,7 +645,7 @@ public class MobileAuthController : ControllerBase
 
     private string GetMobileExternalAuthCallbackUrl()
     {
-        return _configuration["MobileExternalAuth:CallbackUrl"] ?? "streamtunes://auth";
+        return _configuration[AppSettingKeys.MobileExternalAuthCallbackUrl] ?? "streamtunes://auth";
     }
 
     private static string BuildMobileExternalAuthCallback(string callbackUrl, IDictionary<string, string> parameters)
