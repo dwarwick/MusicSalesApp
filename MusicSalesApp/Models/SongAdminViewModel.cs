@@ -13,6 +13,7 @@ public class SongAdminViewModel
     public string Genre { get; set; } = string.Empty;
     public double? TrackLength { get; set; }
     public bool DisplayOnHomePage { get; set; }
+    public bool IsAiGenerated { get; set; }
     public int NumberOfStreams { get; set; }
 
     /// <summary>

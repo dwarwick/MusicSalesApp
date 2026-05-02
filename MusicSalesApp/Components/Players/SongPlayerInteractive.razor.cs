@@ -501,6 +501,11 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         return "Unknown Genre";
     }
 
+    protected bool IsAiGeneratedSong()
+    {
+        return _songMetadata?.IsAiGenerated == true;
+    }
+
     protected string GetArtistUrl()
     {
         return $"/artist/{Uri.EscapeDataString(GetArtistDisplayName())}";

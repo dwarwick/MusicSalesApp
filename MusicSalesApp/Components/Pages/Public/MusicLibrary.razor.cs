@@ -16,6 +16,9 @@ namespace MusicSalesApp.Components.Pages.Public;
 public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
+    protected const string AiFilterAll = "All";
+    protected const string AiFilterAi = "AI";
+    protected const string AiFilterNonAi = "Non-AI";
 
     /// <summary>
     /// When true, only shows items marked for display on home page and hides filter radio buttons.
@@ -72,6 +75,13 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // Artist filter state
     protected HashSet<string> _selectedArtists = new HashSet<string>();
+
+    // AI filter state
+    protected string _selectedAiFilter = AiFilterAll;
+    protected bool _aiFilterDropdownOpen;
+
+    // Track AI-generated status by file name
+    private Dictionary<string, bool> _aiGeneratedMap = new Dictionary<string, bool>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -332,6 +342,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
             // Clear home page songs tracking
             _homePageSongs.Clear();
+            _aiGeneratedMap.Clear();
 
             // Build song art URL mappings and extract metadata for tracks
             foreach (var audioFile in _files)
@@ -379,6 +390,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     {
                         _songTitles[audioFile.Name] = songMeta.SongTitle;
                     }
+                    _aiGeneratedMap[audioFile.Name] = songMeta.IsAiGenerated;
                     // Store artist info
                     _artistInfoMap[audioFile.Name] = GetArtistDisplayInfo(songMeta);
                     // Store genre
@@ -495,6 +507,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         var fileNames = _genreMap.Keys.AsEnumerable();
 
+        fileNames = fileNames.Where(MatchesAiFilter);
+
         // Cross-filter: when artists are selected, only count genres from those artists' songs
         if (_selectedArtists.Count > 0)
         {
@@ -530,6 +544,48 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _selectedGenres.Clear();
     }
 
+    protected void SetAiFilter(string filter)
+    {
+        _selectedAiFilter = filter;
+    }
+
+    protected void ToggleAiFilterDropdown()
+    {
+        _aiFilterDropdownOpen = !_aiFilterDropdownOpen;
+    }
+
+    protected void SelectAiFilterOption(string filter)
+    {
+        SetAiFilter(filter);
+        _aiFilterDropdownOpen = false;
+    }
+
+    protected void HandleAiFilterClear()
+    {
+        SetAiFilter(AiFilterAll);
+        _aiFilterDropdownOpen = false;
+    }
+
+    protected bool HasActiveAiFilter()
+    {
+        return _selectedAiFilter != AiFilterAll;
+    }
+
+    protected string GetAiFilterPillLabel()
+    {
+        return _selectedAiFilter switch
+        {
+            AiFilterAi => "AI Music",
+            AiFilterNonAi => "Non-AI Music",
+            _ => "Music Type"
+        };
+    }
+
+    protected string GetAiFilterOptionClass(string filter)
+    {
+        return _selectedAiFilter == filter ? "selected" : string.Empty;
+    }
+
     /// <summary>
     /// Gets artist items with counts for the FilterPill component.
     /// Counts are cross-filtered by the currently selected genres.
@@ -537,6 +593,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected Dictionary<string, int> GetArtistItems()
     {
         var fileNames = _artistInfoMap.Keys.AsEnumerable();
+
+        fileNames = fileNames.Where(MatchesAiFilter);
 
         // Cross-filter: when genres are selected, only count artists from those genres' songs
         if (_selectedGenres.Count > 0)
@@ -591,6 +649,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             files = files.Where(f => _homePageSongs.Contains(f.Name));
         }
+
+        files = files.Where(f => MatchesAiFilter(f.Name));
         
         // Apply genre filter
         if (_selectedGenres.Count > 0)
@@ -610,6 +670,28 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         
         return files;
+    }
+
+    protected bool IsAiGeneratedSong(string fileName)
+    {
+        return _aiGeneratedMap.TryGetValue(fileName, out var isAiGenerated) && isAiGenerated;
+    }
+
+    private bool MatchesAiFilter(StorageFileInfo file)
+    {
+        return MatchesAiFilter(file.Name);
+    }
+
+    private bool MatchesAiFilter(string fileName)
+    {
+        var isAiGenerated = IsAiGeneratedSong(fileName);
+
+        return _selectedAiFilter switch
+        {
+            AiFilterAi => isAiGenerated,
+            AiFilterNonAi => !isAiGenerated,
+            _ => true
+        };
     }
 
     protected int GetSongMetadataId(string fileName)

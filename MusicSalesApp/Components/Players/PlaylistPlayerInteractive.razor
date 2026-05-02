@@ -27,16 +27,24 @@ else if (!string.IsNullOrEmpty(_error))
                     @{
                         var displayImageUrl = GetTrackImageUrl(_currentTrackIndex);
                     }
-                    @if (!string.IsNullOrEmpty(displayImageUrl))
-                    {
-                        <img src="@displayImageUrl" alt="Track Art" class="playlist-art" />
-                    }
-                    else
-                    {
-                        <div class="playlist-art-animation">
-                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                    <div class="player-art-badge-layout">
+                        <div class="player-art-shell">
+                            @if (!string.IsNullOrEmpty(displayImageUrl))
+                            {
+                                <img src="@displayImageUrl" alt="Track Art" class="playlist-art" />
+                            }
+                            else
+                            {
+                                <div class="playlist-art-animation">
+                                    <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                </div>
+                            }
                         </div>
-                    }
+                        @if (IsCurrentTrackAiGenerated())
+                        {
+                            <img src="/images/ai-generated-badge.svg?v=2" alt="AI generated" class="player-ai-badge-offside" />
+                        }
+                    </div>
                     <h1 class="song-title">@GetDisplayTitle()</h1>
                 </div>
             </div>

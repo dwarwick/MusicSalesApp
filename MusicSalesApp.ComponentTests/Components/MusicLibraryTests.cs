@@ -1,4 +1,5 @@
 using Bunit;
+using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
@@ -303,6 +304,42 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
+    public void MusicLibrary_ShowsAiFilterPill()
+    {
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.Markup, Does.Contain("Music Type"));
+        Assert.That(cut.Markup, Does.Contain("filter-pill"));
+    }
+
+    [Test]
+    public void MusicLibrary_RendersAiBadge_ForAiGeneratedSong()
+    {
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "AiSong.mp3",
+                SongTitle = "AI Song",
+                IsAiGenerated = true,
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.Markup, Does.Contain("ai-generated-badge.svg"));
+    }
+
+    [Test]
     public void MusicLibrary_GenreFilterDropdown_TogglesOnClick()
     {
         // Arrange
@@ -323,8 +360,8 @@ public class MusicLibraryTests : BUnitTestBase
         // Assert - dropdown should not be visible initially
         Assert.That(cut.Markup, Does.Not.Contain("filter-pill-dropdown"));
 
-        // Act - click the genre pill (first pill) to open dropdown
-        cut.FindAll(".filter-pill")[0].Click();
+        // Act - click the genre pill to open dropdown
+        FindFilterPill(cut, "Genres").Click();
 
         // Assert - dropdown should now be visible with genres and count
         Assert.That(cut.Markup, Does.Contain("filter-pill-dropdown"));
@@ -361,8 +398,8 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("RockSong"));
         Assert.That(cut.Markup, Does.Contain("JazzSong"));
 
-        // Act - open genre dropdown (first pill) and check Rock
-        cut.FindAll(".filter-pill")[0].Click();
+        // Act - open genre dropdown and check Rock
+        FindFilterPill(cut, "Genres").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         // Find the Rock checkbox
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
@@ -400,8 +437,8 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Act - open genre dropdown (first pill) and select a genre
-        cut.FindAll(".filter-pill")[0].Click();
+        // Act - open genre dropdown and select a genre
+        FindFilterPill(cut, "Genres").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Rock"));
@@ -439,7 +476,7 @@ public class MusicLibraryTests : BUnitTestBase
         var cut = TestContext.Render<MusicLibrary>();
 
         // Act - select a genre to filter
-        cut.FindAll(".filter-pill")[0].Click();
+        FindFilterPill(cut, "Genres").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var rockCheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Rock"));
@@ -503,8 +540,8 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Act - open genre dropdown (first pill)
-        cut.FindAll(".filter-pill")[0].Click();
+        // Act - open genre dropdown
+        FindFilterPill(cut, "Genres").Click();
 
         // Assert - search input should be present and all genres visible
         Assert.That(cut.Markup, Does.Contain("filter-pill-search-input"));
@@ -553,8 +590,8 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Song1"));
         Assert.That(cut.Markup, Does.Contain("Song2"));
 
-        // Act - open artist dropdown (second pill) and select Artist A
-        cut.FindAll(".filter-pill")[1].Click();
+        // Act - open artist dropdown and select Artist A
+        FindFilterPill(cut, "Artists").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var artistACheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Artist A"));
@@ -615,15 +652,15 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Act - open artist dropdown (second pill) and select Artist A
-        cut.FindAll(".filter-pill")[1].Click();
+        // Act - open artist dropdown and select Artist A
+        FindFilterPill(cut, "Artists").Click();
         var checkboxes = cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']");
         var artistACheckbox = checkboxes.FirstOrDefault(cb =>
             cb.ParentElement.TextContent.Contains("Artist A"));
         artistACheckbox?.Change(true);
 
-        // Now open genre dropdown (first pill) to see updated items
-        cut.FindAll(".filter-pill")[0].Click();
+        // Now open genre dropdown to see updated items
+        FindFilterPill(cut, "Genres").Click();
 
         // Assert - genre dropdown should only show Rock and Country (Artist A's genres), not Jazz
         var genreItems = cut.FindAll(".filter-pill-dropdown-item");
@@ -655,5 +692,11 @@ public class MusicLibraryTests : BUnitTestBase
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
+    }
+
+    private static IElement FindFilterPill(IRenderedComponent<MusicLibrary> cut, string label)
+    {
+        return cut.FindAll(".filter-pill")
+            .First(pill => pill.TextContent.Contains(label, StringComparison.Ordinal));
     }
 }

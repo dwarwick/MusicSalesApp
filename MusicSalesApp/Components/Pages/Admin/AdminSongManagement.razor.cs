@@ -48,6 +48,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     protected string _editGenre = string.Empty;
     protected string _editArtistName = string.Empty;
     protected bool _editDisplayOnHomePage = false;
+    protected bool _editIsAiGenerated = false;
     protected IBrowserFile _songImageFile = null;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
@@ -152,6 +153,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     CreatorEmail = m.Creator?.User?.Email ?? string.Empty,
                     TrackLength = m.TrackLength,
                     DisplayOnHomePage = m.DisplayOnHomePage,
+                    IsAiGenerated = m.IsAiGenerated,
                     IsEnabled = m.IsEnabled,
                     StatusReason = m.StatusReason ?? string.Empty,
                     IsImageSquare = m.IsImageSquare
@@ -182,6 +184,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
+        _editIsAiGenerated = song.IsAiGenerated;
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
@@ -324,6 +327,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.IsAlbumCover = false;
                     existingMetadata.Genre = _editGenre;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    existingMetadata.IsAiGenerated = _editIsAiGenerated;
                     existingMetadata.ImageWidth = CropOutputSize;
                     existingMetadata.ImageHeight = CropOutputSize;
                     await MetadataService.UpsertAsync(existingMetadata);
@@ -403,6 +407,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.IsAlbumCover = false;
                     existingMetadata.Genre = _editGenre;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    existingMetadata.IsAiGenerated = _editIsAiGenerated;
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
                 else
@@ -415,13 +420,14 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                         FileExtension = fileExtension,
                         IsAlbumCover = false,
                         Genre = _editGenre,
-                        DisplayOnHomePage = _editDisplayOnHomePage
+                        DisplayOnHomePage = _editDisplayOnHomePage,
+                        IsAiGenerated = _editIsAiGenerated
                     });
                 }
             }
 
-            // Update metadata in database for existing files (only if status didn't change, as status service handles that)
-            if (!statusIsChanging)
+            // Update metadata fields in database for existing files.
+            // Status changes are handled by SongStatusService, but the other editable fields still need to persist.
             {
                 var filesToUpdate = new List<string>();
 
@@ -445,6 +451,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
                     // Update DisplayOnHomePage for all file types
                     metadata.DisplayOnHomePage = _editDisplayOnHomePage;
+                    metadata.IsAiGenerated = _editIsAiGenerated;
 
                     // Update MP3 metadata
                     if (isMP3)
@@ -472,6 +479,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             // Update local model
             _editingSong.Genre = _editGenre;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
+            _editingSong.IsAiGenerated = _editIsAiGenerated;
             _editingSong.RawArtistName = _editArtistName;
 
             // Close modal and refresh

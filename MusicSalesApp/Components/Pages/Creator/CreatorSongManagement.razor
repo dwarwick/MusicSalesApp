@@ -158,6 +158,21 @@
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.ArtistName)" HeaderText="Artist Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.Genre)" HeaderText="Genre" Width="100"></GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsAiGenerated)" HeaderText="AI" Width="100">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsAiGenerated)
+                            {
+                                <span class="badge bg-warning text-dark">AI</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
                 <GridColumn HeaderText="Duration" Width="100">
                     <Template>
                         @{
@@ -307,6 +322,10 @@
                                 <SfButton CssClass="e-btn e-small" OnClick="() => { _showAddGenre = false; _newGenreName = string.Empty; }">Cancel</SfButton>
                             </div>
                         }
+                    </div>
+
+                    <div class="mb-3">
+                        <SfCheckBox @bind-Checked="_editIsAiGenerated" Label="Created with AI" CssClass="e-outline"></SfCheckBox>
                     </div>
 
                     <div class="mb-3">

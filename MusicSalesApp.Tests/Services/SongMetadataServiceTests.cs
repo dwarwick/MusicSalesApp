@@ -198,6 +198,40 @@ public class SongMetadataServiceTests
     }
 
     [Test]
+    public async Task UpsertAsync_ExistingSong_UpdatesIsAiGenerated()
+    {
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "track/ai-track.mp3",
+            Mp3BlobPath = "track/ai-track.mp3",
+            Genre = "Pop",
+            IsAiGenerated = false,
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "track/ai-track.mp3",
+            Mp3BlobPath = "track/ai-track.mp3",
+            Genre = "Pop",
+            IsAiGenerated = true,
+            CreatorId = 1
+        };
+
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        Assert.That(result.IsAiGenerated, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.SongMetadata.FirstAsync(s => s.BlobPath == "track/ai-track.mp3");
+        Assert.That(saved.IsAiGenerated, Is.True, "UpsertAsync should persist IsAiGenerated when updating an existing song");
+    }
+
+    [Test]
     public async Task UpsertAsync_ExistingSong_ClearsPersonaIdWhenNull()
     {
         // Arrange — existing song with a persona

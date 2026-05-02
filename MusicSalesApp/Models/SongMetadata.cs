@@ -95,6 +95,11 @@ public class SongMetadata
     public bool DisplayOnHomePage { get; set; }
 
     /// <summary>
+    /// Indicates whether this song was created using AI.
+    /// </summary>
+    public bool IsAiGenerated { get; set; }
+
+    /// <summary>
     /// Indicates whether this song is active and available for playback.
     /// Inactive songs are not displayed anywhere on the website and cannot be played.
     /// Songs are set to inactive when a creator deletes them or closes their account.

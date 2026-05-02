@@ -1411,6 +1411,11 @@ namespace MusicSalesApp.Components.Players
             return url;
         }
 
+        protected bool IsCurrentTrackAiGenerated()
+        {
+            return GetCurrentTrackMetadata()?.IsAiGenerated == true;
+        }
+
         protected double? GetTrackLengthSeconds(int index)
         {
             if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return null;

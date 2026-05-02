@@ -62,20 +62,21 @@ body {
 }
 
 .filter-pill {
-    background-color: #fff;
-    border-color: #ced4da;
-    color: #212529;
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
 }
 
 .filter-pill:hover {
-    background-color: #e9ecef;
-    border-color: #adb5bd;
+    background-color: #1ed760;
+    border-color: #1ed760;
 }
 
 .filter-pill.active {
     background-color: #1db954;
     border-color: #1db954;
     color: #fff;
+    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
 }
 
 .filter-pill.active:hover {
@@ -118,6 +119,35 @@ body {
 
 .filter-pill-dropdown-item span {
     color: #212529;
+}
+
+.filter-pill-dropdown-option {
+    color: #212529;
+}
+
+.filter-pill-dropdown-option:hover,
+.filter-pill-dropdown-option.selected {
+    background-color: #f0f0f0;
+}
+
+.filter-pill-option-indicator {
+    color: #1db954;
+}
+
+.music-type-filter {
+    background-color: #1db954;
+    border-color: #1db954;
+    color: #fff;
+}
+
+.music-type-filter:hover,
+.music-type-filter.active {
+    background-color: #1ed760;
+    border-color: #1ed760;
+}
+
+.music-type-filter.active {
+    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
 }
 
 .loading-state,

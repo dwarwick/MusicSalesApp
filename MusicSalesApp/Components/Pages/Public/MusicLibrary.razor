@@ -9,6 +9,42 @@
 {
     <div class="music-library-sticky-header">
         <h3>Music Library</h3>
+        <div class="filter-pill-container">
+            <button class="filter-pill @(HasActiveAiFilter() ? "active" : string.Empty)" @onclick="ToggleAiFilterDropdown" aria-label="AI music filter">
+                @if (HasActiveAiFilter())
+                {
+                    <span class="filter-pill-clear" @onclick="HandleAiFilterClear" @onclick:stopPropagation="true" title="Clear AI music filter">✕</span>
+                }
+                <span>@GetAiFilterPillLabel()</span>
+                <span class="filter-pill-arrow">@(_aiFilterDropdownOpen ? "▲" : "▼")</span>
+            </button>
+            @if (_aiFilterDropdownOpen)
+            {
+                <div class="filter-pill-dropdown filter-pill-dropdown-compact">
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAll)" @onclick="() => SelectAiFilterOption(AiFilterAll)">
+                        <span>All Music</span>
+                        @if (_selectedAiFilter == AiFilterAll)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAi)" @onclick="() => SelectAiFilterOption(AiFilterAi)">
+                        <span>AI Music</span>
+                        @if (_selectedAiFilter == AiFilterAi)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterNonAi)" @onclick="() => SelectAiFilterOption(AiFilterNonAi)">
+                        <span>Non-AI Music</span>
+                        @if (_selectedAiFilter == AiFilterNonAi)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                </div>
+            }
+        </div>
         <FilterPill Label="Genres"
                     SearchPlaceholder="Find a genre"
                     Items="GetGenreItems()"
@@ -58,6 +94,10 @@ else
                         <div class="card-album-art-animation">
                             <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
                         </div>
+                    }
+                    @if (IsAiGeneratedSong(f.Name))
+                    {
+                        <img src="/images/ai-generated-badge.svg?v=2" alt="AI generated" class="ai-generated-badge" />
                     }
                 </div>
 

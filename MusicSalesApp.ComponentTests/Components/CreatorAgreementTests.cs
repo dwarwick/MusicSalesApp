@@ -186,4 +186,13 @@ public class CreatorAgreementTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Changes"));
         Assert.That(cut.Markup, Does.Contain("update this Agreement"));
     }
+
+    [Test]
+    public void CreatorAgreement_ContainsAiDisclosureRequirement()
+    {
+        var cut = TestContext.Render<CreatorAgreement>();
+
+        Assert.That(cut.Markup, Does.Contain("AI-Generated Content Disclosure"));
+        Assert.That(cut.Markup, Does.Contain("mark that song as AI-generated on your song management page"));
+    }
 }

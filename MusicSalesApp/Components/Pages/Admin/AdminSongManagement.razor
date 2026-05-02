@@ -163,6 +163,21 @@ else
                         }
                     </Template>
                 </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsAiGenerated)" HeaderText="AI" Width="100">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsAiGenerated)
+                            {
+                                <span class="badge bg-warning text-dark">AI</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.IsEnabled)" HeaderText="Enabled" Width="100">
                     <Template>
                         @{
@@ -407,8 +422,11 @@ else
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <SfCheckBox @bind-Checked="_editDisplayOnHomePage" Label="Display on Home Page" CssClass="e-outline"></SfCheckBox>
+                        </div>
+                        <div class="col-md-6">
+                            <SfCheckBox @bind-Checked="_editIsAiGenerated" Label="Created with AI" CssClass="e-outline"></SfCheckBox>
                         </div>
                     </div>
 

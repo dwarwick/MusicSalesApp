@@ -24,16 +24,24 @@ else if (!string.IsNullOrEmpty(_error))
         <div class="song-header">
             <div class="album-art-container">
                 <div class="title-container">
-                    @if (!string.IsNullOrEmpty(_albumArtUrl))
-                    {
-                        <img src="@_albumArtUrl" alt="Album Art" class="playlist-art" />
-                    }
-                    else
-                    {
-                        <div class="album-art-animation">
-                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                    <div class="player-art-badge-layout">
+                        <div class="player-art-shell">
+                            @if (!string.IsNullOrEmpty(_albumArtUrl))
+                            {
+                                <img src="@_albumArtUrl" alt="Album Art" class="playlist-art" />
+                            }
+                            else
+                            {
+                                <div class="album-art-animation">
+                                    <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                </div>
+                            }
                         </div>
-                    }
+                        @if (IsAiGeneratedSong())
+                        {
+                            <img src="/images/ai-generated-badge.svg?v=2" alt="AI generated" class="player-ai-badge-offside" />
+                        }
+                    </div>
                     <div class="song-text-details">
                         <h1 class="song-title">@GetDisplayTitle()</h1>
                         <span class="genre-info">
