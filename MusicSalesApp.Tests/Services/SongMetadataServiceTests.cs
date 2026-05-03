@@ -36,6 +36,45 @@ public class SongMetadataServiceTests
         _context?.Dispose();
     }
 
+    private static SongMetadata CreateActiveSong(int id, string blobPath, string genre = null, int? creatorId = null, string artistName = null, bool isEnabled = true)
+    {
+        return new SongMetadata
+        {
+            Id = id,
+            BlobPath = blobPath,
+            Mp3BlobPath = blobPath,
+            Genre = genre,
+            ArtistName = artistName,
+            IsActive = true,
+            IsEnabled = isEnabled,
+            CreatorId = creatorId
+        };
+    }
+
+    private async Task<Creator> CreateActiveCreatorAsync(string email, string displayName)
+    {
+        var user = new ApplicationUser
+        {
+            UserName = email,
+            Email = email
+        };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            User = user,
+            DisplayName = displayName,
+            IsActive = true,
+            PayPalEmail = $"paypal-{user.Id}@example.com"
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        return creator;
+    }
+
     #region UpsertAsync Tests
 
     [Test]
@@ -549,6 +588,23 @@ public class SongMetadataServiceTests
     }
 
     [Test]
+    public async Task GetAllAsync_OrdersSongsByIdAscending()
+    {
+        // Arrange
+        _context.SongMetadata.AddRange(
+            CreateActiveSong(30, "songs/30.mp3"),
+            CreateActiveSong(10, "songs/10.mp3"),
+            CreateActiveSong(20, "songs/20.mp3"));
+        await _context.SaveChangesAsync();
+
+        // Act
+        var results = await _service.GetAllAsync();
+
+        // Assert
+        Assert.That(results.Select(s => s.Id), Is.EqualTo(new[] { 10, 20, 30 }));
+    }
+
+    [Test]
     public async Task GetAllIncludingDisabledAsync_IncludesDisabledButNotInactive()
     {
         // Arrange
@@ -586,6 +642,75 @@ public class SongMetadataServiceTests
         Assert.That(results, Has.Count.EqualTo(2));
         Assert.That(results.Any(s => s.BlobPath == "active/song.mp3"), Is.True);
         Assert.That(results.Any(s => s.BlobPath == "disabled/song.mp3"), Is.True);
+    }
+
+    [Test]
+    public async Task GetAllIncludingDisabledAsync_OrdersSongsByIdAscending()
+    {
+        // Arrange
+        _context.SongMetadata.AddRange(
+            CreateActiveSong(40, "songs/40.mp3"),
+            CreateActiveSong(5, "songs/5.mp3", isEnabled: false),
+            CreateActiveSong(25, "songs/25.mp3"));
+        await _context.SaveChangesAsync();
+
+        // Act
+        var results = await _service.GetAllIncludingDisabledAsync();
+
+        // Assert
+        Assert.That(results.Select(s => s.Id), Is.EqualTo(new[] { 5, 25, 40 }));
+    }
+
+    [Test]
+    public async Task GetByArtistNameAsync_OrdersSongsByIdAscending()
+    {
+        // Arrange
+        _context.SongMetadata.AddRange(
+            CreateActiveSong(15, "songs/15.mp3", artistName: "Artist"),
+            CreateActiveSong(2, "songs/2.mp3", artistName: "Artist"),
+            CreateActiveSong(9, "songs/9.mp3", artistName: "Artist"));
+        await _context.SaveChangesAsync();
+
+        // Act
+        var results = await _service.GetByArtistNameAsync("Artist");
+
+        // Assert
+        Assert.That(results.Select(s => s.Id), Is.EqualTo(new[] { 2, 9, 15 }));
+    }
+
+    [Test]
+    public async Task GetByCreatorIdAsync_OrdersSongsByIdAscending()
+    {
+        // Arrange
+        var creator = await CreateActiveCreatorAsync("creator-order@test.com", "Creator Order");
+        _context.SongMetadata.AddRange(
+            CreateActiveSong(12, "songs/12.mp3", creatorId: creator.Id),
+            CreateActiveSong(1, "songs/1.mp3", creatorId: creator.Id),
+            CreateActiveSong(7, "songs/7.mp3", creatorId: creator.Id));
+        await _context.SaveChangesAsync();
+
+        // Act
+        var results = await _service.GetByCreatorIdAsync(creator.Id);
+
+        // Assert
+        Assert.That(results.Select(s => s.Id), Is.EqualTo(new[] { 1, 7, 12 }));
+    }
+
+    [Test]
+    public async Task GetByGenreAsync_OrdersSongsByIdAscending()
+    {
+        // Arrange
+        _context.SongMetadata.AddRange(
+            CreateActiveSong(22, "songs/22.mp3", genre: "Rock"),
+            CreateActiveSong(4, "songs/4.mp3", genre: "Rock"),
+            CreateActiveSong(11, "songs/11.mp3", genre: "Rock"));
+        await _context.SaveChangesAsync();
+
+        // Act
+        var results = await _service.GetByGenreAsync("Rock");
+
+        // Assert
+        Assert.That(results.Select(s => s.Id), Is.EqualTo(new[] { 4, 11, 22 }));
     }
 
     #endregion

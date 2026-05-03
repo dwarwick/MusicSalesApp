@@ -95,6 +95,12 @@ public class SongMetadata
     public bool DisplayOnHomePage { get; set; }
 
     /// <summary>
+    /// Optional display order used by library-style surfaces.
+    /// Null indicates a new or not-yet-ranked song and should sort ahead of ranked songs.
+    /// </summary>
+    public int? DisplayOrder { get; set; }
+
+    /// <summary>
     /// Indicates whether this song was created using AI.
     /// </summary>
     public bool IsAiGenerated { get; set; }

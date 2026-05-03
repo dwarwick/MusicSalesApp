@@ -60,6 +60,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     // Map song metadata IDs to stream counts
     private Dictionary<int, int> _streamCounts = new Dictionary<int, int>();
+
+    // Map file names to library/home display order
+    private Dictionary<string, int?> _songDisplayOrders = new Dictionary<string, int?>();
     
     // Map file names to stored song titles
     private Dictionary<string, string> _songTitles = new Dictionary<string, string>();
@@ -343,6 +346,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Clear home page songs tracking
             _homePageSongs.Clear();
             _aiGeneratedMap.Clear();
+            _songDisplayOrders.Clear();
 
             // Build song art URL mappings and extract metadata for tracks
             foreach (var audioFile in _files)
@@ -385,6 +389,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     {
                         _homePageSongs.Add(audioFile.Name);
                     }
+                    _songDisplayOrders[audioFile.Name] = songMeta.DisplayOrder;
                     // Store the song title if available
                     if (!string.IsNullOrEmpty(songMeta.SongTitle))
                     {
@@ -640,6 +645,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    private int? GetSongDisplayOrder(string fileName)
+    {
+        return _songDisplayOrders.TryGetValue(fileName, out var displayOrder)
+            ? displayOrder
+            : null;
+    }
+
+    private int GetNullDisplayOrderTieBreaker(string fileName)
+    {
+        return GetSongDisplayOrder(fileName).HasValue ? int.MinValue : GetSongMetadataId(fileName);
+    }
+
     protected IEnumerable<StorageFileInfo> GetFilteredFiles()
     {
         var files = _files.AsEnumerable();
@@ -668,8 +685,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                        _selectedArtists.Contains(artistInfo.DisplayName);
             });
         }
-        
-        return files;
+
+        // New songs with a null DisplayOrder float to the top. Ranked songs follow
+        // in ascending DisplayOrder, and null ties prefer newer uploads via higher Ids.
+        return files
+            .OrderBy(f => GetSongDisplayOrder(f.Name).HasValue ? 1 : 0)
+            .ThenBy(f => GetSongDisplayOrder(f.Name) ?? int.MaxValue)
+            .ThenByDescending(f => GetNullDisplayOrderTieBreaker(f.Name))
+            .ThenBy(f => GetSongMetadataId(f.Name));
     }
 
     protected bool IsAiGeneratedSong(string fileName)

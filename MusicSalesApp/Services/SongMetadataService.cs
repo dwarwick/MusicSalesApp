@@ -23,15 +23,15 @@ namespace MusicSalesApp.Services
         /// Songs without a creator (admin-uploaded) are always included.
         /// Also filters out disabled songs.
         /// </summary>
-        private static readonly Expression<Func<SongMetadata, bool>> ActiveSongFromActiveCreator = 
-            s => s.IsActive && s.IsEnabled && (s.CreatorId == null || s.Creator!.IsActive);
+        private static readonly Expression<Func<SongMetadata, bool>> ActiveSongsFromActiveCreators = 
+            song => song.IsActive && song.IsEnabled && (song.CreatorId == null || song.Creator!.IsActive);
 
         /// <summary>
         /// Expression to filter songs by active status and active creator (including disabled songs for admin use).
         /// Songs without a creator (admin-uploaded) are always included.
         /// </summary>
-        private static readonly Expression<Func<SongMetadata, bool>> ActiveSongFromActiveCreatorIncludingDisabled = 
-            s => s.IsActive && (s.CreatorId == null || s.Creator!.IsActive);
+        private static readonly Expression<Func<SongMetadata, bool>> ActiveSongsFromActiveCreatorsIncludingDisabled = 
+            song => song.IsActive && (song.CreatorId == null || song.Creator!.IsActive);
 
         public SongMetadataService(IDbContextFactory<AppDbContext> contextFactory, ILogger<SongMetadataService> logger)
         {
@@ -39,25 +39,30 @@ namespace MusicSalesApp.Services
             _logger = logger;
         }
 
+        private static IQueryable<SongMetadata> ApplyDefaultOrdering(IQueryable<SongMetadata> query)
+        {
+            return query.OrderBy(s => s.Id);
+        }
+
         public async Task<List<SongMetadata>> GetAllAsync()
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata
+            return await ApplyDefaultOrdering(context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreator)
+                .WhereActiveSongsFromActiveCreators())
                 .ToListAsync();
         }
 
         public async Task<List<SongMetadata>> GetAllIncludingDisabledAsync()
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata
+            return await ApplyDefaultOrdering(context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreatorIncludingDisabled)
+                .WhereActiveSongsFromActiveCreatorsIncludingDisabled())
                 .ToListAsync();
         }
 
@@ -76,7 +81,7 @@ namespace MusicSalesApp.Services
             return await context.SongMetadata
                 .Include(s => s.Creator)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreatorIncludingDisabled)
+                .WhereActiveSongsFromActiveCreatorsIncludingDisabled()
                 .FirstOrDefaultAsync(s => s.BlobPath == blobPath || 
                     s.Mp3BlobPath == blobPath || 
                     s.ImageBlobPath == blobPath);
@@ -89,7 +94,7 @@ namespace MusicSalesApp.Services
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreator)
+                .WhereActiveSongsFromActiveCreators()
                 .Where(s => s.AlbumName == albumName)
                 .ToListAsync();
         }
@@ -97,11 +102,11 @@ namespace MusicSalesApp.Services
         public async Task<List<SongMetadata>> GetByArtistNameAsync(string artistName)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata
+            return await ApplyDefaultOrdering(context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreator)
+                .WhereActiveSongsFromActiveCreators()
                 .Where(s =>
                     // Highest priority: enabled persona name (matches GetEffectiveArtistName priority)
                     (s.Persona != null && s.Persona.IsEnabled && s.Persona.Name == artistName) ||
@@ -113,19 +118,19 @@ namespace MusicSalesApp.Services
                     ((s.Persona == null || !s.Persona.IsEnabled) && (s.ArtistName == null || s.ArtistName == "") && 
                      (s.Creator == null || s.Creator.DisplayName == null || s.Creator.DisplayName == "") && 
                      s.Creator != null && s.Creator.User != null && s.Creator.User.Email != null &&
-                     s.Creator.User.Email.StartsWith(artistName + "@")))
+                     s.Creator.User.Email.StartsWith(artistName + "@"))))
                 .ToListAsync();
         }
 
         public async Task<List<SongMetadata>> GetByCreatorIdAsync(int creatorId)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
-            return await context.SongMetadata
+            return await ApplyDefaultOrdering(context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreator)
-                .Where(s => s.CreatorId == creatorId)
+                .WhereActiveSongsFromActiveCreators()
+                .Where(s => s.CreatorId == creatorId))
                 .ToListAsync();
         }
 
@@ -136,22 +141,22 @@ namespace MusicSalesApp.Services
             // If genreName is "Unknown Genre", return songs with null or empty genre
             if (genreName == "Unknown Genre")
             {
-                return await context.SongMetadata
+                return await ApplyDefaultOrdering(context.SongMetadata
                     .Include(s => s.Creator)
                         .ThenInclude(c => c.User)
                     .Include(s => s.Persona)
-                    .Where(ActiveSongFromActiveCreator)
-                    .Where(s => s.Genre == null || s.Genre == "")
+                    .WhereActiveSongsFromActiveCreators()
+                    .Where(s => s.Genre == null || s.Genre == ""))
                     .ToListAsync();
             }
             
             // Otherwise, return songs matching the genre
-            return await context.SongMetadata
+            return await ApplyDefaultOrdering(context.SongMetadata
                 .Include(s => s.Creator)
                     .ThenInclude(c => c.User)
                 .Include(s => s.Persona)
-                .Where(ActiveSongFromActiveCreator)
-                .Where(s => s.Genre == genreName)
+                .WhereActiveSongsFromActiveCreators()
+                .Where(s => s.Genre == genreName))
                 .ToListAsync();
         }
 
@@ -269,7 +274,7 @@ namespace MusicSalesApp.Services
             // Only include active songs by default (unless specifically querying for inactive)
             if (!parameters.IncludeInactive)
             {
-                query = query.Where(ActiveSongFromActiveCreator);
+                query = query.Where(ActiveSongsFromActiveCreators);
             }
 
             // Apply filters
@@ -378,7 +383,7 @@ namespace MusicSalesApp.Services
 
             var activeSongs = await context.SongMetadata
                 .Include(s => s.Creator)
-                .Where(ActiveSongFromActiveCreator)
+                .Where(ActiveSongsFromActiveCreators)
                 .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null)
                 .Select(s => new { s.SongTitle, s.Mp3BlobPath })
                 .ToListAsync();
@@ -406,7 +411,7 @@ namespace MusicSalesApp.Services
 
             var activeSongs = await context.SongMetadata
                 .Include(s => s.Creator)
-                .Where(ActiveSongFromActiveCreator)
+                .Where(ActiveSongsFromActiveCreators)
                 .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null && s.Id != excludeSongId)
                 .Select(s => new { s.Id, s.SongTitle, s.Mp3BlobPath })
                 .ToListAsync();
@@ -440,7 +445,7 @@ namespace MusicSalesApp.Services
             // Find active songs that use this artist name but belong to a different creator
             var activeSongs = await context.SongMetadata
                 .Include(s => s.Creator)
-                .Where(ActiveSongFromActiveCreator)
+                .Where(ActiveSongsFromActiveCreators)
                 .Where(s => !s.IsAlbumCover && s.Mp3BlobPath != null)
                 .Where(s => !string.IsNullOrEmpty(s.ArtistName))
                 .Select(s => new { s.ArtistName, s.CreatorId })

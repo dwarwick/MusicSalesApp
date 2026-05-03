@@ -273,6 +273,71 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
+    public void MusicLibrary_OrdersFeaturedSongs_ByNullDisplayOrderThenDisplayOrder()
+    {
+        // Arrange
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 10,
+                Mp3BlobPath = "RankedOne.mp3",
+                SongTitle = "Ranked One",
+                DisplayOnHomePage = true,
+                DisplayOrder = 1,
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 40,
+                Mp3BlobPath = "RankedTwo.mp3",
+                SongTitle = "Ranked Two",
+                DisplayOnHomePage = true,
+                DisplayOrder = 2,
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 30,
+                Mp3BlobPath = "NullNewest.mp3",
+                SongTitle = "Null Newest",
+                DisplayOnHomePage = true,
+                DisplayOrder = null,
+                UpdatedAt = DateTime.Now
+            },
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 20,
+                Mp3BlobPath = "NullOlder.mp3",
+                SongTitle = "Null Older",
+                DisplayOnHomePage = true,
+                DisplayOrder = null,
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>(builder => builder.Add(m => m.ShowHomePageFeatured, true));
+
+        // Assert
+        var titles = cut.FindAll(".card-song-title")
+            .Select(element => element.TextContent.Trim())
+            .ToList();
+
+        Assert.That(titles, Is.EqualTo(new[]
+        {
+            "Null Newest",
+            "Null Older",
+            "Ranked One",
+            "Ranked Two"
+        }));
+    }
+
+    [Test]
     public void MusicLibrary_ShowsGenreFilterPill()
     {
         // Arrange - Set up empty metadata list

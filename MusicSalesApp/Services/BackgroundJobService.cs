@@ -32,6 +32,12 @@ public class BackgroundJobService : IBackgroundJobService
             // from previous deployments don't keep firing after the method was removed.
             RecurringJob.RemoveIfExists("sync-likes-to-supabase");
 
+            // Schedule nightly display-order randomization before other catalog jobs.
+            RecurringJob.AddOrUpdate<ISongDisplayOrderService>(
+                "randomize-song-display-order",
+                service => service.RandomizeDisplayOrderAsync(),
+                "30 1 * * *");
+
             // Schedule nightly recommendation generation at 2 AM UTC
             RecurringJob.AddOrUpdate<IRecommendationService>(
                 "generate-recommendations",

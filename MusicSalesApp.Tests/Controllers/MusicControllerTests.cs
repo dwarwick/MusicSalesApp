@@ -331,6 +331,7 @@ public class MusicControllerTests
                 NumberOfStreams = 42,
                 TrackLength = 180.5,
                 DisplayOnHomePage = true,
+                DisplayOrder = 12,
                 CreatorId = 77,
                 Creator = new Creator { Id = 77, UserId = 88 }
             },
@@ -364,6 +365,7 @@ public class MusicControllerTests
         Assert.That(songs[0].StreamCount, Is.EqualTo(42));
         Assert.That(songs[0].TrackLengthSeconds, Is.EqualTo(180.5));
         Assert.That(songs[0].DisplayOnHomePage, Is.True);
+        Assert.That(songs[0].DisplayOrder, Is.EqualTo(12));
         Assert.That(songs[0].CreatorId, Is.EqualTo(77));
         Assert.That(songs[0].CreatorUserId, Is.EqualTo(88));
         Assert.That(songs[0].AlbumArtUrl, Is.EqualTo(sasUri.ToString()));

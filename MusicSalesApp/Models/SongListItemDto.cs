@@ -17,6 +17,7 @@ public class SongListItemDto
     public int StreamCount { get; set; }
     public double? TrackLengthSeconds { get; set; }
     public bool DisplayOnHomePage { get; set; }
+    public int? DisplayOrder { get; set; }
     public bool IsAiGenerated { get; set; }
     /// <summary>
     /// The Creator.Id that owns this song.

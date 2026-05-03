@@ -300,6 +300,7 @@ try
     builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
+    builder.Services.AddScoped<ISongDisplayOrderService, SongDisplayOrderService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();
     builder.Services.AddScoped<ISongStatusService, SongStatusService>();
     builder.Services.AddScoped<IGenreService, GenreService>();
