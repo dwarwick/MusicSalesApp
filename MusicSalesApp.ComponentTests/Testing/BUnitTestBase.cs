@@ -1,5 +1,6 @@
 using Bunit;
 using Bunit.TestDoubles;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -65,6 +66,8 @@ public abstract class BUnitTestBase
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<IReportedSongService> MockReportedSongService { get; private set; } = default!;
     protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
+    protected Mock<IAdminMessageService> MockAdminMessageService { get; private set; } = default!;
+    protected Mock<IAdminMessageHubClient> MockAdminMessageHubClient { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -109,6 +112,8 @@ public abstract class BUnitTestBase
         MockTipService = new Mock<ITipService>();
         MockReportedSongService = new Mock<IReportedSongService>();
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
+        MockAdminMessageService = new Mock<IAdminMessageService>();
+        MockAdminMessageHubClient = new Mock<IAdminMessageHubClient>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         
@@ -310,6 +315,24 @@ public abstract class BUnitTestBase
         MockEmailService.Setup(x => x.GetAppBaseUrl())
             .Returns("https://streamtunes.net");
 
+        MockAdminMessageService.Setup(x => x.GetAvailableRoleNamesAsync())
+            .ReturnsAsync(new List<string>());
+        MockAdminMessageService.Setup(x => x.GetMessagesAsync())
+            .ReturnsAsync(new List<AdminMessageSummaryDto>());
+        MockAdminMessageService.Setup(x => x.GetPendingDialogMessagesAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<PendingAdminMessageDto>());
+        MockAdminMessageService.Setup(x => x.AcknowledgeMessageAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(true);
+        MockAdminMessageService.Setup(x => x.CancelMessageAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(0);
+        MockAdminMessageService.Setup(x => x.SendPendingEmailsAsync())
+            .ReturnsAsync(new AdminMessageEmailJobResult());
+
+        MockAdminMessageHubClient.Setup(x => x.StartAsync())
+            .Returns(Task.CompletedTask);
+        MockAdminMessageHubClient.Setup(x => x.IsConnected)
+            .Returns(true);
+
         // Setup default returns for ICreatorService methods
         MockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(It.IsAny<int>()))
             .ReturnsAsync((Creator)null);
@@ -453,6 +476,8 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<IReportedSongService>(MockReportedSongService.Object);
         TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
+        TestContext.Services.AddSingleton<IAdminMessageService>(MockAdminMessageService.Object);
+        TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);
 
@@ -530,6 +555,7 @@ public abstract class BUnitTestBase
 
         var authContext = TestContext.AddAuthorization();
         authContext.SetAuthorized(userName);
+        authContext.SetClaims(claims.ToArray());
         if (roles.Length > 0)
             authContext.SetRoles(roles);
 

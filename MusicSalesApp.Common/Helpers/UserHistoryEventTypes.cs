@@ -7,6 +7,7 @@ namespace MusicSalesApp.Common.Helpers;
 /// </summary>
 public static class UserHistoryEventTypes
 {
+    public const string AdminMessageAcknowledged = "AdminMessageAcknowledged";
     public const string Registration = "Registration";
     public const string EmailConfirmed = "EmailConfirmed";
     public const string TaxFormCompleted = "TaxFormCompleted";

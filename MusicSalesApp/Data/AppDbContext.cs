@@ -34,6 +34,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<CreatorPersona> CreatorPersonas { get; set; }
     public DbSet<MobileVerificationCode> MobileVerificationCodes { get; set; }
     public DbSet<ReportedSong> ReportedSongs { get; set; }
+    public DbSet<AdminMessage> AdminMessages { get; set; }
+    public DbSet<AdminMessageRole> AdminMessageRoles { get; set; }
+    public DbSet<AdminMessageRecipient> AdminMessageRecipients { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -202,6 +205,62 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<AdminMessage>()
+            .HasOne(am => am.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(am => am.CreatedByUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<AdminMessage>()
+            .HasOne(am => am.CanceledByUser)
+            .WithMany()
+            .HasForeignKey(am => am.CanceledByUserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<AdminMessage>()
+            .HasIndex(am => am.CreatedAtUtc);
+
+        builder.Entity<AdminMessage>()
+            .HasIndex(am => am.CanceledAtUtc);
+
+        builder.Entity<AdminMessageRole>()
+            .HasOne(amr => amr.AdminMessage)
+            .WithMany(am => am.Roles)
+            .HasForeignKey(amr => amr.AdminMessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<AdminMessageRole>()
+            .HasIndex(amr => new { amr.AdminMessageId, amr.RoleName })
+            .IsUnique();
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasOne(amr => amr.AdminMessage)
+            .WithMany(am => am.Recipients)
+            .HasForeignKey(amr => amr.AdminMessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasOne(amr => amr.User)
+            .WithMany()
+            .HasForeignKey(amr => amr.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasIndex(amr => new { amr.AdminMessageId, amr.UserId })
+            .IsUnique();
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasIndex(amr => amr.UserId);
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasIndex(amr => amr.EmailSentAtUtc);
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasIndex(amr => amr.AcknowledgedAtUtc);
+
+        builder.Entity<AdminMessageRecipient>()
+            .HasIndex(amr => amr.CanceledAtUtc);
 
         builder.Entity<Passkey>()
             .HasIndex(p => p.CredentialId)

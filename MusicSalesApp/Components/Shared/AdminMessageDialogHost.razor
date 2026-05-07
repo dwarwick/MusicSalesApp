@@ -1,0 +1,38 @@
+@inherits AdminMessageDialogHostModel
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Popups
+
+@if (_currentMessage != null)
+{
+    <SfDialog @bind-Visible="_showDialog"
+              Width="520px"
+              IsModal="true"
+              ShowCloseIcon="false"
+              CloseOnEscape="false"
+              AllowDragging="false"
+              CssClass="admin-message-dialog">
+        <DialogTemplates>
+            <Header>
+                <span>@_dialogTitle</span>
+            </Header>
+            <Content>
+                <div class="admin-message-dialog-content">
+                    @if (_showSourceLabel)
+                    {
+                        <p class="text-muted mb-2">Message from StreamTunes</p>
+                    }
+                    <p><strong>Created:</strong> @_createdDateText</p>
+                    <div style="white-space: pre-line;">@_currentMessage.MessageText</div>
+                </div>
+            </Content>
+            <FooterTemplate>
+                <SfButton OnClick="AcknowledgeCurrentDialogAsync"
+                          IsPrimary="true"
+                          CssClass="e-btn e-primary"
+                          Disabled="@_isAcknowledging">
+                    Acknowledge
+                </SfButton>
+            </FooterTemplate>
+        </DialogTemplates>
+    </SfDialog>
+}

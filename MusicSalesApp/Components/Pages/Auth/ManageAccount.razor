@@ -106,7 +106,7 @@
                 
                 @if (_passkeys.Any())
                 {
-                    <SfGrid DataSource="@_passkeys" AllowPaging="false" CssClass="mt-3">
+                    <SfGrid DataSource="@_passkeys" AllowPaging="false" AllowResizing="true" CssClass="mt-3">
                         <GridColumns>
                             <GridColumn Field="@nameof(Passkey.Name)" HeaderText="Name" Width="200"></GridColumn>
                             <GridColumn Field="@nameof(Passkey.CreatedAt)" HeaderText="Created" Width="180">

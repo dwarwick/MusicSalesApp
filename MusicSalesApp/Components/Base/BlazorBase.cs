@@ -108,6 +108,12 @@ public abstract class BlazorBase : ComponentBase
     protected IAdminNotificationService AdminNotificationService { get; set; } = default!;
 
     [Inject]
+    protected IAdminMessageService AdminMessageService { get; set; } = default!;
+
+    [Inject]
+    protected IAdminMessageHubClient AdminMessageHubClient { get; set; } = default!;
+
+    [Inject]
     protected IFileMatchingService FileMatchingService { get; set; } = default!;
 
     [Inject]

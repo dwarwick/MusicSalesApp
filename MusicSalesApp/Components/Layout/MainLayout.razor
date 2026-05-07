@@ -1,8 +1,10 @@
 ﻿@inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Hosting
+@using MusicSalesApp.Components.Shared
 @inject IWebHostEnvironment HostEnvironment
 
 <ThemeProvider @rendermode="InteractiveServer" />
+<AdminMessageDialogHost @rendermode="InteractiveServer" />
 
 <div class="page">
     <NavMenu @rendermode="InteractiveServer" />

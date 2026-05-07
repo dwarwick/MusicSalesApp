@@ -1,6 +1,18 @@
 window.dashboardHelper = {
     getUserTimeZone: function () {
         return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    },
+
+    formatAdminMessageDate: function (utcIso) {
+        if (!utcIso) {
+            return '';
+        }
+
+        return new Date(utcIso).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
     }
 };
 

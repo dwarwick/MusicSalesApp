@@ -126,6 +126,21 @@ try
             // Microsoft ClaimTypes equivalents so that [Authorize(Roles = "...")]
             // and User.FindFirstValue(ClaimTypes.NameIdentifier) work correctly.
             options.MapInboundClaims = true;
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    var path = context.HttpContext.Request.Path;
+                    if (!string.IsNullOrWhiteSpace(accessToken)
+                        && path.StartsWithSegments("/adminmessagehub"))
+                    {
+                        context.Token = accessToken;
+                    }
+
+                    return Task.CompletedTask;
+                }
+            };
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -320,12 +335,14 @@ try
     builder.Services.AddScoped<ILikeCountHubClient, LikeCountHubClient>();
     builder.Services.AddScoped<IWebhookStatusHubClient, WebhookStatusHubClient>();
     builder.Services.AddScoped<IMaintenanceHubClient, MaintenanceHubClient>();
+    builder.Services.AddScoped<IAdminMessageHubClient, AdminMessageHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IFileMatchingService, FileMatchingService>();
     builder.Services.AddScoped<ISitemapService, SitemapService>();
     builder.Services.AddScoped<ICreatorService, CreatorService>();
     builder.Services.AddScoped<IDashboardService, DashboardService>();
     builder.Services.AddScoped<ICreatorEmailService, CreatorEmailService>();
+    builder.Services.AddScoped<IAdminMessageService, AdminMessageService>();
     builder.Services.AddScoped<IAdminNotificationService, AdminNotificationService>();
     builder.Services.AddScoped<IStreamPayoutService, StreamPayoutService>();
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
@@ -490,6 +507,7 @@ try
     app.MapHub<MusicSalesApp.Hubs.LikeCountHub>("/likecounthub");
     app.MapHub<MusicSalesApp.Hubs.WebhookStatusHub>("/webhookstatushub");
     app.MapHub<MusicSalesApp.Hubs.MaintenanceHub>("/maintenancehub");
+    app.MapHub<MusicSalesApp.Hubs.AdminMessageHub>("/adminmessagehub");
 
     app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
     {

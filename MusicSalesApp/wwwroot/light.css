@@ -121,6 +121,31 @@ body {
     color: #212529;
 }
 
+.admin-messages-panel {
+    border: 1px solid #d9dde3;
+    background-color: #ffffff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.admin-messages-panel-header {
+    background-color: #f6f8fb;
+    border-bottom: 1px solid #d9dde3;
+}
+
+.admin-messages-panel-body {
+    background-color: #ffffff;
+}
+
+.admin-messages-channel-section {
+    background-color: #f6f8fb;
+    border: 1px solid #d9dde3;
+}
+
+.admin-messages-channel-options .e-checkbox-wrapper .e-label,
+.admin-messages-channel-options .e-css.e-checkbox-wrapper .e-label {
+    color: #212529;
+}
+
 .filter-pill-dropdown-option {
     color: #212529;
 }

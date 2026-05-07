@@ -1,0 +1,229 @@
+@page "/admin/messages"
+@rendermode InteractiveServer
+@inherits AdminMessagesModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Services
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.DropDowns
+@using Syncfusion.Blazor.Grids
+@using Syncfusion.Blazor.Inputs
+@using Syncfusion.Blazor.Notifications
+@using Syncfusion.Blazor.Popups
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Admin Messages</PageTitle>
+
+<h3>Admin Messages</h3>
+
+@if (_isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading admin messages...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        <strong>Error:</strong> @_errorMessage
+    </div>
+}
+else
+{
+    <div class="admin-messages-panel mb-4">
+        <div class="admin-messages-panel-header">
+            <h5 class="mb-0">Create Message</h5>
+        </div>
+        <div class="admin-messages-panel-body">
+            @if (!string.IsNullOrEmpty(_successMessage))
+            {
+                <SfMessage Severity="MessageSeverity.Success" ShowCloseIcon="true" Closed="() => _successMessage = null">
+                    @_successMessage
+                </SfMessage>
+            }
+
+            @if (_validationErrors.Any())
+            {
+                <SfMessage Severity="MessageSeverity.Error">
+                    <strong>Validation Errors:</strong>
+                    <ul class="mb-0">
+                        @foreach (var error in _validationErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </SfMessage>
+            }
+
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">Subject</label>
+                    <SfTextBox @bind-Value="_subject"
+                               Placeholder="Enter the subject line shown in the dialog and email"
+                               CssClass="e-outline" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Message Text</label>
+                    <SfTextBox @bind-Value="_messageText"
+                               Placeholder="Enter the message users should receive"
+                               CssClass="e-outline"
+                               Multiline="true"
+                               MaxLength="4000" />
+                    <small class="text-muted">Write several paragraphs if needed. Closing the dialogue will count as acknowledgement.</small>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Roles</label>
+                    <SfMultiSelect TItem="string"
+                                   TValue="string[]"
+                                   DataSource="@_availableRoles"
+                                   @bind-Value="_selectedRoleNames"
+                                   Placeholder="Select one or more roles"
+                                   Mode="VisualMode.Box"
+                                   AllowFiltering="true"
+                                   ShowDropDownIcon="true" />
+                </div>
+                <div class="col-md-4">
+                    <div class="admin-messages-channel-section">
+                        <label class="form-label admin-messages-channel-label">Delivery Channels</label>
+                        <div class="admin-messages-channel-options">
+                            <SfCheckBox @bind-Checked="_showDialog" TChecked="bool" Label="Dialogue" />
+                            <SfCheckBox @bind-Checked="_sendEmail" TChecked="bool" Label="Email" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <SfButton OnClick="ResetForm"
+                          Content="Clear"
+                          CssClass="e-btn e-outline"
+                          Disabled="@_isSaving" />
+                <SfButton OnClick="CreateMessageAsync"
+                          IsPrimary="true"
+                          CssClass="e-btn e-primary"
+                          Disabled="@_isSaving">
+                    @if (_isSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Create Message
+                </SfButton>
+            </div>
+        </div>
+    </div>
+
+    <div class="admin-messages-panel">
+        <div class="admin-messages-panel-header">
+            <h5 class="mb-0">Message History</h5>
+        </div>
+        <div class="admin-messages-panel-body">
+            <SfGrid @ref="_grid"
+                    TValue="AdminMessageSummaryDto"
+                    DataSource="@_messages"
+                    AllowPaging="true"
+                    AllowSorting="true"
+                    AllowFiltering="true"
+                    AllowResizing="true"
+                    Height="520px"
+                    EnableAdaptiveUI="false"
+                    RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
+                <GridPageSettings PageSize="10"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn HeaderText="Action" Width="190" AllowFiltering="false" AllowSorting="false">
+                        <Template>
+                            @{
+                                var message = (context as AdminMessageSummaryDto)!;
+                                <div class="admin-messages-grid-actions">
+                                    <SfButton OnClick="() => OpenViewDialog(message)"
+                                              CssClass="e-btn e-outline e-small">
+                                        View
+                                    </SfButton>
+
+                                    @if (message.PendingCount > 0 && message.CanceledAtUtc == null)
+                                    {
+                                        <SfButton OnClick="() => CancelMessageAsync(message)"
+                                                  CssClass="e-btn e-outline e-small">
+                                            Cancel
+                                        </SfButton>
+                                    }
+                                </div>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.Subject)" HeaderText="Subject" Width="240"></GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.MessageText)" HeaderText="Message" Width="320">
+                        <Template>
+                            @{
+                                var message = (context as AdminMessageSummaryDto)!;
+                                <span>@GetPreviewText(message.MessageText)</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.RolesDisplay)" HeaderText="Roles" Width="200">
+                        <Template>
+                            @{
+                                var message = (context as AdminMessageSummaryDto)!;
+                                <span>@string.Join(", ", message.RoleNames)</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.ChannelsDisplay)" HeaderText="Channels" Width="140">
+                        <Template>
+                            @{
+                                var message = (context as AdminMessageSummaryDto)!;
+                                <span>@GetChannelText(message)</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.CreatedAtUtc)" HeaderText="Created" Width="170">
+                        <Template>
+                            @{
+                                var message = (context as AdminMessageSummaryDto)!;
+                                <span>@message.CreatedAtUtc.ToString("g") UTC</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.RecipientCount)" HeaderText="Recipients" Width="110"></GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.PendingCount)" HeaderText="Pending" Width="100"></GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.AcknowledgedCount)" HeaderText="Acknowledged" Width="130"></GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.EmailedCount)" HeaderText="Emailed" Width="100"></GridColumn>
+                    <GridColumn Field="@nameof(AdminMessageSummaryDto.CanceledCount)" HeaderText="Canceled" Width="100"></GridColumn>
+                </GridColumns>
+            </SfGrid>
+        </div>
+    </div>
+
+    <SfDialog @bind-Visible="_showViewDialog"
+              Width="640px"
+              IsModal="true"
+              ShowCloseIcon="true"
+              AllowDragging="false"
+              CssClass="admin-message-dialog">
+        <DialogTemplates>
+            <Header>
+                <span>Message Details</span>
+            </Header>
+            <Content>
+                @if (_viewMessage != null)
+                {
+                    <div class="admin-message-dialog-content">
+                        <p><strong>Subject:</strong> @_viewMessage.Subject</p>
+                        <p><strong>Created:</strong> @_viewMessage.CreatedAtUtc.ToString("g") UTC</p>
+                        <p><strong>Roles:</strong> @string.Join(", ", _viewMessage.RoleNames)</p>
+                        <p><strong>Channels:</strong> @GetChannelText(_viewMessage)</p>
+                        <div style="white-space: pre-line;">@_viewMessage.MessageText</div>
+                    </div>
+                }
+            </Content>
+            <FooterTemplate>
+                <SfButton OnClick="CloseViewDialog" IsPrimary="true" CssClass="e-btn e-primary">
+                    Close
+                </SfButton>
+            </FooterTemplate>
+        </DialogTemplates>
+    </SfDialog>
+}

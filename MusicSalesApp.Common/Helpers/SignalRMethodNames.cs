@@ -8,6 +8,12 @@ namespace MusicSalesApp.Common.Helpers;
 public static class SignalRMethodNames
 {
     /// <summary>
+    /// Sent to a connected user when their pending admin messages changed and the
+    /// client should refresh its queue.
+    /// </summary>
+    public const string ReceiveAdminMessageRefresh = "ReceiveAdminMessageRefresh";
+
+    /// <summary>
     /// Broadcast by the server when site maintenance window settings change so connected
     /// clients can refresh their maintenance banner/dialog in real time.
     /// </summary>
