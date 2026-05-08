@@ -20,6 +20,7 @@ public class MusicControllerTests
     private Mock<ISongLikeService> _mockSongLikeService;
     private Mock<ICreatorPersonaService> _mockCreatorPersonaService;
     private Mock<IReportedSongService> _mockReportedSongService;
+    private Mock<IAppSettingsService> _mockAppSettingsService;
     private IMobileSongMapper _songMapper;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ILogger<MusicController>> _mockLogger;
@@ -35,8 +36,10 @@ public class MusicControllerTests
         _mockSongLikeService = new Mock<ISongLikeService>();
         _mockCreatorPersonaService = new Mock<ICreatorPersonaService>();
         _mockReportedSongService = new Mock<IReportedSongService>();
+        _mockAppSettingsService = new Mock<IAppSettingsService>();
         _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
         _mockLogger = new Mock<ILogger<MusicController>>();
+        _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
         
         // Mock UserManager with required dependencies
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
@@ -51,6 +54,7 @@ public class MusicControllerTests
             _mockSongLikeService.Object,
             _mockCreatorPersonaService.Object,
             _mockReportedSongService.Object,
+            _mockAppSettingsService.Object,
             _songMapper,
             _mockUserManager.Object,
             _mockLogger.Object);
@@ -333,7 +337,7 @@ public class MusicControllerTests
                 DisplayOnHomePage = true,
                 DisplayOrder = 12,
                 CreatorId = 77,
-                Creator = new Creator { Id = 77, UserId = 88 }
+                Creator = new Creator { Id = 77, UserId = 88, StreamQualifyingSeconds = 65 }
             },
             new SongMetadata
             {
@@ -368,8 +372,45 @@ public class MusicControllerTests
         Assert.That(songs[0].DisplayOrder, Is.EqualTo(12));
         Assert.That(songs[0].CreatorId, Is.EqualTo(77));
         Assert.That(songs[0].CreatorUserId, Is.EqualTo(88));
+        Assert.That(songs[0].StreamQualifyingSeconds, Is.EqualTo(65));
+        Assert.That(songs[1].StreamQualifyingSeconds, Is.EqualTo(45));
         Assert.That(songs[0].AlbumArtUrl, Is.EqualTo(sasUri.ToString()));
         Assert.That(songs[0].StreamUrl, Is.EqualTo(sasUri.ToString()));
+    }
+
+    [Test]
+    public async Task GetSongByTitle_IncludesResolvedStreamQualifyingSeconds()
+    {
+        var sasUri = new Uri("https://storage.blob.core.windows.net/container/file?sig=test");
+        var metadata = new List<SongMetadata>
+        {
+            new SongMetadata
+            {
+                Id = 1,
+                SongTitle = "Test Song",
+                ArtistName = "Test Artist",
+                Genre = "Rock",
+                Mp3BlobPath = "folder/test.mp3",
+                NumberOfStreams = 42,
+                TrackLength = 180.5,
+                CreatorId = 77,
+                Creator = new Creator { Id = 77, UserId = 88, StreamQualifyingSeconds = 65 }
+            }
+        };
+
+        _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
+        _mockStorageService.Setup(s => s.GetReadSasUri(It.IsAny<string>(), It.IsAny<TimeSpan>())).Returns(sasUri);
+        _mockStreamCountService.Setup(s => s.GetStreamCountAsync(1)).ReturnsAsync(42);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(1)).ReturnsAsync((7, 2));
+
+        var result = await _controller.GetSongByTitle(Uri.EscapeDataString("Test Song"));
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var okResult = (OkObjectResult)result;
+        var value = okResult.Value!;
+        var thresholdProperty = value.GetType().GetProperty("streamQualifyingSeconds");
+        Assert.That(thresholdProperty, Is.Not.Null);
+        Assert.That((int)thresholdProperty!.GetValue(value)!, Is.EqualTo(65));
     }
 
     [Test]

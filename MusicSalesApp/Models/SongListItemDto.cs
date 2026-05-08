@@ -15,6 +15,7 @@ public class SongListItemDto
     public string PersonaBio { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
+    public int StreamQualifyingSeconds { get; set; }
     public double? TrackLengthSeconds { get; set; }
     public bool DisplayOnHomePage { get; set; }
     public int? DisplayOrder { get; set; }

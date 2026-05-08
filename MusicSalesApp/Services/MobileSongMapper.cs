@@ -11,8 +11,8 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public interface IMobileSongMapper
 {
-    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime);
-    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId);
+    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds);
+    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds);
 }
 
 public class MobileSongMapper : IMobileSongMapper
@@ -28,7 +28,7 @@ public class MobileSongMapper : IMobileSongMapper
         _creatorPersonaService = creatorPersonaService;
     }
 
-    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime)
+    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds)
     {
         return new SongListItemDto
         {
@@ -41,6 +41,7 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaBio = ResolvePersonaBio(m),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
+            StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             DisplayOrder = m.DisplayOrder,
@@ -50,7 +51,7 @@ public class MobileSongMapper : IMobileSongMapper
         };
     }
 
-    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId)
+    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds)
     {
         return new MobilePlaylistSongDto
         {
@@ -64,6 +65,7 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaBio = ResolvePersonaBio(m),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
+            StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
             IsAiGenerated = m.IsAiGenerated,
             CreatorId = m.CreatorId,
@@ -90,4 +92,7 @@ public class MobileSongMapper : IMobileSongMapper
         m.Persona is { IsEnabled: true, Bio: not null and not "" }
             ? m.Persona.Bio
             : m.Creator?.Bio;
+
+    private static int ResolveStreamQualifyingSeconds(SongMetadata m, int defaultStreamQualifyingSeconds) =>
+        m.Creator?.StreamQualifyingSeconds ?? defaultStreamQualifyingSeconds;
 }

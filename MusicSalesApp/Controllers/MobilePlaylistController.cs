@@ -25,6 +25,7 @@ public class MobilePlaylistController : ControllerBase
     private readonly IRecommendationService _recommendationService;
     private readonly ISubscriptionService _subscriptionService;
     private readonly ISongMetadataService _songMetadataService;
+    private readonly IAppSettingsService _appSettingsService;
     private readonly IMobileSongMapper _songMapper;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MobilePlaylistController> _logger;
@@ -34,6 +35,7 @@ public class MobilePlaylistController : ControllerBase
         IRecommendationService recommendationService,
         ISubscriptionService subscriptionService,
         ISongMetadataService songMetadataService,
+        IAppSettingsService appSettingsService,
         IMobileSongMapper songMapper,
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MobilePlaylistController> logger)
@@ -42,6 +44,7 @@ public class MobilePlaylistController : ControllerBase
         _recommendationService = recommendationService;
         _subscriptionService = subscriptionService;
         _songMetadataService = songMetadataService;
+        _appSettingsService = appSettingsService;
         _songMapper = songMapper;
         _contextFactory = contextFactory;
         _logger = logger;
@@ -154,10 +157,11 @@ public class MobilePlaylistController : ControllerBase
         }
 
         var entries = await _playlistService.GetPlaylistSongsAsync(playlistId);
+        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
 
         var songs = entries
             .Where(up => up.SongMetadata != null && !string.IsNullOrEmpty(up.SongMetadata.Mp3BlobPath))
-            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id))
+            .Select(up => _songMapper.MapToPlaylistSong(up.SongMetadata, SasLifetime, up.Id, defaultStreamQualifyingSeconds))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -179,11 +183,12 @@ public class MobilePlaylistController : ControllerBase
             return Unauthorized();
 
         var recommended = await _recommendationService.GetRecommendedPlaylistAsync(userId);
+        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
 
         // Materialize the SongMetadata (navigation property was included by service)
         var songs = recommended
             .Where(r => r.SongMetadata != null && !string.IsNullOrEmpty(r.SongMetadata.Mp3BlobPath))
-            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null))
+            .Select(r => _songMapper.MapToPlaylistSong(r.SongMetadata, SasLifetime, userPlaylistId: null, defaultStreamQualifyingSeconds))
             .ToList();
 
         return Ok(new MobilePlaylistSongsDto
@@ -283,9 +288,10 @@ public class MobilePlaylistController : ControllerBase
         }
 
         var available = await _playlistService.GetAvailableSongsForPlaylistAsync(userId, playlistId);
+        var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
         var dtos = available
             .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null))
+            .Select(m => _songMapper.MapToPlaylistSong(m, SasLifetime, userPlaylistId: null, defaultStreamQualifyingSeconds))
             .ToList();
         return Ok(new { songs = dtos, requiresSubscription = false });
     }

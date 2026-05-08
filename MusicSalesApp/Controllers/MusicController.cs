@@ -21,6 +21,7 @@ namespace MusicSalesApp.Controllers
         private readonly ISongLikeService _songLikeService;
         private readonly ICreatorPersonaService _creatorPersonaService;
         private readonly IReportedSongService _reportedSongService;
+        private readonly IAppSettingsService _appSettingsService;
         private readonly IMobileSongMapper _songMapper;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<MusicController> _logger;
@@ -33,6 +34,7 @@ namespace MusicSalesApp.Controllers
             ISongLikeService songLikeService,
             ICreatorPersonaService creatorPersonaService,
             IReportedSongService reportedSongService,
+            IAppSettingsService appSettingsService,
             IMobileSongMapper songMapper,
             UserManager<ApplicationUser> userManager,
             ILogger<MusicController> logger)
@@ -44,6 +46,7 @@ namespace MusicSalesApp.Controllers
             _songLikeService = songLikeService;
             _creatorPersonaService = creatorPersonaService;
             _reportedSongService = reportedSongService;
+            _appSettingsService = appSettingsService;
             _songMapper = songMapper;
             _userManager = userManager;
             _logger = logger;
@@ -59,10 +62,11 @@ namespace MusicSalesApp.Controllers
         {
             var allMetadata = await _songMetadataService.GetAllAsync();
             var sasLifetime = TimeSpan.FromHours(24);
+            var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
 
             var songs = allMetadata
                 .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-                .Select(m => _songMapper.MapToSongListItem(m, sasLifetime))
+                .Select(m => _songMapper.MapToSongListItem(m, sasLifetime, defaultStreamQualifyingSeconds))
                 .ToList();
 
             return Ok(songs);
@@ -301,7 +305,8 @@ namespace MusicSalesApp.Controllers
                 return NotFound(new { error = "Song not found" });
 
             var sasLifetime = TimeSpan.FromHours(24);
-            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime);
+            var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
+            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, defaultStreamQualifyingSeconds);
             mappedSong.StreamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
 
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
@@ -318,6 +323,7 @@ namespace MusicSalesApp.Controllers
                 personaBio = mappedSong.PersonaBio,
                 streamUrl = mappedSong.StreamUrl,
                 streamCount,
+                streamQualifyingSeconds = mappedSong.StreamQualifyingSeconds,
                 trackLengthSeconds = mappedSong.TrackLengthSeconds,
                 creatorId = mappedSong.CreatorId,
                 creatorUserId = mappedSong.CreatorUserId,

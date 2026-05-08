@@ -51,6 +51,7 @@ public class MobilePlaylistSongDto
     public string? PersonaBio { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
+    public int StreamQualifyingSeconds { get; set; }
     public double? TrackLengthSeconds { get; set; }
     public bool IsAiGenerated { get; set; }
     public int? CreatorId { get; set; }
