@@ -54,4 +54,37 @@ public class Subscription
     /// </summary>
     [MaxLength(100)]
     public string GooglePlayOrderId { get; set; }
+
+    /// <summary>
+    /// Latest Apple App Store transaction ID for the subscription. Null for non-Apple subscriptions.
+    /// </summary>
+    [MaxLength(100)]
+    public string AppStoreTransactionId { get; set; }
+
+    /// <summary>
+    /// Apple App Store original transaction ID that remains stable across renewals.
+    /// Null for non-Apple subscriptions.
+    /// </summary>
+    [MaxLength(100)]
+    public string AppStoreOriginalTransactionId { get; set; }
+
+    /// <summary>
+    /// Apple App Store product identifier for the subscription. Null for non-Apple subscriptions.
+    /// </summary>
+    [MaxLength(150)]
+    public string AppStoreProductId { get; set; }
+
+    /// <summary>
+    /// Optional app account token supplied by the client to correlate App Store renewals back to a user.
+    /// Null for non-Apple subscriptions.
+    /// </summary>
+    [MaxLength(100)]
+    public string AppStoreAppAccountToken { get; set; }
+
+    /// <summary>
+    /// Apple environment for the subscription, for example Sandbox or Production.
+    /// Null for non-Apple subscriptions.
+    /// </summary>
+    [MaxLength(20)]
+    public string AppStoreEnvironment { get; set; }
 }

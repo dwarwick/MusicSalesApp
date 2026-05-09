@@ -323,6 +323,7 @@ try
     builder.Services.AddScoped<IPlaylistService, PlaylistService>();
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
     builder.Services.AddSingleton<IGooglePlayVerificationService, GooglePlayVerificationService>();
+    builder.Services.AddSingleton<IAppleAppStoreVerificationService, AppleAppStoreVerificationService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
     builder.Services.AddScoped<IMaintenanceResetService, MaintenanceResetService>();
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();

@@ -60,17 +60,8 @@ public class SubscriptionService : ISubscriptionService
     public async Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
-        
-        // Cancel any existing active subscriptions
-        var existingSubscriptions = await context.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.Active)
-            .ToListAsync();
 
-        foreach (var existing in existingSubscriptions)
-        {
-            existing.Status = SubscriptionStatuses.Cancelled;
-            existing.CancelledAt = DateTime.UtcNow;
-        }
+        await CancelExistingActiveSubscriptionsAsync(context, userId);
 
         // Remove any stale APPROVAL_PENDING subscriptions (user started but never completed)
         var pendingSubscriptions = await context.Subscriptions
@@ -274,16 +265,7 @@ public class SubscriptionService : ISubscriptionService
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
-        // Cancel any existing active subscriptions for this user
-        var existingSubscriptions = await context.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.Active)
-            .ToListAsync();
-
-        foreach (var existing in existingSubscriptions)
-        {
-            existing.Status = SubscriptionStatuses.Cancelled;
-            existing.CancelledAt = DateTime.UtcNow;
-        }
+        await CancelExistingActiveSubscriptionsAsync(context, userId);
 
         var subscription = new Subscription
         {
@@ -303,6 +285,47 @@ public class SubscriptionService : ISubscriptionService
 
         _logger.LogInformation("Created Google Play subscription {SubscriptionId} for user {UserId}, order {OrderId}",
             subscription.Id, userId, orderId);
+
+        return subscription;
+    }
+
+    public async Task<Subscription> CreateAppleSubscriptionAsync(
+        int userId,
+        string transactionId,
+        string originalTransactionId,
+        string productId,
+        string appAccountToken,
+        string environment,
+        decimal monthlyPrice)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        await CancelExistingActiveSubscriptionsAsync(context, userId);
+
+        var subscription = new Subscription
+        {
+            UserId = userId,
+            BillingSource = BillingSources.Apple,
+            AppStoreTransactionId = transactionId,
+            AppStoreOriginalTransactionId = originalTransactionId,
+            AppStoreProductId = productId,
+            AppStoreAppAccountToken = appAccountToken,
+            AppStoreEnvironment = environment,
+            Status = SubscriptionStatuses.Active,
+            StartDate = DateTime.UtcNow,
+            LastPaymentDate = DateTime.UtcNow,
+            MonthlyPrice = monthlyPrice,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        context.Subscriptions.Add(subscription);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Created Apple subscription {SubscriptionId} for user {UserId}, original transaction {OriginalTransactionId}",
+            subscription.Id,
+            userId,
+            originalTransactionId);
 
         return subscription;
     }
@@ -349,6 +372,88 @@ public class SubscriptionService : ISubscriptionService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Updated Google Play subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+    }
+
+    public async Task<Subscription> GetSubscriptionByAppleTransactionIdAsync(string transactionId)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.AppStoreTransactionId == transactionId);
+    }
+
+    public async Task<Subscription> GetSubscriptionByAppleOriginalTransactionIdAsync(string originalTransactionId)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.AppStoreOriginalTransactionId == originalTransactionId);
+    }
+
+    public async Task UpdateAppleSubscriptionStatusAsync(
+        string originalTransactionId,
+        string status,
+        DateTime? expiryTime = null,
+        string latestTransactionId = null,
+        string environment = null)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.AppStoreOriginalTransactionId == originalTransactionId);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning(
+                "Apple subscription with original transaction ID {OriginalTransactionId} not found",
+                originalTransactionId);
+            return;
+        }
+
+        subscription.Status = status;
+
+        if (!string.IsNullOrWhiteSpace(latestTransactionId))
+        {
+            subscription.AppStoreTransactionId = latestTransactionId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(environment))
+        {
+            subscription.AppStoreEnvironment = environment;
+        }
+
+        if (expiryTime.HasValue)
+        {
+            subscription.EndDate = expiryTime.Value;
+            subscription.NextBillingDate = expiryTime.Value;
+        }
+
+        if (status == SubscriptionStatuses.Cancelled || status == SubscriptionStatuses.Suspended || status == SubscriptionStatuses.Expired)
+        {
+            subscription.CancelledAt ??= DateTime.UtcNow;
+        }
+
+        if (status == SubscriptionStatuses.Active)
+        {
+            subscription.LastPaymentDate = DateTime.UtcNow;
+        }
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated Apple subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+    }
+
+    private static async Task CancelExistingActiveSubscriptionsAsync(AppDbContext context, int userId)
+    {
+        var existingSubscriptions = await context.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.Active)
+            .ToListAsync();
+
+        foreach (var existing in existingSubscriptions)
+        {
+            existing.Status = SubscriptionStatuses.Cancelled;
+            existing.CancelledAt = DateTime.UtcNow;
+        }
     }
 
     private async Task NormalizeExpiredSubscriptionsAsync(AppDbContext context, int userId)

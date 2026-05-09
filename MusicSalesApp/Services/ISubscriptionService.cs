@@ -20,4 +20,22 @@ public interface ISubscriptionService
     Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice);
     Task<Subscription> GetSubscriptionByGooglePlayTokenAsync(string purchaseToken);
     Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null);
+
+    // Apple App Store billing methods
+    Task<Subscription> CreateAppleSubscriptionAsync(
+        int userId,
+        string transactionId,
+        string originalTransactionId,
+        string productId,
+        string appAccountToken,
+        string environment,
+        decimal monthlyPrice);
+    Task<Subscription> GetSubscriptionByAppleTransactionIdAsync(string transactionId);
+    Task<Subscription> GetSubscriptionByAppleOriginalTransactionIdAsync(string originalTransactionId);
+    Task UpdateAppleSubscriptionStatusAsync(
+        string originalTransactionId,
+        string status,
+        DateTime? expiryTime = null,
+        string latestTransactionId = null,
+        string environment = null);
 }

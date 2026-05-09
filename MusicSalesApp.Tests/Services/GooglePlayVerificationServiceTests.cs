@@ -16,9 +16,9 @@ public class GooglePlayVerificationServiceTests
     [Test]
     public void ResolveCredentialsPath_ReturnsAbsolutePath_Unchanged()
     {
-        var absolutePath = @"C:\secrets\google-play-service-account.json";
+        var absolutePath = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "google-play-service-account.json"));
 
-        var result = GooglePlayVerificationService.ResolveCredentialsPath(absolutePath, @"C:\app-root");
+        var result = GooglePlayVerificationService.ResolveCredentialsPath(absolutePath, Path.GetTempPath());
 
         Assert.That(result, Is.EqualTo(absolutePath));
     }
@@ -26,8 +26,8 @@ public class GooglePlayVerificationServiceTests
     [Test]
     public void ResolveCredentialsPath_CombinesRelativePath_WithContentRoot()
     {
-        var contentRoot = @"C:\inetpub\wwwroot\streamtunes";
-        var relativePath = @"App_Data\Secrets\google-play-service-account.json";
+        var contentRoot = Path.Combine(Path.GetTempPath(), "streamtunes-root");
+        var relativePath = Path.Combine("App_Data", "Secrets", "google-play-service-account.json");
 
         var result = GooglePlayVerificationService.ResolveCredentialsPath(relativePath, contentRoot);
 

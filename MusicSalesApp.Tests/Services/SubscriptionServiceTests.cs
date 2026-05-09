@@ -401,4 +401,84 @@ public class SubscriptionServiceTests
         Assert.That(newSub, Is.Not.Null);
         Assert.That(newSub.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
     }
+
+    [Test]
+    public async Task CreateAppleSubscriptionAsync_CreatesAppleSubscription()
+    {
+        const int userId = 1;
+
+        var result = await _service.CreateAppleSubscriptionAsync(
+            userId,
+            "apple-tx-1",
+            "apple-orig-1",
+            "streamtunes_monthly_sub_ios",
+            "account-token-1",
+            "Sandbox",
+            3.99m);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.UserId, Is.EqualTo(userId));
+            Assert.That(result.BillingSource, Is.EqualTo(BillingSources.Apple));
+            Assert.That(result.AppStoreTransactionId, Is.EqualTo("apple-tx-1"));
+            Assert.That(result.AppStoreOriginalTransactionId, Is.EqualTo("apple-orig-1"));
+            Assert.That(result.AppStoreProductId, Is.EqualTo("streamtunes_monthly_sub_ios"));
+            Assert.That(result.AppStoreAppAccountToken, Is.EqualTo("account-token-1"));
+            Assert.That(result.AppStoreEnvironment, Is.EqualTo("Sandbox"));
+            Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Active));
+        });
+    }
+
+    [Test]
+    public async Task GetSubscriptionByAppleTransactionIdAsync_ReturnsAppleSubscription()
+    {
+        await _service.CreateAppleSubscriptionAsync(
+            1,
+            "apple-tx-lookup",
+            "apple-orig-lookup",
+            "streamtunes_monthly_sub_ios",
+            null,
+            "Production",
+            3.99m);
+
+        var result = await _service.GetSubscriptionByAppleTransactionIdAsync("apple-tx-lookup");
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.AppStoreOriginalTransactionId, Is.EqualTo("apple-orig-lookup"));
+    }
+
+    [Test]
+    public async Task UpdateAppleSubscriptionStatusAsync_UpdatesAppleSubscriptionFields()
+    {
+        await _service.CreateAppleSubscriptionAsync(
+            1,
+            "apple-tx-old",
+            "apple-orig-update",
+            "streamtunes_monthly_sub_ios",
+            "account-token-1",
+            "Sandbox",
+            3.99m);
+
+        var expiryTime = DateTime.UtcNow.AddDays(30);
+
+        await _service.UpdateAppleSubscriptionStatusAsync(
+            "apple-orig-update",
+            SubscriptionStatuses.Active,
+            expiryTime,
+            "apple-tx-new",
+            "Production");
+
+        var result = await _service.GetSubscriptionByAppleOriginalTransactionIdAsync("apple-orig-update");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.AppStoreTransactionId, Is.EqualTo("apple-tx-new"));
+            Assert.That(result.AppStoreEnvironment, Is.EqualTo("Production"));
+            Assert.That(result.NextBillingDate, Is.EqualTo(expiryTime));
+            Assert.That(result.EndDate, Is.EqualTo(expiryTime));
+            Assert.That(result.LastPaymentDate, Is.Not.Null);
+        });
+    }
 }
