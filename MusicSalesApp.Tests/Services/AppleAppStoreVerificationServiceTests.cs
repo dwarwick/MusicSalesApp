@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
@@ -87,5 +88,25 @@ public class AppleAppStoreVerificationServiceTests
             null);
 
         Assert.That(result, Is.EqualTo(SubscriptionStatuses.Suspended));
+    }
+
+    [Test]
+    public void CreateBearerTokenDescriptor_IncludesBundleIdClaim()
+    {
+        using var privateKey = ECDsa.Create();
+
+        var descriptor = AppleAppStoreVerificationService.CreateBearerTokenDescriptor(
+            "issuer-id",
+            "net.streamtunes.musicsalesapp.maui",
+            "key-id",
+            privateKey);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descriptor.Issuer, Is.EqualTo("issuer-id"));
+            Assert.That(descriptor.Audience, Is.EqualTo("appstoreconnect-v1"));
+            Assert.That(descriptor.Claims, Contains.Key("bid"));
+            Assert.That(descriptor.Claims!["bid"], Is.EqualTo("net.streamtunes.musicsalesapp.maui"));
+        });
     }
 }

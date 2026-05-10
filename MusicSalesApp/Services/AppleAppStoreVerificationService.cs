@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -268,17 +269,27 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
 
     private string CreateBearerToken()
     {
-        var tokenDescriptor = new SecurityTokenDescriptor
-        {
-            Issuer = _issuerId,
-            Audience = "appstoreconnect-v1",
-            Expires = DateTime.UtcNow.AddMinutes(5),
-            SigningCredentials = new SigningCredentials(
-                new ECDsaSecurityKey(_privateKey) { KeyId = _keyId },
-                SecurityAlgorithms.EcdsaSha256)
-        };
+        var tokenDescriptor = CreateBearerTokenDescriptor(_issuerId, _bundleId, _keyId, _privateKey);
 
         return new JsonWebTokenHandler().CreateToken(tokenDescriptor);
+    }
+
+    internal static SecurityTokenDescriptor CreateBearerTokenDescriptor(string issuerId, string bundleId, string keyId, ECDsa privateKey)
+    {
+        return new SecurityTokenDescriptor
+        {
+            Issuer = issuerId,
+            Audience = "appstoreconnect-v1",
+            Expires = DateTime.UtcNow.AddMinutes(5),
+            Claims = new Dictionary<string, object>
+            {
+                ["bid"] = bundleId
+            },
+            Subject = new ClaimsIdentity(),
+            SigningCredentials = new SigningCredentials(
+                new ECDsaSecurityKey(privateKey) { KeyId = keyId },
+                SecurityAlgorithms.EcdsaSha256)
+        };
     }
 
     private void ValidatePayload(AppleSignedTransactionPayload payload, string transactionId, string productId)
