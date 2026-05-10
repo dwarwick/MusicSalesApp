@@ -2,6 +2,13 @@ using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
+using System.Net;
+using System.Net.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Moq.Protected;
 
 namespace MusicSalesApp.Tests.Services;
 
@@ -108,5 +115,62 @@ public class AppleAppStoreVerificationServiceTests
             Assert.That(descriptor.Claims, Contains.Key("bid"));
             Assert.That(descriptor.Claims!["bid"], Is.EqualTo("net.streamtunes.musicsalesapp.maui"));
         });
+    }
+
+    [Test]
+    public void DescribeApiAccessDenied_UsesAppleErrorPayload_WhenPresent()
+    {
+        var result = AppleAppStoreVerificationService.DescribeApiAccessDenied(
+            HttpStatusCode.Unauthorized,
+            "{\"errorCode\":4010002,\"errorMessage\":\"Invalid issuer\"}");
+
+        Assert.That(result, Is.EqualTo("Apple App Store API access was denied. Check the issuer ID, key ID, private key, and App Store Connect permissions. Apple response (401): 4010002 - Invalid issuer"));
+    }
+
+    [Test]
+    public async Task VerifySubscriptionAsync_IncludesAppleErrorDetails_WhenAccessDenied()
+    {
+        using var privateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var privateKeyPem = privateKey.ExportPkcs8PrivateKeyPem();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["AppleAppStore:BundleId"] = "net.streamtunes.musicsalesapp.maui",
+                ["AppleAppStore:IssuerId"] = "issuer-id",
+                ["AppleAppStore:KeyId"] = "key-id",
+                ["AppleAppStore:PrivateKeyPem"] = privateKeyPem,
+                ["AppleAppStore:ApiBaseUrl"] = "https://api.storekit-sandbox.itunes.apple.com"
+            })
+            .Build();
+
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+            {
+                Content = new StringContent("{\"errorCode\":4010002,\"errorMessage\":\"Invalid issuer\"}")
+            });
+
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory
+            .Setup(factory => factory.CreateClient(It.IsAny<string>()))
+            .Returns(new HttpClient(handler.Object));
+
+        var environment = new Mock<IHostEnvironment>();
+        environment.SetupGet(value => value.ContentRootPath).Returns("/tmp");
+
+        var service = new AppleAppStoreVerificationService(
+            configuration,
+            environment.Object,
+            httpClientFactory.Object,
+            NullLogger<AppleAppStoreVerificationService>.Instance);
+
+        var exception = Assert.ThrowsAsync<AppleAppStoreVerificationException>(() => service.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"));
+
+        Assert.That(exception!.Message, Does.Contain("4010002 - Invalid issuer"));
     }
 }

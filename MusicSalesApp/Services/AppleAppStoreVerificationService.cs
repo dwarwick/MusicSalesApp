@@ -58,6 +58,48 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         return "Apple App Store private key could not be loaded on the server.";
     }
 
+    internal static string DescribeApiAccessDenied(HttpStatusCode statusCode, string errorBody)
+    {
+        const string baseMessage = "Apple App Store API access was denied. Check the issuer ID, key ID, private key, and App Store Connect permissions.";
+
+        if (string.IsNullOrWhiteSpace(errorBody))
+        {
+            return baseMessage;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(errorBody);
+            var root = document.RootElement;
+
+            string errorCode = null;
+            string errorMessage = null;
+
+            if (root.TryGetProperty("errorCode", out var errorCodeElement))
+            {
+                errorCode = errorCodeElement.ValueKind == JsonValueKind.String
+                    ? errorCodeElement.GetString()
+                    : errorCodeElement.GetRawText();
+            }
+
+            if (root.TryGetProperty("errorMessage", out var errorMessageElement))
+            {
+                errorMessage = errorMessageElement.GetString();
+            }
+
+            if (!string.IsNullOrWhiteSpace(errorCode) || !string.IsNullOrWhiteSpace(errorMessage))
+            {
+                var detail = string.Join(" - ", new[] { errorCode, errorMessage }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                return $"{baseMessage} Apple response ({(int)statusCode}): {detail}";
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return $"{baseMessage} Apple response ({(int)statusCode}): {errorBody}";
+    }
+
     internal static AppleSignedTransactionPayload DecodeSignedTransactionInfo(string signedTransactionInfo)
     {
         return DecodeSignedPayload<AppleSignedTransactionPayload>(
@@ -223,7 +265,12 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
 
             if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
             {
-                throw new AppleAppStoreVerificationException("Apple App Store API access was denied. Check the issuer ID, key ID, private key, and App Store Connect permissions.");
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError(
+                    "Apple App Store API access denied with status {StatusCode}. Body: {Body}",
+                    response.StatusCode,
+                    errorBody);
+                throw new AppleAppStoreVerificationException(DescribeApiAccessDenied(response.StatusCode, errorBody));
             }
 
             if (!response.IsSuccessStatusCode)
