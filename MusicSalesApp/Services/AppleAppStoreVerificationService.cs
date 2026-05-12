@@ -10,7 +10,6 @@ using MusicSalesApp.Common.Helpers;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.OpenSsl;
-using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.Security;
 
 namespace MusicSalesApp.Services;
@@ -161,21 +160,54 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
                     throw new CryptographicException("The PEM file did not contain an EC private key.");
                 }
 
-                var normalizedPkcs8Bytes = PrivateKeyInfoFactory
-                    .CreatePrivateKeyInfo(ecPrivateKey)
-                    .ToAsn1Object()
-                    .GetEncoded();
-
                 loadStrategy = "BouncyCastle";
-                var privateKey = ECDsa.Create();
-                privateKey.ImportPkcs8PrivateKey(normalizedPkcs8Bytes, out _);
-                return privateKey;
+                return CreateFromEcPrivateKeyParameters(ecPrivateKey);
             }
             catch (Exception fallbackException)
             {
                 throw new AggregateException(primaryException, fallbackException);
             }
         }
+    }
+
+    internal static ECDsa CreateFromEcPrivateKeyParameters(ECPrivateKeyParameters ecPrivateKey)
+    {
+        ArgumentNullException.ThrowIfNull(ecPrivateKey);
+
+        var publicPoint = ecPrivateKey.Parameters.G.Multiply(ecPrivateKey.D).Normalize();
+        var fieldSizeBytes = (ecPrivateKey.Parameters.Curve.FieldSize + 7) / 8;
+
+        var parameters = new ECParameters
+        {
+            Curve = ECCurve.NamedCurves.nistP256,
+            D = PadToSize(ecPrivateKey.D.ToByteArrayUnsigned(), fieldSizeBytes),
+            Q = new ECPoint
+            {
+                X = PadToSize(publicPoint.AffineXCoord.ToBigInteger().ToByteArrayUnsigned(), fieldSizeBytes),
+                Y = PadToSize(publicPoint.AffineYCoord.ToBigInteger().ToByteArrayUnsigned(), fieldSizeBytes)
+            }
+        };
+
+        return ECDsa.Create(parameters);
+    }
+
+    internal static byte[] PadToSize(byte[] value, int size)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Length == size)
+        {
+            return value;
+        }
+
+        if (value.Length > size)
+        {
+            return value[^size..];
+        }
+
+        var padded = new byte[size];
+        Buffer.BlockCopy(value, 0, padded, size - value.Length, value.Length);
+        return padded;
     }
 
     internal static AppleSignedTransactionPayload DecodeSignedTransactionInfo(string signedTransactionInfo)
