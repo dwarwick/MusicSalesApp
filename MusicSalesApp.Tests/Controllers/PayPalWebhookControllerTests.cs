@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Controllers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
@@ -132,6 +133,53 @@ public class PayPalWebhookControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<OkResult>());
+    }
+
+    [Test]
+    public async Task HandleWebhook_BillingSubscriptionCancelled_UpdatesSubscriptionStatus()
+    {
+        var body = @"{
+            ""event_type"": ""BILLING.SUBSCRIPTION.CANCELLED"",
+            ""resource"": {
+                ""id"": ""I-SUB123"",
+                ""billing_info"": {
+                    ""next_billing_time"": ""2026-05-20T12:34:56Z""
+                }
+            }
+        }";
+        SetRequestBody(body);
+
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockSubscriptionService.Verify(s => s.UpdateSubscriptionStatusAsync(
+            "I-SUB123",
+            SubscriptionStatuses.Cancelled,
+            It.Is<DateTime?>(value => value == new DateTime(2026, 5, 20, 12, 34, 56, DateTimeKind.Utc))), Times.Once);
+    }
+
+    [Test]
+    public async Task HandleWebhook_BillingSubscriptionUpdated_UsesResourceStatus()
+    {
+        var body = @"{
+            ""event_type"": ""BILLING.SUBSCRIPTION.UPDATED"",
+            ""resource"": {
+                ""id"": ""I-SUB123"",
+                ""status"": ""ACTIVE"",
+                ""billing_info"": {
+                    ""next_billing_time"": ""2026-05-20T12:34:56Z""
+                }
+            }
+        }";
+        SetRequestBody(body);
+
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockSubscriptionService.Verify(s => s.UpdateSubscriptionStatusAsync(
+            "I-SUB123",
+            SubscriptionStatuses.Active,
+            It.Is<DateTime?>(value => value == new DateTime(2026, 5, 20, 12, 34, 56, DateTimeKind.Utc))), Times.Once);
     }
 
     [Test]

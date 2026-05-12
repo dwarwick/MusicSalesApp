@@ -1,4 +1,5 @@
 #nullable enable
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -56,7 +57,7 @@ public class PayPalWebhookController : ControllerBase
     }
 
     /// <summary>
-    /// Receives PayPal webhook events. Currently handles CUSTOMER.DISPUTE.CREATED.
+    /// Receives PayPal webhook events for subscription lifecycle changes and disputes.
     /// </summary>
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook()
@@ -118,7 +119,11 @@ public class PayPalWebhookController : ControllerBase
                 ? eventTypeProp.GetString()
                 : null;
 
-            if (eventType == "CUSTOMER.DISPUTE.CREATED")
+            if (IsSubscriptionLifecycleEvent(eventType))
+            {
+                await HandleSubscriptionLifecycleEventAsync(eventType!, doc.RootElement);
+            }
+            else if (eventType == "CUSTOMER.DISPUTE.CREATED")
             {
                 await HandleDisputeCreatedAsync(doc.RootElement);
             }
@@ -129,6 +134,95 @@ public class PayPalWebhookController : ControllerBase
         }
 
         return Ok();
+    }
+
+    private async Task HandleSubscriptionLifecycleEventAsync(string eventType, JsonElement root)
+    {
+        if (!root.TryGetProperty("resource", out var resource))
+        {
+            _logger.LogWarning("PayPal subscription webhook {EventType} missing resource", eventType);
+            return;
+        }
+
+        var paypalSubscriptionId = resource.TryGetProperty("id", out var idProperty)
+            ? idProperty.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(paypalSubscriptionId))
+        {
+            _logger.LogWarning("PayPal subscription webhook {EventType} missing subscription ID", eventType);
+            return;
+        }
+
+        var status = ResolveSubscriptionStatus(eventType, resource);
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            _logger.LogInformation("Ignoring PayPal subscription webhook {EventType} because it did not resolve to a supported status", eventType);
+            return;
+        }
+
+        var nextBillingDate = TryGetNextBillingDate(resource);
+        await _subscriptionService.UpdateSubscriptionStatusAsync(paypalSubscriptionId, status, nextBillingDate);
+
+        _logger.LogInformation(
+            "Processed PayPal subscription webhook {EventType} for subscription {SubscriptionId} with status {Status}",
+            eventType,
+            paypalSubscriptionId,
+            status);
+    }
+
+    private static bool IsSubscriptionLifecycleEvent(string? eventType)
+        => eventType is "BILLING.SUBSCRIPTION.ACTIVATED"
+            or "BILLING.SUBSCRIPTION.CANCELLED"
+            or "BILLING.SUBSCRIPTION.EXPIRED"
+            or "BILLING.SUBSCRIPTION.SUSPENDED"
+            or "BILLING.SUBSCRIPTION.UPDATED";
+
+    private static string? ResolveSubscriptionStatus(string eventType, JsonElement resource)
+    {
+        return eventType switch
+        {
+            "BILLING.SUBSCRIPTION.ACTIVATED" => SubscriptionStatuses.Active,
+            "BILLING.SUBSCRIPTION.CANCELLED" => SubscriptionStatuses.Cancelled,
+            "BILLING.SUBSCRIPTION.EXPIRED" => SubscriptionStatuses.Expired,
+            "BILLING.SUBSCRIPTION.SUSPENDED" => SubscriptionStatuses.Suspended,
+            "BILLING.SUBSCRIPTION.UPDATED" => MapPayPalSubscriptionStatus(
+                resource.TryGetProperty("status", out var statusProperty)
+                    ? statusProperty.GetString()
+                    : null),
+            _ => null
+        };
+    }
+
+    private static string? MapPayPalSubscriptionStatus(string? paypalStatus)
+    {
+        return paypalStatus?.ToUpperInvariant() switch
+        {
+            SubscriptionStatuses.ApprovalPending => SubscriptionStatuses.ApprovalPending,
+            SubscriptionStatuses.Active => SubscriptionStatuses.Active,
+            SubscriptionStatuses.Cancelled => SubscriptionStatuses.Cancelled,
+            SubscriptionStatuses.Suspended => SubscriptionStatuses.Suspended,
+            SubscriptionStatuses.Expired => SubscriptionStatuses.Expired,
+            _ => null
+        };
+    }
+
+    private static DateTime? TryGetNextBillingDate(JsonElement resource)
+    {
+        if (!resource.TryGetProperty("billing_info", out var billingInfo) ||
+            !billingInfo.TryGetProperty("next_billing_time", out var nextBillingProperty))
+        {
+            return null;
+        }
+
+        var nextBillingText = nextBillingProperty.GetString();
+        return DateTime.TryParse(
+            nextBillingText,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+            out var parsed)
+            ? parsed
+            : null;
     }
 
     private async Task HandleDisputeCreatedAsync(JsonElement root)

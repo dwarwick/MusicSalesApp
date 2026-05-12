@@ -292,6 +292,11 @@ public class SubscriptionController : ControllerBase
             return BadRequest("No active subscription found");
         }
 
+        if (string.Equals(subscription.BillingSource, BillingSources.Apple, StringComparison.Ordinal))
+        {
+            return BadRequest("Apple subscriptions must be cancelled in Apple Subscriptions settings.");
+        }
+
         // Route cancellation to the correct billing provider
         var cancelled = await CancelWithProviderAsync(subscription);
         if (!cancelled)
@@ -690,10 +695,8 @@ public class SubscriptionController : ControllerBase
                 return gpCancelled;
 
             case BillingSources.Apple:
-                // Apple does not support server-initiated cancellation.
-                // The subscription is marked cancelled locally; the user must manage it in iOS Settings.
-                _logger.LogInformation("Apple subscription for user {UserId} marked cancelled locally. User must cancel in iOS Settings.", subscription.UserId);
-                return true;
+                _logger.LogWarning("Attempted server-side cancellation for Apple subscription owned by user {UserId}", subscription.UserId);
+                return false;
 
             case BillingSources.PayPal:
             default:

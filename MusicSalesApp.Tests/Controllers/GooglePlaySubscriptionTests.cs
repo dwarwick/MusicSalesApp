@@ -239,7 +239,7 @@ public class GooglePlaySubscriptionTests
     }
 
     [Test]
-    public async Task CancelSubscription_Apple_SucceedsLocally()
+    public async Task CancelSubscription_Apple_ReturnsBadRequest()
     {
         var subscription = new Subscription
         {
@@ -249,13 +249,13 @@ public class GooglePlaySubscriptionTests
             BillingSource = BillingSources.Apple
         };
         _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync(subscription);
-        _mockSubscriptionService.Setup(s => s.CancelSubscriptionAsync(1)).ReturnsAsync(true);
 
         var result = await _controller.CancelSubscription();
-        var ok = result as OkObjectResult;
+        var badRequest = result as BadRequestObjectResult;
 
-        Assert.That(ok, Is.Not.Null);
-        // Apple cancellation succeeds locally (user must manage in iOS Settings)
+        Assert.That(badRequest, Is.Not.Null);
+        Assert.That(badRequest!.Value?.ToString(), Does.Contain("Apple subscriptions must be cancelled"));
+        _mockSubscriptionService.Verify(s => s.CancelSubscriptionAsync(It.IsAny<int>()), Times.Never);
         _mockGooglePlayService.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
