@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
@@ -115,6 +116,25 @@ public class AppleAppStoreVerificationServiceTests
             Assert.That(descriptor.Claims, Contains.Key("bid"));
             Assert.That(descriptor.Claims!["bid"], Is.EqualTo("net.streamtunes.musicsalesapp.maui"));
         });
+    }
+
+    [Test]
+    public void DescribeBearerToken_ReturnsExpectedSummary()
+    {
+        using var privateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var descriptor = AppleAppStoreVerificationService.CreateBearerTokenDescriptor(
+            "issuer-id",
+            "net.streamtunes.musicsalesapp.maui",
+            "key-id",
+            privateKey);
+        var token = new JsonWebTokenHandler().CreateToken(descriptor);
+
+        var result = AppleAppStoreVerificationService.DescribeBearerToken(token);
+
+        Assert.That(result, Does.Contain("kid=key-id"));
+        Assert.That(result, Does.Contain("iss=issuer-id"));
+        Assert.That(result, Does.Contain("aud=appstoreconnect-v1"));
+        Assert.That(result, Does.Contain("bid=net.streamtunes.musicsalesapp.maui"));
     }
 
     [Test]

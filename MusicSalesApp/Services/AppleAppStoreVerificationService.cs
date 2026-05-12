@@ -18,6 +18,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
     private readonly string _issuerId;
     private readonly string _keyId;
     private readonly string _apiBaseUrl;
+    private readonly string _privateKeyPath;
     private readonly ECDsa _privateKey;
     private readonly string _initializationError;
 
@@ -98,6 +99,32 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         }
 
         return $"{baseMessage} Apple response ({(int)statusCode}): {errorBody}";
+    }
+
+    internal static string DescribeBearerToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return "<empty token>";
+        }
+
+        try
+        {
+            var jwt = new JsonWebToken(token);
+            var keyId = jwt.Kid ?? "<missing>";
+            var issuer = jwt.Issuer ?? "<missing>";
+            var audience = jwt.Audiences.FirstOrDefault() ?? "<missing>";
+            var bundleId = jwt.Claims.FirstOrDefault(claim => claim.Type == "bid")?.Value ?? "<missing>";
+            var expiresAt = jwt.ValidTo == DateTime.MinValue
+                ? "<missing>"
+                : jwt.ValidTo.ToString("O");
+
+            return $"kid={keyId}; iss={issuer}; aud={audience}; bid={bundleId}; exp={expiresAt}";
+        }
+        catch (Exception ex)
+        {
+            return $"<unparseable token: {ex.GetType().Name}>";
+        }
     }
 
     internal static AppleSignedTransactionPayload DecodeSignedTransactionInfo(string signedTransactionInfo)
@@ -216,20 +243,34 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         _keyId = configuration["AppleAppStore:KeyId"];
         _apiBaseUrl = configuration["AppleAppStore:ApiBaseUrl"] ?? "https://api.storekit.itunes.apple.com";
 
-        var privateKeyPath = ResolvePrivateKeyPath(configuration["AppleAppStore:PrivateKeyPath"], environment.ContentRootPath);
+        _privateKeyPath = ResolvePrivateKeyPath(configuration["AppleAppStore:PrivateKeyPath"], environment.ContentRootPath);
         var inlinePrivateKey = configuration["AppleAppStore:PrivateKeyPem"];
-        _initializationError = DescribeCredentialConfigurationIssue(privateKeyPath, inlinePrivateKey, _issuerId, _keyId, _bundleId);
+        _initializationError = DescribeCredentialConfigurationIssue(_privateKeyPath, inlinePrivateKey, _issuerId, _keyId, _bundleId);
+
+        _logger.LogInformation(
+            "Initializing Apple App Store verification service. BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, ApiBaseUrl={ApiBaseUrl}, PrivateKeyPath={PrivateKeyPath}, PrivateKeyFileExists={PrivateKeyFileExists}, InlinePrivateKeyConfigured={InlinePrivateKeyConfigured}",
+            _bundleId,
+            _issuerId,
+            _keyId,
+            _apiBaseUrl,
+            _privateKeyPath ?? "<none>",
+            !string.IsNullOrWhiteSpace(_privateKeyPath) && File.Exists(_privateKeyPath),
+            !string.IsNullOrWhiteSpace(inlinePrivateKey));
 
         try
         {
-            var privateKeyPem = !string.IsNullOrWhiteSpace(privateKeyPath) && File.Exists(privateKeyPath)
-                ? File.ReadAllText(privateKeyPath)
+            var privateKeyPem = !string.IsNullOrWhiteSpace(_privateKeyPath) && File.Exists(_privateKeyPath)
+                ? File.ReadAllText(_privateKeyPath)
                 : inlinePrivateKey;
 
             if (!string.IsNullOrWhiteSpace(privateKeyPem))
             {
                 _privateKey = ECDsa.Create();
                 _privateKey.ImportFromPem(privateKeyPem);
+                _logger.LogInformation(
+                    "Apple App Store private key loaded successfully. PrivateKeySource={PrivateKeySource}, PemLength={PemLength}",
+                    !string.IsNullOrWhiteSpace(_privateKeyPath) && File.Exists(_privateKeyPath) ? _privateKeyPath : "inline-config",
+                    privateKeyPem.Length);
             }
             else
             {
@@ -252,11 +293,26 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_apiBaseUrl.TrimEnd('/')}/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateBearerToken());
+            var requestUri = $"{_apiBaseUrl.TrimEnd('/')}/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}";
+            _logger.LogInformation(
+                "Starting Apple App Store subscription verification. TransactionId={TransactionId}, ProductId={ProductId}, RequestUri={RequestUri}, BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, PrivateKeyPath={PrivateKeyPath}",
+                transactionId,
+                productId,
+                requestUri,
+                _bundleId,
+                _issuerId,
+                _keyId,
+                _privateKeyPath ?? "<none>");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            var bearerToken = CreateBearerToken();
+            _logger.LogInformation("Created Apple App Store bearer token summary: {BearerTokenSummary}", DescribeBearerToken(bearerToken));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
 
             var client = _httpClientFactory.CreateClient();
+            _logger.LogInformation("Sending Apple App Store verification request to {RequestUri}", requestUri);
             var response = await client.SendAsync(request);
+            _logger.LogInformation("Apple App Store verification response received. StatusCode={StatusCode}", response.StatusCode);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -284,7 +340,17 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             }
 
             var lookupResponse = await response.Content.ReadFromJsonAsync<AppleTransactionLookupResponse>();
+            _logger.LogInformation(
+                "Apple App Store verification response payload received. HasSignedTransactionInfo={HasSignedTransactionInfo}",
+                !string.IsNullOrWhiteSpace(lookupResponse?.SignedTransactionInfo));
             var payload = DecodeSignedTransactionInfo(lookupResponse?.SignedTransactionInfo);
+            _logger.LogInformation(
+                "Decoded Apple signed transaction payload. PayloadTransactionId={PayloadTransactionId}, PayloadOriginalTransactionId={PayloadOriginalTransactionId}, PayloadProductId={PayloadProductId}, PayloadBundleId={PayloadBundleId}, PayloadEnvironment={PayloadEnvironment}",
+                payload.TransactionId,
+                payload.OriginalTransactionId,
+                payload.ProductId,
+                payload.BundleId,
+                payload.Environment);
             ValidatePayload(payload, transactionId, productId);
 
             var expiryTime = payload.ExpiresDate.HasValue
@@ -294,8 +360,19 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
                 ? DateTimeOffset.FromUnixTimeMilliseconds(payload.RevocationDate.Value).UtcDateTime
                 : (DateTime?)null;
 
+            var resolvedStatus = DetermineSubscriptionStatus(DateTime.UtcNow, expiryTime, revocationTime);
+            _logger.LogInformation(
+                "Apple subscription verification succeeded. TransactionId={TransactionId}, OriginalTransactionId={OriginalTransactionId}, ProductId={ProductId}, Environment={Environment}, ExpiryTimeUtc={ExpiryTimeUtc}, RevocationTimeUtc={RevocationTimeUtc}, ResolvedStatus={ResolvedStatus}",
+                payload.TransactionId,
+                payload.OriginalTransactionId,
+                payload.ProductId,
+                payload.Environment,
+                expiryTime,
+                revocationTime,
+                resolvedStatus);
+
             return new AppleAppStoreSubscriptionInfo(
-                DetermineSubscriptionStatus(DateTime.UtcNow, expiryTime, revocationTime),
+                resolvedStatus,
                 expiryTime,
                 payload.TransactionId,
                 payload.OriginalTransactionId,
