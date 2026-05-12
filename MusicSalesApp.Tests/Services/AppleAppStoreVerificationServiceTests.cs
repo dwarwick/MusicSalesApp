@@ -193,4 +193,35 @@ public class AppleAppStoreVerificationServiceTests
 
         Assert.That(exception!.Message, Does.Contain("4010002 - Invalid issuer"));
     }
+
+    [Test]
+    public void VerifySubscriptionAsync_DoesNotProceed_WhenPrivateKeyCannotBeLoaded()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["AppleAppStore:BundleId"] = "net.streamtunes.musicsalesapp.maui",
+                ["AppleAppStore:IssuerId"] = "issuer-id",
+                ["AppleAppStore:KeyId"] = "key-id",
+                ["AppleAppStore:PrivateKeyPem"] = "not-a-valid-private-key",
+                ["AppleAppStore:ApiBaseUrl"] = "https://api.storekit-sandbox.itunes.apple.com"
+            })
+            .Build();
+
+        var httpClientFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+
+        var environment = new Mock<IHostEnvironment>();
+        environment.SetupGet(value => value.ContentRootPath).Returns("/tmp");
+
+        var service = new AppleAppStoreVerificationService(
+            configuration,
+            environment.Object,
+            httpClientFactory.Object,
+            NullLogger<AppleAppStoreVerificationService>.Instance);
+
+        var exception = Assert.ThrowsAsync<AppleAppStoreVerificationException>(() => service.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"));
+
+        Assert.That(exception!.Message, Is.EqualTo("Apple App Store private key could not be loaded on the server."));
+        httpClientFactory.Verify(factory => factory.CreateClient(It.IsAny<string>()), Times.Never);
+    }
 }

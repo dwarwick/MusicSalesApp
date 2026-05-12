@@ -7,6 +7,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using MusicSalesApp.Common.Helpers;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.OpenSsl;
+using Org.BouncyCastle.Pkcs;
+using Org.BouncyCastle.Security;
 
 namespace MusicSalesApp.Services;
 
@@ -124,6 +129,52 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         catch (Exception ex)
         {
             return $"<unparseable token: {ex.GetType().Name}>";
+        }
+    }
+
+    internal static ECDsa LoadPrivateKey(string privateKeyPem, out string loadStrategy)
+    {
+        try
+        {
+            var privateKey = ECDsa.Create();
+            privateKey.ImportFromPem(privateKeyPem);
+            loadStrategy = "ImportFromPem";
+            return privateKey;
+        }
+        catch (Exception primaryException)
+        {
+            try
+            {
+                using var stringReader = new StringReader(privateKeyPem);
+                var pemReader = new PemReader(stringReader);
+                var keyObject = pemReader.ReadObject();
+
+                var ecPrivateKey = keyObject switch
+                {
+                    AsymmetricCipherKeyPair keyPair => keyPair.Private as ECPrivateKeyParameters,
+                    ECPrivateKeyParameters privateKeyParameters => privateKeyParameters,
+                    _ => null
+                };
+
+                if (ecPrivateKey == null)
+                {
+                    throw new CryptographicException("The PEM file did not contain an EC private key.");
+                }
+
+                var normalizedPkcs8Bytes = PrivateKeyInfoFactory
+                    .CreatePrivateKeyInfo(ecPrivateKey)
+                    .ToAsn1Object()
+                    .GetEncoded();
+
+                loadStrategy = "BouncyCastle";
+                var privateKey = ECDsa.Create();
+                privateKey.ImportPkcs8PrivateKey(normalizedPkcs8Bytes, out _);
+                return privateKey;
+            }
+            catch (Exception fallbackException)
+            {
+                throw new AggregateException(primaryException, fallbackException);
+            }
         }
     }
 
@@ -265,12 +316,12 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
 
             if (!string.IsNullOrWhiteSpace(privateKeyPem))
             {
-                _privateKey = ECDsa.Create();
-                _privateKey.ImportFromPem(privateKeyPem);
+                _privateKey = LoadPrivateKey(privateKeyPem, out var loadStrategy);
                 _logger.LogInformation(
-                    "Apple App Store private key loaded successfully. PrivateKeySource={PrivateKeySource}, PemLength={PemLength}",
+                    "Apple App Store private key loaded successfully. PrivateKeySource={PrivateKeySource}, PemLength={PemLength}, LoadStrategy={LoadStrategy}",
                     !string.IsNullOrWhiteSpace(_privateKeyPath) && File.Exists(_privateKeyPath) ? _privateKeyPath : "inline-config",
-                    privateKeyPem.Length);
+                    privateKeyPem.Length,
+                    loadStrategy);
             }
             else
             {
@@ -279,6 +330,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         }
         catch (Exception ex)
         {
+            _privateKey = null;
             _logger.LogWarning(ex, "Apple App Store private key not available. {InitializationError}", _initializationError);
         }
     }
