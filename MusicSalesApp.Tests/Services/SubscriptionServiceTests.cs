@@ -481,4 +481,51 @@ public class SubscriptionServiceTests
             Assert.That(result.LastPaymentDate, Is.Not.Null);
         });
     }
+
+    [Test]
+    public async Task UpdateAppleSubscriptionStatusAsync_CreatesAppleSubscriptionFromNotification_WhenMissingAndAppAccountTokenMapsToUser()
+    {
+        var expiryTime = DateTime.UtcNow.AddDays(30);
+
+        await _service.UpdateAppleSubscriptionStatusAsync(
+            "apple-orig-missing",
+            SubscriptionStatuses.Active,
+            expiryTime,
+            "apple-tx-created",
+            "Sandbox",
+            "streamtunes_monthly_sub_ios",
+            "22",
+            4.99m);
+
+        var result = await _service.GetSubscriptionByAppleOriginalTransactionIdAsync("apple-orig-missing");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result!.UserId, Is.EqualTo(22));
+            Assert.That(result.AppStoreTransactionId, Is.EqualTo("apple-tx-created"));
+            Assert.That(result.AppStoreProductId, Is.EqualTo("streamtunes_monthly_sub_ios"));
+            Assert.That(result.AppStoreAppAccountToken, Is.EqualTo("22"));
+            Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(result.MonthlyPrice, Is.EqualTo(4.99m));
+        });
+    }
+
+    [Test]
+    public async Task UpdateAppleSubscriptionStatusAsync_DoesNotCreateSubscription_WhenNotificationCannotMapToUser()
+    {
+        await _service.UpdateAppleSubscriptionStatusAsync(
+            "apple-orig-missing-no-user",
+            SubscriptionStatuses.Active,
+            DateTime.UtcNow.AddDays(30),
+            "apple-tx-created",
+            "Sandbox",
+            "streamtunes_monthly_sub_ios",
+            "not-a-user-id",
+            4.99m);
+
+        var result = await _service.GetSubscriptionByAppleOriginalTransactionIdAsync("apple-orig-missing-no-user");
+
+        Assert.That(result, Is.Null);
+    }
 }

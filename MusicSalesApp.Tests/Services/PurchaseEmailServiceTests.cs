@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -315,7 +316,42 @@ public class PurchaseEmailServiceTests
                     body.Contains(payPalSubscriptionId) &&
                     body.Contains("$3.99") &&
                     body.Contains("Monthly Streaming Subscription") &&
+                    body.Contains("PayPal Subscription ID") &&
                     body.Contains("right to cancel at any time"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendSubscriptionConfirmationAsync_UsesAppleLabels_ForAppleSubscriptions()
+    {
+        var subscription = new Subscription
+        {
+            Id = 1,
+            UserId = 1,
+            BillingSource = BillingSources.Apple,
+            Status = SubscriptionStatuses.Active,
+            StartDate = DateTime.UtcNow,
+            MonthlyPrice = 3.99m,
+            NextBillingDate = DateTime.UtcNow.AddMonths(1),
+            EndDate = DateTime.UtcNow.AddMonths(1)
+        };
+
+        var result = await _service.SendSubscriptionConfirmationAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            "apple-orig-123",
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(s => s.Contains("Subscription Confirmation")),
+                It.Is<string>(body =>
+                    body.Contains("App Store Original Transaction ID") &&
+                    body.Contains("apple-orig-123") &&
+                    body.Contains("Amount Charged by Apple"))),
             Times.Once);
     }
 

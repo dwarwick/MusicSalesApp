@@ -27,7 +27,7 @@ public class SubscriptionController : ControllerBase
     /// HTTP client factory for making PayPal API requests.
     /// </summary>
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IPurchaseEmailService _purchaseEmailService;
+    private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
     private readonly IAccountEmailService _accountEmailService;
     private readonly IGooglePlayVerificationService _googlePlayVerificationService;
 
@@ -50,7 +50,7 @@ public class SubscriptionController : ControllerBase
         IConfiguration configuration,
         ILogger<SubscriptionController> logger,
         IHttpClientFactory httpClientFactory,
-        IPurchaseEmailService purchaseEmailService,
+        ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         IAccountEmailService accountEmailService,
         IGooglePlayVerificationService googlePlayVerificationService)
     {
@@ -60,7 +60,7 @@ public class SubscriptionController : ControllerBase
         _configuration = configuration;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
-        _purchaseEmailService = purchaseEmailService;
+        _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
         _accountEmailService = accountEmailService;
         _googlePlayVerificationService = googlePlayVerificationService;
     }
@@ -186,28 +186,10 @@ public class SubscriptionController : ControllerBase
 
             _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", request.SubscriptionId, user.Id);
 
-            // Send subscription confirmation email (fire and forget - don't block the response)
             var subscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(request.SubscriptionId);
             if (subscription != null)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var baseUrl = GetBaseUrl();
-                        var userName = user.UserName ?? user.Email;
-                        await _purchaseEmailService.SendSubscriptionConfirmationAsync(
-                            user.Email,
-                            userName,
-                            subscription,
-                            request.SubscriptionId,
-                            baseUrl);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to send subscription confirmation email to user {UserId}", user.Id);
-                    }
-                });
+                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
             }
 
             return Ok(new { success = true });
@@ -286,25 +268,7 @@ public class SubscriptionController : ControllerBase
             var updatedSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId);
             if (updatedSubscription != null)
             {
-                // Send subscription confirmation email (fire and forget - don't block the response)
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var baseUrl = GetBaseUrl();
-                        var userName = user.UserName ?? user.Email;
-                        await _purchaseEmailService.SendSubscriptionConfirmationAsync(
-                            user.Email,
-                            userName,
-                            updatedSubscription,
-                            subscription.PayPalSubscriptionId,
-                            baseUrl);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to send subscription confirmation email to user {UserId}", user.Id);
-                    }
-                });
+                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
             }
 
             return Ok(new { success = true });

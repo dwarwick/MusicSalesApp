@@ -48,7 +48,10 @@ public class AppleAppStoreNotificationsControllerTests
                 "ACTIVE",
                 It.IsAny<DateTime?>(),
                 "tx-123",
-                "Sandbox"),
+                "Sandbox",
+                "streamtunes_monthly_sub_ios",
+                It.IsAny<string>(),
+                3.99m),
             Times.Once);
     }
 
@@ -69,7 +72,10 @@ public class AppleAppStoreNotificationsControllerTests
                 It.IsAny<string>(),
                 It.IsAny<DateTime?>(),
                 It.IsAny<string>(),
-                It.IsAny<string>()),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<decimal?>()),
             Times.Never);
     }
 }

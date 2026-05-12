@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Controllers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -17,6 +18,7 @@ public class GooglePlaySubscriptionControllerTests
 {
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IGooglePlayVerificationService> _mockVerificationService;
+    private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<GooglePlaySubscriptionController>> _mockLogger;
@@ -27,6 +29,7 @@ public class GooglePlaySubscriptionControllerTests
     {
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockVerificationService = new Mock<IGooglePlayVerificationService>();
+        _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<GooglePlaySubscriptionController>>();
 
@@ -37,6 +40,7 @@ public class GooglePlaySubscriptionControllerTests
         _controller = new GooglePlaySubscriptionController(
             _mockSubscriptionService.Object,
             _mockVerificationService.Object,
+            _mockSubscriptionConfirmationEmailService.Object,
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object);
@@ -53,6 +57,32 @@ public class GooglePlaySubscriptionControllerTests
 
         _mockUserManager.Setup(m => m.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(user);
         _mockConfiguration.Setup(c => c["GooglePlay:SubscriptionProductId"]).Returns("streamtunes_monthly_sub");
+        _mockConfiguration.Setup(c => c["AppSettings:SubscriptionPrice"]).Returns("3.99");
+        _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
+    }
+
+    [Test]
+    public async Task VerifyAndRecordPurchase_SendsConfirmationEmail_WhenVerificationSucceeds()
+    {
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
+            .ReturnsAsync(new GooglePlaySubscriptionInfo(
+                "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow.AddDays(30),
+                "order-123",
+                true,
+                "linked-token"));
+        _mockSubscriptionService
+            .Setup(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
+            .ReturnsAsync((Subscription)null);
+        _mockSubscriptionService
+            .Setup(s => s.CreateGooglePlaySubscriptionAsync(1, "purchase-token", "order-123", 3.99m))
+            .ReturnsAsync(new Subscription { Id = 12, BillingSource = BillingSources.GooglePlay, GooglePlayOrderId = "order-123", Status = SubscriptionStatuses.Active });
+
+        var result = await _controller.VerifyAndRecordPurchase(new GooglePlayPurchaseRequest("purchase-token", "order-123"));
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), It.IsAny<Subscription>(), "https://davidtest.dev"), Times.Once);
     }
 
     [Test]

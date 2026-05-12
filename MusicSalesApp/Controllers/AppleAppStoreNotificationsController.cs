@@ -75,7 +75,10 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 status,
                 expiryTime,
                 transactionPayload.TransactionId,
-                transactionPayload.Environment);
+                transactionPayload.Environment,
+                transactionPayload.ProductId,
+                transactionPayload.AppAccountToken,
+                3.99m);
 
             _logger.LogInformation(
                 "Processed Apple notification {NotificationType} for original transaction {OriginalTransactionId} with status {Status}",

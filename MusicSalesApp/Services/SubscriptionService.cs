@@ -395,19 +395,43 @@ public class SubscriptionService : ISubscriptionService
         string status,
         DateTime? expiryTime = null,
         string latestTransactionId = null,
-        string environment = null)
+        string environment = null,
+        string productId = null,
+        string appAccountToken = null,
+        decimal? monthlyPrice = null)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
         var subscription = await context.Subscriptions
             .FirstOrDefaultAsync(s => s.AppStoreOriginalTransactionId == originalTransactionId);
 
+        if (subscription == null && !string.IsNullOrWhiteSpace(latestTransactionId))
+        {
+            subscription = await context.Subscriptions
+                .FirstOrDefaultAsync(s => s.AppStoreTransactionId == latestTransactionId);
+        }
+
         if (subscription == null)
         {
-            _logger.LogWarning(
-                "Apple subscription with original transaction ID {OriginalTransactionId} not found",
-                originalTransactionId);
-            return;
+            subscription = await TryCreateAppleSubscriptionFromNotificationAsync(
+                context,
+                originalTransactionId,
+                status,
+                expiryTime,
+                latestTransactionId,
+                environment,
+                productId,
+                appAccountToken,
+                monthlyPrice);
+
+            if (subscription == null)
+            {
+                _logger.LogWarning(
+                    "Apple subscription with original transaction ID {OriginalTransactionId} not found and notification could not be reconciled. AppAccountTokenPresent={AppAccountTokenPresent}",
+                    originalTransactionId,
+                    !string.IsNullOrWhiteSpace(appAccountToken));
+                return;
+            }
         }
 
         subscription.Status = status;
@@ -441,6 +465,59 @@ public class SubscriptionService : ISubscriptionService
         await context.SaveChangesAsync();
 
         _logger.LogInformation("Updated Apple subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+    }
+
+    private async Task<Subscription> TryCreateAppleSubscriptionFromNotificationAsync(
+        AppDbContext context,
+        string originalTransactionId,
+        string status,
+        DateTime? expiryTime,
+        string latestTransactionId,
+        string environment,
+        string productId,
+        string appAccountToken,
+        decimal? monthlyPrice)
+    {
+        if (string.IsNullOrWhiteSpace(appAccountToken) || !int.TryParse(appAccountToken, out var userId))
+        {
+            return null;
+        }
+
+        await CancelExistingActiveSubscriptionsAsync(context, userId);
+
+        var effectiveNow = DateTime.UtcNow;
+        var effectivePrice = monthlyPrice ?? 3.99m;
+        var subscription = new Subscription
+        {
+            UserId = userId,
+            BillingSource = BillingSources.Apple,
+            AppStoreTransactionId = latestTransactionId,
+            AppStoreOriginalTransactionId = originalTransactionId,
+            AppStoreProductId = productId,
+            AppStoreAppAccountToken = appAccountToken,
+            AppStoreEnvironment = environment,
+            Status = status,
+            StartDate = effectiveNow,
+            CreatedAt = effectiveNow,
+            MonthlyPrice = effectivePrice,
+            LastPaymentDate = status == SubscriptionStatuses.Active ? effectiveNow : null,
+            EndDate = expiryTime,
+            NextBillingDate = expiryTime,
+            CancelledAt = status is SubscriptionStatuses.Cancelled or SubscriptionStatuses.Expired or SubscriptionStatuses.Suspended
+                ? effectiveNow
+                : null
+        };
+
+        context.Subscriptions.Add(subscription);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Created Apple subscription {SubscriptionId} from notification reconciliation for user {UserId}, original transaction {OriginalTransactionId}",
+            subscription.Id,
+            userId,
+            originalTransactionId);
+
+        return subscription;
     }
 
     private static async Task CancelExistingActiveSubscriptionsAsync(AppDbContext context, int userId)

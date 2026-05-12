@@ -33,14 +33,14 @@ public interface IPurchaseEmailService
     /// <param name="userEmail">The recipient's email address.</param>
     /// <param name="userName">The user's display name (or email if name not available).</param>
     /// <param name="subscription">The subscription details.</param>
-    /// <param name="payPalSubscriptionId">The PayPal subscription ID.</param>
+    /// <param name="externalSubscriptionId">The provider-specific subscription reference ID.</param>
     /// <param name="baseUrl">The base URL for constructing asset URLs.</param>
     /// <returns>True if the email was sent successfully, false otherwise.</returns>
     Task<bool> SendSubscriptionConfirmationAsync(
         string userEmail,
         string userName,
         Subscription subscription,
-        string payPalSubscriptionId,
+        string externalSubscriptionId,
         string baseUrl);
 }
 

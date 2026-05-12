@@ -311,6 +311,7 @@ try
     builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
     builder.Services.AddScoped<IEmailService, EmailService>();
     builder.Services.AddScoped<IPurchaseEmailService, PurchaseEmailService>();
+    builder.Services.AddScoped<ISubscriptionConfirmationEmailService, SubscriptionConfirmationEmailService>();
     builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
     builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();

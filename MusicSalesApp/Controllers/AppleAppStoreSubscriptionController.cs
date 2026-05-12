@@ -13,6 +13,7 @@ public class AppleAppStoreSubscriptionController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
     private readonly IAppleAppStoreVerificationService _verificationService;
+    private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppleAppStoreSubscriptionController> _logger;
@@ -20,12 +21,14 @@ public class AppleAppStoreSubscriptionController : ControllerBase
     public AppleAppStoreSubscriptionController(
         ISubscriptionService subscriptionService,
         IAppleAppStoreVerificationService verificationService,
+        ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<AppleAppStoreSubscriptionController> logger)
     {
         _subscriptionService = subscriptionService;
         _verificationService = verificationService;
+        _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -111,7 +114,20 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             subscriptionInfo.TransactionId,
             subscriptionInfo.Environment);
 
+        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
+
         return Ok(new { success = true, subscriptionId = subscription.Id, status = subscriptionInfo.Status });
+    }
+
+    private string GetBaseUrl()
+    {
+        var baseUrl = _configuration["BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return baseUrl;
+        }
+
+        return $"{Request.Scheme}://{Request.Host}";
     }
 }
 

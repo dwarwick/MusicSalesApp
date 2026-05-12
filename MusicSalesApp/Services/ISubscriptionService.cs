@@ -37,5 +37,8 @@ public interface ISubscriptionService
         string status,
         DateTime? expiryTime = null,
         string latestTransactionId = null,
-        string environment = null);
+        string environment = null,
+        string productId = null,
+        string appAccountToken = null,
+        decimal? monthlyPrice = null);
 }

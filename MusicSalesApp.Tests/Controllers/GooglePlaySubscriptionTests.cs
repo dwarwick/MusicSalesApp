@@ -21,7 +21,7 @@ public class GooglePlaySubscriptionTests
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<SubscriptionController>> _mockLogger;
     private Mock<IHttpClientFactory> _mockHttpClientFactory;
-    private Mock<IPurchaseEmailService> _mockPurchaseEmailService;
+    private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IGooglePlayVerificationService> _mockGooglePlayService;
     private SubscriptionController _controller;
@@ -34,7 +34,7 @@ public class GooglePlaySubscriptionTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<SubscriptionController>>();
         _mockHttpClientFactory = new Mock<IHttpClientFactory>();
-        _mockPurchaseEmailService = new Mock<IPurchaseEmailService>();
+        _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockGooglePlayService = new Mock<IGooglePlayVerificationService>();
 
@@ -49,7 +49,7 @@ public class GooglePlaySubscriptionTests
             _mockConfiguration.Object,
             _mockLogger.Object,
             _mockHttpClientFactory.Object,
-            _mockPurchaseEmailService.Object,
+            _mockSubscriptionConfirmationEmailService.Object,
             _mockAccountEmailService.Object,
             _mockGooglePlayService.Object);
 

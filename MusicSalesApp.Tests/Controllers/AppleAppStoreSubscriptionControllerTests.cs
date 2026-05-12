@@ -17,6 +17,7 @@ public class AppleAppStoreSubscriptionControllerTests
 {
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IAppleAppStoreVerificationService> _mockVerificationService;
+    private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<AppleAppStoreSubscriptionController>> _mockLogger;
@@ -27,6 +28,7 @@ public class AppleAppStoreSubscriptionControllerTests
     {
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockVerificationService = new Mock<IAppleAppStoreVerificationService>();
+        _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<AppleAppStoreSubscriptionController>>();
 
@@ -37,6 +39,7 @@ public class AppleAppStoreSubscriptionControllerTests
         _controller = new AppleAppStoreSubscriptionController(
             _mockSubscriptionService.Object,
             _mockVerificationService.Object,
+            _mockSubscriptionConfirmationEmailService.Object,
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object);
@@ -54,6 +57,7 @@ public class AppleAppStoreSubscriptionControllerTests
         _mockUserManager.Setup(m => m.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(user);
         _mockConfiguration.Setup(c => c["AppleAppStore:SubscriptionProductId"]).Returns("streamtunes_monthly_sub_ios");
         _mockConfiguration.Setup(c => c["AppSettings:SubscriptionPrice"]).Returns("3.99");
+        _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
     }
 
     [Test]
@@ -98,6 +102,7 @@ public class AppleAppStoreSubscriptionControllerTests
         Assert.That(ok, Is.Not.Null);
         _mockSubscriptionService.Verify(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 3.99m), Times.Once);
         _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync("orig-123", "ACTIVE", It.IsAny<DateTime?>(), "tx-123", "Sandbox"), Times.Once);
+        _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), It.IsAny<Subscription>(), "https://davidtest.dev"), Times.Once);
     }
 
     [Test]

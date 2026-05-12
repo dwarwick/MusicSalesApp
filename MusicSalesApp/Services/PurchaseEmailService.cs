@@ -1,4 +1,5 @@
 using System.Text;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -89,7 +90,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         string userEmail,
         string userName,
         Subscription subscription,
-        string payPalSubscriptionId,
+        string externalSubscriptionId,
         string baseUrl)
     {
         try
@@ -102,7 +103,7 @@ public class PurchaseEmailService : IPurchaseEmailService
             body.Append("<p style='font-size: 16px; color: #333;'>Thank you for subscribing to StreamTunes! Here are your subscription details:</p>");
 
             // Subscription details section
-            body.Append(BuildSubscriptionDetailsSection(subscription, payPalSubscriptionId));
+            body.Append(BuildSubscriptionDetailsSection(subscription, externalSubscriptionId));
 
             // Terms and cancellation info
             body.Append(BuildSubscriptionTermsSection(subscription));
@@ -289,10 +290,11 @@ public class PurchaseEmailService : IPurchaseEmailService
         ";
     }
 
-    private string BuildSubscriptionDetailsSection(Subscription subscription, string payPalSubscriptionId)
+    private string BuildSubscriptionDetailsSection(Subscription subscription, string externalSubscriptionId)
     {
         var nextBillingDate = subscription.NextBillingDate?.ToString("MMMM dd, yyyy") ?? "Pending";
-        var endDate = subscription.EndDate?.ToString("MMMM dd, yyyy") ?? "N/A";
+        var referenceLabel = GetSubscriptionReferenceLabel(subscription.BillingSource);
+        var amountLabel = GetSubscriptionAmountLabel(subscription.BillingSource);
 
         return $@"
             <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
@@ -315,17 +317,33 @@ public class PurchaseEmailService : IPurchaseEmailService
                         <td style='padding: 8px 0; color: #333;'>{nextBillingDate}</td>
                     </tr>
                     <tr>
-                        <td style='padding: 8px 0; color: #666;'>PayPal Subscription ID:</td>
-                        <td style='padding: 8px 0; color: #333;'>{System.Web.HttpUtility.HtmlEncode(payPalSubscriptionId)}</td>
+                        <td style='padding: 8px 0; color: #666;'>{referenceLabel}:</td>
+                        <td style='padding: 8px 0; color: #333;'>{System.Web.HttpUtility.HtmlEncode(externalSubscriptionId)}</td>
                     </tr>
                 </table>
             </div>
             <div style='background-color: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: right;'>
-                <span style='color: #ffffff; font-size: 18px;'>Amount Paid to PayPal:</span>
+                <span style='color: #ffffff; font-size: 18px;'>{amountLabel}:</span>
                 <span style='color: #4CAF50; font-size: 24px; font-weight: bold; margin-left: 10px;'>${subscription.MonthlyPrice:F2}</span>
             </div>
         ";
     }
+
+    private static string GetSubscriptionReferenceLabel(string billingSource)
+        => billingSource switch
+        {
+            BillingSources.GooglePlay => "Google Play Order ID",
+            BillingSources.Apple => "App Store Original Transaction ID",
+            _ => "PayPal Subscription ID"
+        };
+
+    private static string GetSubscriptionAmountLabel(string billingSource)
+        => billingSource switch
+        {
+            BillingSources.GooglePlay => "Amount Charged by Google Play",
+            BillingSources.Apple => "Amount Charged by Apple",
+            _ => "Amount Paid to PayPal"
+        };
 
     private string BuildSubscriptionTermsSection(Subscription subscription)
     {
