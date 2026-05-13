@@ -155,7 +155,7 @@
                 @if (_hasSubscription)
                 {
                     <div class="subscription-details">
-                        <p><strong>Status:</strong> @_subscriptionStatus</p>
+                        <p><strong>Status:</strong> @DisplaySubscriptionStatus</p>
                         <p><strong>Monthly Price:</strong> $@_monthlyPrice</p>
                         <p><strong>Billed via:</strong> @(_billingSource ?? "PayPal")</p>
                         @if (_startDate.HasValue)
@@ -168,17 +168,13 @@
                         }
                         @if (_endDate.HasValue)
                         {
-                            <p><strong>Access Until:</strong> @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")</p>
-                            <p class="subscription-note">Your subscription has been cancelled. You can continue to enjoy unlimited music streaming until @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt").</p>
+                            <p><strong>@SubscriptionEndDateLabel:</strong> @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")</p>
                         }
-                        else
-                        {
-                            <p class="subscription-note">You have unlimited access to all music on our platform.</p>
-                        }
+                        <p class="subscription-note">@ActiveSubscriptionMessage</p>
                         
-                        @if (!_endDate.HasValue && !_cancelling)
+                        @if (ShowCancelSubscriptionButton && !_cancelling)
                         {
-                            <SfButton OnClick="@CancelSubscription" CssClass="e-danger mt-2">Cancel Subscription</SfButton>
+                            <SfButton OnClick="@CancelSubscription" CssClass="e-danger mt-2">@(ShouldUseExternalSubscriptionManagement ? "Manage Subscription" : "Cancel Subscription")</SfButton>
                         }
                         else if (_cancelling)
                         {
@@ -210,9 +206,9 @@
                             <h4>Subscription Terms:</h4>
                             <ul>
                                 <li>Monthly fee of <strong>$@_subscriptionPrice</strong> will continue until cancelled by the user.</li>
-                                <li>The charge will occur on or about the same day each month, subject to PayPal's policy.</li>
+                                <li>The charge will occur on or about the same day each month, subject to your billing provider's policy.</li>
                                 <li>Once cancelled, the subscription will be in effect until the end of the paid month.</li>
-                                <li>You can cancel at any time from this page.</li>
+                                <li>You can manage or cancel your subscription at any time through the applicable billing provider.</li>
                             </ul>
                         </div>
 

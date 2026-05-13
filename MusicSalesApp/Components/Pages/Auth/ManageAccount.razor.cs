@@ -14,6 +14,9 @@ namespace MusicSalesApp.Components.Pages.Auth;
 
 public partial class ManageAccountModel : BlazorBase, IDisposable
 {
+    private const string DefaultAppleSubscriptionManagementUrl = "https://account.apple.com/account/manage/section/subscriptions";
+    private const string DefaultGoogleSubscriptionManagementUrl = "https://play.google.com/store/account/subscriptions";
+
     protected bool _loading = true;
     protected bool _isAuthenticated = false;
     private bool _hasLoadedData = false;
@@ -489,14 +492,43 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     /// <summary>
     /// Returns true if the user has an active subscription that hasn't been cancelled yet.
     /// </summary>
-    protected bool HasActiveSubscription => _hasSubscription && !_endDate.HasValue;
-    protected bool HasCancelledSubscriptionAccess => _hasSubscription && _endDate.HasValue;
+    protected bool HasActiveSubscription => _hasSubscription;
+    protected bool HasCancelledSubscriptionAccess => _hasSubscription && IsNonRenewingSubscription;
     protected bool CanCreateNewSubscription => !_hasSubscription ||
-        _subscriptionStatus == SubscriptionStatuses.Cancelled ||
         _subscriptionStatus == SubscriptionStatuses.Expired;
     protected string SubscribeButtonLabel => HasCancelledSubscriptionAccess || _subscriptionStatus == SubscriptionStatuses.Expired
         ? "Start New Subscription"
         : "Sign Up for Monthly Subscription";
+    protected bool IsNonRenewingSubscription =>
+        _hasSubscription && string.Equals(_subscriptionStatus, SubscriptionStatuses.Cancelled, StringComparison.OrdinalIgnoreCase);
+    protected bool ShouldUseExternalSubscriptionManagement =>
+        string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal) ||
+        string.Equals(_billingSource, BillingSources.GooglePlay, StringComparison.Ordinal);
+    protected bool ShowCancelSubscriptionButton => HasActiveSubscription && !IsNonRenewingSubscription;
+    protected string DisplaySubscriptionStatus => IsNonRenewingSubscription
+        ? "Renews Off"
+        : _subscriptionStatus switch
+        {
+            SubscriptionStatuses.Active => "Active",
+            SubscriptionStatuses.Expired => "Expired",
+            SubscriptionStatuses.ApprovalPending => "Pending",
+            _ => _subscriptionStatus
+        };
+    protected string SubscriptionEndDateLabel => HasActiveSubscription
+        ? IsNonRenewingSubscription
+            ? "Access Until"
+            : "Current Billing Period Ends"
+        : "Ended On";
+    protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
+        ? $"Your subscription will not renew again. You still have full access until {_endDate?.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+        : _endDate.HasValue
+            ? $"Your subscription is active. Your current billing period ends on {_endDate.Value.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+            : "You have unlimited access to all music on our platform.";
+    protected string SubscriptionManagementPrompt => string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal)
+        ? IsAppleSandboxManagementUrl()
+            ? "Sandbox Apple subscriptions are managed on the test device in Settings > Developer > Sandbox Account > Manage. Open Apple's sandbox instructions now?"
+            : "Apple subscriptions must be managed with Apple. Open Apple's subscription management page now?"
+        : "Google Play subscriptions should be managed in Google Play subscription settings. Open Google Play now?";
 
     protected async Task ShowSuspendConfirmDialog()
     {
@@ -719,6 +751,17 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
     protected async Task CancelSubscription()
     {
+        if (ShouldUseExternalSubscriptionManagement)
+        {
+            if (!await JS.InvokeAsync<bool>("confirm", SubscriptionManagementPrompt))
+            {
+                return;
+            }
+
+            NavigationManager.NavigateTo(GetExternalSubscriptionManagementUrl(), forceLoad: true);
+            return;
+        }
+
         if (!await JS.InvokeAsync<bool>("confirm", "Are you sure you want to cancel your subscription? You will have access until the end of your current billing period."))
         {
             return;
@@ -763,6 +806,14 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             await InvokeAsync(StateHasChanged);
         }
     }
+
+    protected string GetExternalSubscriptionManagementUrl()
+        => string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal)
+            ? Configuration["AppleAppStore:SubscriptionManagementUrl"] ?? DefaultAppleSubscriptionManagementUrl
+            : DefaultGoogleSubscriptionManagementUrl;
+
+    protected bool IsAppleSandboxManagementUrl()
+        => GetExternalSubscriptionManagementUrl().Contains("developer.apple.com", StringComparison.OrdinalIgnoreCase);
 
     protected async Task LoadCreatorStatus()
     {

@@ -1,8 +1,10 @@
 using Bunit;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MusicSalesApp.Components.Pages.Auth;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Models;
 using System.Security.Claims;
@@ -199,5 +201,99 @@ public class ManageAccountTests : BUnitTestBase
         Assert.That(instance, Is.Not.Null);
         // Verify the component renders without errors when dialog markup is present
         Assert.That(cut.Markup, Is.Not.Null);
+    }
+
+    [Test]
+    public void ManageAccount_AppleActiveSubscriptionWithFutureEndDate_ShowsManageSubscriptionAndNoNewSubscriptionPrompt()
+    {
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = 1,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new
+            {
+                HasSubscription = true,
+                Status = SubscriptionStatuses.Active,
+                MonthlyPrice = 3.99m,
+                StartDate = DateTime.UtcNow.AddDays(-5),
+                EndDate = DateTime.UtcNow.AddDays(25),
+                NextBillingDate = DateTime.UtcNow.AddDays(25),
+                BillingSource = BillingSources.Apple,
+                SubscriptionPrice = "3.99"
+            });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends:"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("Status:</strong> Active"));
+        Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends:"));
+        Assert.That(cut.Markup, Does.Contain("Manage Subscription"));
+        Assert.That(cut.Markup, Does.Not.Contain("Start a new subscription at any time."));
+    }
+
+    [Test]
+    public void ManageAccount_AppleSubscriptionManagementUrl_ComesFromConfiguration()
+    {
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = 1,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new
+            {
+                HasSubscription = true,
+                Status = SubscriptionStatuses.Active,
+                MonthlyPrice = 3.99m,
+                BillingSource = BillingSources.Apple,
+                SubscriptionPrice = "3.99"
+            });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["Facebook:AppId"] = "test-facebook-app-id",
+                ["PayPal:SubscriptionPrice"] = "3.99",
+                ["AppleAppStore:SubscriptionManagementUrl"] = "https://developer.apple.com/documentation/storekit/testing-disabling-auto-renew"
+            })
+            .Build();
+        TestContext.Services.AddSingleton<IConfiguration>(configuration);
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Manage Subscription"), TimeSpan.FromSeconds(5));
+
+        var method = typeof(ManageAccountModel).GetMethod("GetExternalSubscriptionManagementUrl",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var url = method?.Invoke(cut.Instance, null) as string;
+
+        Assert.That(url, Is.EqualTo("https://developer.apple.com/documentation/storekit/testing-disabling-auto-renew"));
     }
 }
