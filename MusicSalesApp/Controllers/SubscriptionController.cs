@@ -326,6 +326,8 @@ public class SubscriptionController : ControllerBase
                         userEmail,
                         userName,
                         updatedSubscription?.EndDate,
+                        updatedSubscription?.BillingSource,
+                        user.TimeZoneId,
                         baseUrl);
                 }
                 catch (Exception ex)

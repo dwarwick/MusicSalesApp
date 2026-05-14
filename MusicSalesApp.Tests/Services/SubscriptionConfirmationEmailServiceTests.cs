@@ -1,3 +1,4 @@
+#nullable enable
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Common.Helpers;
@@ -24,7 +25,7 @@ public class SubscriptionConfirmationEmailServiceTests
     [Test]
     public async Task SendConfirmationAsync_UsesAppleOriginalTransactionId_ForAppleSubscriptions()
     {
-        var user = new ApplicationUser { Id = 22, Email = "test@example.com", UserName = "tester" };
+        var user = new ApplicationUser { Id = 22, Email = "test@example.com", UserName = "tester", TimeZoneId = "America/New_York" };
         var subscription = new Subscription
         {
             BillingSource = BillingSources.Apple,
@@ -32,7 +33,7 @@ public class SubscriptionConfirmationEmailServiceTests
         };
 
         _mockPurchaseEmailService
-            .Setup(service => service.SendSubscriptionConfirmationAsync("test@example.com", "tester", subscription, "orig-123", "https://davidtest.dev"))
+            .Setup(service => service.SendSubscriptionConfirmationAsync("test@example.com", "tester", subscription, "orig-123", "America/New_York", "https://davidtest.dev"))
             .ReturnsAsync(true);
 
         var result = await _service.SendConfirmationAsync(user, subscription, "https://davidtest.dev");
@@ -58,6 +59,7 @@ public class SubscriptionConfirmationEmailServiceTests
                 It.IsAny<string>(),
                 It.IsAny<Subscription>(),
                 It.IsAny<string>(),
+                It.IsAny<string?>(),
                 It.IsAny<string>()),
             Times.Never);
     }

@@ -1,3 +1,4 @@
+#nullable enable
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -35,7 +36,7 @@ public class GooglePlayWebhookControllerTests
 
         var userStore = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
-            userStore.Object, null, null, null, null, null, null, null, null);
+            userStore.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
         _mockConfiguration.Setup(c => c["GooglePlay:SubscriptionProductId"]).Returns("streamtunes_monthly_sub");
         _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
@@ -61,6 +62,7 @@ public class GooglePlayWebhookControllerTests
         {
             Id = 21,
             UserId = 9,
+            BillingSource = BillingSources.GooglePlay,
             EndDate = new DateTime(2026, 6, 15, 8, 30, 0, DateTimeKind.Utc)
         };
         var user = new ApplicationUser
@@ -109,6 +111,8 @@ public class GooglePlayWebhookControllerTests
             "google@example.com",
             "googleuser",
             subscription.EndDate,
+            BillingSources.GooglePlay,
+            null,
             "https://davidtest.dev"), Times.Once);
     }
 
@@ -149,6 +153,8 @@ public class GooglePlayWebhookControllerTests
             It.IsAny<string>(),
             It.IsAny<string>(),
             It.IsAny<DateTime?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
             It.IsAny<string>()), Times.Never);
     }
 }

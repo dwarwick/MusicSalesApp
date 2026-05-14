@@ -1,5 +1,7 @@
+#nullable enable
 using System.Text;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -34,6 +36,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         string payPalOrderId,
         IEnumerable<CartItemWithMetadata> purchasedItems,
         decimal totalAmount,
+        string? timeZoneId,
         string baseUrl)
     {
         try
@@ -44,7 +47,7 @@ public class PurchaseEmailService : IPurchaseEmailService
             // Group items by album
             var albumGroups = itemsList
                 .Where(i => i.IsAlbumTrack)
-                .GroupBy(i => i.AlbumName)
+                .GroupBy(i => i.AlbumName!)
                 .ToList();
 
             var standaloneSongs = itemsList
@@ -57,7 +60,7 @@ public class PurchaseEmailService : IPurchaseEmailService
             body.Append("<p style='font-size: 16px; color: #333;'>Thank you for your purchase! Here's a summary of your order:</p>");
 
             // Order information
-            body.Append(BuildOrderInfoSection(streamTunesOrderId, payPalOrderId));
+            body.Append(BuildOrderInfoSection(streamTunesOrderId, payPalOrderId, timeZoneId));
 
             // Standalone songs section
             if (standaloneSongs.Any())
@@ -91,6 +94,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         string userName,
         Subscription subscription,
         string externalSubscriptionId,
+        string? timeZoneId,
         string baseUrl)
     {
         try
@@ -103,12 +107,12 @@ public class PurchaseEmailService : IPurchaseEmailService
             body.Append("<p style='font-size: 16px; color: #333;'>Thank you for subscribing to StreamTunes! Here are your subscription details:</p>");
 
             // Subscription details section
-            body.Append(BuildSubscriptionDetailsSection(subscription, externalSubscriptionId));
+            body.Append(BuildSubscriptionDetailsSection(subscription, externalSubscriptionId, timeZoneId));
 
             body.Append(BuildSubscriptionBenefitsSection());
 
             // Terms and cancellation info
-            body.Append(BuildSubscriptionTermsSection(subscription));
+            body.Append(BuildSubscriptionTermsSection(subscription, timeZoneId));
 
             body.Append(BuildEmailFooter());
 
@@ -140,8 +144,10 @@ public class PurchaseEmailService : IPurchaseEmailService
         return $"<p style='font-size: 16px; color: #333;'>Hello {System.Web.HttpUtility.HtmlEncode(displayName)},</p>";
     }
 
-    private string BuildOrderInfoSection(string streamTunesOrderId, string payPalOrderId)
+    private string BuildOrderInfoSection(string streamTunesOrderId, string payPalOrderId, string? timeZoneId)
     {
+        var purchaseDateDisplay = UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(DateTime.UtcNow, timeZoneId);
+
         return $@"
             <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
                 <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Order Information</h3>
@@ -156,7 +162,7 @@ public class PurchaseEmailService : IPurchaseEmailService
                     </tr>
                     <tr>
                         <td style='padding: 5px 0; color: #666;'>Purchase Date:</td>
-                        <td style='padding: 5px 0; color: #333;'>{DateTime.UtcNow:MMMM dd, yyyy 'at' h:mm tt} UTC</td>
+                        <td style='padding: 5px 0; color: #333;'>{purchaseDateDisplay}</td>
                     </tr>
                 </table>
             </div>
@@ -292,11 +298,15 @@ public class PurchaseEmailService : IPurchaseEmailService
         ";
     }
 
-    private string BuildSubscriptionDetailsSection(Subscription subscription, string externalSubscriptionId)
+    private string BuildSubscriptionDetailsSection(Subscription subscription, string externalSubscriptionId, string? timeZoneId)
     {
-        var nextBillingDate = subscription.NextBillingDate?.ToString("MMMM dd, yyyy") ?? "Pending";
+        var nextBillingDate = subscription.NextBillingDate.HasValue
+            ? UserTimeZoneDisplayHelper.FormatDate(subscription.NextBillingDate.Value, timeZoneId)
+            : "Pending";
         var referenceLabel = GetSubscriptionReferenceLabel(subscription.BillingSource);
         var amountLabel = GetSubscriptionAmountLabel(subscription.BillingSource);
+        var startDate = UserTimeZoneDisplayHelper.FormatDate(subscription.StartDate, timeZoneId);
+        var billingProvider = GetBillingProviderDisplayName(subscription.BillingSource);
 
         return $@"
             <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
@@ -307,12 +317,16 @@ public class PurchaseEmailService : IPurchaseEmailService
                         <td style='padding: 8px 0; color: #333; font-weight: bold;'>Monthly Streaming Subscription</td>
                     </tr>
                     <tr>
+                        <td style='padding: 8px 0; color: #666;'>Billing Provider:</td>
+                        <td style='padding: 8px 0; color: #333;'>{billingProvider}</td>
+                    </tr>
+                    <tr>
                         <td style='padding: 8px 0; color: #666;'>Monthly Price:</td>
                         <td style='padding: 8px 0; color: #333; font-weight: bold;'>${subscription.MonthlyPrice:F2}/month</td>
                     </tr>
                     <tr>
                         <td style='padding: 8px 0; color: #666;'>Start Date:</td>
-                        <td style='padding: 8px 0; color: #333;'>{subscription.StartDate:MMMM dd, yyyy}</td>
+                        <td style='padding: 8px 0; color: #333;'>{startDate}</td>
                     </tr>
                     <tr>
                         <td style='padding: 8px 0; color: #666;'>Next Billing Date:</td>
@@ -347,11 +361,13 @@ public class PurchaseEmailService : IPurchaseEmailService
             _ => "Amount Paid to PayPal"
         };
 
-    private string BuildSubscriptionTermsSection(Subscription subscription)
+    private string BuildSubscriptionTermsSection(Subscription subscription, string? timeZoneId)
     {
-        var endDateDisplay = subscription.EndDate?.ToString("MMMM dd, yyyy") ?? 
-            subscription.NextBillingDate?.ToString("MMMM dd, yyyy") ?? 
-            subscription.StartDate.AddMonths(1).ToString("MMMM dd, yyyy");
+        var endDateDisplay = subscription.EndDate.HasValue
+            ? UserTimeZoneDisplayHelper.FormatDate(subscription.EndDate.Value, timeZoneId)
+            : subscription.NextBillingDate.HasValue
+                ? UserTimeZoneDisplayHelper.FormatDate(subscription.NextBillingDate.Value, timeZoneId)
+                : UserTimeZoneDisplayHelper.FormatDate(subscription.StartDate.AddMonths(1), timeZoneId);
 
         return $@"
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
@@ -379,6 +395,14 @@ public class PurchaseEmailService : IPurchaseEmailService
             </div>
         ";
     }
+
+    private static string GetBillingProviderDisplayName(string billingSource)
+        => billingSource switch
+        {
+            BillingSources.GooglePlay => "Google Play",
+            BillingSources.Apple => "Apple App Store",
+            _ => "PayPal"
+        };
 
     private string BuildEmailFooter()
     {
@@ -409,7 +433,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         return Path.GetFileNameWithoutExtension(item.SongFileName);
     }
 
-    private string GetImageUrl(CartItemWithMetadata item, string baseUrl)
+    private string? GetImageUrl(CartItemWithMetadata item, string baseUrl)
     {
         if (string.IsNullOrEmpty(item.ImageBlobPath))
         {
@@ -440,7 +464,7 @@ public class PurchaseEmailService : IPurchaseEmailService
     /// <param name="height">The height of the image/placeholder in pixels.</param>
     /// <param name="altText">Alt text for the image.</param>
     /// <returns>HTML string for the image or placeholder.</returns>
-    private static string GetImageHtml(string imageUrl, int width, int height, string altText)
+    private static string GetImageHtml(string? imageUrl, int width, int height, string altText)
     {
         if (!string.IsNullOrEmpty(imageUrl))
         {
@@ -458,7 +482,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         </table>";
     }
 
-    private string GetAlbumCoverUrl(List<CartItemWithMetadata> tracks, string baseUrl)
+    private string? GetAlbumCoverUrl(List<CartItemWithMetadata> tracks, string baseUrl)
     {
         // Try to find an album cover from the tracks' metadata
         // Album covers have IsAlbumCover = true, but track metadata won't have that

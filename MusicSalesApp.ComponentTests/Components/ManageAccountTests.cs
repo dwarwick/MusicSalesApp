@@ -59,7 +59,8 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
@@ -101,11 +102,15 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
             .ReturnsAsync(testUser);
+
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
 
         var creator = new Creator
         {
@@ -143,11 +148,15 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
             .ReturnsAsync(testUser);
+
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
 
         var creator = new Creator
         {
@@ -187,11 +196,15 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
             .ReturnsAsync(testUser);
+
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
 
         // Act
         var cut = TestContext.Render<ManageAccount>();
@@ -213,11 +226,15 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
             .ReturnsAsync(testUser);
+
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
 
         var handler = new StubHttpMessageHandler();
         handler.SetupJsonResponse(
@@ -241,6 +258,7 @@ public class ManageAccountTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends:"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Status:</strong> Active"));
+        Assert.That(cut.Markup, Does.Contain("America/New_York"));
         Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends:"));
         Assert.That(cut.Markup, Does.Contain("will automatically renew unless canceled"));
         Assert.That(cut.Markup, Does.Contain("Manage Subscription"));
@@ -257,7 +275,8 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
@@ -308,7 +327,8 @@ public class ManageAccountTests : BUnitTestBase
             Id = 1,
             UserName = "testuser@test.com",
             Email = "testuser@test.com",
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
         };
 
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
@@ -336,6 +356,7 @@ public class ManageAccountTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Access Until:"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Status:</strong> Renews Off"));
+        Assert.That(cut.Markup, Does.Contain("America/New_York"));
         Assert.That(cut.Markup, Does.Contain("has been canceled"));
         Assert.That(cut.Markup, Does.Contain("will not automatically renew"));
         Assert.That(cut.Markup, Does.Not.Contain("Cancel Subscription"));

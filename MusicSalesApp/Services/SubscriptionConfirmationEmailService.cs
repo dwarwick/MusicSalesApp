@@ -60,6 +60,7 @@ public class SubscriptionConfirmationEmailService : ISubscriptionConfirmationEma
                 user.UserName ?? user.Email,
                 subscription,
                 externalSubscriptionId,
+                user.TimeZoneId,
                 baseUrl);
 
             if (sent)

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Tests.Services;
@@ -87,7 +88,7 @@ public class AccountEmailServiceTests
         var baseUrl = "https://streamtunes.net";
 
         // Act
-        var result = await _service.SendPasswordChangedEmailAsync(userEmail, userName, baseUrl);
+        var result = await _service.SendPasswordChangedEmailAsync(userEmail, userName, "America/New_York", baseUrl);
 
         // Assert
         Assert.That(result, Is.True);
@@ -100,6 +101,7 @@ public class AccountEmailServiceTests
                     body.Contains("Password Changed") &&
                     body.Contains("Test User") &&
                     body.Contains("successfully changed") &&
+                        body.Contains("America/New_York") &&
                     body.Contains("If you did not make this change"))),
             Times.Once);
     }
@@ -140,7 +142,7 @@ public class AccountEmailServiceTests
         var baseUrl = "https://streamtunes.net";
 
         // Act
-        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, baseUrl);
+        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, BillingSources.GooglePlay, "America/New_York", baseUrl);
 
         // Assert
         Assert.That(result, Is.True);
@@ -153,6 +155,8 @@ public class AccountEmailServiceTests
                     body.Contains("Subscription Cancelled") &&
                     body.Contains("Test User") &&
                     body.Contains("Subscription Terms") &&
+                    body.Contains("Google Play") &&
+                    body.Contains("America/New_York") &&
                     body.Contains("will not automatically renew") &&
                     body.Contains("Unlimited music streaming") &&
                     body.Contains("subscription will remain active") &&
@@ -170,7 +174,7 @@ public class AccountEmailServiceTests
         var baseUrl = "https://streamtunes.net";
 
         // Act
-        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, baseUrl);
+        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, null, null, baseUrl);
 
         // Assert
         Assert.That(result, Is.True);
@@ -230,7 +234,7 @@ public class AccountEmailServiceTests
         var baseUrl = "https://streamtunes.net";
 
         // Act
-        var result = await _service.SendPasswordChangedEmailAsync(userEmail, userName, baseUrl);
+        var result = await _service.SendPasswordChangedEmailAsync(userEmail, userName, null, baseUrl);
 
         // Assert
         Assert.That(result, Is.False);
@@ -267,7 +271,7 @@ public class AccountEmailServiceTests
         var baseUrl = "https://streamtunes.net";
 
         // Act
-        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, baseUrl);
+        var result = await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, null, null, baseUrl);
 
         // Assert
         Assert.That(result, Is.False);
@@ -372,7 +376,7 @@ public class AccountEmailServiceTests
         _mockEmailService.Invocations.Clear();
 
         // Act & Assert - Password Changed
-        await _service.SendPasswordChangedEmailAsync(userEmail, userName, baseUrl);
+        await _service.SendPasswordChangedEmailAsync(userEmail, userName, null, baseUrl);
         _mockEmailService.Verify(
             x => x.SendEmailAsync(
                 It.IsAny<string>(),
@@ -396,7 +400,7 @@ public class AccountEmailServiceTests
         _mockEmailService.Invocations.Clear();
 
         // Act & Assert - Subscription Cancelled
-        await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, baseUrl);
+        await _service.SendSubscriptionCancelledEmailAsync(userEmail, userName, endDate, BillingSources.PayPal, null, baseUrl);
         _mockEmailService.Verify(
             x => x.SendEmailAsync(
                 It.IsAny<string>(),

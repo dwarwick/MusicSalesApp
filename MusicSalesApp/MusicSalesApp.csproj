@@ -8,6 +8,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Suppress OPENAI001: OpenAI Responses API is experimental but stable enough for production use -->

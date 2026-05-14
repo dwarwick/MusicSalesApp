@@ -1,4 +1,9 @@
 {
+    "dotnet.defaultSolution": "MusicSalesApp.slnx",
+    "dotnetAcquisitionExtension.cacheTimeToLiveMultiplier": 0,
+    "dotnetAcquisitionExtension.existingDotnetPath": "/usr/local/share/dotnet/dotnet",
+    "dotnetAcquisitionExtension.sharedExistingDotnetPath": "/usr/local/share/dotnet/dotnet",
+    "omnisharp.dotnetPath": "/usr/local/share/dotnet",
     "chat.tools.terminal.autoApprove": {
         "/^git stash push -m \"preserve plan file\" -- \\.github/prompts/plan-staticSsrSitemapPages\\.prompt\\.md$/": {
             "approve": true,

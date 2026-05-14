@@ -1,9 +1,11 @@
+#nullable enable
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Controllers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -29,7 +31,7 @@ public class AppleAppStoreNotificationsControllerTests
         _mockLogger = new Mock<ILogger<AppleAppStoreNotificationsController>>();
         var userStore = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
-            userStore.Object, null, null, null, null, null, null, null, null);
+            userStore.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
         _mockConfiguration.Setup(c => c["AppleAppStore:SubscriptionProductId"]).Returns("streamtunes_monthly_sub_ios");
         _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
@@ -69,6 +71,8 @@ public class AppleAppStoreNotificationsControllerTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<DateTime?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
                 It.IsAny<string>()),
             Times.Never);
     }
@@ -104,13 +108,15 @@ public class AppleAppStoreNotificationsControllerTests
         {
             Id = 7,
             UserId = 42,
+            BillingSource = BillingSources.Apple,
             EndDate = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)
         };
         var user = new ApplicationUser
         {
             Id = 42,
             UserName = "appleuser",
-            Email = "apple@example.com"
+            Email = "apple@example.com",
+            TimeZoneId = "America/Los_Angeles"
         };
 
         _mockSubscriptionService.Setup(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
@@ -144,6 +150,8 @@ public class AppleAppStoreNotificationsControllerTests
                 "apple@example.com",
                 "appleuser",
                 subscription.EndDate,
+                BillingSources.Apple,
+                "America/Los_Angeles",
                 "https://davidtest.dev"),
             Times.Once);
     }

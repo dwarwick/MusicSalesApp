@@ -1,3 +1,4 @@
+#nullable enable
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -25,6 +26,7 @@ public interface IPurchaseEmailService
         string payPalOrderId,
         IEnumerable<CartItemWithMetadata> purchasedItems,
         decimal totalAmount,
+        string? timeZoneId,
         string baseUrl);
 
     /// <summary>
@@ -41,6 +43,7 @@ public interface IPurchaseEmailService
         string userName,
         Subscription subscription,
         string externalSubscriptionId,
+        string? timeZoneId,
         string baseUrl);
 }
 
@@ -52,7 +55,7 @@ public class CartItemWithMetadata
     /// <summary>
     /// The song file name.
     /// </summary>
-    public string SongFileName { get; set; }
+    public string SongFileName { get; set; } = string.Empty;
 
     /// <summary>
     /// The price of the item.
@@ -67,12 +70,12 @@ public class CartItemWithMetadata
     /// <summary>
     /// The song metadata (may be null if not found).
     /// </summary>
-    public SongMetadata SongMetadata { get; set; }
+    public SongMetadata? SongMetadata { get; set; }
 
     /// <summary>
     /// The album name (if part of an album).
     /// </summary>
-    public string AlbumName => SongMetadata?.AlbumName;
+    public string? AlbumName => SongMetadata?.AlbumName;
 
     /// <summary>
     /// Whether this is an album purchase vs individual song.
@@ -82,5 +85,5 @@ public class CartItemWithMetadata
     /// <summary>
     /// The image blob path for this song.
     /// </summary>
-    public string ImageBlobPath => SongMetadata?.ImageBlobPath;
+    public string? ImageBlobPath => SongMetadata?.ImageBlobPath;
 }

@@ -1,3 +1,4 @@
+#nullable enable
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -67,7 +68,7 @@ public class PayPalWebhookControllerTests
 
         var userStore = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
-            userStore.Object, null, null, null, null, null, null, null, null);
+            userStore.Object, null!, null!, null!, null!, null!, null!, null!, null!);
 
         // Set up environment as Development so placeholder WebhookId is accepted
         _mockEnvironment = new Mock<IWebHostEnvironment>();
@@ -182,6 +183,8 @@ public class PayPalWebhookControllerTests
             "paypal@example.com",
             "paypaluser",
             subscription.EndDate,
+            BillingSources.PayPal,
+            null,
             "https://davidtest.dev"), Times.Once);
     }
 
@@ -211,6 +214,8 @@ public class PayPalWebhookControllerTests
             It.IsAny<string>(),
             It.IsAny<string>(),
             It.IsAny<DateTime?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
             It.IsAny<string>()), Times.Never);
     }
 

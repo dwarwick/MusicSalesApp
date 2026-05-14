@@ -95,6 +95,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            "America/New_York",
             baseUrl);
 
         // Assert
@@ -106,6 +107,7 @@ public class PurchaseEmailServiceTests
                 It.Is<string>(body =>
                     body.Contains(streamTunesOrderId) &&
                     body.Contains(payPalOrderId) &&
+                        body.Contains("America/New_York") &&
                     body.Contains("$2.97") &&
                     body.Contains("Individual Songs"))),
             Times.Once);
@@ -173,6 +175,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            null,
             baseUrl);
 
         // Assert
@@ -262,6 +265,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            null,
             baseUrl);
 
         // Assert
@@ -304,6 +308,7 @@ public class PurchaseEmailServiceTests
             userName,
             subscription,
             payPalSubscriptionId,
+            "America/New_York",
             baseUrl);
 
         // Assert
@@ -316,6 +321,7 @@ public class PurchaseEmailServiceTests
                     body.Contains(payPalSubscriptionId) &&
                     body.Contains("$3.99") &&
                     body.Contains("Monthly Streaming Subscription") &&
+                    body.Contains("PayPal") &&
                     body.Contains("Your Subscription Benefits") &&
                     body.Contains("Unlimited music streaming") &&
                     body.Contains("PayPal Subscription ID") &&
@@ -343,6 +349,7 @@ public class PurchaseEmailServiceTests
             "Test User",
             subscription,
             "apple-orig-123",
+            "America/Los_Angeles",
             "https://streamtunes.net");
 
         Assert.That(result, Is.True);
@@ -353,6 +360,7 @@ public class PurchaseEmailServiceTests
                 It.Is<string>(body =>
                     body.Contains("App Store Original Transaction ID") &&
                     body.Contains("apple-orig-123") &&
+                        body.Contains("Apple App Store") &&
                     body.Contains("Amount Charged by Apple"))),
             Times.Once);
     }
@@ -386,6 +394,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            null,
             baseUrl);
 
         // Assert
@@ -430,6 +439,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            null,
             baseUrl);
 
         // Assert
@@ -465,6 +475,7 @@ public class PurchaseEmailServiceTests
             userName,
             subscription,
             payPalSubscriptionId,
+            null,
             baseUrl);
 
         // Assert
@@ -500,6 +511,7 @@ public class PurchaseEmailServiceTests
             payPalOrderId,
             purchasedItems,
             totalAmount,
+            null,
             baseUrl);
 
         // Assert
@@ -539,6 +551,7 @@ public class PurchaseEmailServiceTests
             userName,
             subscription,
             payPalSubscriptionId,
+            null,
             baseUrl);
 
         // Assert

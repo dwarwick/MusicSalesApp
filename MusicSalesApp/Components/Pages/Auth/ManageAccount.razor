@@ -155,20 +155,21 @@
                 @if (_hasSubscription)
                 {
                     <div class="subscription-details">
+                        <p><small>All subscription dates and times shown in @SubscriptionTimeZoneLabel.</small></p>
                         <p><strong>Status:</strong> @DisplaySubscriptionStatus</p>
                         <p><strong>Monthly Price:</strong> $@_monthlyPrice</p>
                         <p><strong>Billed via:</strong> @(_billingSource ?? "PayPal")</p>
                         @if (_startDate.HasValue)
                         {
-                            <p><strong>Started:</strong> @_startDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                            <p><strong>Started:</strong> @FormatUserDate(_startDate)</p>
                         }
                         @if (_nextBillingDate.HasValue)
                         {
-                            <p><strong>Next Billing Date:</strong> @_nextBillingDate.Value.ToLocalTime().ToString("MMMM dd, yyyy")</p>
+                            <p><strong>Next Billing Date:</strong> @FormatUserDate(_nextBillingDate)</p>
                         }
                         @if (_endDate.HasValue)
                         {
-                            <p><strong>@SubscriptionEndDateLabel:</strong> @_endDate.Value.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")</p>
+                            <p><strong>@SubscriptionEndDateLabel:</strong> @FormatUserDateTimeWithTimeZone(_endDate)</p>
                         }
                         <p class="subscription-note">@ActiveSubscriptionMessage</p>
                         
@@ -189,7 +190,7 @@
                         @if (HasCancelledSubscriptionAccess)
                         {
                             <h3>Start a new subscription at any time.</h3>
-                            <p>Your current subscription remains available until @_endDate?.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt"). If you subscribe again now, your new subscription will take over immediately.</p>
+                            <p>Your current subscription remains available until @FormatUserDateTimeWithTimeZone(_endDate). If you subscribe again now, your new subscription will take over immediately.</p>
                         }
                         else if (_subscriptionStatus == SubscriptionStatuses.Expired)
                         {

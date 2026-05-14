@@ -133,6 +133,8 @@ public class AppleAppStoreNotificationsController : ControllerBase
             user.Email,
             user.UserName ?? user.Email,
             subscription.EndDate,
+            subscription.BillingSource,
+            user.TimeZoneId,
             GetBaseUrl());
     }
 

@@ -151,6 +151,8 @@ public class GooglePlayWebhookController : ControllerBase
             user.Email,
             user.UserName ?? user.Email,
             subscription.EndDate,
+            subscription.BillingSource,
+            user.TimeZoneId,
             GetBaseUrl());
     }
 

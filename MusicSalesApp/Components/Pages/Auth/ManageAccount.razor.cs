@@ -4,6 +4,7 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Data;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Notifications;
@@ -51,6 +52,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string _paypalSubscriptionId;
     protected string _billingSource;
     protected string _subscriptionPrice = "3.99";
+    protected string _userTimeZoneId = UserTimeZoneDisplayHelper.UtcTimeZoneId;
     protected bool _agreeToTerms = false;
     protected bool _subscribing = false;
     protected bool _cancelling = false;
@@ -156,8 +158,11 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                     if (_currentUser != null)
                     {
                         _userEmail = _currentUser.Email ?? string.Empty;
+                        _userTimeZoneId = UserTimeZoneDisplayHelper.GetTimeZoneId(_currentUser);
                         // Load email preferences
                         _receiveNewSongEmails = _currentUser.ReceiveNewSongEmails;
+
+                        await DetectAndPersistUserTimeZoneAsync();
                         
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
@@ -306,6 +311,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                         await AccountEmailService.SendPasswordChangedEmailAsync(
                             userEmail,
                             userName,
+                            _userTimeZoneId,
                             baseUrl);
                     }
                     catch (Exception ex)
@@ -519,10 +525,11 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             ? "Access Until"
             : "Current Billing Period Ends"
         : "Ended On";
+    protected string SubscriptionTimeZoneLabel => UserTimeZoneDisplayHelper.GetTimeZoneDisplayLabel(_userTimeZoneId, _endDate ?? _nextBillingDate ?? _startDate);
     protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
-        ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {_endDate?.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+        ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {FormatUserDateTimeWithTimeZone(_endDate)}."
         : _endDate.HasValue
-            ? $"Your subscription is active and will automatically renew unless canceled. Your current billing period ends on {_endDate.Value.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+            ? $"Your subscription is active and will automatically renew unless canceled. Your current billing period ends on {FormatUserDateTimeWithTimeZone(_endDate)}."
             : "You have an active subscription that will automatically renew unless canceled.";
     protected string SubscriptionManagementPrompt => string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal)
         ? IsAppleSandboxManagementUrl()
@@ -782,7 +789,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 if (result?.Success == true)
                 {
                     await LoadSubscriptionStatus();
-                    _successMessage = $"Your subscription has been cancelled. You can continue to listen to unlimited music until {_endDate?.ToLocalTime().ToString("MMMM dd, yyyy h:mm tt")}.";
+                    _successMessage = $"Your subscription has been cancelled. You can continue to listen to unlimited music until {FormatUserDateTimeWithTimeZone(_endDate)}.";
                 }
                 else
                 {
@@ -814,6 +821,38 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
     protected bool IsAppleSandboxManagementUrl()
         => GetExternalSubscriptionManagementUrl().Contains("developer.apple.com", StringComparison.OrdinalIgnoreCase);
+
+    protected string FormatUserDate(DateTime? value)
+        => value.HasValue ? UserTimeZoneDisplayHelper.FormatDate(value.Value, _userTimeZoneId) : string.Empty;
+
+    protected string FormatUserDateTimeWithTimeZone(DateTime? value)
+        => value.HasValue ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(value.Value, _userTimeZoneId) : string.Empty;
+
+    private async Task DetectAndPersistUserTimeZoneAsync()
+    {
+        try
+        {
+            var ianaTimeZone = await JS.InvokeAsync<string>("dashboardHelper.getUserTimeZone");
+
+            if (string.IsNullOrWhiteSpace(ianaTimeZone))
+            {
+                return;
+            }
+
+            UserTimeZoneDisplayHelper.ResolveTimeZone(ianaTimeZone);
+            _userTimeZoneId = ianaTimeZone;
+
+            if (_currentUser != null && !string.Equals(_currentUser.TimeZoneId, ianaTimeZone, StringComparison.Ordinal))
+            {
+                _currentUser.TimeZoneId = ianaTimeZone;
+                await UserManager.UpdateAsync(_currentUser);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to detect user timezone for manage account; using stored or UTC fallback");
+        }
+    }
 
     protected async Task LoadCreatorStatus()
     {

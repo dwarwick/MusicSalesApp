@@ -26,4 +26,8 @@ public class ApplicationUser : IdentityUser<int>
 
     // Email preferences - user opt-in to receive new song notification emails
     public bool ReceiveNewSongEmails { get; set; } = false;
+
+    // Last known browser timezone from the user, stored as an IANA timezone ID.
+    [MaxLength(100)]
+    public string TimeZoneId { get; set; }
 }

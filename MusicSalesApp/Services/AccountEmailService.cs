@@ -1,4 +1,7 @@
+#nullable enable
 using System.Text;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Helpers;
 
 namespace MusicSalesApp.Services;
 
@@ -82,18 +85,19 @@ public class AccountEmailService : IAccountEmailService
     }
 
     /// <inheritdoc />
-    public async Task<bool> SendPasswordChangedEmailAsync(string userEmail, string userName, string baseUrl)
+    public async Task<bool> SendPasswordChangedEmailAsync(string userEmail, string userName, string? timeZoneId, string baseUrl)
     {
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
+            var changedAtDisplay = UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(DateTime.UtcNow, timeZoneId);
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Password Changed"));
             body.Append(BuildGreeting(userName));
             body.Append($@"
                 <p style='font-size: 16px; color: #333;'>Your StreamTunes account password has been successfully changed.</p>
-                <p style='font-size: 16px; color: #333;'>This change was made on {DateTime.UtcNow:MMMM dd, yyyy 'at' h:mm tt} UTC.</p>
+                <p style='font-size: 16px; color: #333;'>This change was made on {changedAtDisplay}.</p>
                 <p style='font-size: 16px; color: #333;'><strong>If you did not make this change</strong>, please take the following steps immediately:</p>
                 <ol style='font-size: 16px; color: #333;'>
                     <li>Reset your password using the 'Forgot Password' link on the login page</li>
@@ -148,12 +152,15 @@ public class AccountEmailService : IAccountEmailService
     }
 
     /// <inheritdoc />
-    public async Task<bool> SendSubscriptionCancelledEmailAsync(string userEmail, string userName, DateTime? endDate, string baseUrl)
+    public async Task<bool> SendSubscriptionCancelledEmailAsync(string userEmail, string userName, DateTime? endDate, string? billingSource, string? timeZoneId, string baseUrl)
     {
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
-            var endDateDisplay = endDate?.ToString("MMMM dd, yyyy 'at' h:mm tt") ?? "the end of your billing period";
+            var endDateDisplay = endDate.HasValue
+                ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(endDate.Value, timeZoneId)
+                : "the end of your billing period";
+            var billingProviderDisplay = GetBillingProviderDisplayName(billingSource);
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Subscription Cancelled"));
@@ -162,6 +169,7 @@ public class AccountEmailService : IAccountEmailService
                 <p style='font-size: 16px; color: #333;'>Your StreamTunes subscription has been cancelled as requested.</p>
                 <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
                     <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Important Information</h3>
+                    <p style='font-size: 16px; color: #333; margin: 0 0 8px 0;'>Billing provider: <strong>{billingProviderDisplay}</strong></p>
                     <p style='font-size: 16px; color: #333; margin: 0;'>Your subscription will remain active until: <strong>{endDateDisplay}</strong></p>
                 </div>
                 <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
@@ -254,4 +262,12 @@ public class AccountEmailService : IAccountEmailService
         </div>
         ";
     }
+
+    private static string GetBillingProviderDisplayName(string? billingSource)
+        => billingSource switch
+        {
+            BillingSources.GooglePlay => "Google Play",
+            BillingSources.Apple => "Apple App Store",
+            _ => "PayPal"
+        };
 }
