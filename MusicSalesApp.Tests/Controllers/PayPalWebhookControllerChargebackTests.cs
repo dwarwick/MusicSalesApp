@@ -28,6 +28,7 @@ public class PayPalWebhookControllerChargebackTests
     private Mock<IDbContextFactory<AppDbContext>> _mockDbContextFactory;
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IAdminNotificationService> _mockAdminNotificationService;
+    private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IEmailService> _mockEmailService;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<IHttpClientFactory> _mockHttpClientFactory;
@@ -50,6 +51,7 @@ public class PayPalWebhookControllerChargebackTests
 
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockAdminNotificationService = new Mock<IAdminNotificationService>();
+        _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockAdminNotificationService.Setup(x => x.IsNotificationEnabledAsync(It.IsAny<string>()))
             .ReturnsAsync(true);
 
@@ -81,6 +83,7 @@ public class PayPalWebhookControllerChargebackTests
             _mockDbContextFactory.Object,
             _mockSubscriptionService.Object,
             _mockAdminNotificationService.Object,
+            _mockAccountEmailService.Object,
             _mockEmailService.Object,
             _mockConfiguration.Object,
             _mockHttpClientFactory.Object,

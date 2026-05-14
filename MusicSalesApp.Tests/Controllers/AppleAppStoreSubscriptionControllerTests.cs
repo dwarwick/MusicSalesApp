@@ -101,8 +101,66 @@ public class AppleAppStoreSubscriptionControllerTests
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
         _mockSubscriptionService.Verify(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 3.99m), Times.Once);
-        _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync("orig-123", "ACTIVE", It.IsAny<DateTime?>(), "tx-123", "Sandbox"), Times.Once);
+        _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync(
+            "orig-123",
+            "ACTIVE",
+            It.IsAny<DateTime?>(),
+            "tx-123",
+            "Sandbox",
+            "streamtunes_monthly_sub_ios",
+            "account-token",
+            3.99m), Times.Once);
         _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), It.IsAny<Subscription>(), "https://davidtest.dev"), Times.Once);
+    }
+
+    [Test]
+    public async Task VerifyAndRecordPurchase_ResendsConfirmationEmail_WhenSubscriptionAlreadyExists()
+    {
+        var existingSubscription = new Subscription
+        {
+            Id = 17,
+            UserId = 1,
+            BillingSource = "Apple",
+            Status = "CANCELLED",
+            AppStoreOriginalTransactionId = "orig-123"
+        };
+
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"))
+            .ReturnsAsync(new AppleAppStoreSubscriptionInfo(
+                "ACTIVE",
+                DateTime.UtcNow.AddDays(30),
+                "tx-123",
+                "orig-123",
+                "streamtunes_monthly_sub_ios",
+                "Sandbox",
+                "account-token"));
+        _mockSubscriptionService
+            .SetupSequence(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
+            .ReturnsAsync(existingSubscription)
+            .ReturnsAsync(existingSubscription);
+
+        var result = await _controller.VerifyAndRecordPurchase(new AppStorePurchaseRequest("tx-123", "account-token"));
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync(
+            "orig-123",
+            "ACTIVE",
+            It.IsAny<DateTime?>(),
+            "tx-123",
+            "Sandbox",
+            "streamtunes_monthly_sub_ios",
+            "account-token",
+            3.99m), Times.Once);
+        _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), existingSubscription, "https://davidtest.dev"), Times.Once);
+        _mockSubscriptionService.Verify(s => s.CreateAppleSubscriptionAsync(
+            It.IsAny<int>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<decimal>()), Times.Never);
     }
 
     [Test]

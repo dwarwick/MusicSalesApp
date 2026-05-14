@@ -164,6 +164,14 @@ public class AccountEmailService : IAccountEmailService
                     <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Important Information</h3>
                     <p style='font-size: 16px; color: #333; margin: 0;'>Your subscription will remain active until: <strong>{endDateDisplay}</strong></p>
                 </div>
+                <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
+                    <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Subscription Terms</h3>
+                    <ul style='margin: 0; padding-left: 20px; color: #555;'>
+                        <li style='margin-bottom: 8px;'>Your subscription has been turned off and will not automatically renew.</li>
+                        <li style='margin-bottom: 8px;'>You will continue receiving subscription benefits until <strong>{endDateDisplay}</strong>.</li>
+                        <li style='margin-bottom: 8px;'>You can subscribe again at any time from your account settings.</li>
+                    </ul>
+                </div>
                 <p style='font-size: 16px; color: #333;'>Until then, you can continue to enjoy:</p>
                 <ul style='font-size: 16px; color: #333;'>
                     <li>Unlimited music streaming</li>

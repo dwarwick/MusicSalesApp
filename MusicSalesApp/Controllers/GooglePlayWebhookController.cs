@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Controllers;
@@ -15,17 +17,23 @@ public class GooglePlayWebhookController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
     private readonly IGooglePlayVerificationService _verificationService;
+    private readonly IAccountEmailService _accountEmailService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GooglePlayWebhookController> _logger;
 
     public GooglePlayWebhookController(
         ISubscriptionService subscriptionService,
         IGooglePlayVerificationService verificationService,
+        IAccountEmailService accountEmailService,
+        UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<GooglePlayWebhookController> logger)
     {
         _subscriptionService = subscriptionService;
         _verificationService = verificationService;
+        _accountEmailService = accountEmailService;
+        _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
     }
@@ -118,5 +126,42 @@ public class GooglePlayWebhookController : ControllerBase
         DateTime? expiryTime = info?.ExpiryTime?.UtcDateTime;
 
         await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(purchaseToken, status, expiryTime);
+
+        if (status == SubscriptionStatuses.Cancelled)
+        {
+            await SendCancellationEmailAsync(purchaseToken);
+        }
+    }
+
+    private async Task SendCancellationEmailAsync(string purchaseToken)
+    {
+        var subscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(purchaseToken);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+            user.Email,
+            user.UserName ?? user.Email,
+            subscription.EndDate,
+            GetBaseUrl());
+    }
+
+    private string GetBaseUrl()
+    {
+        var baseUrl = _configuration["BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return baseUrl;
+        }
+
+        return $"{Request.Scheme}://{Request.Host}";
     }
 }

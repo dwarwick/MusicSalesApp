@@ -242,6 +242,7 @@ public class ManageAccountTests : BUnitTestBase
 
         Assert.That(cut.Markup, Does.Contain("Status:</strong> Active"));
         Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends:"));
+        Assert.That(cut.Markup, Does.Contain("will automatically renew unless canceled"));
         Assert.That(cut.Markup, Does.Contain("Manage Subscription"));
         Assert.That(cut.Markup, Does.Not.Contain("Start a new subscription at any time."));
     }

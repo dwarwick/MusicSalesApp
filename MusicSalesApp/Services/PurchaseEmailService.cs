@@ -105,6 +105,8 @@ public class PurchaseEmailService : IPurchaseEmailService
             // Subscription details section
             body.Append(BuildSubscriptionDetailsSection(subscription, externalSubscriptionId));
 
+            body.Append(BuildSubscriptionBenefitsSection());
+
             // Terms and cancellation info
             body.Append(BuildSubscriptionTermsSection(subscription));
 
@@ -359,6 +361,20 @@ public class PurchaseEmailService : IPurchaseEmailService
                     <li style='margin-bottom: 8px;'><strong>You have the right to cancel at any time.</strong></li>
                     <li style='margin-bottom: 8px;'>If you cancel, your subscription will remain active until your subscription end date: <strong>{endDateDisplay}</strong></li>
                     <li style='margin-bottom: 8px;'>You can manage your subscription in your account settings.</li>
+                </ul>
+            </div>
+        ";
+    }
+
+    private string BuildSubscriptionBenefitsSection()
+    {
+        return @"
+            <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
+                <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Your Subscription Benefits</h3>
+                <ul style='margin: 0; padding-left: 20px; color: #555;'>
+                    <li style='margin-bottom: 8px;'>Unlimited music streaming across the StreamTunes catalog.</li>
+                    <li style='margin-bottom: 8px;'>Full access to your playlists and premium listening features.</li>
+                    <li style='margin-bottom: 8px;'>The ability to keep listening until the end of any paid billing period if you cancel.</li>
                 </ul>
             </div>
         ";

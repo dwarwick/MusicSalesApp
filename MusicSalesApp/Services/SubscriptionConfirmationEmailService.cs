@@ -23,6 +23,12 @@ public class SubscriptionConfirmationEmailService : ISubscriptionConfirmationEma
 
     public async Task<bool> SendConfirmationAsync(ApplicationUser user, Subscription subscription, string baseUrl)
     {
+        if (subscription == null)
+        {
+            _logger.LogWarning("Skipping subscription confirmation email because subscription details are unavailable.");
+            return false;
+        }
+
         if (user == null || string.IsNullOrWhiteSpace(user.Email))
         {
             _logger.LogWarning("Skipping subscription confirmation email because user email is unavailable.");
@@ -40,12 +46,42 @@ public class SubscriptionConfirmationEmailService : ISubscriptionConfirmationEma
 
         try
         {
-            return await _purchaseEmailService.SendSubscriptionConfirmationAsync(
+            _logger.LogInformation(
+                "Attempting subscription confirmation email for user {UserId}. BillingSource={BillingSource}, SubscriptionId={SubscriptionId}, ExternalReference={ExternalReference}, MonthlyPrice={MonthlyPrice}, BaseUrl={BaseUrl}",
+                user.Id,
+                subscription.BillingSource,
+                subscription.Id,
+                externalSubscriptionId,
+                subscription.MonthlyPrice,
+                baseUrl);
+
+            var sent = await _purchaseEmailService.SendSubscriptionConfirmationAsync(
                 user.Email,
                 user.UserName ?? user.Email,
                 subscription,
                 externalSubscriptionId,
                 baseUrl);
+
+            if (sent)
+            {
+                _logger.LogInformation(
+                    "Subscription confirmation email sent for user {UserId}. BillingSource={BillingSource}, SubscriptionId={SubscriptionId}, ExternalReference={ExternalReference}",
+                    user.Id,
+                    subscription.BillingSource,
+                    subscription.Id,
+                    externalSubscriptionId);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Subscription confirmation email service returned false for user {UserId}. BillingSource={BillingSource}, SubscriptionId={SubscriptionId}, ExternalReference={ExternalReference}",
+                    user.Id,
+                    subscription.BillingSource,
+                    subscription.Id,
+                    externalSubscriptionId);
+            }
+
+            return sent;
         }
         catch (Exception ex)
         {

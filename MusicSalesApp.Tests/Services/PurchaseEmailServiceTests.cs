@@ -316,6 +316,8 @@ public class PurchaseEmailServiceTests
                     body.Contains(payPalSubscriptionId) &&
                     body.Contains("$3.99") &&
                     body.Contains("Monthly Streaming Subscription") &&
+                    body.Contains("Your Subscription Benefits") &&
+                    body.Contains("Unlimited music streaming") &&
                     body.Contains("PayPal Subscription ID") &&
                     body.Contains("right to cancel at any time"))),
             Times.Once);
@@ -545,6 +547,8 @@ public class PurchaseEmailServiceTests
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.Is<string>(body =>
+                    body.Contains("Your Subscription Benefits") &&
+                    body.Contains("Full access to your playlists") &&
                     body.Contains("right to cancel at any time") &&
                     body.Contains("subscription will remain active until your subscription end date"))),
             Times.Once);

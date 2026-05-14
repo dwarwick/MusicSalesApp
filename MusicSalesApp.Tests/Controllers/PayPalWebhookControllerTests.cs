@@ -22,6 +22,7 @@ public class PayPalWebhookControllerTests
     private Mock<IDbContextFactory<AppDbContext>> _mockDbContextFactory;
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IAdminNotificationService> _mockAdminNotificationService;
+    private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IEmailService> _mockEmailService;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<IHttpClientFactory> _mockHttpClientFactory;
@@ -44,6 +45,7 @@ public class PayPalWebhookControllerTests
 
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockAdminNotificationService = new Mock<IAdminNotificationService>();
+        _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockAdminNotificationService.Setup(x => x.IsNotificationEnabledAsync(It.IsAny<string>()))
             .ReturnsAsync(true);
 
@@ -59,6 +61,7 @@ public class PayPalWebhookControllerTests
         _mockConfiguration.Setup(c => c["PayPal:ClientId"]).Returns("test-client-id");
         _mockConfiguration.Setup(c => c["PayPal:Secret"]).Returns("test-secret");
         _mockConfiguration.Setup(c => c["PayPal:ApiBaseUrl"]).Returns("https://api-m.sandbox.paypal.com/");
+        _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
 
         _mockHttpClientFactory = new Mock<IHttpClientFactory>();
 
@@ -76,6 +79,7 @@ public class PayPalWebhookControllerTests
             _mockDbContextFactory.Object,
             _mockSubscriptionService.Object,
             _mockAdminNotificationService.Object,
+            _mockAccountEmailService.Object,
             _mockEmailService.Object,
             _mockConfiguration.Object,
             _mockHttpClientFactory.Object,
@@ -138,6 +142,24 @@ public class PayPalWebhookControllerTests
     [Test]
     public async Task HandleWebhook_BillingSubscriptionCancelled_UpdatesSubscriptionStatus()
     {
+        var subscription = new Subscription
+        {
+            Id = 15,
+            UserId = 7,
+            EndDate = new DateTime(2026, 5, 20, 12, 34, 56, DateTimeKind.Utc)
+        };
+        var user = new ApplicationUser
+        {
+            Id = 7,
+            UserName = "paypaluser",
+            Email = "paypal@example.com"
+        };
+
+        _mockSubscriptionService.Setup(s => s.GetSubscriptionByPayPalIdAsync("I-SUB123"))
+            .ReturnsAsync(subscription);
+        _mockUserManager.Setup(m => m.FindByIdAsync("7"))
+            .ReturnsAsync(user);
+
         var body = @"{
             ""event_type"": ""BILLING.SUBSCRIPTION.CANCELLED"",
             ""resource"": {
@@ -156,6 +178,11 @@ public class PayPalWebhookControllerTests
             "I-SUB123",
             SubscriptionStatuses.Cancelled,
             It.Is<DateTime?>(value => value == new DateTime(2026, 5, 20, 12, 34, 56, DateTimeKind.Utc))), Times.Once);
+        _mockAccountEmailService.Verify(service => service.SendSubscriptionCancelledEmailAsync(
+            "paypal@example.com",
+            "paypaluser",
+            subscription.EndDate,
+            "https://davidtest.dev"), Times.Once);
     }
 
     [Test]
@@ -180,6 +207,11 @@ public class PayPalWebhookControllerTests
             "I-SUB123",
             SubscriptionStatuses.Active,
             It.Is<DateTime?>(value => value == new DateTime(2026, 5, 20, 12, 34, 56, DateTimeKind.Utc))), Times.Once);
+        _mockAccountEmailService.Verify(service => service.SendSubscriptionCancelledEmailAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<string>()), Times.Never);
     }
 
     [Test]

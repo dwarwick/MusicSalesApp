@@ -27,6 +27,7 @@ public class PayPalWebhookController : ControllerBase
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ISubscriptionService _subscriptionService;
     private readonly IAdminNotificationService _adminNotificationService;
+    private readonly IAccountEmailService _accountEmailService;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -38,6 +39,7 @@ public class PayPalWebhookController : ControllerBase
         IDbContextFactory<AppDbContext> contextFactory,
         ISubscriptionService subscriptionService,
         IAdminNotificationService adminNotificationService,
+        IAccountEmailService accountEmailService,
         IEmailService emailService,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
@@ -48,6 +50,7 @@ public class PayPalWebhookController : ControllerBase
         _contextFactory = contextFactory;
         _subscriptionService = subscriptionService;
         _adminNotificationService = adminNotificationService;
+        _accountEmailService = accountEmailService;
         _emailService = emailService;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
@@ -164,6 +167,11 @@ public class PayPalWebhookController : ControllerBase
         var nextBillingDate = TryGetNextBillingDate(resource);
         await _subscriptionService.UpdateSubscriptionStatusAsync(paypalSubscriptionId, status, nextBillingDate);
 
+        if (status == SubscriptionStatuses.Cancelled)
+        {
+            await SendCancellationEmailAsync(paypalSubscriptionId);
+        }
+
         _logger.LogInformation(
             "Processed PayPal subscription webhook {EventType} for subscription {SubscriptionId} with status {Status}",
             eventType,
@@ -223,6 +231,38 @@ public class PayPalWebhookController : ControllerBase
             out var parsed)
             ? parsed
             : null;
+    }
+
+    private async Task SendCancellationEmailAsync(string paypalSubscriptionId)
+    {
+        var subscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+            user.Email,
+            user.UserName ?? user.Email,
+            subscription.EndDate,
+            GetBaseUrl());
+    }
+
+    private string GetBaseUrl()
+    {
+        var baseUrl = _configuration["BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return baseUrl;
+        }
+
+        return $"{Request.Scheme}://{Request.Host}";
     }
 
     private async Task HandleDisputeCreatedAsync(JsonElement root)

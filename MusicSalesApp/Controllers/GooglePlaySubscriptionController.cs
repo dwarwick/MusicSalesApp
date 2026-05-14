@@ -81,7 +81,22 @@ public class GooglePlaySubscriptionController : ControllerBase
         var existing = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
         if (existing != null)
         {
-            // Already recorded — just return success
+            _logger.LogInformation(
+                "Google Play verification matched existing subscription {SubscriptionId} for user {UserId}; refreshing status and resending confirmation email.",
+                existing.Id,
+                user.Id);
+
+            await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
+                request.PurchaseToken,
+                SubscriptionStatuses.Active,
+                subscriptionInfo.ExpiryTime?.UtcDateTime);
+
+            var updatedSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
+            if (updatedSubscription != null)
+            {
+                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
+            }
+
             return Ok(new { success = true, subscriptionId = existing.Id, status = existing.Status });
         }
 

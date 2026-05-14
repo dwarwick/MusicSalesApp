@@ -522,8 +522,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
         ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {_endDate?.ToLocalTime():MMMM dd, yyyy h:mm tt}."
         : _endDate.HasValue
-            ? $"Your subscription is active. Your current billing period ends on {_endDate.Value.ToLocalTime():MMMM dd, yyyy h:mm tt}."
-            : "You have unlimited access to all music on our platform.";
+            ? $"Your subscription is active and will automatically renew unless canceled. Your current billing period ends on {_endDate.Value.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+            : "You have an active subscription that will automatically renew unless canceled.";
     protected string SubscriptionManagementPrompt => string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal)
         ? IsAppleSandboxManagementUrl()
             ? "Sandbox Apple subscriptions are managed on the test device in Settings > Developer > Sandbox Account > Manage. Open Apple's sandbox instructions now?"

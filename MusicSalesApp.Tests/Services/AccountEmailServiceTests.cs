@@ -152,6 +152,9 @@ public class AccountEmailServiceTests
                     body.Contains("logo-light-small.png") &&
                     body.Contains("Subscription Cancelled") &&
                     body.Contains("Test User") &&
+                    body.Contains("Subscription Terms") &&
+                    body.Contains("will not automatically renew") &&
+                    body.Contains("Unlimited music streaming") &&
                     body.Contains("subscription will remain active") &&
                     body.Contains("resubscribe at any time"))),
             Times.Once);

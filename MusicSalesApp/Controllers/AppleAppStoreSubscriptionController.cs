@@ -80,23 +80,37 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             return BadRequest(new { success = false, error = $"Subscription is not active (status: {subscriptionInfo.Status})." });
         }
 
+        var monthlyPrice = decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], out var price) ? price : 3.99m;
+        var appAccountToken = string.IsNullOrWhiteSpace(request.AppAccountToken)
+            ? subscriptionInfo.AppAccountToken
+            : request.AppAccountToken;
+
         var existing = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
         if (existing != null)
         {
+            _logger.LogInformation(
+                "Apple App Store verification matched existing subscription {SubscriptionId} for user {UserId}; updating record and resending confirmation email.",
+                existing.Id,
+                user.Id);
+
             await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
                 subscriptionInfo.OriginalTransactionId,
                 subscriptionInfo.Status,
                 subscriptionInfo.ExpiryTime,
                 subscriptionInfo.TransactionId,
-                subscriptionInfo.Environment);
+                subscriptionInfo.Environment,
+                subscriptionInfo.ProductId,
+                appAccountToken,
+                monthlyPrice);
+
+            var updatedSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
+            if (updatedSubscription != null)
+            {
+                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
+            }
 
             return Ok(new { success = true, subscriptionId = existing.Id, status = subscriptionInfo.Status });
         }
-
-        var monthlyPrice = decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], out var price) ? price : 3.99m;
-        var appAccountToken = string.IsNullOrWhiteSpace(request.AppAccountToken)
-            ? subscriptionInfo.AppAccountToken
-            : request.AppAccountToken;
 
         var subscription = await _subscriptionService.CreateAppleSubscriptionAsync(
             user.Id,
@@ -112,7 +126,10 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             subscriptionInfo.Status,
             subscriptionInfo.ExpiryTime,
             subscriptionInfo.TransactionId,
-            subscriptionInfo.Environment);
+            subscriptionInfo.Environment,
+            subscriptionInfo.ProductId,
+            appAccountToken,
+            monthlyPrice);
 
         await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
 

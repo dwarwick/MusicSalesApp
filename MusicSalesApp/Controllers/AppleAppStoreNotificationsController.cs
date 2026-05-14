@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Controllers;
@@ -12,15 +14,21 @@ namespace MusicSalesApp.Controllers;
 public class AppleAppStoreNotificationsController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
+    private readonly IAccountEmailService _accountEmailService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppleAppStoreNotificationsController> _logger;
 
     public AppleAppStoreNotificationsController(
         ISubscriptionService subscriptionService,
+        IAccountEmailService accountEmailService,
+        UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<AppleAppStoreNotificationsController> logger)
     {
         _subscriptionService = subscriptionService;
+        _accountEmailService = accountEmailService;
+        _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
     }
@@ -84,6 +92,11 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 transactionPayload.AppAccountToken,
                 3.99m);
 
+            if (string.Equals(status, MusicSalesApp.Common.Helpers.SubscriptionStatuses.Cancelled, StringComparison.Ordinal))
+            {
+                await SendCancellationEmailAsync(transactionPayload.OriginalTransactionId);
+            }
+
             _logger.LogInformation(
                 "Processed Apple notification {NotificationType} for original transaction {OriginalTransactionId} with status {Status}",
                 notification.NotificationType,
@@ -100,6 +113,38 @@ public class AppleAppStoreNotificationsController : ControllerBase
         }
 
         return Ok();
+    }
+
+    private async Task SendCancellationEmailAsync(string originalTransactionId)
+    {
+        var subscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(originalTransactionId);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+            user.Email,
+            user.UserName ?? user.Email,
+            subscription.EndDate,
+            GetBaseUrl());
+    }
+
+    private string GetBaseUrl()
+    {
+        var baseUrl = _configuration["BaseUrl"];
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return baseUrl;
+        }
+
+        return $"{Request.Scheme}://{Request.Host}";
     }
 }
 
