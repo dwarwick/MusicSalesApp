@@ -322,6 +322,8 @@ public class PurchaseEmailServiceTests
                     body.Contains("$3.99") &&
                     body.Contains("Monthly Streaming Subscription") &&
                     body.Contains("PayPal") &&
+                    body.Contains(" at ") &&
+                    body.Contains("America/New_York") &&
                     body.Contains("Your Subscription Benefits") &&
                     body.Contains("Unlimited music streaming") &&
                     body.Contains("PayPal Subscription ID") &&
@@ -360,7 +362,9 @@ public class PurchaseEmailServiceTests
                 It.Is<string>(body =>
                     body.Contains("App Store Original Transaction ID") &&
                     body.Contains("apple-orig-123") &&
-                        body.Contains("Apple App Store") &&
+                    body.Contains(" at ") &&
+                    body.Contains("America/Los_Angeles") &&
+                    body.Contains("Apple App Store") &&
                     body.Contains("Amount Charged by Apple"))),
             Times.Once);
     }

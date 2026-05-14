@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -48,6 +49,8 @@ public class AppleAppStoreSubscriptionController : ControllerBase
         {
             return Unauthorized();
         }
+
+        await UserTimeZonePersistenceHelper.PersistIfProvidedAsync(_userManager, user, request.TimeZoneId, _logger);
 
         var productId = _configuration["AppleAppStore:SubscriptionProductId"];
         if (string.IsNullOrWhiteSpace(productId))
@@ -131,7 +134,10 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             appAccountToken,
             monthlyPrice);
 
-        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
+        var refreshedSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId)
+            ?? subscription;
+
+        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, refreshedSubscription, GetBaseUrl());
 
         return Ok(new { success = true, subscriptionId = subscription.Id, status = subscriptionInfo.Status });
     }
@@ -148,4 +154,4 @@ public class AppleAppStoreSubscriptionController : ControllerBase
     }
 }
 
-public record AppStorePurchaseRequest(string TransactionId, string AppAccountToken = "");
+public record AppStorePurchaseRequest(string TransactionId, string AppAccountToken = "", string TimeZoneId = "");

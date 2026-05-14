@@ -301,11 +301,11 @@ public class PurchaseEmailService : IPurchaseEmailService
     private string BuildSubscriptionDetailsSection(Subscription subscription, string externalSubscriptionId, string? timeZoneId)
     {
         var nextBillingDate = subscription.NextBillingDate.HasValue
-            ? UserTimeZoneDisplayHelper.FormatDate(subscription.NextBillingDate.Value, timeZoneId)
+            ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.NextBillingDate.Value, timeZoneId)
             : "Pending";
         var referenceLabel = GetSubscriptionReferenceLabel(subscription.BillingSource);
         var amountLabel = GetSubscriptionAmountLabel(subscription.BillingSource);
-        var startDate = UserTimeZoneDisplayHelper.FormatDate(subscription.StartDate, timeZoneId);
+        var startDate = UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.StartDate, timeZoneId);
         var billingProvider = GetBillingProviderDisplayName(subscription.BillingSource);
 
         return $@"
@@ -364,10 +364,10 @@ public class PurchaseEmailService : IPurchaseEmailService
     private string BuildSubscriptionTermsSection(Subscription subscription, string? timeZoneId)
     {
         var endDateDisplay = subscription.EndDate.HasValue
-            ? UserTimeZoneDisplayHelper.FormatDate(subscription.EndDate.Value, timeZoneId)
+            ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.EndDate.Value, timeZoneId)
             : subscription.NextBillingDate.HasValue
-                ? UserTimeZoneDisplayHelper.FormatDate(subscription.NextBillingDate.Value, timeZoneId)
-                : UserTimeZoneDisplayHelper.FormatDate(subscription.StartDate.AddMonths(1), timeZoneId);
+                ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.NextBillingDate.Value, timeZoneId)
+                : UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.StartDate.AddMonths(1), timeZoneId);
 
         return $@"
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>

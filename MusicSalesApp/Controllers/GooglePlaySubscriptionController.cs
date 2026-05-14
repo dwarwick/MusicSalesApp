@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -48,6 +49,8 @@ public class GooglePlaySubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null)
             return Unauthorized();
+
+        await UserTimeZonePersistenceHelper.PersistIfProvidedAsync(_userManager, user, request.TimeZoneId, _logger);
 
         var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
 
@@ -104,13 +107,21 @@ public class GooglePlaySubscriptionController : ControllerBase
         var subscription = await _subscriptionService.CreateGooglePlaySubscriptionAsync(
             user.Id, request.PurchaseToken, orderId, monthlyPrice);
 
+        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
+            request.PurchaseToken,
+            SubscriptionStatuses.Active,
+            subscriptionInfo.ExpiryTime?.UtcDateTime);
+
         // Acknowledge the purchase so Google doesn't auto-refund
         if (!subscriptionInfo.IsAcknowledged)
         {
             await _verificationService.AcknowledgeSubscriptionAsync(request.PurchaseToken, productId);
         }
 
-        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
+        var refreshedSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken)
+            ?? subscription;
+
+        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, refreshedSubscription, GetBaseUrl());
 
         return Ok(new { success = true, subscriptionId = subscription.Id, status = subscription.Status });
     }
@@ -127,4 +138,4 @@ public class GooglePlaySubscriptionController : ControllerBase
     }
 }
 
-public record GooglePlayPurchaseRequest(string PurchaseToken, string OrderId = "");
+public record GooglePlayPurchaseRequest(string PurchaseToken, string OrderId = "", string TimeZoneId = "");
