@@ -296,4 +296,48 @@ public class ManageAccountTests : BUnitTestBase
 
         Assert.That(url, Is.EqualTo("https://developer.apple.com/documentation/storekit/testing-disabling-auto-renew"));
     }
+
+    [Test]
+    public void ManageAccount_CancelledSubscriptionWithRemainingAccess_HidesCancelActionsAndShowsNonRenewingMessage()
+    {
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = 1,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new
+            {
+                HasSubscription = true,
+                Status = SubscriptionStatuses.Cancelled,
+                MonthlyPrice = 3.99m,
+                StartDate = DateTime.UtcNow.AddDays(-5),
+                EndDate = DateTime.UtcNow.AddDays(25),
+                NextBillingDate = DateTime.UtcNow.AddDays(25),
+                BillingSource = BillingSources.PayPal,
+                SubscriptionPrice = "3.99"
+            });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Access Until:"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("Status:</strong> Renews Off"));
+        Assert.That(cut.Markup, Does.Contain("has been canceled"));
+        Assert.That(cut.Markup, Does.Contain("will not automatically renew"));
+        Assert.That(cut.Markup, Does.Not.Contain("Cancel Subscription"));
+        Assert.That(cut.Markup, Does.Not.Contain("Manage Subscription"));
+    }
 }

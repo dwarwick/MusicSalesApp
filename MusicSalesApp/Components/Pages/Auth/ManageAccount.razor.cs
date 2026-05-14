@@ -520,7 +520,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             : "Current Billing Period Ends"
         : "Ended On";
     protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
-        ? $"Your subscription will not renew again. You still have full access until {_endDate?.ToLocalTime():MMMM dd, yyyy h:mm tt}."
+        ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {_endDate?.ToLocalTime():MMMM dd, yyyy h:mm tt}."
         : _endDate.HasValue
             ? $"Your subscription is active. Your current billing period ends on {_endDate.Value.ToLocalTime():MMMM dd, yyyy h:mm tt}."
             : "You have unlimited access to all music on our platform.";

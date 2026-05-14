@@ -230,6 +230,16 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             "Failed to parse Apple App Store notification data.");
     }
 
+    internal static AppleSignedRenewalInfoPayload DecodeSignedRenewalInfo(string signedRenewalInfo)
+    {
+        return DecodeSignedPayload<AppleSignedRenewalInfoPayload>(
+            signedRenewalInfo,
+            "Apple App Store did not return signed renewal info.",
+            "Apple App Store returned malformed signed renewal info.",
+            "Apple App Store returned an empty renewal payload.",
+            "Failed to parse Apple App Store renewal data.");
+    }
+
     internal static string DetermineSubscriptionStatus(DateTime utcNow, DateTime? expiryTimeUtc, DateTime? revocationTimeUtc)
     {
         if (revocationTimeUtc.HasValue)
@@ -250,10 +260,23 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         string subtype,
         DateTime utcNow,
         DateTime? expiryTimeUtc,
-        DateTime? revocationTimeUtc)
+        DateTime? revocationTimeUtc,
+        int? autoRenewStatus = null)
     {
         switch (notificationType)
         {
+            case "DID_CHANGE_RENEWAL_STATUS":
+                if (string.Equals(subtype, "AUTO_RENEW_DISABLED", StringComparison.OrdinalIgnoreCase) || autoRenewStatus == 0)
+                {
+                    return SubscriptionStatuses.Cancelled;
+                }
+
+                if (string.Equals(subtype, "AUTO_RENEW_ENABLED", StringComparison.OrdinalIgnoreCase) || autoRenewStatus == 1)
+                {
+                    return SubscriptionStatuses.Active;
+                }
+
+                break;
             case "DID_FAIL_TO_RENEW":
                 return SubscriptionStatuses.Suspended;
             case "EXPIRED":
@@ -546,5 +569,10 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
     {
         public string SignedTransactionInfo { get; set; }
         public string SignedRenewalInfo { get; set; }
+    }
+
+    internal sealed class AppleSignedRenewalInfoPayload
+    {
+        public int? AutoRenewStatus { get; set; }
     }
 }

@@ -38,6 +38,9 @@ public class AppleAppStoreNotificationsController : ControllerBase
         {
             var notification = AppleAppStoreVerificationService.DecodeServerNotificationPayload(request.SignedPayload);
             var transactionPayload = AppleAppStoreVerificationService.DecodeSignedTransactionInfo(notification.Data?.SignedTransactionInfo);
+            var renewalInfo = !string.IsNullOrWhiteSpace(notification.Data?.SignedRenewalInfo)
+                ? AppleAppStoreVerificationService.DecodeSignedRenewalInfo(notification.Data.SignedRenewalInfo)
+                : null;
             var configuredProductId = _configuration["AppleAppStore:SubscriptionProductId"];
 
             if (!string.IsNullOrWhiteSpace(configuredProductId) &&
@@ -68,7 +71,8 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 notification.Subtype,
                 DateTime.UtcNow,
                 expiryTime,
-                revocationTime);
+                revocationTime,
+                renewalInfo?.AutoRenewStatus);
 
             await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
                 transactionPayload.OriginalTransactionId,

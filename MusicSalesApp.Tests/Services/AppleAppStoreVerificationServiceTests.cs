@@ -75,6 +75,17 @@ public class AppleAppStoreVerificationServiceTests
     }
 
     [Test]
+    public void DecodeSignedRenewalInfo_ParsesPayload()
+    {
+        var payload = Base64UrlEncoder.Encode("{\"autoRenewStatus\":0}");
+        var signedPayload = $"header.{payload}.signature";
+
+        var result = AppleAppStoreVerificationService.DecodeSignedRenewalInfo(signedPayload);
+
+        Assert.That(result.AutoRenewStatus, Is.EqualTo(0));
+    }
+
+    [Test]
     public void DetermineSubscriptionStatus_ReturnsCancelled_WhenRevoked()
     {
         var result = AppleAppStoreVerificationService.DetermineSubscriptionStatus(
@@ -96,6 +107,20 @@ public class AppleAppStoreVerificationServiceTests
             null);
 
         Assert.That(result, Is.EqualTo(SubscriptionStatuses.Suspended));
+    }
+
+    [Test]
+    public void DetermineNotificationStatus_ReturnsCancelled_ForAutoRenewDisabled()
+    {
+        var result = AppleAppStoreVerificationService.DetermineNotificationStatus(
+            "DID_CHANGE_RENEWAL_STATUS",
+            "AUTO_RENEW_DISABLED",
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(5),
+            null,
+            0);
+
+        Assert.That(result, Is.EqualTo(SubscriptionStatuses.Cancelled));
     }
 
     [Test]

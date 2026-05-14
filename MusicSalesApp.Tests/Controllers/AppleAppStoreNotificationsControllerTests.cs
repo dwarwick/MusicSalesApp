@@ -78,4 +78,30 @@ public class AppleAppStoreNotificationsControllerTests
                 It.IsAny<decimal?>()),
             Times.Never);
     }
+
+    [Test]
+    public async Task HandleNotification_UpdatesSubscriptionStatus_ForAutoRenewDisabledNotification()
+    {
+        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
+        var signedTransactionInfo = $"header.{transactionPayload}.signature";
+        var renewalPayload = Base64UrlEncoder.Encode("{\"autoRenewStatus\":0}");
+        var signedRenewalInfo = $"header.{renewalPayload}.signature";
+        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"DID_CHANGE_RENEWAL_STATUS\",\"subtype\":\"AUTO_RENEW_DISABLED\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\",\"signedRenewalInfo\":\"{signedRenewalInfo}\"}}}}");
+        var signedPayload = $"header.{notificationPayload}.signature";
+
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockSubscriptionService.Verify(
+            s => s.UpdateAppleSubscriptionStatusAsync(
+                "orig-123",
+                "CANCELLED",
+                It.IsAny<DateTime?>(),
+                "tx-123",
+                "Sandbox",
+                "streamtunes_monthly_sub_ios",
+                It.IsAny<string>(),
+                3.99m),
+            Times.Once);
+    }
 }
