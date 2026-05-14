@@ -204,6 +204,72 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task NormalizeExpiredSubscriptionsAsync_ExpiresAllStaleEntitlements()
+    {
+        var expiredEndDate = DateTime.UtcNow.AddMinutes(-10);
+
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.AddRange(
+                new Subscription
+                {
+                    UserId = 1,
+                    Status = SubscriptionStatuses.Active,
+                    EndDate = expiredEndDate,
+                    MonthlyPrice = 3.99m,
+                    CreatedAt = DateTime.UtcNow.AddDays(-5),
+                    LastPaymentDate = DateTime.UtcNow.AddDays(-30)
+                },
+                new Subscription
+                {
+                    UserId = 2,
+                    Status = SubscriptionStatuses.Cancelled,
+                    EndDate = expiredEndDate,
+                    MonthlyPrice = 3.99m,
+                    CreatedAt = DateTime.UtcNow.AddDays(-4),
+                    CancelledAt = DateTime.UtcNow.AddDays(-1),
+                    LastPaymentDate = DateTime.UtcNow.AddDays(-30)
+                },
+                new Subscription
+                {
+                    UserId = 3,
+                    Status = SubscriptionStatuses.Suspended,
+                    EndDate = expiredEndDate,
+                    MonthlyPrice = 3.99m,
+                    CreatedAt = DateTime.UtcNow.AddDays(-3),
+                    LastPaymentDate = DateTime.UtcNow.AddDays(-30)
+                },
+                new Subscription
+                {
+                    UserId = 4,
+                    Status = SubscriptionStatuses.Active,
+                    EndDate = DateTime.UtcNow.AddDays(2),
+                    MonthlyPrice = 3.99m,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2),
+                    LastPaymentDate = DateTime.UtcNow.AddDays(-5)
+                });
+
+            await context.SaveChangesAsync();
+        }
+
+        var normalizedCount = await _service.NormalizeExpiredSubscriptionsAsync();
+
+        Assert.That(normalizedCount, Is.EqualTo(3));
+
+        using var verificationContext = new AppDbContext(_dbOptions);
+        var subscriptions = await verificationContext.Subscriptions
+            .OrderBy(s => s.UserId)
+            .ToListAsync();
+
+        Assert.That(subscriptions[0].Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        Assert.That(subscriptions[0].CancelledAt, Is.EqualTo(expiredEndDate));
+        Assert.That(subscriptions[1].Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        Assert.That(subscriptions[2].Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        Assert.That(subscriptions[2].CancelledAt, Is.EqualTo(expiredEndDate));
+        Assert.That(subscriptions[3].Status, Is.EqualTo(SubscriptionStatuses.Active));
+    }
+
+    [Test]
     public async Task UpdateSubscriptionStatusAsync_UpdatesStatus()
     {
         // Arrange

@@ -44,6 +44,12 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.GenerateAllRecommendationsAsync(),
                 Cron.Daily(2));
 
+            // Normalize stale subscription rows before other expiration-dependent jobs run.
+            RecurringJob.AddOrUpdate<ISubscriptionService>(
+                "normalize-expired-subscriptions",
+                service => service.NormalizeExpiredSubscriptionsAsync(),
+                "30 2 * * *");
+
             // Schedule daily cleanup job at 3 AM UTC
             RecurringJob.AddOrUpdate<IPlaylistCleanupService>(
                 "cleanup-lapsed-subscription-playlists",

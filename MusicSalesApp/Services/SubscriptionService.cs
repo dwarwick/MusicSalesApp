@@ -57,6 +57,12 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
+    public async Task<int> NormalizeExpiredSubscriptionsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        return await NormalizeExpiredSubscriptionsAsync(context);
+    }
+
     public async Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
@@ -538,9 +544,20 @@ public class SubscriptionService : ISubscriptionService
 
     private async Task NormalizeExpiredSubscriptionsAsync(AppDbContext context, int userId)
     {
+        await NormalizeExpiredSubscriptionsAsync(context, query => query.Where(s => s.UserId == userId));
+    }
+
+    private async Task<int> NormalizeExpiredSubscriptionsAsync(AppDbContext context)
+    {
+        return await NormalizeExpiredSubscriptionsAsync(context, query => query);
+    }
+
+    private async Task<int> NormalizeExpiredSubscriptionsAsync(
+        AppDbContext context,
+        Func<IQueryable<Subscription>, IQueryable<Subscription>> filter)
+    {
         var now = DateTime.UtcNow;
-        var subscriptionsToExpire = await context.Subscriptions
-            .Where(s => s.UserId == userId)
+        var subscriptionsToExpire = await filter(context.Subscriptions)
             .Where(s => s.EndDate.HasValue && s.EndDate.Value <= now)
             .Where(s => s.Status == SubscriptionStatuses.Active ||
                         s.Status == SubscriptionStatuses.Cancelled ||
@@ -549,7 +566,7 @@ public class SubscriptionService : ISubscriptionService
 
         if (subscriptionsToExpire.Count == 0)
         {
-            return;
+            return 0;
         }
 
         foreach (var subscription in subscriptionsToExpire)
@@ -559,5 +576,12 @@ public class SubscriptionService : ISubscriptionService
         }
 
         await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Normalized {Count} expired subscriptions to {Status}",
+            subscriptionsToExpire.Count,
+            SubscriptionStatuses.Expired);
+
+        return subscriptionsToExpire.Count;
     }
 }

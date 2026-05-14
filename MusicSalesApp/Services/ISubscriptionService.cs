@@ -7,6 +7,7 @@ public interface ISubscriptionService
     Task<Subscription> GetActiveSubscriptionAsync(int userId);
     Task<Subscription> GetLatestSubscriptionAsync(int userId);
     Task<bool> HasActiveSubscriptionAsync(int userId);
+    Task<int> NormalizeExpiredSubscriptionsAsync();
     Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice);
     Task<bool> CancelSubscriptionAsync(int userId);
     Task<Subscription> GetSubscriptionByPayPalIdAsync(string paypalSubscriptionId);

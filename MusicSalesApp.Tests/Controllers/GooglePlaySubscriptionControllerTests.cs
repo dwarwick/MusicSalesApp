@@ -174,6 +174,38 @@ public class GooglePlaySubscriptionControllerTests
     }
 
     [Test]
+    public async Task VerifyAndRecordPurchase_ResendsConfirmationEmail_WhenExistingActiveSubscriptionHasExpired()
+    {
+        var existingSubscription = new Subscription
+        {
+            Id = 12,
+            BillingSource = BillingSources.GooglePlay,
+            GooglePlayOrderId = "order-123",
+            GooglePlayPurchaseToken = "purchase-token",
+            Status = SubscriptionStatuses.Active,
+            EndDate = DateTime.UtcNow.AddMinutes(-1)
+        };
+
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
+            .ReturnsAsync(new GooglePlaySubscriptionInfo(
+                "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow.AddDays(30),
+                "order-123",
+                true,
+                "linked-token"));
+        _mockSubscriptionService
+            .SetupSequence(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
+            .ReturnsAsync(existingSubscription)
+            .ReturnsAsync(existingSubscription);
+
+        var result = await _controller.VerifyAndRecordPurchase(new GooglePlayPurchaseRequest("purchase-token", "order-123"));
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), existingSubscription, "https://davidtest.dev"), Times.Once);
+    }
+
+    [Test]
     public async Task VerifyAndRecordPurchase_ReturnsVerificationMessage_WhenVerificationThrows()
     {
         _mockVerificationService

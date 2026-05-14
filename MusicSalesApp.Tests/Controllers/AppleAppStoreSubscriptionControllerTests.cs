@@ -225,6 +225,41 @@ public class AppleAppStoreSubscriptionControllerTests
     }
 
     [Test]
+    public async Task VerifyAndRecordPurchase_ResendsConfirmationEmail_WhenExistingActiveSubscriptionHasExpired()
+    {
+        var existingSubscription = new Subscription
+        {
+            Id = 17,
+            UserId = 1,
+            BillingSource = "Apple",
+            Status = SubscriptionStatuses.Active,
+            AppStoreOriginalTransactionId = "orig-123",
+            EndDate = DateTime.UtcNow.AddMinutes(-1)
+        };
+
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"))
+            .ReturnsAsync(new AppleAppStoreSubscriptionInfo(
+                "ACTIVE",
+                DateTime.UtcNow.AddDays(30),
+                DateTime.UtcNow.AddMinutes(-2),
+                "tx-123",
+                "orig-123",
+                "streamtunes_monthly_sub_ios",
+                "Sandbox",
+                "account-token"));
+        _mockSubscriptionService
+            .SetupSequence(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
+            .ReturnsAsync(existingSubscription)
+            .ReturnsAsync(existingSubscription);
+
+        var result = await _controller.VerifyAndRecordPurchase(new AppStorePurchaseRequest("tx-123", "account-token"));
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), existingSubscription, "https://davidtest.dev"), Times.Once);
+    }
+
+    [Test]
     public async Task VerifyAndRecordPurchase_PersistsProvidedTimeZone_WhenRequestIncludesIt()
     {
         var existingSubscription = new Subscription
