@@ -29,7 +29,8 @@ public interface ISubscriptionService
         string productId,
         string appAccountToken,
         string environment,
-        decimal monthlyPrice);
+        decimal monthlyPrice,
+        DateTime? startDate = null);
     Task<Subscription> GetSubscriptionByAppleTransactionIdAsync(string transactionId);
     Task<Subscription> GetSubscriptionByAppleOriginalTransactionIdAsync(string originalTransactionId);
     Task UpdateAppleSubscriptionStatusAsync(

@@ -463,6 +463,9 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             var expiryTime = payload.ExpiresDate.HasValue
                 ? DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresDate.Value).UtcDateTime
                 : (DateTime?)null;
+            var purchaseTime = payload.PurchaseDate.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds(payload.PurchaseDate.Value).UtcDateTime
+                : (DateTime?)null;
             var revocationTime = payload.RevocationDate.HasValue
                 ? DateTimeOffset.FromUnixTimeMilliseconds(payload.RevocationDate.Value).UtcDateTime
                 : (DateTime?)null;
@@ -481,6 +484,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             return new AppleAppStoreSubscriptionInfo(
                 resolvedStatus,
                 expiryTime,
+                purchaseTime,
                 payload.TransactionId,
                 payload.OriginalTransactionId,
                 payload.ProductId,
@@ -554,6 +558,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         public string BundleId { get; set; }
         public string Environment { get; set; }
         public string AppAccountToken { get; set; }
+        public long? PurchaseDate { get; set; }
         public long? ExpiresDate { get; set; }
         public long? RevocationDate { get; set; }
     }

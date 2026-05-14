@@ -10,6 +10,7 @@ public interface IAppleAppStoreVerificationService
 public record AppleAppStoreSubscriptionInfo(
     string Status,
     DateTime? ExpiryTime,
+    DateTime? PurchaseTime,
     string TransactionId,
     string OriginalTransactionId,
     string ProductId,

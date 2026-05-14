@@ -406,6 +406,7 @@ public class SubscriptionServiceTests
     public async Task CreateAppleSubscriptionAsync_CreatesAppleSubscription()
     {
         const int userId = 1;
+        var purchaseTime = DateTime.UtcNow.AddMinutes(-2);
 
         var result = await _service.CreateAppleSubscriptionAsync(
             userId,
@@ -414,7 +415,8 @@ public class SubscriptionServiceTests
             "streamtunes_monthly_sub_ios",
             "account-token-1",
             "Sandbox",
-            3.99m);
+            3.99m,
+            purchaseTime);
 
         Assert.Multiple(() =>
         {
@@ -427,6 +429,7 @@ public class SubscriptionServiceTests
             Assert.That(result.AppStoreAppAccountToken, Is.EqualTo("account-token-1"));
             Assert.That(result.AppStoreEnvironment, Is.EqualTo("Sandbox"));
             Assert.That(result.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(result.StartDate, Is.EqualTo(purchaseTime));
         });
     }
 

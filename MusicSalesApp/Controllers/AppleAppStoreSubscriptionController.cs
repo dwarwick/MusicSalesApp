@@ -91,10 +91,13 @@ public class AppleAppStoreSubscriptionController : ControllerBase
         var existing = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
         if (existing != null)
         {
+            var shouldSendConfirmationEmail = !string.Equals(existing.Status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase);
+
             _logger.LogInformation(
-                "Apple App Store verification matched existing subscription {SubscriptionId} for user {UserId}; updating record and resending confirmation email.",
+                "Apple App Store verification matched existing subscription {SubscriptionId} for user {UserId}; updating record. SendConfirmationEmail={SendConfirmationEmail}",
                 existing.Id,
-                user.Id);
+                user.Id,
+                shouldSendConfirmationEmail);
 
             await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
                 subscriptionInfo.OriginalTransactionId,
@@ -106,10 +109,13 @@ public class AppleAppStoreSubscriptionController : ControllerBase
                 appAccountToken,
                 monthlyPrice);
 
-            var updatedSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
-            if (updatedSubscription != null)
+            if (shouldSendConfirmationEmail)
             {
-                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
+                var updatedSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
+                if (updatedSubscription != null)
+                {
+                    await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
+                }
             }
 
             return Ok(new { success = true, subscriptionId = existing.Id, status = subscriptionInfo.Status });
@@ -122,7 +128,8 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             subscriptionInfo.ProductId,
             appAccountToken,
             subscriptionInfo.Environment,
-            monthlyPrice);
+            monthlyPrice,
+            subscriptionInfo.PurchaseTime);
 
         await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
             subscriptionInfo.OriginalTransactionId,

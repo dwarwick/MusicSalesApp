@@ -296,11 +296,14 @@ public class SubscriptionService : ISubscriptionService
         string productId,
         string appAccountToken,
         string environment,
-        decimal monthlyPrice)
+        decimal monthlyPrice,
+        DateTime? startDate = null)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
         await CancelExistingActiveSubscriptionsAsync(context, userId);
+
+        var effectiveStartDate = startDate ?? DateTime.UtcNow;
 
         var subscription = new Subscription
         {
@@ -312,8 +315,8 @@ public class SubscriptionService : ISubscriptionService
             AppStoreAppAccountToken = appAccountToken,
             AppStoreEnvironment = environment,
             Status = SubscriptionStatuses.Active,
-            StartDate = DateTime.UtcNow,
-            LastPaymentDate = DateTime.UtcNow,
+            StartDate = effectiveStartDate,
+            LastPaymentDate = effectiveStartDate,
             MonthlyPrice = monthlyPrice,
             CreatedAt = DateTime.UtcNow,
         };
