@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -15,6 +17,7 @@ public class AppleAppStoreNotificationsController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
     private readonly IAccountEmailService _accountEmailService;
+    private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppleAppStoreNotificationsController> _logger;
@@ -22,12 +25,14 @@ public class AppleAppStoreNotificationsController : ControllerBase
     public AppleAppStoreNotificationsController(
         ISubscriptionService subscriptionService,
         IAccountEmailService accountEmailService,
+        ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<AppleAppStoreNotificationsController> logger)
     {
         _subscriptionService = subscriptionService;
         _accountEmailService = accountEmailService;
+        _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -82,6 +87,10 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 revocationTime,
                 renewalInfo?.AutoRenewStatus);
 
+            var existingSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(transactionPayload.OriginalTransactionId);
+            var shouldSendConfirmationEmail = string.Equals(status, SubscriptionStatuses.Active, StringComparison.Ordinal) &&
+                                              !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existingSubscription);
+
             await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
                 transactionPayload.OriginalTransactionId,
                 status,
@@ -95,6 +104,11 @@ public class AppleAppStoreNotificationsController : ControllerBase
             if (string.Equals(status, MusicSalesApp.Common.Helpers.SubscriptionStatuses.Cancelled, StringComparison.Ordinal))
             {
                 await SendCancellationEmailAsync(transactionPayload.OriginalTransactionId);
+            }
+
+            if (shouldSendConfirmationEmail)
+            {
+                await SendConfirmationEmailAsync(transactionPayload.OriginalTransactionId);
             }
 
             _logger.LogInformation(
@@ -136,6 +150,23 @@ public class AppleAppStoreNotificationsController : ControllerBase
             subscription.BillingSource,
             user.TimeZoneId,
             GetBaseUrl());
+    }
+
+    private async Task SendConfirmationEmailAsync(string originalTransactionId)
+    {
+        var subscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(originalTransactionId);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
     }
 
     private string GetBaseUrl()

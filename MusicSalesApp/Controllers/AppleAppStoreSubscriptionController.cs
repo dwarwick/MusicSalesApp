@@ -91,7 +91,7 @@ public class AppleAppStoreSubscriptionController : ControllerBase
         var existing = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
         if (existing != null)
         {
-            var shouldSendConfirmationEmail = !IsCurrentlyEntitled(existing);
+            var shouldSendConfirmationEmail = !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existing);
 
             _logger.LogInformation(
                 "Apple App Store verification matched existing subscription {SubscriptionId} for user {UserId}; updating record. SendConfirmationEmail={SendConfirmationEmail}",
@@ -158,23 +158,6 @@ public class AppleAppStoreSubscriptionController : ControllerBase
         }
 
         return $"{Request.Scheme}://{Request.Host}";
-    }
-
-    private static bool IsCurrentlyEntitled(Subscription subscription)
-    {
-        var now = DateTime.UtcNow;
-
-        if (string.Equals(subscription.Status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase))
-        {
-            return !subscription.EndDate.HasValue || subscription.EndDate.Value > now;
-        }
-
-        if (string.Equals(subscription.Status, SubscriptionStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
-        {
-            return subscription.EndDate.HasValue && subscription.EndDate.Value > now;
-        }
-
-        return false;
     }
 }
 

@@ -17,6 +17,7 @@ public class AppleAppStoreNotificationsControllerTests
 {
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
+    private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<AppleAppStoreNotificationsController>> _mockLogger;
@@ -27,6 +28,7 @@ public class AppleAppStoreNotificationsControllerTests
     {
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
+        _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<AppleAppStoreNotificationsController>>();
         var userStore = new Mock<IUserStore<ApplicationUser>>();
@@ -39,6 +41,7 @@ public class AppleAppStoreNotificationsControllerTests
         _controller = new AppleAppStoreNotificationsController(
             _mockSubscriptionService.Object,
             _mockAccountEmailService.Object,
+            _mockSubscriptionConfirmationEmailService.Object,
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object);
@@ -73,6 +76,12 @@ public class AppleAppStoreNotificationsControllerTests
                 It.IsAny<DateTime?>(),
                 It.IsAny<string?>(),
                 It.IsAny<string?>(),
+                It.IsAny<string>()),
+            Times.Never);
+        _mockSubscriptionConfirmationEmailService.Verify(
+            service => service.SendConfirmationAsync(
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<Subscription>(),
                 It.IsAny<string>()),
             Times.Never);
     }
@@ -154,5 +163,84 @@ public class AppleAppStoreNotificationsControllerTests
                 "America/Los_Angeles",
                 "https://davidtest.dev"),
             Times.Once);
+    }
+
+    [Test]
+    public async Task HandleNotification_SendsConfirmationEmail_WhenSubscriptionReactivatesAfterLapse()
+    {
+        var expiredSubscription = new Subscription
+        {
+            Id = 7,
+            UserId = 42,
+            BillingSource = BillingSources.Apple,
+            Status = SubscriptionStatuses.Active,
+            EndDate = DateTime.UtcNow.AddMinutes(-5),
+            AppStoreOriginalTransactionId = "orig-123"
+        };
+        var reactivatedSubscription = new Subscription
+        {
+            Id = 7,
+            UserId = 42,
+            BillingSource = BillingSources.Apple,
+            Status = SubscriptionStatuses.Active,
+            EndDate = DateTime.UtcNow.AddDays(30),
+            AppStoreOriginalTransactionId = "orig-123"
+        };
+        var user = new ApplicationUser
+        {
+            Id = 42,
+            UserName = "appleuser",
+            Email = "apple@example.com"
+        };
+
+        _mockSubscriptionService.SetupSequence(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
+            .ReturnsAsync(expiredSubscription)
+            .ReturnsAsync(reactivatedSubscription);
+        _mockUserManager.Setup(m => m.FindByIdAsync("42"))
+            .ReturnsAsync(user);
+
+        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
+        var signedTransactionInfo = $"header.{transactionPayload}.signature";
+        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"SUBSCRIBED\",\"subtype\":\"INITIAL_BUY\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
+        var signedPayload = $"header.{notificationPayload}.signature";
+
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockSubscriptionConfirmationEmailService.Verify(
+            service => service.SendConfirmationAsync(user, reactivatedSubscription, "https://davidtest.dev"),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task HandleNotification_DoesNotSendConfirmationEmail_WhenSubscriptionIsStillEntitled()
+    {
+        var currentSubscription = new Subscription
+        {
+            Id = 7,
+            UserId = 42,
+            BillingSource = BillingSources.Apple,
+            Status = SubscriptionStatuses.Cancelled,
+            EndDate = DateTime.UtcNow.AddMinutes(5),
+            AppStoreOriginalTransactionId = "orig-123"
+        };
+
+        _mockSubscriptionService.Setup(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
+            .ReturnsAsync(currentSubscription);
+
+        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
+        var signedTransactionInfo = $"header.{transactionPayload}.signature";
+        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"SUBSCRIBED\",\"subtype\":\"INITIAL_BUY\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
+        var signedPayload = $"header.{notificationPayload}.signature";
+
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockSubscriptionConfirmationEmailService.Verify(
+            service => service.SendConfirmationAsync(
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<Subscription>(),
+                It.IsAny<string>()),
+            Times.Never);
     }
 }
