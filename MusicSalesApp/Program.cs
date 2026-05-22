@@ -314,6 +314,7 @@ try
     builder.Services.AddScoped<ISubscriptionConfirmationEmailService, SubscriptionConfirmationEmailService>();
     builder.Services.AddScoped<IAccountEmailService, AccountEmailService>();
     builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
+    builder.Services.AddScoped<IUnverifiedUserCleanupService, UnverifiedUserCleanupService>();
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongDisplayOrderService, SongDisplayOrderService>();

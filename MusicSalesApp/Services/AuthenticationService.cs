@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Web;
 
@@ -49,9 +50,16 @@ public class AuthenticationService : IAuthenticationService
         {
             return (false, "Email and password are required");
         }
+
+        var normalizedEmail = email.Trim();
+        if (!new EmailAddressAttribute().IsValid(normalizedEmail))
+        {
+            return (false, "Please enter a valid email address.");
+        }
+
         try
         {
-            var existing = await _userManager.FindByEmailAsync(email);
+            var existing = await _userManager.FindByEmailAsync(normalizedEmail);
             if (existing != null)
             {
                 return (false, "Email already registered");
@@ -70,8 +78,8 @@ public class AuthenticationService : IAuthenticationService
 
             var user = new ApplicationUser
             {
-                UserName = email,
-                Email = email,
+                UserName = normalizedEmail,
+                Email = normalizedEmail,
                 EmailConfirmed = false,
                 ReceiveNewSongEmails = receiveNewSongEmails
             };
@@ -109,7 +117,7 @@ public class AuthenticationService : IAuthenticationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error registering user {Email}", email);
+            _logger.LogError(ex, "Error registering user {Email}", normalizedEmail);
             return (false, "Unexpected error creating account");
         }
     }

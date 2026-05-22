@@ -56,6 +56,11 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.RemoveNonOwnedSongsFromLapsedSubscriptionsAsync(),
                 Cron.Daily(3));
 
+            RecurringJob.AddOrUpdate<IUnverifiedUserCleanupService>(
+                "cleanup-stale-unverified-users",
+                service => service.DeleteStaleUnverifiedUsersAsync(),
+                Cron.Daily(3, 15));
+
             // Schedule nightly new song notification emails at 4 AM UTC
             // This runs after song cleanup and sends emails to opted-in users about new songs added in the past 24 hours
             RecurringJob.AddOrUpdate<INewSongNotificationService>(

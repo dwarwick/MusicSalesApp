@@ -160,6 +160,19 @@ public class AuthenticationServiceTests
     }
 
     [Test]
+    public async Task RegisterAsync_InvalidEmail_ReturnsValidationErrorWithoutCreatingUser()
+    {
+        // Act
+        var (success, error) = await _service.RegisterAsync("not-an-email", "Pass123!");
+
+        // Assert
+        Assert.That(success, Is.False);
+        Assert.That(error, Is.EqualTo("Please enter a valid email address."));
+        _mockUserManager.Verify(um => um.FindByEmailAsync(It.IsAny<string>()), Times.Never);
+        _mockUserManager.Verify(um => um.CreateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
     public async Task SendVerificationEmailAsync_WhenSpamFilterRejects_ReturnsAppropriateError()
     {
         // Arrange
