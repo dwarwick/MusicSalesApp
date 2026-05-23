@@ -515,6 +515,7 @@ body {
 
 .cta-button:hover {
     background-color: #1ed760 !important;
+    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
 }
 
 .creator-cta .cta-button,
@@ -527,6 +528,7 @@ body {
 .creator-cta .cta-button:hover,
 .hero-secondary-cta:hover {
     background-color: #9b59b6 !important;
+    box-shadow: 0 8px 20px rgba(142, 68, 173, 0.4);
 }
 
 /* Subscribe CTA Dialog */

@@ -1269,16 +1269,18 @@ h1:focus {
 
 /* CTA Buttons */
 .cta-primary,
-.cta-secondary {
+.cta-secondary,
+.cta-button {
     border-radius: 500px;
     font-weight: 700;
     text-transform: none;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .cta-primary:hover,
-.cta-secondary:hover {
+.cta-secondary:hover,
+.cta-button:hover {
     transform: scale(1.04);
 }
 
