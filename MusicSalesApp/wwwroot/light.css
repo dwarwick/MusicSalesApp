@@ -606,11 +606,15 @@ body {
     background-color: #1ed760 !important;
 }
 
-.creator-cta .cta-button {
+.creator-cta .cta-button,
+.hero-secondary-cta {
     background-color: #8e44ad !important;
+    color: #fff !important;
+    border: none !important;
 }
 
-.creator-cta .cta-button:hover {
+.creator-cta .cta-button:hover,
+.hero-secondary-cta:hover {
     background-color: #9b59b6 !important;
 }
 

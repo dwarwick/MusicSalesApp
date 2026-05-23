@@ -32,7 +32,13 @@ public class HomeTests : BUnitTestBase
         // Assert - Verify hero section content
         Assert.That(cut.Markup, Does.Contain("hero-section"));
         Assert.That(cut.Markup, Does.Contain("hero-title"));
-        Assert.That(cut.Find("a.hero-browse-music-button").TextContent, Does.Contain("Browse Music"));
+        var browseButton = cut.Find("a.hero-browse-music-button");
+        var loginButton = cut.Find("a.hero-login-button");
+
+        Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
+        Assert.That(browseButton.ClassList.Contains("hero-secondary-cta"), Is.True);
+        Assert.That(loginButton.TextContent, Does.Contain("Log In"));
+        Assert.That(loginButton.ClassList.Contains("hero-secondary-cta"), Is.True);
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
     }
 
@@ -71,6 +77,7 @@ public class HomeTests : BUnitTestBase
         var browseButton = cut.Find("a.hero-browse-music-button");
         Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
         Assert.That(browseButton.GetAttribute("href"), Is.EqualTo("/music-library"));
+        Assert.That(browseButton.ClassList.Contains("hero-secondary-cta"), Is.True);
     }
 
     [Test]
