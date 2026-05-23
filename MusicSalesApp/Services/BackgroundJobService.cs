@@ -80,6 +80,12 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.GenerateSitemapAsync(),
                 Cron.Daily(5));
 
+            // Retry duration extraction for active songs whose metadata is missing TrackLength.
+            RecurringJob.AddOrUpdate<ITrackLengthRepairService>(
+                "repair-missing-track-lengths",
+                service => service.RepairMissingTrackLengthsAsync(),
+                Cron.Daily(5, 30));
+
             // Schedule hourly retry of pending 1099 transactions
             // This retries TaxBandits 1099 reports that were deferred due to maintenance or failures
             RecurringJob.AddOrUpdate<IStreamPayoutService>(

@@ -5,6 +5,11 @@ namespace MusicSalesApp.Services;
 
 internal static class SongMetadataQueryExtensions
 {
+    private static readonly Expression<Func<SongMetadata, bool>> ActivePlayableSongsFilter =
+        song => song.IsActive &&
+                song.Mp3BlobPath != null &&
+                song.Mp3BlobPath != string.Empty;
+
     private static readonly Expression<Func<SongMetadata, bool>> ActiveSongsFromActiveCreatorsFilter =
         song => song.IsActive && song.IsEnabled && (song.CreatorId == null || song.Creator!.IsActive);
 
@@ -21,6 +26,11 @@ internal static class SongMetadataQueryExtensions
     public static IQueryable<SongMetadata> WhereActiveSongsFromActiveCreators(this IQueryable<SongMetadata> query)
     {
         return query.Where(ActiveSongsFromActiveCreatorsFilter);
+    }
+
+    public static IQueryable<SongMetadata> WhereActivePlayableSongs(this IQueryable<SongMetadata> query)
+    {
+        return query.Where(ActivePlayableSongsFilter);
     }
 
     public static IQueryable<SongMetadata> WhereActiveSongsFromActiveCreatorsIncludingDisabled(this IQueryable<SongMetadata> query)

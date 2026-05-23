@@ -329,6 +329,7 @@ try
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
     builder.Services.AddScoped<IMaintenanceResetService, MaintenanceResetService>();
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
+    builder.Services.AddScoped<ITrackLengthRepairService, TrackLengthRepairService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
     builder.Services.AddScoped<ISongLikeService, SongLikeService>();
