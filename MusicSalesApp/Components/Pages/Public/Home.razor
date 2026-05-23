@@ -16,20 +16,21 @@
                 Stream all songs, discover new artists, and create the perfect playlist for every moment. 
                 All for less than $5 per month.
             </p>
-            @if (!_isAuthenticated)
-            {
-                <div class="hero-cta">                    
+            <div class="hero-cta">
+                <a href="/music-library" class="e-control e-btn cta-secondary hero-browse-music-button">
+                    Browse Music
+                </a>
+                @if (!_isAuthenticated)
+                {
                     <a href="/login" class="e-control e-btn cta-secondary">
                         Log In
                     </a>
                     <a href="/register" class="e-control e-btn cta-primary">
                         Register
                     </a>
-                </div>
-            }
-            else if (!_hasActiveSubscription)
-            {
-                <div class="hero-cta">
+                }
+                else if (!_hasActiveSubscription)
+                {
                     @if (_isEmailVerified)
                     {
                         <a href="/manage-account" class="e-control e-btn cta-primary">
@@ -42,8 +43,8 @@
                             Validate Your Email for Full Functionality
                         </a>
                     }
-                </div>
-            }
+                }
+            </div>
         </div>
         <div class="hero-visual">
             <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="hero-animation" autoplay loop></dotlottie-wc>

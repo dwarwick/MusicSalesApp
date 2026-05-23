@@ -274,10 +274,10 @@ public abstract class BUnitTestBase
         // Setup default returns for IPurchaseEmailService methods
         MockPurchaseEmailService.Setup(x => x.SendSongPurchaseConfirmationAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<IEnumerable<CartItemWithMetadata>>(), It.IsAny<decimal>(), It.IsAny<string?>(), It.IsAny<string>()))
+            It.IsAny<IEnumerable<CartItemWithMetadata>>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         MockPurchaseEmailService.Setup(x => x.SendSubscriptionConfirmationAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Subscription>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Subscription>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
         // Setup default returns for IAccountEmailService methods
@@ -288,13 +288,13 @@ public abstract class BUnitTestBase
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         MockAccountEmailService.Setup(x => x.SendPasswordChangedEmailAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>()))
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         MockAccountEmailService.Setup(x => x.SendAccountDeletedEmailAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         MockAccountEmailService.Setup(x => x.SendSubscriptionCancelledEmailAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string>()))
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
         MockAccountEmailService.Setup(x => x.SendAccountReactivatedEmailAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))

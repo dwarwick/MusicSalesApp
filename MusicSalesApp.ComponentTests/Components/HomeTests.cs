@@ -32,7 +32,45 @@ public class HomeTests : BUnitTestBase
         // Assert - Verify hero section content
         Assert.That(cut.Markup, Does.Contain("hero-section"));
         Assert.That(cut.Markup, Does.Contain("hero-title"));
+        Assert.That(cut.Find("a.hero-browse-music-button").TextContent, Does.Contain("Browse Music"));
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
+    }
+
+    [Test]
+    public void Home_ShowsBrowseMusicButton_ForAuthenticatedSubscribers()
+    {
+        // Arrange
+        const int userId = 1;
+        SetupAuthorizedUser(userId, "test@user.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = userId,
+            UserName = "test@user.com"
+        };
+
+        var likedSongsPlaylist = new Playlist
+        {
+            Id = 7,
+            UserId = userId,
+            PlaylistName = "Liked Songs",
+            IsSystemGenerated = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(testUser);
+        MockUserManager.Setup(x => x.IsInRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>())).ReturnsAsync(false);
+        MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(true);
+        MockPlaylistService.Setup(x => x.GetOrCreateLikedSongsPlaylistAsync(userId)).ReturnsAsync(likedSongsPlaylist);
+        MockPlaylistService.Setup(x => x.GetPlaylistSongsAsync(likedSongsPlaylist.Id)).ReturnsAsync(new List<UserPlaylist>());
+
+        // Act
+        var cut = TestContext.Render<Home>();
+
+        // Assert
+        var browseButton = cut.Find("a.hero-browse-music-button");
+        Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
+        Assert.That(browseButton.GetAttribute("href"), Is.EqualTo("/music-library"));
     }
 
     [Test]
