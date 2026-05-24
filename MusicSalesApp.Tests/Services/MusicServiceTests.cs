@@ -182,6 +182,36 @@ public class MusicServiceTests
     }
 
     [Test]
+    public void TryParseDurationFromFfmpegOutput_WithDurationLine_ReturnsTotalSeconds()
+    {
+        var output = "Input #0, mp3, from 'song.mp3':\r\n  Duration: 00:03:21.50, start: 0.025057, bitrate: 320 kb/s";
+
+        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
+
+        Assert.That(result, Is.EqualTo(201.5).Within(0.001));
+    }
+
+    [Test]
+    public void TryParseDurationFromFfmpegOutput_WithHourDurationLine_ReturnsTotalSeconds()
+    {
+        var output = "Duration: 01:02:03.25, start: 0.000000, bitrate: 192 kb/s";
+
+        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
+
+        Assert.That(result, Is.EqualTo(3723.25).Within(0.001));
+    }
+
+    [Test]
+    public void TryParseDurationFromFfmpegOutput_WithoutDurationLine_ReturnsNull()
+    {
+        var output = "Invalid data found when processing input";
+
+        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
     public void ConvertToMp3Async_WithNullStream_ThrowsArgumentNullException()
     {
         // Arrange

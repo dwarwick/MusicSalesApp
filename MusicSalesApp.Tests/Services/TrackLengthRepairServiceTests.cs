@@ -82,6 +82,72 @@ public class TrackLengthRepairServiceTests
     }
 
     [Test]
+    public async Task RepairMissingTrackLengthsAsync_RepairsLegacyBlobPathOnlyMp3AndBackfillsMp3Path()
+    {
+        var originalUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            Id = 1,
+            BlobPath = "legacy/test-song.mp3",
+            Mp3BlobPath = string.Empty,
+            IsActive = true,
+            IsEnabled = true,
+            IsAlbumCover = false,
+            TrackLength = null,
+            UpdatedAt = originalUpdatedAt
+        });
+        await _context.SaveChangesAsync();
+
+        _mockStorageService
+            .Setup(service => service.OpenReadAsync("legacy/test-song.mp3"))
+            .ReturnsAsync(new MemoryStream(new byte[] { 1, 2, 3 }));
+        _mockMusicService
+            .Setup(service => service.GetAudioDurationAsync(It.IsAny<Stream>(), "test-song.mp3"))
+            .ReturnsAsync(201.5);
+
+        var repaired = await _service.RepairMissingTrackLengthsAsync();
+
+        Assert.That(repaired, Is.EqualTo(1));
+
+        await using var verifyContext = new AppDbContext(_options);
+        var saved = await verifyContext.SongMetadata.SingleAsync(song => song.Id == 1);
+        Assert.That(saved.TrackLength, Is.EqualTo(201.5));
+        Assert.That(saved.Mp3BlobPath, Is.EqualTo("legacy/test-song.mp3"));
+        Assert.That(saved.UpdatedAt, Is.GreaterThan(originalUpdatedAt));
+
+        _mockStorageService.Verify(service => service.OpenReadAsync("legacy/test-song.mp3"), Times.Once);
+        _mockMusicService.Verify(service => service.GetAudioDurationAsync(It.IsAny<Stream>(), "test-song.mp3"), Times.Once);
+    }
+
+    [Test]
+    public async Task RepairMissingTrackLengthsAsync_IgnoresLegacyBlobPathWhenItIsNotMp3()
+    {
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            Id = 1,
+            BlobPath = "legacy/test-song.jpg",
+            Mp3BlobPath = string.Empty,
+            IsActive = true,
+            IsEnabled = true,
+            IsAlbumCover = false,
+            TrackLength = null
+        });
+        await _context.SaveChangesAsync();
+
+        var repaired = await _service.RepairMissingTrackLengthsAsync();
+
+        Assert.That(repaired, Is.EqualTo(0));
+
+        await using var verifyContext = new AppDbContext(_options);
+        var saved = await verifyContext.SongMetadata.SingleAsync(song => song.Id == 1);
+        Assert.That(saved.TrackLength, Is.Null);
+        Assert.That(saved.Mp3BlobPath, Is.Empty);
+
+        _mockStorageService.Verify(service => service.OpenReadAsync(It.IsAny<string>()), Times.Never);
+        _mockMusicService.Verify(service => service.GetAudioDurationAsync(It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
     public async Task RepairMissingTrackLengthsAsync_SkipsSongsWhenBlobStreamIsMissingOrEmpty()
     {
         _context.SongMetadata.Add(new SongMetadata

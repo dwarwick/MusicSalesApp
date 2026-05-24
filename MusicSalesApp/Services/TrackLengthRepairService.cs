@@ -9,6 +9,8 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public class TrackLengthRepairService : ITrackLengthRepairService
 {
+    private static readonly TimeSpan DelayBetweenCandidates = TimeSpan.FromMilliseconds(500);
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IAzureStorageService _storageService;
     private readonly IMusicService _musicService;
@@ -38,12 +40,17 @@ public class TrackLengthRepairService : ITrackLengthRepairService
                 return 0;
             }
 
+            _logger.LogInformation(
+                "Repairing missing track lengths for {CandidateCount} active song(s).",
+                candidates.Count);
+
             int repairedCount = 0;
             int skippedCount = 0;
             int failureCount = 0;
 
-            foreach (var candidate in candidates)
+            for (var i = 0; i < candidates.Count; i++)
             {
+                var candidate = candidates[i];
                 var outcome = await TryRepairCandidateAsync(candidate);
                 switch (outcome)
                 {
@@ -56,6 +63,11 @@ public class TrackLengthRepairService : ITrackLengthRepairService
                     default:
                         failureCount++;
                         break;
+                }
+
+                if (i < candidates.Count - 1)
+                {
+                    await Task.Delay(DelayBetweenCandidates);
                 }
             }
 
@@ -80,10 +92,15 @@ public class TrackLengthRepairService : ITrackLengthRepairService
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         return await context.SongMetadata
-            .WhereActivePlayableSongs()
+            .Where(song => song.IsActive && !song.IsAlbumCover)
             .Where(song => !song.TrackLength.HasValue)
+            .Where(song =>
+                (song.Mp3BlobPath != null && song.Mp3BlobPath != string.Empty) ||
+                (song.BlobPath != null && song.BlobPath != string.Empty && song.BlobPath.ToLower().EndsWith(".mp3")))
             .OrderBy(song => song.Id)
-            .Select(song => new TrackLengthRepairCandidate(song.Id, song.Mp3BlobPath!))
+            .Select(song => new TrackLengthRepairCandidate(
+                song.Id,
+                song.Mp3BlobPath != null && song.Mp3BlobPath != string.Empty ? song.Mp3BlobPath : song.BlobPath))
             .ToListAsync();
     }
 
@@ -91,23 +108,28 @@ public class TrackLengthRepairService : ITrackLengthRepairService
     {
         try
         {
-            await using var stream = await _storageService.OpenReadAsync(candidate.Mp3BlobPath);
+            _logger.LogInformation(
+                "Attempting track length repair for song {SongId} from blob {BlobPath}.",
+                candidate.Id,
+                candidate.BlobPath);
+
+            await using var stream = await _storageService.OpenReadAsync(candidate.BlobPath);
             if (stream == null || (stream.CanSeek && stream.Length == 0))
             {
                 _logger.LogWarning(
                     "Skipping track length repair for song {SongId} because blob {BlobPath} could not be opened or was empty.",
                     candidate.Id,
-                    candidate.Mp3BlobPath);
+                    candidate.BlobPath);
                 return TrackLengthRepairOutcome.Skipped;
             }
 
-            var duration = await _musicService.GetAudioDurationAsync(stream, Path.GetFileName(candidate.Mp3BlobPath));
+            var duration = await _musicService.GetAudioDurationAsync(stream, Path.GetFileName(candidate.BlobPath));
             if (!duration.HasValue || duration.Value <= 0)
             {
                 _logger.LogWarning(
                     "Skipping track length repair for song {SongId} because duration extraction failed for blob {BlobPath}.",
                     candidate.Id,
-                    candidate.Mp3BlobPath);
+                    candidate.BlobPath);
                 return TrackLengthRepairOutcome.Skipped;
             }
 
@@ -120,7 +142,7 @@ public class TrackLengthRepairService : ITrackLengthRepairService
                 ex,
                 "Failed to repair track length for song {SongId} and blob {BlobPath}.",
                 candidate.Id,
-                candidate.Mp3BlobPath);
+                candidate.BlobPath);
             return TrackLengthRepairOutcome.Failed;
         }
     }
@@ -130,7 +152,7 @@ public class TrackLengthRepairService : ITrackLengthRepairService
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         var song = await context.SongMetadata
-            .WhereActivePlayableSongs()
+            .Where(song => song.IsActive && !song.IsAlbumCover)
             .FirstOrDefaultAsync(song => song.Id == candidate.Id);
 
         if (song == null)
@@ -150,6 +172,11 @@ public class TrackLengthRepairService : ITrackLengthRepairService
         }
 
         song.TrackLength = duration;
+        if (string.IsNullOrEmpty(song.Mp3BlobPath))
+        {
+            song.Mp3BlobPath = candidate.BlobPath;
+        }
+
         song.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
@@ -158,7 +185,7 @@ public class TrackLengthRepairService : ITrackLengthRepairService
             "Updated missing track length for song {SongId} to {TrackLengthSeconds} seconds from blob {BlobPath}.",
             candidate.Id,
             duration,
-            candidate.Mp3BlobPath);
+            candidate.BlobPath);
 
         return true;
     }
@@ -170,5 +197,5 @@ public class TrackLengthRepairService : ITrackLengthRepairService
         Failed
     }
 
-    private sealed record TrackLengthRepairCandidate(int Id, string Mp3BlobPath);
+    private sealed record TrackLengthRepairCandidate(int Id, string BlobPath);
 }
