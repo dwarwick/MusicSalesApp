@@ -1,3 +1,32 @@
+/* Extra large breakpoint styles (>=1200px) */
+.mobile-app-install-banner {
+    min-height: 64px;
+    padding: 10px 24px;
+}
+
+.mobile-app-install-icon {
+    width: 44px;
+    height: 44px;
+}
+
+.mobile-app-install-title {
+    font-size: 16px;
+}
+
+.mobile-app-install-subtitle {
+    font-size: 14px;
+}
+
+.mobile-app-install-store-badge {
+    height: 40px;
+}
+
+.mobile-app-install-store-text {
+    min-height: 40px;
+    padding: 0 16px;
+    font-size: 14px;
+}
+
 /* 1. The Wrapper (Router Container) - Base styles for all breakpoints */
 .playlist-player-container {
     display: grid;

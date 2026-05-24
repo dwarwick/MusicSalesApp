@@ -1,0 +1,13 @@
+{
+  "name": "StreamTunes",
+  "short_name": "StreamTunes",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "net.streamtunes.musicsalesapp.maui"
+    }
+  ]
+}

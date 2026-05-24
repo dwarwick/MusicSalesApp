@@ -479,6 +479,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAdminMessageService>(MockAdminMessageService.Object);
         TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
+        TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);
 
         // Add IConfiguration for components that need it

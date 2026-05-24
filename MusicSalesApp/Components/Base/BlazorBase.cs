@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace MusicSalesApp.Components.Base;
 
@@ -134,6 +135,9 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IConfiguration Configuration { get; set; } = default!;
+
+    [Inject]
+    protected IOptions<MobileAppInstallOptions> MobileAppInstallOptions { get; set; } = default!;
 
     [Inject]
     protected TimeProvider TimeProvider { get; set; } = default!;

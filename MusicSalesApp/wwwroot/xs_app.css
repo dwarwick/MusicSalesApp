@@ -1,5 +1,34 @@
 /* Extra small breakpoint styles (<576px) */
 @media (max-width: 576px) {
+    .mobile-app-install-banner {
+        min-height: 54px;
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .mobile-app-install-icon {
+        width: 34px;
+        height: 34px;
+    }
+
+    .mobile-app-install-title {
+        font-size: 13px;
+    }
+
+    .mobile-app-install-subtitle {
+        display: none;
+    }
+
+    .mobile-app-install-store-badge {
+        height: 34px;
+    }
+
+    .mobile-app-install-store-text {
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 12px;
+    }
+
     /* AdminSongManagement container */
     #grid-container {
         width: 100%;

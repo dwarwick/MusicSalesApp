@@ -23,6 +23,30 @@ body {
     box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+.mobile-app-install-banner {
+    background-color: #ffffff;
+    border-color: #d9dee3;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-app-install-title {
+    color: #111111;
+}
+
+.mobile-app-install-subtitle {
+    color: #495057;
+}
+
+.mobile-app-install-store-text {
+    background-color: #111111;
+    color: #ffffff;
+}
+
+.mobile-app-install-store-text:hover {
+    background-color: #242424;
+    color: #ffffff;
+}
+
 /* Add to Cart Button Colors */
 .card-cart-button {
     background-color: transparent;

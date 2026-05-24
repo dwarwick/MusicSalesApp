@@ -99,6 +99,63 @@ h1:focus {
     margin-left: 10px;
 }
 
+.mobile-app-install-banner {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid;
+}
+
+.mobile-app-install-icon {
+    flex: 0 0 auto;
+    object-fit: contain;
+}
+
+.mobile-app-install-copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mobile-app-install-title,
+.mobile-app-install-subtitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mobile-app-install-store-link {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.mobile-app-install-store-badge {
+    display: block;
+    width: auto;
+    object-fit: contain;
+}
+
+.mobile-app-install-store-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.mobile-app-install-dismiss {
+    flex: 0 0 auto;
+}
+
 /* Admin menu header styling */
 .e-menu-wrapper .e-menu .e-menu-item.e-disabled {
     opacity: 1 !important;

@@ -1,0 +1,37 @@
+@inherits MobileAppInstallBannerModel
+
+@if (ShouldRenderIosSmartAppBanner)
+{
+    <HeadContent>
+        <meta name="apple-itunes-app" content="@AppleSmartBannerContent" />
+    </HeadContent>
+}
+
+@if (IsBannerVisible)
+{
+    <section class="mobile-app-install-banner"
+             role="region"
+             aria-label="StreamTunes mobile app"
+             data-mobile-app-install-platform="@BannerPlatform"
+             data-mobile-app-install-promotional="@IsPromotional.ToString().ToLowerInvariant()">
+        <img src="@StreamTunesIconUrl" alt="StreamTunes" class="mobile-app-install-icon" />
+        <div class="mobile-app-install-copy">
+            <strong class="mobile-app-install-title">Get the StreamTunes app</strong>
+            <span class="mobile-app-install-subtitle">@BannerSubtitle</span>
+        </div>
+        <a href="@StoreUrl" class="mobile-app-install-store-link" aria-label="@StoreLinkLabel">
+            @if (HasStoreBadge)
+            {
+                <img src="@StoreBadgeUrl" alt="@StoreBadgeAlt" class="mobile-app-install-store-badge" />
+            }
+            else
+            {
+                <span class="mobile-app-install-store-text">@StoreLinkText</span>
+            }
+        </a>
+        <button type="button"
+                class="btn-close mobile-app-install-dismiss"
+                aria-label="Dismiss app download banner"
+                @onclick="DismissAsync"></button>
+    </section>
+}

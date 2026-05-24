@@ -79,6 +79,8 @@ try
 
     builder.Services.AddRazorPages();
 
+    builder.Services.Configure<MobileAppInstallOptions>(builder.Configuration.GetSection("MobileAppInstall"));
+
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
