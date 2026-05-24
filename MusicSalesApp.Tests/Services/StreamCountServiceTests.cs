@@ -434,4 +434,5 @@ public class StreamCountServiceTests
             .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
         Assert.That(streamRecord, Is.Null);
     }
+
 }
