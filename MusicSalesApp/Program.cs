@@ -354,6 +354,8 @@ try
     builder.Services.AddScoped<ICreatorPersonaService, CreatorPersonaService>();
     builder.Services.AddScoped<ITipService, TipService>();
     builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
+    builder.Services.AddScoped<IContactRequestEmailService, ContactRequestEmailService>();
+    builder.Services.AddScoped<IContactRequestRateLimitService, ContactRequestRateLimitService>();
     builder.Services.AddScoped<IMobileSongMapper, MobileSongMapper>();
     
     // Register TaxBanditsService with HttpClient

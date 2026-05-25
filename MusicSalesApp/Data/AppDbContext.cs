@@ -37,6 +37,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<AdminMessage> AdminMessages { get; set; }
     public DbSet<AdminMessageRole> AdminMessageRoles { get; set; }
     public DbSet<AdminMessageRecipient> AdminMessageRecipients { get; set; }
+    public DbSet<ContactRequestSubmission> ContactRequestSubmissions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -565,5 +566,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on ReportingUserId for efficient lookups
         builder.Entity<ReportedSong>()
             .HasIndex(rs => rs.ReportingUserId);
+
+        builder.Entity<ContactRequestSubmission>()
+            .HasOne(submission => submission.User)
+            .WithMany()
+            .HasForeignKey(submission => submission.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ContactRequestSubmission>()
+            .HasIndex(submission => new { submission.UserId, submission.SubmittedAtUtc });
+
+        builder.Entity<ContactRequestSubmission>()
+            .HasIndex(submission => new { submission.IpAddress, submission.SubmittedAtUtc });
     }
 }
