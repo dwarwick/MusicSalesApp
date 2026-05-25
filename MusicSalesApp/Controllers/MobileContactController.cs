@@ -52,7 +52,7 @@ public class MobileContactController : ControllerBase
             userId,
             userEmail,
             subject,
-            message.Length,
+            message,
             ipAddress);
 
         if (!reservation.IsAllowed)

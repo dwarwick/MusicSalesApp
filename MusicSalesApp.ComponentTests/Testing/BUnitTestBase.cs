@@ -68,6 +68,7 @@ public abstract class BUnitTestBase
     protected Mock<IAdminNotificationService> MockAdminNotificationService { get; private set; } = default!;
     protected Mock<IAdminMessageService> MockAdminMessageService { get; private set; } = default!;
     protected Mock<IAdminMessageHubClient> MockAdminMessageHubClient { get; private set; } = default!;
+    protected Mock<IContactRequestAdminService> MockContactRequestAdminService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -114,6 +115,7 @@ public abstract class BUnitTestBase
         MockAdminNotificationService = new Mock<IAdminNotificationService>();
         MockAdminMessageService = new Mock<IAdminMessageService>();
         MockAdminMessageHubClient = new Mock<IAdminMessageHubClient>();
+        MockContactRequestAdminService = new Mock<IContactRequestAdminService>();
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         
@@ -430,6 +432,9 @@ public abstract class BUnitTestBase
         MockStreamPayoutService.Setup(x => x.GetAllPayoutsAsync())
             .ReturnsAsync(new List<MusicSalesApp.Models.StreamPayout>());
 
+        MockContactRequestAdminService.Setup(x => x.GetSubmissionsAsync())
+            .ReturnsAsync(new List<ContactRequestSubmissionDto>());
+
         // Setup DbContextFactory mock - use in-memory database for testing
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<MusicSalesApp.Data.AppDbContext>()
             .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
@@ -478,6 +483,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAdminNotificationService>(MockAdminNotificationService.Object);
         TestContext.Services.AddSingleton<IAdminMessageService>(MockAdminMessageService.Object);
         TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);
+        TestContext.Services.AddSingleton<IContactRequestAdminService>(MockContactRequestAdminService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

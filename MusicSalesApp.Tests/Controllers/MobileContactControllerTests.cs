@@ -26,7 +26,7 @@ public class MobileContactControllerTests
             .Setup(service => service.SendContactRequestEmailsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(new ContactRequestEmailResult(true, true));
         _mockRateLimitService
-            .Setup(service => service.TryReserveSubmissionAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>()))
+            .Setup(service => service.TryReserveSubmissionAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(ContactRequestReservationResult.Allowed(42));
 
         _controller = CreateController(userId: 7, email: "validated@example.com", includeValidatedClaim: true);
@@ -87,7 +87,7 @@ public class MobileContactControllerTests
     public async Task Submit_RateLimitFailure_ReturnsTooManyRequestsAndDoesNotSendEmail()
     {
         _mockRateLimitService
-            .Setup(service => service.TryReserveSubmissionAsync(7, "validated@example.com", ContactRequestSubjectTypes.BugReport, 5, "10.0.0.1"))
+            .Setup(service => service.TryReserveSubmissionAsync(7, "validated@example.com", ContactRequestSubjectTypes.BugReport, "Hello", "10.0.0.1"))
             .ReturnsAsync(ContactRequestReservationResult.Blocked("Please wait."));
 
         var result = await _controller.Submit(new MobileContactRequest
@@ -116,6 +116,12 @@ public class MobileContactControllerTests
             "validated@example.com",
             ContactRequestSubjectTypes.AppSuggestion,
             "Please add queue editing."), Times.Once);
+        _mockRateLimitService.Verify(service => service.TryReserveSubmissionAsync(
+            7,
+            "validated@example.com",
+            ContactRequestSubjectTypes.AppSuggestion,
+            "Please add queue editing.",
+            "10.0.0.1"), Times.Once);
         _mockRateLimitService.Verify(service => service.MarkEmailResultAsync(42, true, true), Times.Once);
     }
 

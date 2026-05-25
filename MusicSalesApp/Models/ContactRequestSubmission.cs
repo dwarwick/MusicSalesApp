@@ -23,6 +23,10 @@ public class ContactRequestSubmission
     [MaxLength(100)]
     public string Subject { get; set; } = string.Empty;
 
+    [Required]
+    [MaxLength(4000)]
+    public string MessageText { get; set; } = string.Empty;
+
     public int MessageLength { get; set; }
 
     [MaxLength(45)]

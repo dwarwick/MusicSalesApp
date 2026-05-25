@@ -8,7 +8,7 @@ public interface IContactRequestRateLimitService
         int userId,
         string userEmail,
         string subject,
-        int messageLength,
+        string message,
         string? ipAddress);
 
     Task MarkEmailResultAsync(int submissionId, bool userEmailSent, bool adminEmailSent);

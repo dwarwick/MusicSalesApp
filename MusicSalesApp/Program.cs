@@ -356,6 +356,7 @@ try
     builder.Services.AddScoped<IReportedSongService, ReportedSongService>();
     builder.Services.AddScoped<IContactRequestEmailService, ContactRequestEmailService>();
     builder.Services.AddScoped<IContactRequestRateLimitService, ContactRequestRateLimitService>();
+    builder.Services.AddScoped<IContactRequestAdminService, ContactRequestAdminService>();
     builder.Services.AddScoped<IMobileSongMapper, MobileSongMapper>();
     
     // Register TaxBanditsService with HttpClient

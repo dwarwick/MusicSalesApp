@@ -30,13 +30,14 @@ public class ContactRequestRateLimitService : IContactRequestRateLimitService
         int userId,
         string userEmail,
         string subject,
-        int messageLength,
+        string message,
         string? ipAddress)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var shortWindowStart = now.AddMinutes(-MinimumMinutesBetweenSubmissions);
         var dailyWindowStart = now.AddDays(-1);
         var normalizedIpAddress = NormalizeIpAddress(ipAddress);
+        var trimmedMessage = message.Trim();
 
         await using var context = await _contextFactory.CreateDbContextAsync();
 
@@ -72,7 +73,8 @@ public class ContactRequestRateLimitService : IContactRequestRateLimitService
             UserId = userId,
             UserEmail = userEmail,
             Subject = subject,
-            MessageLength = messageLength,
+            MessageText = trimmedMessage,
+            MessageLength = trimmedMessage.Length,
             IpAddress = normalizedIpAddress,
             SubmittedAtUtc = now
         };

@@ -1,0 +1,147 @@
+@page "/admin/contact-messages"
+@rendermode InteractiveServer
+@inherits ContactMessagesModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Services
+@using Syncfusion.Blazor.Buttons
+@using Syncfusion.Blazor.Grids
+@using Syncfusion.Blazor.Inputs
+@using Syncfusion.Blazor.Popups
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Contact Messages</PageTitle>
+
+<h3>Contact Messages</h3>
+
+@if (_isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading contact messages...</p>
+    </div>
+}
+else if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        <strong>Error:</strong> @_errorMessage
+    </div>
+}
+else
+{
+    <div class="admin-messages-panel">
+        <div class="admin-messages-panel-header">
+            <h5 class="mb-0">Mobile Contact Form Submissions</h5>
+        </div>
+        <div class="admin-messages-panel-body">
+            <SfGrid @ref="_grid"
+                    TValue="ContactRequestSubmissionDto"
+                    DataSource="@_messages"
+                    AllowPaging="true"
+                    AllowSorting="true"
+                    AllowFiltering="true"
+                    AllowResizing="true"
+                    Height="520px"
+                    EnableAdaptiveUI="false"
+                    RowRenderingMode="Syncfusion.Blazor.Grids.RowDirection.Horizontal">
+                <GridPageSettings PageSize="10"></GridPageSettings>
+                <GridFilterSettings Type="Syncfusion.Blazor.Grids.FilterType.Excel"></GridFilterSettings>
+                <GridColumns>
+                    <GridColumn HeaderText="Action" Width="100" AllowFiltering="false" AllowSorting="false">
+                        <Template>
+                            @{
+                                var message = (context as ContactRequestSubmissionDto)!;
+                                <SfButton OnClick="() => OpenViewDialog(message)"
+                                          CssClass="e-btn e-outline e-small">
+                                    View
+                                </SfButton>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.SubmittedAtUtc)" HeaderText="Submitted" Width="170">
+                        <Template>
+                            @{
+                                var message = (context as ContactRequestSubmissionDto)!;
+                                <span>@message.SubmittedAtUtc.ToString("g") UTC</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.UserEmail)" HeaderText="User Email" Width="230"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.Subject)" HeaderText="Subject" Width="210"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.MessagePreview)" HeaderText="Message" Width="360"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.EmailStatus)" HeaderText="Email Status" Width="140"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.MessageLength)" HeaderText="Length" Width="100"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.IpAddress)" HeaderText="IP Address" Width="150"></GridColumn>
+                    <GridColumn Field="@nameof(ContactRequestSubmissionDto.EmailSendCompletedAtUtc)" HeaderText="Email Completed" Width="180">
+                        <Template>
+                            @{
+                                var message = (context as ContactRequestSubmissionDto)!;
+                                <span>@FormatNullableUtc(message.EmailSendCompletedAtUtc)</span>
+                            }
+                        </Template>
+                    </GridColumn>
+                </GridColumns>
+            </SfGrid>
+        </div>
+    </div>
+
+    <SfDialog @bind-Visible="_showViewDialog"
+              Width="720px"
+              IsModal="true"
+              ShowCloseIcon="true"
+              AllowDragging="false"
+              CssClass="admin-message-dialog">
+        <DialogTemplates>
+            <Header>
+                <span>Contact Message Details</span>
+            </Header>
+            <Content>
+                @if (_viewMessage != null)
+                {
+                    <div class="admin-message-dialog-content">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Submitted</label>
+                                <SfTextBox Value="@FormatUtc(_viewMessage.SubmittedAtUtc)" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Email Status</label>
+                                <SfTextBox Value="@_viewMessage.EmailStatus" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">User Email</label>
+                                <SfTextBox Value="@_viewMessage.UserEmail" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">User ID</label>
+                                <SfTextBox Value="@_viewMessage.UserId.ToString()" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Subject</label>
+                                <SfTextBox Value="@_viewMessage.Subject" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">IP Address</label>
+                                <SfTextBox Value="@(_viewMessage.IpAddress ?? string.Empty)" Enabled="false" CssClass="e-outline" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Message</label>
+                                <SfTextBox Value="@_viewMessage.MessageText"
+                                           Enabled="false"
+                                           CssClass="e-outline"
+                                           Multiline="true" />
+                            </div>
+                        </div>
+                    </div>
+                }
+            </Content>
+            <FooterTemplate>
+                <SfButton OnClick="CloseViewDialog" IsPrimary="true" CssClass="e-btn e-primary">
+                    Close
+                </SfButton>
+            </FooterTemplate>
+        </DialogTemplates>
+    </SfDialog>
+}

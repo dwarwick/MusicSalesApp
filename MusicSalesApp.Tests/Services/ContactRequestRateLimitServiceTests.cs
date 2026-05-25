@@ -28,9 +28,9 @@ public class ContactRequestRateLimitServiceTests
     }
 
     [Test]
-    public async Task TryReserveSubmissionAsync_FirstSubmission_IsAllowedAndStoresMetadataOnly()
+    public async Task TryReserveSubmissionAsync_FirstSubmission_IsAllowedAndStoresMessage()
     {
-        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 123, "192.0.2.1");
+        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "  Playback stopped.  ", "192.0.2.1");
 
         Assert.That(result.IsAllowed, Is.True);
         await using var context = new AppDbContext(_options);
@@ -40,7 +40,8 @@ public class ContactRequestRateLimitServiceTests
             Assert.That(submission.UserId, Is.EqualTo(7));
             Assert.That(submission.UserEmail, Is.EqualTo("user@example.com"));
             Assert.That(submission.Subject, Is.EqualTo("Bug Report"));
-            Assert.That(submission.MessageLength, Is.EqualTo(123));
+            Assert.That(submission.MessageText, Is.EqualTo("Playback stopped."));
+            Assert.That(submission.MessageLength, Is.EqualTo("Playback stopped.".Length));
             Assert.That(submission.IpAddress, Is.EqualTo("192.0.2.1"));
         });
     }
@@ -48,10 +49,10 @@ public class ContactRequestRateLimitServiceTests
     [Test]
     public async Task TryReserveSubmissionAsync_BlocksSubmissionWithinShortWindow()
     {
-        await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 123, "192.0.2.1");
+        await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "Hello", "192.0.2.1");
         _timeProvider.UtcNow = _timeProvider.UtcNow.AddMinutes(5);
 
-        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 124, "192.0.2.1");
+        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "Hello again", "192.0.2.1");
 
         Assert.That(result.IsAllowed, Is.False);
         Assert.That(result.ErrorMessage, Does.Contain("10 minutes"));
@@ -62,7 +63,7 @@ public class ContactRequestRateLimitServiceTests
     {
         await SeedSubmissionsAsync(userId: 7, ipAddress: "192.0.2.1", count: ContactRequestRateLimitService.MaxSubmissionsPerUserPerDay, useDistinctUsers: false);
 
-        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 123, "192.0.2.1");
+        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "Hello", "192.0.2.1");
 
         Assert.That(result.IsAllowed, Is.False);
         Assert.That(result.ErrorMessage, Does.Contain("daily contact form limit"));
@@ -73,7 +74,7 @@ public class ContactRequestRateLimitServiceTests
     {
         await SeedSubmissionsAsync(userId: 100, ipAddress: "192.0.2.9", count: ContactRequestRateLimitService.MaxSubmissionsPerIpPerDay, useDistinctUsers: true);
 
-        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 123, "192.0.2.9");
+        var result = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "Hello", "192.0.2.9");
 
         Assert.That(result.IsAllowed, Is.False);
         Assert.That(result.ErrorMessage, Does.Contain("network"));
@@ -82,7 +83,7 @@ public class ContactRequestRateLimitServiceTests
     [Test]
     public async Task MarkEmailResultAsync_UpdatesEmailStatus()
     {
-        var reservation = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", 123, "192.0.2.1");
+        var reservation = await _service.TryReserveSubmissionAsync(7, "user@example.com", "Bug Report", "Hello", "192.0.2.1");
 
         await _service.MarkEmailResultAsync(reservation.SubmissionId!.Value, userEmailSent: true, adminEmailSent: false);
 
@@ -106,6 +107,7 @@ public class ContactRequestRateLimitServiceTests
                 UserId = useDistinctUsers ? userId + i : userId,
                 UserEmail = $"user{i}@example.com",
                 Subject = "Bug Report",
+                MessageText = "Seeded message",
                 MessageLength = 50,
                 IpAddress = ipAddress,
                 SubmittedAtUtc = _timeProvider.UtcNow.UtcDateTime.AddMinutes(-15 - i)
