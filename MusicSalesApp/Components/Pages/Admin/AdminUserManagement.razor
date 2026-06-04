@@ -188,6 +188,7 @@ else
                             var user = (context as UserViewModel);
                             var badgeClass = user!.SubscriptionStatus switch
                             {
+                                "Trial Active" => "bg-info",
                                 "Active" => "bg-success",
                                 "Cancelled" => "bg-warning",
                                 "Blocked" => "bg-danger",

@@ -2,6 +2,7 @@ using Google.Apis.AndroidPublisher.v3;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Microsoft.Extensions.Hosting;
+using System.Globalization;
 
 namespace MusicSalesApp.Services;
 
@@ -129,23 +130,59 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
                 throw new GooglePlayVerificationException("Google Play returned an empty verification response for this purchase.");
             }
 
-            // Parse expiry time from the line items
+            var lineItem = subscription.LineItems?.FirstOrDefault(item => item.ProductId == productId)
+                ?? subscription.LineItems?.FirstOrDefault();
+
             DateTimeOffset? expiryTime = null;
-            if (subscription.LineItems?.Count > 0)
+            if (lineItem != null)
             {
-                var dto = subscription.LineItems[0].ExpiryTimeDateTimeOffset;
+                var dto = lineItem.ExpiryTimeDateTimeOffset;
                 if (dto.HasValue)
                 {
                     expiryTime = dto.Value;
                 }
             }
 
-            return new GooglePlaySubscriptionInfo(
+            var offerTags = lineItem?.OfferDetails?.OfferTags?
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .ToArray() ?? [];
+
+            var isFreeTrial = lineItem?.OfferPhase?.FreeTrial != null;
+            var recurringPrice = ResolveMoneyAmount(lineItem?.AutoRenewingPlan?.RecurringPrice);
+            var priceCurrencyCode = ResolveMoneyCurrencyCode(lineItem?.AutoRenewingPlan?.RecurringPrice);
+
+            var result = new GooglePlaySubscriptionInfo(
                 SubscriptionState: subscription.SubscriptionState ?? "UNKNOWN",
+                StartTime: subscription.StartTimeDateTimeOffset,
                 ExpiryTime: expiryTime,
-                OrderId: subscription.LatestOrderId,
+                OrderId: lineItem?.LatestSuccessfulOrderId ?? subscription.LatestOrderId,
                 IsAcknowledged: subscription.AcknowledgementState == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
-                LinkedPurchaseToken: subscription.LinkedPurchaseToken);
+                LinkedPurchaseToken: subscription.LinkedPurchaseToken,
+                IsFreeTrial: isFreeTrial,
+                BasePlanId: lineItem?.OfferDetails?.BasePlanId,
+                OfferId: lineItem?.OfferDetails?.OfferId,
+                OfferTags: offerTags,
+                AutoRenewEnabled: lineItem?.AutoRenewingPlan?.AutoRenewEnabled,
+                RecurringPrice: recurringPrice,
+                PriceCurrencyCode: priceCurrencyCode);
+
+            _logger.LogInformation(
+                "Google Play verification result for product {ProductId}: State={State}, Start={StartTime}, Expiry={ExpiryTime}, OrderId={OrderId}, IsAcknowledged={IsAcknowledged}, IsFreeTrial={IsFreeTrial}, AutoRenewEnabled={AutoRenewEnabled}, BasePlanId={BasePlanId}, OfferId={OfferId}, OfferTags={OfferTags}, RecurringPrice={RecurringPrice}, PriceCurrencyCode={PriceCurrencyCode}",
+                productId,
+                result.SubscriptionState,
+                result.StartTime,
+                result.ExpiryTime,
+                result.OrderId,
+                result.IsAcknowledged,
+                result.IsFreeTrial,
+                result.AutoRenewEnabled,
+                result.BasePlanId,
+                result.OfferId,
+                result.OfferTags == null ? string.Empty : string.Join(",", result.OfferTags),
+                result.RecurringPrice,
+                result.PriceCurrencyCode);
+
+            return result;
         }
         catch (Google.GoogleApiException ex) when (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -246,5 +283,24 @@ public class GooglePlayVerificationService : IGooglePlayVerificationService, IDi
     public void Dispose()
     {
         _publisherService?.Dispose();
+    }
+
+    private static decimal? ResolveMoneyAmount(object money)
+    {
+        if (money == null)
+        {
+            return null;
+        }
+
+        var unitsValue = money.GetType().GetProperty("Units")?.GetValue(money);
+        var nanosValue = money.GetType().GetProperty("Nanos")?.GetValue(money);
+        var units = unitsValue == null ? 0m : Convert.ToDecimal(unitsValue, CultureInfo.InvariantCulture);
+        var nanos = nanosValue == null ? 0m : Convert.ToDecimal(nanosValue, CultureInfo.InvariantCulture) / 1_000_000_000m;
+        return units + nanos;
+    }
+
+    private static string ResolveMoneyCurrencyCode(object money)
+    {
+        return money?.GetType().GetProperty("CurrencyCode")?.GetValue(money)?.ToString() ?? string.Empty;
     }
 }

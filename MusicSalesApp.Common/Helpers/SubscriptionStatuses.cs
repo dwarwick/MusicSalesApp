@@ -15,6 +15,9 @@ public static class SubscriptionStatuses
     /// <summary>Subscription has been cancelled.</summary>
     public const string Cancelled = "CANCELLED";
 
+    /// <summary>Alternative spelling used by some external providers for cancelled subscriptions.</summary>
+    public const string Canceled = "CANCELED";
+
     /// <summary>Subscription has been suspended.</summary>
     public const string Suspended = "SUSPENDED";
 

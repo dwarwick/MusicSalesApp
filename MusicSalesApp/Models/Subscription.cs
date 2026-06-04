@@ -28,6 +28,18 @@ public class Subscription
     [Column(TypeName = "decimal(18,2)")]
     public decimal MonthlyPrice { get; set; }
 
+    /// <summary>
+    /// Store-provided price text such as a Google Play formatted price. Null when unavailable.
+    /// </summary>
+    [MaxLength(100)]
+    public string StoreFormattedPrice { get; set; }
+
+    /// <summary>
+    /// Store-provided ISO currency code. Null when unavailable.
+    /// </summary>
+    [MaxLength(10)]
+    public string StorePriceCurrencyCode { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? CancelledAt { get; set; }
@@ -35,6 +47,27 @@ public class Subscription
     public DateTime? LastPaymentDate { get; set; }
 
     public DateTime? NextBillingDate { get; set; }
+
+    public DateTime? TrialStartDate { get; set; }
+
+    public DateTime? TrialEndDate { get; set; }
+
+    public DateTime? TrialConvertedAt { get; set; }
+
+    public DateTime? TrialActivationEmailSentAt { get; set; }
+
+    public DateTime? TrialConversionEmailSentAt { get; set; }
+
+    [MaxLength(100)]
+    public string TrialBasePlanId { get; set; }
+
+    [MaxLength(100)]
+    public string TrialOfferId { get; set; }
+
+    [MaxLength(500)]
+    public string TrialOfferTags { get; set; }
+
+    public bool? GooglePlayAutoRenewEnabled { get; set; }
 
     /// <summary>
     /// Billing source: "PayPal" or "GooglePlay". Defaults to PayPal for existing records.

@@ -191,6 +191,7 @@ public class AppleAppStoreSubscriptionControllerTests
             UserId = 1,
             BillingSource = "Apple",
             Status = SubscriptionStatuses.Active,
+            LastPaymentDate = DateTime.UtcNow.AddDays(-1),
             AppStoreOriginalTransactionId = "orig-123"
         };
 

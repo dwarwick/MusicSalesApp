@@ -18,6 +18,7 @@ public class GooglePlayWebhookController : ControllerBase
     private readonly ISubscriptionService _subscriptionService;
     private readonly IGooglePlayVerificationService _verificationService;
     private readonly IAccountEmailService _accountEmailService;
+    private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GooglePlayWebhookController> _logger;
@@ -26,6 +27,7 @@ public class GooglePlayWebhookController : ControllerBase
         ISubscriptionService subscriptionService,
         IGooglePlayVerificationService verificationService,
         IAccountEmailService accountEmailService,
+        ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<GooglePlayWebhookController> logger)
@@ -33,6 +35,7 @@ public class GooglePlayWebhookController : ControllerBase
         _subscriptionService = subscriptionService;
         _verificationService = verificationService;
         _accountEmailService = accountEmailService;
+        _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -104,7 +107,7 @@ public class GooglePlayWebhookController : ControllerBase
         // 9 = DEFERRED, 10 = PAUSED, 11 = PAUSE_SCHEDULE_CHANGED,
         // 12 = REVOKED, 13 = EXPIRED, 20 = PENDING_PURCHASE_CANCELED
 
-        var status = notificationType switch
+        var notificationStatus = notificationType switch
         {
             1 or 2 or 4 or 7 => SubscriptionStatuses.Active,      // RECOVERED, RENEWED, PURCHASED, RESTARTED
             3 => SubscriptionStatuses.Cancelled,                    // CANCELED
@@ -113,23 +116,77 @@ public class GooglePlayWebhookController : ControllerBase
             _ => (string)null
         };
 
-        if (status == null)
+        if (notificationStatus == null)
         {
             _logger.LogInformation("RTDN notification type {Type} does not require status update", notificationType);
             return;
         }
 
-        // Verify current subscription state with Google for accurate expiry time
+        var existingSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(purchaseToken);
+
         var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
         var info = await _verificationService.VerifySubscriptionAsync(purchaseToken, productId);
 
         DateTime? expiryTime = info?.ExpiryTime?.UtcDateTime;
+        var status = ResolveLocalStatus(notificationStatus, info);
 
-        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(purchaseToken, status, expiryTime);
+        _logger.LogInformation(
+            "RTDN notification type {NotificationType} mapped to {NotificationStatus}; Google verification state={GoogleState}, expiry={ExpiryTime}, isFreeTrial={IsFreeTrial}, autoRenewEnabled={AutoRenewEnabled}, recurringPrice={RecurringPrice}. Chosen local status={LocalStatus}.",
+            notificationType,
+            notificationStatus,
+            info?.SubscriptionState,
+            expiryTime,
+            info?.IsFreeTrial,
+            info?.AutoRenewEnabled,
+            info?.RecurringPrice,
+            status);
+
+        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(purchaseToken, status, expiryTime, info);
 
         if (status == SubscriptionStatuses.Cancelled)
         {
             await SendCancellationEmailAsync(purchaseToken);
+        }
+
+        if (status == SubscriptionStatuses.Active && info?.IsFreeTrial == false)
+        {
+            await SendTrialConvertedEmailIfNeededAsync(purchaseToken, existingSubscription);
+        }
+    }
+
+    private static string ResolveLocalStatus(string notificationStatus, GooglePlaySubscriptionInfo info)
+    {
+        return info.SubscriptionState switch
+        {
+            "SUBSCRIPTION_STATE_ACTIVE" => SubscriptionStatuses.Active,
+            "SUBSCRIPTION_STATE_CANCELED" => SubscriptionStatuses.Cancelled,
+            "SUBSCRIPTION_STATE_EXPIRED" => SubscriptionStatuses.Expired,
+            _ => notificationStatus
+        };
+    }
+
+    private async Task SendTrialConvertedEmailIfNeededAsync(string purchaseToken, Subscription existingSubscription)
+    {
+        if (existingSubscription?.TrialEndDate == null || existingSubscription.TrialConversionEmailSentAt.HasValue)
+        {
+            return;
+        }
+
+        var subscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(purchaseToken);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString());
+        if (user == null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        if (await _subscriptionConfirmationEmailService.SendTrialConvertedAsync(user, subscription, GetBaseUrl()))
+        {
+            await _subscriptionService.MarkTrialConversionEmailSentAsync(subscription.Id);
         }
     }
 

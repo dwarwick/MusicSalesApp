@@ -26,7 +26,15 @@ public interface IGooglePlayVerificationService
 /// </summary>
 public record GooglePlaySubscriptionInfo(
     string SubscriptionState,
+    DateTimeOffset? StartTime,
     DateTimeOffset? ExpiryTime,
     string OrderId,
     bool IsAcknowledged,
-    string LinkedPurchaseToken);
+    string LinkedPurchaseToken,
+    bool IsFreeTrial,
+    string BasePlanId,
+    string OfferId,
+    IReadOnlyList<string> OfferTags,
+    bool? AutoRenewEnabled,
+    decimal? RecurringPrice,
+    string PriceCurrencyCode);

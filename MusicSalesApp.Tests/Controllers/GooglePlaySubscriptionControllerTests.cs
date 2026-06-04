@@ -69,10 +69,18 @@ public class GooglePlaySubscriptionControllerTests
             .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(
                 "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow.AddDays(30),
                 "order-123",
                 true,
-                "linked-token"));
+                "linked-token",
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                205.00m,
+                "PHP"));
         _mockSubscriptionService
             .SetupSequence(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
             .ReturnsAsync((Subscription)null)
@@ -86,16 +94,25 @@ public class GooglePlaySubscriptionControllerTests
                 NextBillingDate = DateTime.UtcNow.AddDays(30)
             });
         _mockSubscriptionService
-            .Setup(s => s.CreateGooglePlaySubscriptionAsync(1, "purchase-token", "order-123", 3.99m))
+            .Setup(s => s.CreateGooglePlaySubscriptionAsync(1, "purchase-token", "order-123", 205.00m, It.IsAny<GooglePlaySubscriptionInfo>()))
             .ReturnsAsync(new Subscription { Id = 12, BillingSource = BillingSources.GooglePlay, GooglePlayOrderId = "order-123", Status = SubscriptionStatuses.Active });
 
-        var result = await _controller.VerifyAndRecordPurchase(new GooglePlayPurchaseRequest("purchase-token", "order-123"));
+        var result = await _controller.VerifyAndRecordPurchase(new GooglePlayPurchaseRequest(
+            "purchase-token",
+            "order-123",
+            PriceCurrencyCode: "PHP",
+            FormattedPrice: "\u20B1205.00"));
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockSubscriptionService.Verify(s => s.UpdateGooglePlaySubscriptionStatusAsync(
             "purchase-token",
             SubscriptionStatuses.Active,
-            It.IsAny<DateTime?>()), Times.Once);
+            It.IsAny<DateTime?>(),
+            It.IsAny<GooglePlaySubscriptionInfo>()), Times.Once);
+        _mockSubscriptionService.Verify(s => s.UpdateGooglePlayStorePriceAsync(
+            "purchase-token",
+            "\u20B1205.00",
+            "PHP"), Times.Once);
         _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), It.IsAny<Subscription>(), "https://davidtest.dev"), Times.Once);
     }
 
@@ -115,10 +132,18 @@ public class GooglePlaySubscriptionControllerTests
             .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(
                 "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow.AddDays(30),
                 "order-123",
                 true,
-                "linked-token"));
+                "linked-token",
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                null,
+                "USD"));
         _mockSubscriptionService
             .SetupSequence(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
             .ReturnsAsync(existingSubscription)
@@ -130,13 +155,15 @@ public class GooglePlaySubscriptionControllerTests
         _mockSubscriptionService.Verify(s => s.UpdateGooglePlaySubscriptionStatusAsync(
             "purchase-token",
             SubscriptionStatuses.Active,
-            It.IsAny<DateTime?>()), Times.Once);
+            It.IsAny<DateTime?>(),
+            It.IsAny<GooglePlaySubscriptionInfo>()), Times.Once);
         _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), existingSubscription, "https://davidtest.dev"), Times.Once);
         _mockSubscriptionService.Verify(s => s.CreateGooglePlaySubscriptionAsync(
             It.IsAny<int>(),
             It.IsAny<string>(),
             It.IsAny<string>(),
-            It.IsAny<decimal>()), Times.Never);
+            It.IsAny<decimal>(),
+            It.IsAny<GooglePlaySubscriptionInfo>()), Times.Never);
     }
 
     [Test]
@@ -148,17 +175,26 @@ public class GooglePlaySubscriptionControllerTests
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
-            Status = SubscriptionStatuses.Active
+            Status = SubscriptionStatuses.Active,
+            LastPaymentDate = DateTime.UtcNow.AddDays(-1)
         };
 
         _mockVerificationService
             .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(
                 "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow.AddDays(30),
                 "order-123",
                 true,
-                "linked-token"));
+                "linked-token",
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                null,
+                "USD"));
         _mockSubscriptionService
             .Setup(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
             .ReturnsAsync(existingSubscription);
@@ -169,7 +205,8 @@ public class GooglePlaySubscriptionControllerTests
         _mockSubscriptionService.Verify(s => s.UpdateGooglePlaySubscriptionStatusAsync(
             "purchase-token",
             SubscriptionStatuses.Active,
-            It.IsAny<DateTime?>()), Times.Once);
+            It.IsAny<DateTime?>(),
+            It.IsAny<GooglePlaySubscriptionInfo>()), Times.Once);
         _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(It.IsAny<ApplicationUser>(), It.IsAny<Subscription>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -190,10 +227,18 @@ public class GooglePlaySubscriptionControllerTests
             .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(
                 "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow.AddDays(30),
                 "order-123",
                 true,
-                "linked-token"));
+                "linked-token",
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                null,
+                "USD"));
         _mockSubscriptionService
             .SetupSequence(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
             .ReturnsAsync(existingSubscription)
@@ -237,10 +282,18 @@ public class GooglePlaySubscriptionControllerTests
             .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(
                 "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow.AddDays(30),
                 "order-123",
                 true,
-                "linked-token"));
+                "linked-token",
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                null,
+                "USD"));
         _mockSubscriptionService
             .SetupSequence(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
             .ReturnsAsync(existingSubscription)

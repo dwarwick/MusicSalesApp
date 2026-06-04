@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -15,14 +16,23 @@ public class PurchaseEmailServiceTests
     private Mock<ILogger<PurchaseEmailService>> _mockLogger;
     private Mock<IConfiguration> _mockConfiguration;
     private PurchaseEmailService _service;
+    private CultureInfo _originalCulture;
+    private CultureInfo _originalUICulture;
 
     [SetUp]
     public void SetUp()
     {
+        _originalCulture = CultureInfo.CurrentCulture;
+        _originalUICulture = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+
         _mockEmailService = new Mock<IEmailService>();
         _mockAzureStorageService = new Mock<IAzureStorageService>();
         _mockLogger = new Mock<ILogger<PurchaseEmailService>>();
         _mockConfiguration = new Mock<IConfiguration>();
+        _mockConfiguration.Setup(c => c[AppSettingKeys.EmailCustomerServiceEmail])
+            .Returns("help@streamtunes.test");
 
         _mockEmailService.Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
@@ -37,6 +47,13 @@ public class PurchaseEmailServiceTests
             _mockAzureStorageService.Object,
             _mockLogger.Object,
             _mockConfiguration.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        CultureInfo.CurrentCulture = _originalCulture;
+        CultureInfo.CurrentUICulture = _originalUICulture;
     }
 
     [Test]
@@ -327,7 +344,8 @@ public class PurchaseEmailServiceTests
                     body.Contains("Your Subscription Benefits") &&
                     body.Contains("Unlimited music streaming") &&
                     body.Contains("PayPal Subscription ID") &&
-                    body.Contains("right to cancel at any time"))),
+                    body.Contains("cancel your subscription at any time") &&
+                    body.Contains("help@streamtunes.test"))),
             Times.Once);
     }
 
@@ -566,8 +584,154 @@ public class PurchaseEmailServiceTests
                 It.Is<string>(body =>
                     body.Contains("Your Subscription Benefits") &&
                     body.Contains("Full access to your playlists") &&
-                    body.Contains("right to cancel at any time") &&
-                    body.Contains("subscription will remain active until your subscription end date"))),
+                    body.Contains("cancel your subscription at any time") &&
+                    body.Contains("continue to enjoy your subscription benefits until the end of the current subscription period") &&
+                    body.Contains("help@streamtunes.test"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendSubscriptionTrialConvertedAsync_IncludesCancellationTermsAndCustomerServiceEmail()
+    {
+        var subscription = new Subscription
+        {
+            Id = 43,
+            UserId = 1,
+            BillingSource = BillingSources.GooglePlay,
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 2.99m,
+            StartDate = DateTime.UtcNow.AddDays(-3),
+            NextBillingDate = DateTime.UtcNow.AddMonths(1),
+            EndDate = DateTime.UtcNow.AddMonths(1),
+            TrialEndDate = DateTime.UtcNow
+        };
+
+        var result = await _service.SendSubscriptionTrialConvertedAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            "gpa-order-123",
+            null,
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(subject => subject.Contains("Subscription Active")),
+                It.Is<string>(body => body.Contains("Your free trial has ended")
+                    && body.Contains("cancel your subscription at any time")
+                    && body.Contains("continue to enjoy your subscription benefits until the end of the current subscription period")
+                    && body.Contains("help@streamtunes.test"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendSubscriptionTrialStartedAsync_SendsUserAndAdminEmails()
+    {
+        var subscription = new Subscription
+        {
+            Id = 42,
+            UserId = 1,
+            BillingSource = BillingSources.GooglePlay,
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 2.99m,
+            TrialEndDate = DateTime.UtcNow.AddDays(3),
+            EndDate = DateTime.UtcNow.AddDays(3)
+        };
+
+        var result = await _service.SendSubscriptionTrialStartedAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            "gpa-order-123",
+            null,
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(subject => subject.Contains("Free Trial Started")),
+                It.Is<string>(body => body.Contains("free trial is active")
+                    && body.Contains("full subscription benefits")
+                    && body.Contains("$2.99/month")
+                    && !body.Contains("$3.99/month"))),
+            Times.Once);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                It.IsAny<string>(),
+                It.Is<string>(subject => subject.Contains("Google Play free trial started")),
+                It.Is<string>(body => body.Contains("gpa-order-123"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendSubscriptionTrialStartedAsync_UsesCurrentCultureForCurrencyAmounts()
+    {
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-PH");
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-PH");
+
+        var subscription = new Subscription
+        {
+            Id = 44,
+            UserId = 1,
+            BillingSource = BillingSources.GooglePlay,
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 205.00m,
+            TrialEndDate = DateTime.UtcNow.AddDays(3),
+            EndDate = DateTime.UtcNow.AddDays(3)
+        };
+
+        var result = await _service.SendSubscriptionTrialStartedAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            "gpa-order-456",
+            null,
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(subject => subject.Contains("Free Trial Started")),
+                It.Is<string>(body => body.Contains("\u20B1205.00/month")
+                    && !body.Contains("$205.00/month"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SendSubscriptionTrialStartedAsync_UsesStoreFormattedPriceWhenAvailable()
+    {
+        var subscription = new Subscription
+        {
+            Id = 45,
+            UserId = 1,
+            BillingSource = BillingSources.GooglePlay,
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 205.00m,
+            StoreFormattedPrice = "\u20B1205.00",
+            StorePriceCurrencyCode = "PHP",
+            TrialEndDate = DateTime.UtcNow.AddDays(3),
+            EndDate = DateTime.UtcNow.AddDays(3)
+        };
+
+        var result = await _service.SendSubscriptionTrialStartedAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            "gpa-order-789",
+            null,
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(subject => subject.Contains("Free Trial Started")),
+                It.Is<string>(body => body.Contains("\u20B1205.00/month")
+                    && !body.Contains("$205.00/month"))),
             Times.Once);
     }
 }

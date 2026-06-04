@@ -18,9 +18,12 @@ public interface ISubscriptionService
     Task ActivateSubscriptionAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate);
 
     // Google Play billing methods
-    Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice);
+    Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice, GooglePlaySubscriptionInfo googlePlayInfo = null);
     Task<Subscription> GetSubscriptionByGooglePlayTokenAsync(string purchaseToken);
-    Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null);
+    Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null, GooglePlaySubscriptionInfo googlePlayInfo = null);
+    Task UpdateGooglePlayStorePriceAsync(string purchaseToken, string formattedPrice, string priceCurrencyCode);
+    Task MarkTrialActivationEmailSentAsync(int subscriptionId);
+    Task MarkTrialConversionEmailSentAsync(int subscriptionId);
 
     // Apple App Store billing methods
     Task<Subscription> CreateAppleSubscriptionAsync(

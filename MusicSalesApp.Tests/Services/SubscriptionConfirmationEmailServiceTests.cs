@@ -63,4 +63,24 @@ public class SubscriptionConfirmationEmailServiceTests
                 It.IsAny<string>()),
             Times.Never);
     }
+
+    [Test]
+    public async Task SendTrialStartedAsync_UsesGooglePlayOrderId()
+    {
+        var user = new ApplicationUser { Id = 22, Email = "test@example.com", UserName = "tester", TimeZoneId = "America/New_York" };
+        var subscription = new Subscription
+        {
+            BillingSource = BillingSources.GooglePlay,
+            GooglePlayOrderId = "gpa-order-123",
+            GooglePlayPurchaseToken = "token-123"
+        };
+
+        _mockPurchaseEmailService
+            .Setup(service => service.SendSubscriptionTrialStartedAsync("test@example.com", "tester", subscription, "gpa-order-123", "America/New_York", "https://davidtest.dev"))
+            .ReturnsAsync(true);
+
+        var result = await _service.SendTrialStartedAsync(user, subscription, "https://davidtest.dev");
+
+        Assert.That(result, Is.True);
+    }
 }

@@ -6,6 +6,11 @@
 # macOS Finder metadata
 .DS_Store
 
+# Local handoff notes
+HANDOFF*.md
+handoff*.md
+.handoff*.md
+
 # User-specific files
 *.rsuser
 *.suo

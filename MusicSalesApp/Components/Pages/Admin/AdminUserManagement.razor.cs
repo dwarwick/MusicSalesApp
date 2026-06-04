@@ -13,6 +13,7 @@ namespace MusicSalesApp.Components.Pages.Admin;
 public class AdminUserManagementModel : BlazorBase
 {
     private const string RolesDelimiter = ", ";
+    private const string TrialActiveSubscriptionStatusText = "Trial Active";
 
     [Microsoft.AspNetCore.Components.Inject]
     protected IDbContextFactory<AppDbContext> DbContextFactory { get; set; } = default!;
@@ -97,18 +98,7 @@ public class AdminUserManagementModel : BlazorBase
             var creator = creators.FirstOrDefault(c => c.UserId == u.Id);
             latestSubByUser.TryGetValue(u.Id, out var latestSub);
 
-            string subStatus;
-            if (u.IsSubscriptionBlocked)
-                subStatus = "Blocked";
-            else if (latestSub != null && latestSub.Status == SubscriptionStatuses.Active
-                     && (latestSub.EndDate == null || latestSub.EndDate > DateTime.UtcNow))
-                subStatus = "Active";
-            else if (latestSub != null && (latestSub.Status == SubscriptionStatuses.Cancelled
-                     || latestSub.Status == SubscriptionStatuses.Suspended
-                     || latestSub.Status == SubscriptionStatuses.Expired))
-                subStatus = "Cancelled";
-            else
-                subStatus = "Not Subscribed";
+            var subStatus = ResolveSubscriptionStatus(u, latestSub);
 
             return new UserViewModel
             {
@@ -152,6 +142,43 @@ public class AdminUserManagementModel : BlazorBase
     {
         await using var context = await DbContextFactory.CreateDbContextAsync();
         _availableRoles = await context.Roles.Select(r => r.Name!).ToListAsync();
+    }
+
+    private static string ResolveSubscriptionStatus(ApplicationUser user, Subscription? subscription)
+    {
+        if (user.IsSubscriptionBlocked)
+        {
+            return "Blocked";
+        }
+
+        var now = DateTime.UtcNow;
+        if (subscription?.TrialEndDate > now && subscription.EndDate > now)
+        {
+            return TrialActiveSubscriptionStatusText;
+        }
+
+        if (subscription != null && subscription.Status == SubscriptionStatuses.Active
+            && (subscription.EndDate == null || subscription.EndDate > now))
+        {
+            return "Active";
+        }
+
+        if (subscription?.Status == SubscriptionStatuses.Expired)
+        {
+            return "Expired";
+        }
+
+        if (subscription?.Status == SubscriptionStatuses.Suspended)
+        {
+            return "Suspended";
+        }
+
+        if (subscription?.Status == SubscriptionStatuses.Cancelled)
+        {
+            return "Cancelled";
+        }
+
+        return "Not Subscribed";
     }
 
     protected void EditUser(UserViewModel user)
