@@ -16,7 +16,9 @@ public static class SubscriptionEntitlementHelper
 
         if (string.Equals(subscription.Status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase))
         {
-            return !subscription.EndDate.HasValue || subscription.EndDate.Value > now;
+            var isPaidEntitlement = subscription.LastPaymentDate.HasValue;
+            var isTrialEntitlement = subscription.TrialEndDate.HasValue && subscription.TrialEndDate.Value > now;
+            return (isPaidEntitlement || isTrialEntitlement) && (!subscription.EndDate.HasValue || subscription.EndDate.Value > now);
         }
 
         if (string.Equals(subscription.Status, SubscriptionStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))

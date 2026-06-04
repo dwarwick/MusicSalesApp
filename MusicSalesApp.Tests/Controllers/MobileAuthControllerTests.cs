@@ -94,6 +94,10 @@ public class MobileAuthControllerTests
             .ReturnsAsync(EmailResult.Succeeded());
         _mockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(It.IsAny<int>()))
             .ReturnsAsync(false);
+        _mockSubscriptionService.Setup(x => x.GetActiveSubscriptionAsync(It.IsAny<int>()))
+            .ReturnsAsync((Subscription)null!);
+        _mockSubscriptionService.Setup(x => x.GetLatestSubscriptionAsync(It.IsAny<int>()))
+            .ReturnsAsync((Subscription)null!);
         _mockUserManager.Setup(x => x.GetRolesAsync(It.IsAny<ApplicationUser>()))
             .ReturnsAsync(new List<string> { Roles.User });
         _mockAccountEmailService.Setup(x => x.SendAccountCreatedEmailAsync(
@@ -786,6 +790,44 @@ public class MobileAuthControllerTests
         Assert.That(ok, Is.Not.Null);
         Assert.That(ok!.Value?.GetType().GetProperty("IsCreator")?.GetValue(ok.Value), Is.EqualTo(false));
         Assert.That(ok.Value?.GetType().GetProperty("CreatorId")?.GetValue(ok.Value), Is.Null);
+    }
+
+    [Test]
+    public async Task Login_PreviousExpiredSubscription_IncludesSubscriptionHistory()
+    {
+        var user = CreateTestUser(emailConfirmed: true);
+        var endDate = DateTime.UtcNow.AddDays(-1);
+        var trialEndDate = DateTime.UtcNow.AddDays(-2);
+        var latestSubscription = new Subscription
+        {
+            UserId = user.Id,
+            Status = SubscriptionStatuses.Expired,
+            EndDate = endDate,
+            TrialEndDate = trialEndDate,
+            BillingSource = BillingSources.GooglePlay
+        };
+
+        _mockUserManager.Setup(x => x.FindByEmailAsync(user.Email!)).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.FindByNameAsync(user.Email!)).ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.CheckPasswordAsync(user, "Pass123!")).ReturnsAsync(true);
+        _mockUserManager.Setup(x => x.ResetAccessFailedCountAsync(user)).ReturnsAsync(IdentityResult.Success);
+        _mockSubscriptionService.Setup(x => x.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(latestSubscription);
+
+        var result = await _controller.Login(new MobileLoginRequest { Email = user.Email!, Password = "Pass123!" });
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var response = ok!.Value as MobileLoginResponse;
+        Assert.That(response, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(response!.HasActiveSubscription, Is.False);
+            Assert.That(response.SubscriptionStatus, Is.EqualTo(SubscriptionStatuses.Expired));
+            Assert.That(response.SubscriptionEndDate, Is.EqualTo(endDate));
+            Assert.That(response.TrialEndDate, Is.EqualTo(trialEndDate));
+            Assert.That(response.BillingSource, Is.EqualTo(BillingSources.GooglePlay));
+        });
     }
 
     #endregion

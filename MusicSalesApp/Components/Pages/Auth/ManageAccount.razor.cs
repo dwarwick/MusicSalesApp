@@ -49,6 +49,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected DateTime? _startDate;
     protected DateTime? _endDate;
     protected DateTime? _nextBillingDate;
+    protected bool _isOnTrial;
+    protected DateTime? _trialEndDate;
     protected string _paypalSubscriptionId;
     protected string _billingSource;
     protected string _subscriptionPrice = "3.99";
@@ -513,6 +515,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool ShowCancelSubscriptionButton => HasActiveSubscription && !IsNonRenewingSubscription;
     protected string DisplaySubscriptionStatus => IsNonRenewingSubscription
         ? "Renews Off"
+        : _isOnTrial
+            ? "Free Trial Active"
         : _subscriptionStatus switch
         {
             SubscriptionStatuses.Active => "Active",
@@ -521,13 +525,17 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             _ => _subscriptionStatus
         };
     protected string SubscriptionEndDateLabel => HasActiveSubscription
-        ? IsNonRenewingSubscription
+        ? _isOnTrial
+            ? "Trial Active Until"
+            : IsNonRenewingSubscription
             ? "Access Until"
             : "Current Billing Period Ends"
         : "Ended On";
     protected string SubscriptionTimeZoneLabel => UserTimeZoneDisplayHelper.GetTimeZoneDisplayLabel(_userTimeZoneId, _endDate ?? _nextBillingDate ?? _startDate);
     protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
         ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {FormatUserDateTimeWithTimeZone(_endDate)}."
+        : _isOnTrial
+            ? $"Your free trial is active until {FormatUserDateTimeWithTimeZone(_trialEndDate ?? _endDate)}. During the trial, you have full subscription benefits. After the trial, your subscription will automatically renew unless canceled."
         : _endDate.HasValue
             ? $"Your subscription is active and will automatically renew unless canceled. Your current billing period ends on {FormatUserDateTimeWithTimeZone(_endDate)}."
             : "You have an active subscription that will automatically renew unless canceled.";
@@ -697,6 +705,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                 _startDate = response.StartDate;
                 _endDate = response.EndDate;
                 _nextBillingDate = response.NextBillingDate;
+                _isOnTrial = response.IsOnTrial;
+                _trialEndDate = response.TrialEndDate;
                 _paypalSubscriptionId = response.PaypalSubscriptionId;
                 _billingSource = response.BillingSource;
                 _subscriptionPrice = response.SubscriptionPrice ?? "3.99";
@@ -1329,10 +1339,14 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 public class SubscriptionStatusResponse
 {
     public bool HasSubscription { get; set; }
+    public bool IsOnTrial { get; set; }
     public string Status { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public DateTime? NextBillingDate { get; set; }
+    public DateTime? TrialStartDate { get; set; }
+    public DateTime? TrialEndDate { get; set; }
+    public DateTime? TrialConvertedAt { get; set; }
     public decimal MonthlyPrice { get; set; }
     public string PaypalSubscriptionId { get; set; }
     public string BillingSource { get; set; }

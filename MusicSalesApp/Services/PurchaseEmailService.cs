@@ -126,6 +126,76 @@ public class PurchaseEmailService : IPurchaseEmailService
         }
     }
 
+    public async Task<bool> SendSubscriptionTrialStartedAsync(
+        string userEmail,
+        string userName,
+        Subscription subscription,
+        string externalSubscriptionId,
+        string? timeZoneId,
+        string baseUrl)
+    {
+        try
+        {
+            var trialEndDate = subscription.TrialEndDate ?? subscription.EndDate ?? subscription.NextBillingDate;
+            var trialEndDisplay = trialEndDate.HasValue
+                ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(trialEndDate.Value, timeZoneId)
+                : "the end of your trial";
+
+            var body = new StringBuilder();
+            body.Append(BuildEmailHeader(_emailService.GetLogoUrl(), "Free Trial Started"));
+            body.Append(BuildGreeting(userName));
+            body.Append($"<p style='font-size: 16px; color: #333;'>Your StreamTunes free trial is active until <strong>{trialEndDisplay}</strong>. During the trial, you have full subscription benefits.</p>");
+            body.Append(BuildSubscriptionBenefitsSection());
+            body.Append(BuildGooglePlayTrialTermsSection(subscription, externalSubscriptionId, timeZoneId));
+            body.Append(BuildEmailFooter());
+
+            var userSent = await _emailService.SendEmailAsync(userEmail, "StreamTunes - Free Trial Started", body.ToString());
+            var adminSent = await SendAdminSubscriptionEventEmailAsync("Google Play free trial started", userEmail, subscription, externalSubscriptionId, trialEndDisplay);
+            return userSent && adminSent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending subscription trial-start email to {Email}", userEmail);
+            return false;
+        }
+    }
+
+    public async Task<bool> SendSubscriptionTrialConvertedAsync(
+        string userEmail,
+        string userName,
+        Subscription subscription,
+        string externalSubscriptionId,
+        string? timeZoneId,
+        string baseUrl)
+    {
+        try
+        {
+            var nextBillingDate = subscription.NextBillingDate ?? subscription.EndDate;
+            var nextBillingDisplay = nextBillingDate.HasValue
+                ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(nextBillingDate.Value, timeZoneId)
+                : "your next monthly renewal date";
+
+            var body = new StringBuilder();
+            body.Append(BuildEmailHeader(_emailService.GetLogoUrl(), "Subscription Active"));
+            body.Append(BuildGreeting(userName));
+            body.Append($"<p style='font-size: 16px; color: #333;'>Your free trial has ended and your StreamTunes subscription is now active at <strong>{FormatMonthlyPrice(subscription)}</strong>.</p>");
+            body.Append(BuildSubscriptionDetailsSection(subscription, externalSubscriptionId, timeZoneId));
+            body.Append(BuildSubscriptionBenefitsSection());
+            body.Append($"<p style='font-size: 14px; color: #555;'>Your subscription will automatically renew. Your next renewal date is {nextBillingDisplay}.</p>");
+            body.Append(BuildSubscriptionTermsSection(subscription, timeZoneId));
+            body.Append(BuildEmailFooter());
+
+            var userSent = await _emailService.SendEmailAsync(userEmail, "StreamTunes - Subscription Active", body.ToString());
+            var adminSent = await SendAdminSubscriptionEventEmailAsync("Google Play trial converted to paid", userEmail, subscription, externalSubscriptionId, nextBillingDisplay);
+            return userSent && adminSent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending subscription trial-conversion email to {Email}", userEmail);
+            return false;
+        }
+    }
+
     private string BuildEmailHeader(string logoUrl, string title)
     {
         return $@"
@@ -204,7 +274,7 @@ public class PurchaseEmailService : IPurchaseEmailService
                             </tr>
                         </table>
                     </td>
-                    <td style='padding: 10px; text-align: right; border-bottom: 1px solid #eee; color: #333;'>${song.Price:F2}</td>
+                    <td style='padding: 10px; text-align: right; border-bottom: 1px solid #eee; color: #333;'>{FormatPrice(song.Price)}</td>
                 </tr>
             ");
         }
@@ -236,7 +306,7 @@ public class PurchaseEmailService : IPurchaseEmailService
                             </td>
                             <td style='padding-left: 15px; vertical-align: middle;'>
                                 <h3 style='margin: 0; color: #ffffff; font-size: 18px;'>{System.Web.HttpUtility.HtmlEncode(albumName)}</h3>
-                                <p style='margin: 5px 0 0 0; color: #cccccc;'>Album - ${albumPrice:F2}</p>
+                                <p style='margin: 5px 0 0 0; color: #cccccc;'>Album - {FormatPrice(albumPrice)}</p>
                             </td>
                         </tr>
                     </table>
@@ -293,7 +363,7 @@ public class PurchaseEmailService : IPurchaseEmailService
         return $@"
             <div style='background-color: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: right;'>
                 <span style='color: #ffffff; font-size: 18px;'>Total Paid to PayPal:</span>
-                <span style='color: #4CAF50; font-size: 24px; font-weight: bold; margin-left: 10px;'>${totalAmount:F2}</span>
+                <span style='color: #4CAF50; font-size: 24px; font-weight: bold; margin-left: 10px;'>{FormatPrice(totalAmount)}</span>
             </div>
         ";
     }
@@ -322,7 +392,7 @@ public class PurchaseEmailService : IPurchaseEmailService
                     </tr>
                     <tr>
                         <td style='padding: 8px 0; color: #666;'>Monthly Price:</td>
-                        <td style='padding: 8px 0; color: #333; font-weight: bold;'>${subscription.MonthlyPrice:F2}/month</td>
+                        <td style='padding: 8px 0; color: #333; font-weight: bold;'>{FormatMonthlyPrice(subscription)}</td>
                     </tr>
                     <tr>
                         <td style='padding: 8px 0; color: #666;'>Start Date:</td>
@@ -340,7 +410,7 @@ public class PurchaseEmailService : IPurchaseEmailService
             </div>
             <div style='background-color: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: right;'>
                 <span style='color: #ffffff; font-size: 18px;'>{amountLabel}:</span>
-                <span style='color: #4CAF50; font-size: 24px; font-weight: bold; margin-left: 10px;'>${subscription.MonthlyPrice:F2}</span>
+                <span style='color: #4CAF50; font-size: 24px; font-weight: bold; margin-left: 10px;'>{FormatPrice(subscription)}</span>
             </div>
         ";
     }
@@ -374,9 +444,28 @@ public class PurchaseEmailService : IPurchaseEmailService
                 <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Subscription Terms</h3>
                 <ul style='margin: 0; padding-left: 20px; color: #555;'>
                     <li style='margin-bottom: 8px;'>Your subscription renews automatically every month.</li>
-                    <li style='margin-bottom: 8px;'><strong>You have the right to cancel at any time.</strong></li>
-                    <li style='margin-bottom: 8px;'>If you cancel, your subscription will remain active until your subscription end date: <strong>{endDateDisplay}</strong></li>
+                    <li style='margin-bottom: 8px;'><strong>You can cancel your subscription at any time.</strong></li>
+                    <li style='margin-bottom: 8px;'>If you choose to cancel your subscription, you will continue to enjoy your subscription benefits until the end of the current subscription period: <strong>{endDateDisplay}</strong></li>
                     <li style='margin-bottom: 8px;'>You can manage your subscription in your account settings.</li>
+                </ul>
+            </div>
+        ";
+    }
+
+    private string BuildGooglePlayTrialTermsSection(Subscription subscription, string externalSubscriptionId, string? timeZoneId)
+    {
+        var trialEndDisplay = subscription.TrialEndDate.HasValue
+            ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.TrialEndDate.Value, timeZoneId)
+            : "the end of your trial";
+
+        return $@"
+            <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
+                <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Free Trial Terms</h3>
+                <ul style='margin: 0; padding-left: 20px; color: #555;'>
+                    <li style='margin-bottom: 8px;'>Your free trial is active until <strong>{trialEndDisplay}</strong>.</li>
+                    <li style='margin-bottom: 8px;'>After the trial, your subscription automatically renews at <strong>{FormatMonthlyPrice(subscription)}</strong>.</li>
+                    <li style='margin-bottom: 8px;'>You can cancel anytime in your Google Play subscription settings.</li>
+                    <li style='margin-bottom: 8px;'>Google Play reference: <strong>{System.Web.HttpUtility.HtmlEncode(externalSubscriptionId)}</strong></li>
                 </ul>
             </div>
         ";
@@ -396,6 +485,22 @@ public class PurchaseEmailService : IPurchaseEmailService
         ";
     }
 
+    private async Task<bool> SendAdminSubscriptionEventEmailAsync(string eventName, string userEmail, Subscription subscription, string externalSubscriptionId, string dateDisplay)
+    {
+        var adminEmail = _configuration[AppSettingKeys.EmailAdminEmail] ?? "admin@streamtunes.net";
+        var body = $@"
+            <p>{System.Web.HttpUtility.HtmlEncode(eventName)}</p>
+            <ul>
+                <li>User email: {System.Web.HttpUtility.HtmlEncode(userEmail)}</li>
+                <li>Subscription ID: {subscription.Id}</li>
+                <li>Billing source: {System.Web.HttpUtility.HtmlEncode(subscription.BillingSource)}</li>
+                <li>External reference: {System.Web.HttpUtility.HtmlEncode(externalSubscriptionId)}</li>
+                <li>Relevant date: {System.Web.HttpUtility.HtmlEncode(dateDisplay)}</li>
+            </ul>";
+
+        return await _emailService.SendEmailAsync(adminEmail, $"StreamTunes - {eventName}", body);
+    }
+
     private static string GetBillingProviderDisplayName(string billingSource)
         => billingSource switch
         {
@@ -406,15 +511,44 @@ public class PurchaseEmailService : IPurchaseEmailService
 
     private string BuildEmailFooter()
     {
+        var customerServiceEmail = GetCustomerServiceEmail();
+
         return $@"
                 <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;'>
                     <p style='color: #666; font-size: 14px;'>Thank you for choosing StreamTunes!</p>
-                    <p style='color: #999; font-size: 12px;'>If you have any questions, please contact our support team.</p>
+                    <p style='color: #999; font-size: 12px;'>If you have any questions, please contact customer service at <a href='mailto:{System.Web.HttpUtility.HtmlEncode(customerServiceEmail)}' style='color: #666; text-decoration: underline;'>{System.Web.HttpUtility.HtmlEncode(customerServiceEmail)}</a>.</p>
                 </div>
             </div>
         </div>
         ";
     }
+
+    private string GetCustomerServiceEmail()
+    {
+        var configuredEmail = _configuration[AppSettingKeys.EmailCustomerServiceEmail];
+        return string.IsNullOrWhiteSpace(configuredEmail)
+            ? "admin@streamtunes.net"
+            : configuredEmail.Trim();
+    }
+
+    private static string FormatPrice(decimal amount)
+        => CurrencyDisplayHelper.FormatCurrency(amount);
+
+    private static string FormatPrice(Subscription subscription)
+        => CurrencyDisplayHelper.FormatCurrencyText(subscription.StoreFormattedPrice, subscription.MonthlyPrice);
+
+    private static string FormatMonthlyPrice(decimal amount)
+        => $"{FormatPrice(amount)}/month";
+
+    private static string FormatMonthlyPrice(Subscription subscription)
+    {
+        var price = FormatPrice(subscription);
+        return IncludesMonthlyPeriod(price) ? price : $"{price}/month";
+    }
+
+    private static bool IncludesMonthlyPeriod(string price)
+        => price.Contains("/month", StringComparison.OrdinalIgnoreCase)
+            || price.Contains("per month", StringComparison.OrdinalIgnoreCase);
 
     private string GetSongTitle(CartItemWithMetadata item)
     {

@@ -73,6 +73,34 @@ public class SubscriptionController : ControllerBase
 
         var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
         var latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+        _logger.LogInformation(
+            "Subscription status request for user {UserId}: ActiveSubscriptionId={ActiveSubscriptionId}, ActiveStatus={ActiveStatus}, ActiveEndDate={ActiveEndDate}, LatestSubscriptionId={LatestSubscriptionId}, LatestStatus={LatestStatus}, LatestEndDate={LatestEndDate}, LatestTrialEndDate={LatestTrialEndDate}, BillingSource={BillingSource}",
+            user.Id,
+            activeSubscription?.Id,
+            activeSubscription?.Status,
+            activeSubscription?.EndDate,
+            latestSubscription?.Id,
+            latestSubscription?.Status,
+            latestSubscription?.EndDate,
+            latestSubscription?.TrialEndDate,
+            latestSubscription?.BillingSource);
+
+        if (await TryRefreshGooglePlaySubscriptionAsync(user, activeSubscription, latestSubscription))
+        {
+            activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+            latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+            _logger.LogInformation(
+                "Subscription status after Google Play refresh for user {UserId}: ActiveSubscriptionId={ActiveSubscriptionId}, ActiveStatus={ActiveStatus}, ActiveEndDate={ActiveEndDate}, LatestSubscriptionId={LatestSubscriptionId}, LatestStatus={LatestStatus}, LatestEndDate={LatestEndDate}, LatestTrialEndDate={LatestTrialEndDate}",
+                user.Id,
+                activeSubscription?.Id,
+                activeSubscription?.Status,
+                activeSubscription?.EndDate,
+                latestSubscription?.Id,
+                latestSubscription?.Status,
+                latestSubscription?.EndDate,
+                latestSubscription?.TrialEndDate);
+        }
+
         var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
         
         if (latestSubscription == null)
@@ -80,24 +108,153 @@ public class SubscriptionController : ControllerBase
             return Ok(new
             {
                 hasSubscription = false,
+                isOnTrial = false,
                 subscriptionPrice = subscriptionPrice.ToString("F2"),
                 isSubscriptionBlocked = user.IsSubscriptionBlocked
             });
         }
 
+        var isOnTrial = latestSubscription.TrialEndDate.HasValue
+            && latestSubscription.TrialEndDate.Value > DateTime.UtcNow
+            && activeSubscription != null;
+
         return Ok(new
         {
             hasSubscription = activeSubscription != null,
+            isOnTrial,
             status = latestSubscription.Status,
             startDate = latestSubscription.StartDate,
             endDate = latestSubscription.EndDate,
             nextBillingDate = latestSubscription.NextBillingDate,
+            trialStartDate = latestSubscription.TrialStartDate,
+            trialEndDate = latestSubscription.TrialEndDate,
+            trialConvertedAt = latestSubscription.TrialConvertedAt,
             monthlyPrice = latestSubscription.MonthlyPrice,
             paypalSubscriptionId = latestSubscription.PayPalSubscriptionId,
             billingSource = latestSubscription.BillingSource,
             isSubscriptionBlocked = user.IsSubscriptionBlocked,
             subscriptionPrice = subscriptionPrice.ToString("F2")
         });
+    }
+
+    private async Task<bool> TryRefreshGooglePlaySubscriptionAsync(
+        ApplicationUser user,
+        Subscription activeSubscription,
+        Subscription latestSubscription)
+    {
+        if (!ShouldRefreshGooglePlaySubscription(activeSubscription, latestSubscription))
+        {
+            return false;
+        }
+
+        var productId = _configuration["GooglePlay:SubscriptionProductId"] ?? "streamtunes_monthly_sub";
+        GooglePlaySubscriptionInfo googlePlayInfo;
+        try
+        {
+            _logger.LogInformation(
+                "Refreshing Google Play subscription {SubscriptionId} for user {UserId}: LocalStatus={LocalStatus}, EndDate={EndDate}, TrialEndDate={TrialEndDate}, TrialConvertedAt={TrialConvertedAt}, AutoRenewEnabled={AutoRenewEnabled}",
+                latestSubscription.Id,
+                user.Id,
+                latestSubscription.Status,
+                latestSubscription.EndDate,
+                latestSubscription.TrialEndDate,
+                latestSubscription.TrialConvertedAt,
+                latestSubscription.GooglePlayAutoRenewEnabled);
+
+            googlePlayInfo = await _googlePlayVerificationService.VerifySubscriptionAsync(latestSubscription.GooglePlayPurchaseToken, productId);
+        }
+        catch (GooglePlayVerificationException ex)
+        {
+            _logger.LogWarning(ex, "Unable to refresh Google Play subscription {SubscriptionId} for user {UserId}", latestSubscription.Id, user.Id);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unexpected error refreshing Google Play subscription {SubscriptionId} for user {UserId}", latestSubscription.Id, user.Id);
+            return false;
+        }
+
+        if (googlePlayInfo == null)
+        {
+            return false;
+        }
+
+        var previousTrialNeededConversionEmail = latestSubscription.TrialEndDate.HasValue
+            && !latestSubscription.TrialConversionEmailSentAt.HasValue
+            && !googlePlayInfo.IsFreeTrial;
+        var refreshedStatus = ResolveGooglePlayLocalStatus(googlePlayInfo);
+
+        _logger.LogInformation(
+            "Google Play subscription refresh result for subscription {SubscriptionId}: GoogleState={GoogleState}, LocalStatus={LocalStatus}, IsFreeTrial={IsFreeTrial}, Expiry={ExpiryTime}, AutoRenewEnabled={AutoRenewEnabled}, RecurringPrice={RecurringPrice}, PriceCurrencyCode={PriceCurrencyCode}, PreviousTrialNeededConversionEmail={PreviousTrialNeededConversionEmail}",
+            latestSubscription.Id,
+            googlePlayInfo.SubscriptionState,
+            refreshedStatus,
+            googlePlayInfo.IsFreeTrial,
+            googlePlayInfo.ExpiryTime,
+            googlePlayInfo.AutoRenewEnabled,
+            googlePlayInfo.RecurringPrice,
+            googlePlayInfo.PriceCurrencyCode,
+            previousTrialNeededConversionEmail);
+
+        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
+            latestSubscription.GooglePlayPurchaseToken,
+            refreshedStatus,
+            googlePlayInfo.ExpiryTime?.UtcDateTime,
+            googlePlayInfo);
+
+        if (!googlePlayInfo.IsAcknowledged)
+        {
+            await _googlePlayVerificationService.AcknowledgeSubscriptionAsync(latestSubscription.GooglePlayPurchaseToken, productId);
+        }
+
+        if (previousTrialNeededConversionEmail && HasGooglePlayEntitlement(googlePlayInfo))
+        {
+            var refreshed = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(latestSubscription.GooglePlayPurchaseToken);
+            if (refreshed != null && await _subscriptionConfirmationEmailService.SendTrialConvertedAsync(user, refreshed, GetBaseUrl()))
+            {
+                await _subscriptionService.MarkTrialConversionEmailSentAsync(refreshed.Id);
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ShouldRefreshGooglePlaySubscription(Subscription activeSubscription, Subscription latestSubscription)
+    {
+        if (latestSubscription == null || latestSubscription.BillingSource != BillingSources.GooglePlay || string.IsNullOrWhiteSpace(latestSubscription.GooglePlayPurchaseToken))
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        return activeSubscription == null
+            || (latestSubscription.TrialEndDate.HasValue
+                && !latestSubscription.TrialConvertedAt.HasValue
+                && latestSubscription.TrialEndDate.Value <= now.AddMinutes(5))
+            || latestSubscription.EndDate <= now.AddMinutes(5);
+    }
+
+    private static string ResolveGooglePlayLocalStatus(GooglePlaySubscriptionInfo googlePlayInfo)
+    {
+        if (googlePlayInfo.SubscriptionState == "SUBSCRIPTION_STATE_CANCELED")
+        {
+            return SubscriptionStatuses.Cancelled;
+        }
+
+        return HasGooglePlayEntitlement(googlePlayInfo)
+            ? SubscriptionStatuses.Active
+            : SubscriptionStatuses.Expired;
+    }
+
+    private static bool HasGooglePlayEntitlement(GooglePlaySubscriptionInfo googlePlayInfo)
+    {
+        if (googlePlayInfo.SubscriptionState == "SUBSCRIPTION_STATE_ACTIVE")
+        {
+            return true;
+        }
+
+        return googlePlayInfo.SubscriptionState == "SUBSCRIPTION_STATE_CANCELED"
+            && googlePlayInfo.ExpiryTime?.UtcDateTime > DateTime.UtcNow;
     }
 
     [HttpPost("create")]

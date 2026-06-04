@@ -593,7 +593,11 @@ public class MobileAuthController : ControllerBase
         var permissions = roles.SelectMany(GetPermissionsForRole).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var token = GenerateJwtToken(user, roles, permissions);
 
-        var hasSubscription = await _subscriptionService.HasActiveSubscriptionAsync(user.Id);
+        var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+        var latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+        var isOnTrial = latestSubscription?.TrialEndDate is { } trialEndDate
+            && trialEndDate > DateTime.UtcNow
+            && activeSubscription != null;
 
         var creator = await _context.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id && c.IsActive);
 
@@ -604,7 +608,12 @@ public class MobileAuthController : ControllerBase
             Email = user.Email ?? string.Empty,
             Roles = roles.ToList(),
             EmailConfirmed = user.EmailConfirmed,
-            HasActiveSubscription = hasSubscription,
+            HasActiveSubscription = activeSubscription != null,
+            IsOnTrial = isOnTrial,
+            SubscriptionStatus = latestSubscription?.Status,
+            SubscriptionEndDate = latestSubscription?.EndDate,
+            TrialEndDate = latestSubscription?.TrialEndDate,
+            BillingSource = latestSubscription?.BillingSource,
             IsCreator = creator != null,
             CreatorId = creator?.Id
         };
@@ -854,6 +863,11 @@ public class MobileLoginResponse
     public List<string> Roles { get; set; } = [];
     public bool EmailConfirmed { get; set; }
     public bool HasActiveSubscription { get; set; }
+    public bool IsOnTrial { get; set; }
+    public string SubscriptionStatus { get; set; } = string.Empty;
+    public DateTime? SubscriptionEndDate { get; set; }
+    public DateTime? TrialEndDate { get; set; }
+    public string BillingSource { get; set; } = string.Empty;
     public bool IsCreator { get; set; }
     public int? CreatorId { get; set; }
 }

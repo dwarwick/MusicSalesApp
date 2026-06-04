@@ -427,6 +427,70 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task DeletePendingSubscriptionAsync_DoesNotDeleteGooglePlayFreeTrial()
+    {
+        var trialEnd = DateTimeOffset.UtcNow.AddDays(3);
+        await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "trial-token-cleanup",
+            "trial-order-cleanup",
+            3.99m,
+            CreateGooglePlayInfo(isFreeTrial: true, expiryTime: trialEnd));
+
+        var result = await _service.DeletePendingSubscriptionAsync(1);
+
+        var subscription = await _service.GetSubscriptionByGooglePlayTokenAsync("trial-token-cleanup");
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.False);
+            Assert.That(subscription, Is.Not.Null);
+            Assert.That(subscription!.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(subscription.LastPaymentDate, Is.Null);
+            Assert.That(subscription.TrialEndDate, Is.EqualTo(trialEnd.UtcDateTime));
+        });
+    }
+
+    [Test]
+    public async Task DeletePendingSubscriptionAsync_WithGooglePlayTrialAndPaypalPending_DeletesOnlyPaypalPending()
+    {
+        var trialEnd = DateTimeOffset.UtcNow.AddDays(3);
+        await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "trial-token-with-paypal-pending",
+            "trial-order-with-paypal-pending",
+            3.99m,
+            CreateGooglePlayInfo(isFreeTrial: true, expiryTime: trialEnd));
+
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                PayPalSubscriptionId = "SUB-PAYPAL-PENDING-CLEANUP",
+                BillingSource = BillingSources.PayPal,
+                Status = SubscriptionStatuses.ApprovalPending,
+                StartDate = DateTime.UtcNow,
+                MonthlyPrice = 3.99m,
+                CreatedAt = DateTime.UtcNow.AddMinutes(1)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.DeletePendingSubscriptionAsync(1);
+
+        var googlePlaySubscription = await _service.GetSubscriptionByGooglePlayTokenAsync("trial-token-with-paypal-pending");
+        var paypalSubscription = await _service.GetSubscriptionByPayPalIdAsync("SUB-PAYPAL-PENDING-CLEANUP");
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.True);
+            Assert.That(paypalSubscription, Is.Null);
+            Assert.That(googlePlaySubscription, Is.Not.Null);
+            Assert.That(googlePlaySubscription!.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(googlePlaySubscription.BillingSource, Is.EqualTo(BillingSources.GooglePlay));
+        });
+    }
+
+    [Test]
     public async Task CancelSubscriptionAsync_CancelsApprovalPendingSubscription()
     {
         // Arrange
@@ -597,4 +661,109 @@ public class SubscriptionServiceTests
 
         Assert.That(result, Is.Null);
     }
+
+    [Test]
+    public async Task CreateGooglePlaySubscriptionAsync_FreeTrial_GrantsEntitlementWithoutPaymentDate()
+    {
+        var trialEnd = DateTimeOffset.UtcNow.AddDays(3);
+        var info = CreateGooglePlayInfo(isFreeTrial: true, expiryTime: trialEnd);
+
+        var subscription = await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "trial-token",
+            "trial-order",
+            3.99m,
+            info);
+
+        var hasActiveSubscription = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(hasActiveSubscription, Is.True);
+            Assert.That(subscription.LastPaymentDate, Is.Null);
+            Assert.That(subscription.TrialEndDate, Is.EqualTo(trialEnd.UtcDateTime));
+            Assert.That(subscription.TrialOfferId, Is.EqualTo("trial-offer"));
+            Assert.That(subscription.TrialOfferTags, Is.EqualTo("free-trial"));
+        });
+    }
+
+    [Test]
+    public async Task UpdateGooglePlaySubscriptionStatusAsync_AfterTrialConversion_SetsPaymentAndConvertedAt()
+    {
+        var trialEnd = DateTimeOffset.UtcNow.AddMinutes(-5);
+        await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "convert-token",
+            "trial-order",
+            3.99m,
+            CreateGooglePlayInfo(isFreeTrial: true, expiryTime: trialEnd));
+
+        await _service.UpdateGooglePlaySubscriptionStatusAsync(
+            "convert-token",
+            SubscriptionStatuses.Active,
+            DateTime.UtcNow.AddDays(30),
+            CreateGooglePlayInfo(isFreeTrial: false, expiryTime: DateTimeOffset.UtcNow.AddDays(30), recurringPrice: 2.99m));
+
+        var subscription = await _service.GetSubscriptionByGooglePlayTokenAsync("convert-token");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(subscription, Is.Not.Null);
+            Assert.That(subscription!.LastPaymentDate, Is.Not.Null);
+            Assert.That(subscription.TrialConvertedAt, Is.Not.Null);
+            Assert.That(subscription.TrialEndDate, Is.EqualTo(trialEnd.UtcDateTime));
+            Assert.That(subscription.MonthlyPrice, Is.EqualTo(2.99m));
+        });
+    }
+
+    [Test]
+    public async Task CreateGooglePlaySubscriptionAsync_StoresVerificationCurrencyCode()
+    {
+        var subscription = await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "currency-token",
+            "currency-order",
+            205.00m,
+            CreateGooglePlayInfo(isFreeTrial: false, expiryTime: DateTimeOffset.UtcNow.AddDays(30), recurringPrice: 205.00m));
+
+        Assert.That(subscription.StorePriceCurrencyCode, Is.EqualTo("USD"));
+    }
+
+    [Test]
+    public async Task UpdateGooglePlayStorePriceAsync_StoresFormattedPriceAndCurrencyCode()
+    {
+        await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "store-price-token",
+            "store-price-order",
+            205.00m,
+            CreateGooglePlayInfo(isFreeTrial: false, expiryTime: DateTimeOffset.UtcNow.AddDays(30), recurringPrice: 205.00m));
+
+        await _service.UpdateGooglePlayStorePriceAsync("store-price-token", " \u20B1205.00 ", " php ");
+
+        var subscription = await _service.GetSubscriptionByGooglePlayTokenAsync("store-price-token");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(subscription, Is.Not.Null);
+            Assert.That(subscription!.StoreFormattedPrice, Is.EqualTo("\u20B1205.00"));
+            Assert.That(subscription.StorePriceCurrencyCode, Is.EqualTo("PHP"));
+        });
+    }
+
+    private static GooglePlaySubscriptionInfo CreateGooglePlayInfo(bool isFreeTrial, DateTimeOffset expiryTime, decimal? recurringPrice = null)
+        => new(
+            "SUBSCRIPTION_STATE_ACTIVE",
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            expiryTime,
+            isFreeTrial ? "trial-order" : "paid-order",
+            true,
+            string.Empty,
+            isFreeTrial,
+            "monthly",
+            isFreeTrial ? "trial-offer" : null,
+            isFreeTrial ? ["free-trial"] : [],
+            !isFreeTrial,
+            recurringPrice,
+            "USD");
 }

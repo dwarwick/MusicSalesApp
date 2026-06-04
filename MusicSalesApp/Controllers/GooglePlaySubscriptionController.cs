@@ -6,6 +6,7 @@ using MusicSalesApp.Data;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using System.Globalization;
 
 namespace MusicSalesApp.Controllers;
 
@@ -69,8 +70,7 @@ public class GooglePlaySubscriptionController : ControllerBase
         if (subscriptionInfo == null)
             return BadRequest(new { success = false, error = "Could not verify purchase with Google Play." });
 
-        // Only allow active subscriptions
-        if (subscriptionInfo.SubscriptionState != "SUBSCRIPTION_STATE_ACTIVE")
+        if (!HasGooglePlayEntitlement(subscriptionInfo))
         {
             _logger.LogWarning("Google Play subscription verification returned state {State} for user {UserId}",
                 subscriptionInfo.SubscriptionState, user.Id);
@@ -78,29 +78,75 @@ public class GooglePlaySubscriptionController : ControllerBase
         }
 
         var orderId = subscriptionInfo.OrderId ?? request.OrderId ?? "";
-        var monthlyPrice = decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], out var price) ? price : 3.99m;
+        var priceResolution = ResolveMonthlyPrice(subscriptionInfo, request);
+        var monthlyPrice = priceResolution.MonthlyPrice;
+        var localStatus = ResolveLocalStatus(subscriptionInfo);
+
+        _logger.LogInformation(
+            "Recording Google Play subscription for user {UserId}: GoogleState={GoogleState}, LocalStatus={LocalStatus}, IsFreeTrial={IsFreeTrial}, Expiry={ExpiryTime}, AutoRenewEnabled={AutoRenewEnabled}, OrderId={OrderId}, MonthlyPrice={MonthlyPrice}, PriceSource={PriceSource}, RequestPriceAmountMicros={RequestPriceAmountMicros}, RequestPriceCurrencyCode={RequestPriceCurrencyCode}, RequestFormattedPrice={RequestFormattedPrice}",
+            user.Id,
+            subscriptionInfo.SubscriptionState,
+            localStatus,
+            subscriptionInfo.IsFreeTrial,
+            subscriptionInfo.ExpiryTime,
+            subscriptionInfo.AutoRenewEnabled,
+            orderId,
+            monthlyPrice,
+            priceResolution.PriceSource,
+            request.PriceAmountMicros,
+            request.PriceCurrencyCode,
+            request.FormattedPrice);
 
         // Check if we already have this token recorded
         var existing = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
         if (existing != null)
         {
             var shouldSendConfirmationEmail = !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existing);
+            var shouldSendTrialStartedEmail = subscriptionInfo.IsFreeTrial && !existing.TrialActivationEmailSentAt.HasValue;
+            var shouldSendTrialConvertedEmail = !subscriptionInfo.IsFreeTrial && existing.TrialEndDate.HasValue && !existing.TrialConversionEmailSentAt.HasValue;
 
             _logger.LogInformation(
-                "Google Play verification matched existing subscription {SubscriptionId} for user {UserId}; refreshing status. SendConfirmationEmail={SendConfirmationEmail}",
+                "Google Play verification matched existing subscription {SubscriptionId} for user {UserId}; refreshing status. SendConfirmationEmail={SendConfirmationEmail}, SendTrialStartedEmail={SendTrialStartedEmail}, SendTrialConvertedEmail={SendTrialConvertedEmail}",
                 existing.Id,
                 user.Id,
-                shouldSendConfirmationEmail);
+                shouldSendConfirmationEmail,
+                shouldSendTrialStartedEmail,
+                shouldSendTrialConvertedEmail);
 
             await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
                 request.PurchaseToken,
-                SubscriptionStatuses.Active,
-                subscriptionInfo.ExpiryTime?.UtcDateTime);
+                localStatus,
+                subscriptionInfo.ExpiryTime?.UtcDateTime,
+                subscriptionInfo);
 
-            if (shouldSendConfirmationEmail)
+            await _subscriptionService.UpdateGooglePlayStorePriceAsync(
+                request.PurchaseToken,
+                request.FormattedPrice,
+                string.IsNullOrWhiteSpace(request.PriceCurrencyCode) ? subscriptionInfo.PriceCurrencyCode : request.PriceCurrencyCode);
+
+            if (!subscriptionInfo.IsAcknowledged)
             {
-                var updatedSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
-                if (updatedSubscription != null)
+                await _verificationService.AcknowledgeSubscriptionAsync(request.PurchaseToken, productId);
+            }
+
+            var updatedSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
+            if (updatedSubscription != null)
+            {
+                if (shouldSendTrialStartedEmail)
+                {
+                    if (await _subscriptionConfirmationEmailService.SendTrialStartedAsync(user, updatedSubscription, GetBaseUrl()))
+                    {
+                        await _subscriptionService.MarkTrialActivationEmailSentAsync(updatedSubscription.Id);
+                    }
+                }
+                else if (shouldSendTrialConvertedEmail)
+                {
+                    if (await _subscriptionConfirmationEmailService.SendTrialConvertedAsync(user, updatedSubscription, GetBaseUrl()))
+                    {
+                        await _subscriptionService.MarkTrialConversionEmailSentAsync(updatedSubscription.Id);
+                    }
+                }
+                else if (shouldSendConfirmationEmail && !subscriptionInfo.IsFreeTrial)
                 {
                     await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
                 }
@@ -111,12 +157,18 @@ public class GooglePlaySubscriptionController : ControllerBase
 
         // Create new subscription record
         var subscription = await _subscriptionService.CreateGooglePlaySubscriptionAsync(
-            user.Id, request.PurchaseToken, orderId, monthlyPrice);
+            user.Id, request.PurchaseToken, orderId, monthlyPrice, subscriptionInfo);
 
         await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
             request.PurchaseToken,
-            SubscriptionStatuses.Active,
-            subscriptionInfo.ExpiryTime?.UtcDateTime);
+            localStatus,
+            subscriptionInfo.ExpiryTime?.UtcDateTime,
+            subscriptionInfo);
+
+        await _subscriptionService.UpdateGooglePlayStorePriceAsync(
+            request.PurchaseToken,
+            request.FormattedPrice,
+            string.IsNullOrWhiteSpace(request.PriceCurrencyCode) ? subscriptionInfo.PriceCurrencyCode : request.PriceCurrencyCode);
 
         // Acknowledge the purchase so Google doesn't auto-refund
         if (!subscriptionInfo.IsAcknowledged)
@@ -127,9 +179,55 @@ public class GooglePlaySubscriptionController : ControllerBase
         var refreshedSubscription = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken)
             ?? subscription;
 
-        await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, refreshedSubscription, GetBaseUrl());
+        if (subscriptionInfo.IsFreeTrial)
+        {
+            if (await _subscriptionConfirmationEmailService.SendTrialStartedAsync(user, refreshedSubscription, GetBaseUrl()))
+            {
+                await _subscriptionService.MarkTrialActivationEmailSentAsync(refreshedSubscription.Id);
+            }
+        }
+        else
+        {
+            await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, refreshedSubscription, GetBaseUrl());
+        }
 
         return Ok(new { success = true, subscriptionId = subscription.Id, status = subscription.Status });
+    }
+
+    private static bool HasGooglePlayEntitlement(GooglePlaySubscriptionInfo subscriptionInfo)
+    {
+        if (subscriptionInfo.SubscriptionState == "SUBSCRIPTION_STATE_ACTIVE")
+        {
+            return true;
+        }
+
+        return subscriptionInfo.SubscriptionState == "SUBSCRIPTION_STATE_CANCELED"
+            && subscriptionInfo.ExpiryTime?.UtcDateTime > DateTime.UtcNow;
+    }
+
+    private static string ResolveLocalStatus(GooglePlaySubscriptionInfo subscriptionInfo)
+        => subscriptionInfo.SubscriptionState == "SUBSCRIPTION_STATE_CANCELED"
+            ? SubscriptionStatuses.Cancelled
+            : SubscriptionStatuses.Active;
+
+    private (decimal MonthlyPrice, string PriceSource) ResolveMonthlyPrice(GooglePlaySubscriptionInfo subscriptionInfo, GooglePlayPurchaseRequest request)
+    {
+        if (subscriptionInfo.RecurringPrice.HasValue && subscriptionInfo.RecurringPrice.Value > 0)
+        {
+            return (subscriptionInfo.RecurringPrice.Value, "GooglePlayVerificationRecurringPrice");
+        }
+
+        if (request.PriceAmountMicros.HasValue && request.PriceAmountMicros.Value > 0)
+        {
+            return (Math.Round(request.PriceAmountMicros.Value / 1_000_000m, 2, MidpointRounding.AwayFromZero), "MauiBillingClientPriceAmountMicros");
+        }
+
+        if (decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
+        {
+            return (price, "AppSettingsSubscriptionPrice");
+        }
+
+        return (3.99m, "HardcodedFallback");
     }
 
     private string GetBaseUrl()
@@ -144,4 +242,10 @@ public class GooglePlaySubscriptionController : ControllerBase
     }
 }
 
-public record GooglePlayPurchaseRequest(string PurchaseToken, string OrderId = "", string TimeZoneId = "");
+public record GooglePlayPurchaseRequest(
+    string PurchaseToken,
+    string OrderId = "",
+    string TimeZoneId = "",
+    long? PriceAmountMicros = null,
+    string PriceCurrencyCode = "",
+    string FormattedPrice = "");

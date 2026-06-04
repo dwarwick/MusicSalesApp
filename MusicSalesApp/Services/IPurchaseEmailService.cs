@@ -45,6 +45,22 @@ public interface IPurchaseEmailService
         string externalSubscriptionId,
         string? timeZoneId,
         string baseUrl);
+
+    Task<bool> SendSubscriptionTrialStartedAsync(
+        string userEmail,
+        string userName,
+        Subscription subscription,
+        string externalSubscriptionId,
+        string? timeZoneId,
+        string baseUrl);
+
+    Task<bool> SendSubscriptionTrialConvertedAsync(
+        string userEmail,
+        string userName,
+        Subscription subscription,
+        string externalSubscriptionId,
+        string? timeZoneId,
+        string baseUrl);
 }
 
 /// <summary>

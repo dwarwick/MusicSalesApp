@@ -26,8 +26,10 @@ public class SubscriptionService : ISubscriptionService
         var now = DateTime.UtcNow;
         return await context.Subscriptions
             .Where(s => s.UserId == userId)
-            .Where(s => (s.Status == SubscriptionStatuses.Active && s.LastPaymentDate != null && (s.EndDate == null || s.EndDate > now)) ||
-                                 (s.Status == SubscriptionStatuses.Cancelled && s.EndDate > now))
+            .Where(s => (s.Status == SubscriptionStatuses.Active &&
+                         (s.LastPaymentDate != null || s.TrialEndDate > now) &&
+                         (s.EndDate == null || s.EndDate > now)) ||
+                        (s.Status == SubscriptionStatuses.Cancelled && s.EndDate > now))
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
     }
@@ -80,6 +82,7 @@ public class SubscriptionService : ISubscriptionService
         {
             UserId = userId,
             PayPalSubscriptionId = paypalSubscriptionId,
+            BillingSource = BillingSources.PayPal,
             Status = SubscriptionStatuses.ApprovalPending,
             StartDate = DateTime.UtcNow,
             MonthlyPrice = monthlyPrice,
@@ -202,12 +205,13 @@ public class SubscriptionService : ISubscriptionService
     {
         using var context = await _contextFactory.CreateDbContextAsync();
         
-        // Find the most recent subscription for this user that hasn't been paid for yet
-        // (APPROVAL_PENDING status or ACTIVE with no LastPaymentDate)
+        // Only PayPal setup records are pending in this cleanup path. Google Play
+        // free trials are ACTIVE with no LastPaymentDate until conversion and must not be deleted here.
         var pendingSubscription = await context.Subscriptions
             .Where(s => s.UserId == userId && 
-                       (s.Status == SubscriptionStatuses.ApprovalPending ||
-                        (s.Status == SubscriptionStatuses.Active && s.LastPaymentDate == null)))
+                       s.BillingSource == BillingSources.PayPal &&
+                       s.PayPalSubscriptionId != null &&
+                       s.Status == SubscriptionStatuses.ApprovalPending)
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -267,11 +271,13 @@ public class SubscriptionService : ISubscriptionService
 
     // --- Google Play billing methods ---
 
-    public async Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice)
+    public async Task<Subscription> CreateGooglePlaySubscriptionAsync(int userId, string purchaseToken, string orderId, decimal monthlyPrice, GooglePlaySubscriptionInfo googlePlayInfo = null)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
         await CancelExistingActiveSubscriptionsAsync(context, userId);
+        var now = DateTime.UtcNow;
+        var expiryTime = googlePlayInfo?.ExpiryTime?.UtcDateTime;
 
         var subscription = new Subscription
         {
@@ -280,11 +286,16 @@ public class SubscriptionService : ISubscriptionService
             GooglePlayPurchaseToken = purchaseToken,
             GooglePlayOrderId = orderId,
             Status = SubscriptionStatuses.Active,
-            StartDate = DateTime.UtcNow,
-            LastPaymentDate = DateTime.UtcNow,
+            StartDate = googlePlayInfo?.StartTime?.UtcDateTime ?? now,
+            LastPaymentDate = googlePlayInfo?.IsFreeTrial == true ? null : now,
+            EndDate = expiryTime,
+            NextBillingDate = expiryTime,
             MonthlyPrice = monthlyPrice,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
         };
+
+        ApplyGooglePlayTrialInfo(subscription, googlePlayInfo, expiryTime, now);
+        ApplyStorePriceInfo(subscription, null, googlePlayInfo?.PriceCurrencyCode);
 
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
@@ -347,7 +358,7 @@ public class SubscriptionService : ISubscriptionService
             .FirstOrDefaultAsync(s => s.GooglePlayPurchaseToken == purchaseToken);
     }
 
-    public async Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null)
+    public async Task UpdateGooglePlaySubscriptionStatusAsync(string purchaseToken, string status, DateTime? expiryTime = null, GooglePlaySubscriptionInfo googlePlayInfo = null)
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
@@ -360,7 +371,26 @@ public class SubscriptionService : ISubscriptionService
             return;
         }
 
+        var now = DateTime.UtcNow;
+        var previousStatus = subscription.Status;
+        var previousEndDate = subscription.EndDate;
+        var previousLastPaymentDate = subscription.LastPaymentDate;
+        var previousMonthlyPrice = subscription.MonthlyPrice;
         subscription.Status = status;
+
+        if (!string.IsNullOrWhiteSpace(googlePlayInfo?.OrderId))
+        {
+            subscription.GooglePlayOrderId = googlePlayInfo.OrderId;
+        }
+
+        if (googlePlayInfo?.RecurringPrice.HasValue == true)
+        {
+            subscription.MonthlyPrice = googlePlayInfo.RecurringPrice.Value;
+        }
+
+        ApplyStorePriceInfo(subscription, null, googlePlayInfo?.PriceCurrencyCode);
+
+        ApplyGooglePlayTrialInfo(subscription, googlePlayInfo, expiryTime, now);
 
         if (expiryTime.HasValue)
         {
@@ -375,12 +405,66 @@ public class SubscriptionService : ISubscriptionService
 
         if (status == SubscriptionStatuses.Active)
         {
-            subscription.LastPaymentDate = DateTime.UtcNow;
+            if (googlePlayInfo?.IsFreeTrial == true)
+            {
+                subscription.LastPaymentDate = null;
+            }
+            else
+            {
+                subscription.LastPaymentDate = now;
+            }
         }
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Updated Google Play subscription {SubscriptionId} status to {Status}", subscription.Id, status);
+        _logger.LogInformation(
+            "Updated Google Play subscription {SubscriptionId}: Status {PreviousStatus}->{Status}, EndDate {PreviousEndDate}->{EndDate}, LastPaymentDate {PreviousLastPaymentDate}->{LastPaymentDate}, MonthlyPrice {PreviousMonthlyPrice}->{MonthlyPrice}, IsFreeTrial={IsFreeTrial}, TrialEndDate={TrialEndDate}, TrialConvertedAt={TrialConvertedAt}, AutoRenewEnabled={AutoRenewEnabled}, GoogleState={GoogleState}",
+            subscription.Id,
+            previousStatus,
+            subscription.Status,
+            previousEndDate,
+            subscription.EndDate,
+            previousLastPaymentDate,
+            subscription.LastPaymentDate,
+            previousMonthlyPrice,
+            subscription.MonthlyPrice,
+            googlePlayInfo?.IsFreeTrial,
+            subscription.TrialEndDate,
+            subscription.TrialConvertedAt,
+            subscription.GooglePlayAutoRenewEnabled,
+            googlePlayInfo?.SubscriptionState);
+    }
+
+    public async Task UpdateGooglePlayStorePriceAsync(string purchaseToken, string formattedPrice, string priceCurrencyCode)
+    {
+        if (string.IsNullOrWhiteSpace(formattedPrice) && string.IsNullOrWhiteSpace(priceCurrencyCode))
+        {
+            return;
+        }
+
+        using var context = await _contextFactory.CreateDbContextAsync();
+
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.GooglePlayPurchaseToken == purchaseToken);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning("Google Play subscription with token {PurchaseToken} not found while updating store price", purchaseToken[..Math.Min(20, purchaseToken.Length)]);
+            return;
+        }
+
+        ApplyStorePriceInfo(subscription, formattedPrice, priceCurrencyCode);
+        await context.SaveChangesAsync();
+    }
+
+    public async Task MarkTrialActivationEmailSentAsync(int subscriptionId)
+    {
+        await MarkTrialEmailSentAsync(subscriptionId, isConversionEmail: false);
+    }
+
+    public async Task MarkTrialConversionEmailSentAsync(int subscriptionId)
+    {
+        await MarkTrialEmailSentAsync(subscriptionId, isConversionEmail: true);
     }
 
     public async Task<Subscription> GetSubscriptionByAppleTransactionIdAsync(string transactionId)
@@ -542,6 +626,68 @@ public class SubscriptionService : ISubscriptionService
         }
     }
 
+    private static void ApplyGooglePlayTrialInfo(Subscription subscription, GooglePlaySubscriptionInfo googlePlayInfo, DateTime? expiryTime, DateTime now)
+    {
+        if (googlePlayInfo == null)
+        {
+            return;
+        }
+
+        subscription.GooglePlayAutoRenewEnabled = googlePlayInfo.AutoRenewEnabled;
+
+        if (googlePlayInfo.IsFreeTrial)
+        {
+            subscription.TrialStartDate ??= googlePlayInfo.StartTime?.UtcDateTime ?? subscription.StartDate;
+            subscription.TrialEndDate = expiryTime ?? googlePlayInfo.ExpiryTime?.UtcDateTime;
+            subscription.TrialBasePlanId = googlePlayInfo.BasePlanId;
+            subscription.TrialOfferId = googlePlayInfo.OfferId;
+            subscription.TrialOfferTags = googlePlayInfo.OfferTags?.Count > 0
+                ? string.Join(",", googlePlayInfo.OfferTags)
+                : null;
+            return;
+        }
+
+        if (subscription.TrialEndDate.HasValue && !subscription.TrialConvertedAt.HasValue)
+        {
+            subscription.TrialConvertedAt = now;
+        }
+    }
+
+    private static void ApplyStorePriceInfo(Subscription subscription, string formattedPrice, string priceCurrencyCode)
+    {
+        if (!string.IsNullOrWhiteSpace(formattedPrice))
+        {
+            subscription.StoreFormattedPrice = formattedPrice.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(priceCurrencyCode))
+        {
+            subscription.StorePriceCurrencyCode = priceCurrencyCode.Trim().ToUpperInvariant();
+        }
+    }
+
+    private async Task MarkTrialEmailSentAsync(int subscriptionId, bool isConversionEmail)
+    {
+        using var context = await _contextFactory.CreateDbContextAsync();
+        var subscription = await context.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId);
+        if (subscription == null)
+        {
+            _logger.LogWarning("Subscription {SubscriptionId} not found while marking trial email as sent", subscriptionId);
+            return;
+        }
+
+        if (isConversionEmail)
+        {
+            subscription.TrialConversionEmailSentAt ??= DateTime.UtcNow;
+        }
+        else
+        {
+            subscription.TrialActivationEmailSentAt ??= DateTime.UtcNow;
+        }
+
+        await context.SaveChangesAsync();
+    }
+
     private async Task NormalizeExpiredSubscriptionsAsync(AppDbContext context, int userId)
     {
         await NormalizeExpiredSubscriptionsAsync(context, query => query.Where(s => s.UserId == userId));
@@ -571,6 +717,17 @@ public class SubscriptionService : ISubscriptionService
 
         foreach (var subscription in subscriptionsToExpire)
         {
+            _logger.LogInformation(
+                "Normalizing subscription {SubscriptionId} for user {UserId} to EXPIRED: PreviousStatus={PreviousStatus}, BillingSource={BillingSource}, EndDate={EndDate}, TrialEndDate={TrialEndDate}, LastPaymentDate={LastPaymentDate}, AutoRenewEnabled={AutoRenewEnabled}",
+                subscription.Id,
+                subscription.UserId,
+                subscription.Status,
+                subscription.BillingSource,
+                subscription.EndDate,
+                subscription.TrialEndDate,
+                subscription.LastPaymentDate,
+                subscription.GooglePlayAutoRenewEnabled);
+
             subscription.Status = SubscriptionStatuses.Expired;
             subscription.CancelledAt ??= subscription.EndDate;
         }

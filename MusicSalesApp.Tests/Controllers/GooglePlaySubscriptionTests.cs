@@ -172,6 +172,66 @@ public class GooglePlaySubscriptionTests
         Assert.That(json, Does.Contain("\"status\":\"EXPIRED\""));
     }
 
+    [Test]
+    public async Task GetSubscriptionStatus_RefreshesGooglePlay_WhenLocalSubscriptionExpiredButGoogleIsActive()
+    {
+        var expiredSubscription = new Subscription
+        {
+            Id = 5,
+            UserId = 1,
+            Status = SubscriptionStatuses.Expired,
+            BillingSource = BillingSources.GooglePlay,
+            EndDate = DateTime.UtcNow.AddMinutes(-2),
+            MonthlyPrice = 3.99m,
+            GooglePlayPurchaseToken = "renewed-token"
+        };
+        var refreshedSubscription = new Subscription
+        {
+            Id = 5,
+            UserId = 1,
+            Status = SubscriptionStatuses.Active,
+            BillingSource = BillingSources.GooglePlay,
+            EndDate = DateTime.UtcNow.AddDays(30),
+            MonthlyPrice = 2.99m,
+            GooglePlayPurchaseToken = "renewed-token"
+        };
+
+        _mockSubscriptionService.SetupSequence(s => s.GetActiveSubscriptionAsync(1))
+            .ReturnsAsync((Subscription)null)
+            .ReturnsAsync(refreshedSubscription);
+        _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync(expiredSubscription);
+        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
+        _mockConfiguration.Setup(c => c["GooglePlay:SubscriptionProductId"]).Returns("streamtunes_monthly_sub");
+        _mockGooglePlayService.Setup(g => g.VerifySubscriptionAsync("renewed-token", "streamtunes_monthly_sub"))
+            .ReturnsAsync(new GooglePlaySubscriptionInfo(
+                "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow.AddMinutes(-5),
+                DateTimeOffset.UtcNow.AddDays(30),
+                "order-renewed",
+                true,
+                string.Empty,
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                2.99m,
+                "USD"));
+
+        var result = await _controller.GetSubscriptionStatus();
+        var ok = result as OkObjectResult;
+
+        Assert.That(ok, Is.Not.Null);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok!.Value);
+        Assert.That(json, Does.Contain("\"hasSubscription\":true"));
+        Assert.That(json, Does.Contain("\"monthlyPrice\":2.99"));
+        _mockSubscriptionService.Verify(s => s.UpdateGooglePlaySubscriptionStatusAsync(
+            "renewed-token",
+            SubscriptionStatuses.Active,
+            It.IsAny<DateTime?>(),
+            It.Is<GooglePlaySubscriptionInfo>(info => info.RecurringPrice == 2.99m)), Times.Once);
+    }
+
     // --- Cancel routing ---
 
     [Test]
