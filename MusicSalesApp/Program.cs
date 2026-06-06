@@ -320,6 +320,7 @@ try
     builder.Services.AddScoped<INewSongNotificationService, NewSongNotificationService>();
     builder.Services.AddScoped<ISongMetadataService, SongMetadataService>();
     builder.Services.AddScoped<ISongDisplayOrderService, SongDisplayOrderService>();
+    builder.Services.AddScoped<IFeaturedSongRotationService, FeaturedSongRotationService>();
     builder.Services.AddScoped<ISongAdminService, SongAdminService>();
     builder.Services.AddScoped<ISongStatusService, SongStatusService>();
     builder.Services.AddScoped<IGenreService, GenreService>();

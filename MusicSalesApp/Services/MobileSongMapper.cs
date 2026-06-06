@@ -67,6 +67,8 @@ public class MobileSongMapper : IMobileSongMapper
             StreamCount = m.NumberOfStreams,
             StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
             TrackLengthSeconds = m.TrackLength,
+            DisplayOnHomePage = m.DisplayOnHomePage,
+            DisplayOrder = m.DisplayOrder,
             IsAiGenerated = m.IsAiGenerated,
             CreatorId = m.CreatorId,
             CreatorUserId = m.Creator?.UserId

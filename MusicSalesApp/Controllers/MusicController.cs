@@ -325,6 +325,8 @@ namespace MusicSalesApp.Controllers
                 streamCount,
                 streamQualifyingSeconds = mappedSong.StreamQualifyingSeconds,
                 trackLengthSeconds = mappedSong.TrackLengthSeconds,
+                displayOnHomePage = mappedSong.DisplayOnHomePage,
+                displayOrder = mappedSong.DisplayOrder,
                 creatorId = mappedSong.CreatorId,
                 creatorUserId = mappedSong.CreatorUserId,
                 likeCount,

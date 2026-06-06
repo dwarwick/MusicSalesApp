@@ -357,6 +357,8 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             return false;
         if (_isAdmin)
             return false;
+        if (_songMetadata?.DisplayOnHomePage == true)
+            return false;
         if (_isCreatorOfSong)
             return false;
         return true;

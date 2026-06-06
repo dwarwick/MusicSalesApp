@@ -1,4 +1,5 @@
 using Hangfire;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services;
 
@@ -31,6 +32,12 @@ public class BackgroundJobService : IBackgroundJobService
             // Remove the old Supabase sync job id so that stale Hangfire records
             // from previous deployments don't keep firing after the method was removed.
             RecurringJob.RemoveIfExists("sync-likes-to-supabase");
+
+            // Rotate home-page featured songs daily at midnight UTC.
+            RecurringJob.AddOrUpdate<IFeaturedSongRotationService>(
+                HangfireJobIds.RotateFeaturedSongs,
+                service => service.RotateFeaturedSongsAsync(),
+                Cron.Daily(0));
 
             // Schedule nightly display-order randomization before other catalog jobs.
             RecurringJob.AddOrUpdate<ISongDisplayOrderService>(

@@ -1249,6 +1249,13 @@ namespace MusicSalesApp.Components.Players
             if (_isAdmin)
                 return false;
 
+            if (_playlistInfo?.Tracks != null && trackIndex >= 0 && trackIndex < _playlistInfo.Tracks.Count)
+            {
+                var track = _playlistInfo.Tracks[trackIndex];
+                if (_metadataLookup.TryGetValue(track.Name, out var metadata) && metadata.DisplayOnHomePage)
+                    return false;
+            }
+
             // Creators can fully stream their own songs
             if (_currentUserId.HasValue && _playlistInfo?.Tracks != null && trackIndex >= 0 && trackIndex < _playlistInfo.Tracks.Count)
             {

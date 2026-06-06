@@ -1,5 +1,12 @@
 # Agent Instructions - MusicSalesApp
 
+## Working Branches
+
+- Before editing files, always check the current branch with `git branch --show-current`.
+- If the current branch is `master`, create and switch to an appropriately named working branch before making changes.
+- Use clear task-based branch names such as `work/featured-playback-queue-rotation`.
+- Do not make code edits on `master` unless the user explicitly asks for that.
+
 ## String Constants and Magic Strings
 
 **CRITICAL:** Never use inline "magic" string literals for values that are written in one place and read/compared in another. Always define string constants in a shared class in the `MusicSalesApp.Common` project under the `Helpers` folder.
