@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
@@ -55,7 +56,7 @@ public class StreamCountServiceTests
         _context.Dispose();
     }
 
-    private async Task<SongMetadata> CreateTestSongMetadata(int numberOfStreams = 0)
+    private async Task<SongMetadata> CreateTestSongMetadata(int numberOfStreams = 0, bool displayOnHomePage = false)
     {
         using var context = new AppDbContext(_contextOptions);
         var metadata = new SongMetadata
@@ -64,6 +65,7 @@ public class StreamCountServiceTests
             Mp3BlobPath = "test/song.mp3",
             AlbumName = "Test Album",
             NumberOfStreams = numberOfStreams,
+            DisplayOnHomePage = displayOnHomePage,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -349,6 +351,126 @@ public class StreamCountServiceTests
             .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
         Assert.That(streamRecord, Is.Not.Null);
         Assert.That(streamRecord.StreamerUserId, Is.Null);
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_FeaturedNonSubscriberFirstStream_IncrementsCountAndCreatesRecord()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 7, displayOnHomePage: true);
+        var streamerUserId = 999;
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, streamerUserId);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(8));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecords = await verifyContext.SongStreams
+            .Where(s => s.SongMetadataId == metadata.Id && s.StreamerUserId == streamerUserId)
+            .ToListAsync();
+        Assert.That(streamRecords, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_FeaturedNonSubscriberWithExistingStream_DoesNotIncrementOrCreateRecord()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 7, displayOnHomePage: true);
+        var streamerUserId = 999;
+        using (var setupContext = new AppDbContext(_contextOptions))
+        {
+            setupContext.SongStreams.Add(new SongStream
+            {
+                SongMetadataId = metadata.Id,
+                StreamerUserId = streamerUserId,
+                CreatedDate = DateTime.UtcNow.AddMinutes(-5)
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, streamerUserId);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(7));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var updatedMetadata = await verifyContext.SongMetadata.FindAsync(metadata.Id);
+        var streamRecords = await verifyContext.SongStreams
+            .Where(s => s.SongMetadataId == metadata.Id && s.StreamerUserId == streamerUserId)
+            .ToListAsync();
+
+        Assert.That(updatedMetadata?.NumberOfStreams, Is.EqualTo(7));
+        Assert.That(streamRecords, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_FeaturedAnonymousWithExistingStream_IncrementsWhenClientReportsStream()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 7, displayOnHomePage: true);
+        using (var setupContext = new AppDbContext(_contextOptions))
+        {
+            setupContext.SongStreams.Add(new SongStream
+            {
+                SongMetadataId = metadata.Id,
+                StreamerUserId = null,
+                CreatedDate = DateTime.UtcNow.AddMinutes(-5)
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(8));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecords = await verifyContext.SongStreams
+            .Where(s => s.SongMetadataId == metadata.Id && s.StreamerUserId == null)
+            .ToListAsync();
+        Assert.That(streamRecords, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_FeaturedSubscriberWithExistingStream_IncrementsCountAndCreatesRecord()
+    {
+        // Arrange
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 7, displayOnHomePage: true);
+        var streamerUserId = 999;
+        using (var setupContext = new AppDbContext(_contextOptions))
+        {
+            setupContext.Subscriptions.Add(new Subscription
+            {
+                UserId = streamerUserId,
+                Status = SubscriptionStatuses.Active,
+                StartDate = DateTime.UtcNow.AddDays(-1),
+                EndDate = DateTime.UtcNow.AddDays(1),
+                MonthlyPrice = 3.99m
+            });
+            setupContext.SongStreams.Add(new SongStream
+            {
+                SongMetadataId = metadata.Id,
+                StreamerUserId = streamerUserId,
+                CreatedDate = DateTime.UtcNow.AddMinutes(-5)
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, streamerUserId);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(8));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecords = await verifyContext.SongStreams
+            .Where(s => s.SongMetadataId == metadata.Id && s.StreamerUserId == streamerUserId)
+            .ToListAsync();
+        Assert.That(streamRecords, Has.Count.EqualTo(2));
     }
 
     [Test]

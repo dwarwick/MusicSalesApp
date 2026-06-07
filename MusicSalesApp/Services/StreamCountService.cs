@@ -70,8 +70,15 @@ public class StreamCountService : IStreamCountService
             }
         }
 
-        // Creators streaming their own songs and admins do not generate stream counts or records
-        bool isCountableStream = !isAdmin && !isCreatorOfSong;
+        var hasActiveSubscription = await HasActiveSubscriptionAsync(context, streamerUserId);
+        var hasReachedFeaturedFreeStreamCap = song.DisplayOnHomePage &&
+                                              streamerUserId.HasValue &&
+                                              !hasActiveSubscription &&
+                                              await HasExistingStreamRecordAsync(context, songMetadataId, streamerUserId.Value);
+
+        // Creators streaming their own songs and admins do not generate stream counts or records.
+        // Featured songs are full-length for everyone, but non-subscribed listeners only count once per song.
+        bool isCountableStream = !isAdmin && !isCreatorOfSong && !hasReachedFeaturedFreeStreamCap;
 
         int newCount;
 
@@ -117,8 +124,17 @@ public class StreamCountService : IStreamCountService
             newCount = song.NumberOfStreams;
         }
 
-        _logger.LogInformation("StreamCountService: Stream request for song {SongMetadataId} by user {StreamerUserId}, isAdmin={IsAdmin}, isCreatorOfSong={IsCreatorOfSong}, recorded={Recorded}. Count: {NewCount}", 
-            songMetadataId, streamerUserId, isAdmin, isCreatorOfSong, isCountableStream, newCount);
+        _logger.LogInformation(
+            "StreamCountService: Stream request for song {SongMetadataId} by user {StreamerUserId}, isAdmin={IsAdmin}, isCreatorOfSong={IsCreatorOfSong}, isFeatured={IsFeatured}, hasActiveSubscription={HasActiveSubscription}, featuredFreeStreamCapReached={FeaturedFreeStreamCapReached}, recorded={Recorded}. Count: {NewCount}",
+            songMetadataId,
+            streamerUserId,
+            isAdmin,
+            isCreatorOfSong,
+            song.DisplayOnHomePage,
+            hasActiveSubscription,
+            hasReachedFeaturedFreeStreamCap,
+            isCountableStream,
+            newCount);
 
         // Notify subscribers (local in-process event)
         NotifyStreamCountUpdated(songMetadataId, newCount);
@@ -146,5 +162,26 @@ public class StreamCountService : IStreamCountService
     public void NotifyStreamCountUpdated(int songMetadataId, int newCount)
     {
         OnStreamCountUpdated?.Invoke(songMetadataId, newCount);
+    }
+
+    private static async Task<bool> HasActiveSubscriptionAsync(AppDbContext context, int? streamerUserId)
+    {
+        if (!streamerUserId.HasValue)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        return await context.Subscriptions.AnyAsync(subscription =>
+            subscription.UserId == streamerUserId.Value &&
+            subscription.Status == SubscriptionStatuses.Active &&
+            (!subscription.EndDate.HasValue || subscription.EndDate.Value > now));
+    }
+
+    private static Task<bool> HasExistingStreamRecordAsync(AppDbContext context, int songMetadataId, int streamerUserId)
+    {
+        return context.SongStreams.AnyAsync(stream =>
+            stream.SongMetadataId == songMetadataId &&
+            stream.StreamerUserId == streamerUserId);
     }
 }

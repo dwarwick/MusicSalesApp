@@ -958,6 +958,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         if (_isAdmin)
             return false;
 
+        // Home-page featured songs are full-length for everyone
+        if (!string.IsNullOrEmpty(_playingFileName) && _homePageSongs.Contains(_playingFileName))
+            return false;
+
         // Creators can fully stream their own songs
         if (_currentUserId.HasValue && !string.IsNullOrEmpty(_playingFileName))
         {
