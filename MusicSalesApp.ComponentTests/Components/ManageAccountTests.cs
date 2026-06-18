@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -217,6 +218,115 @@ public class ManageAccountTests : BUnitTestBase
     }
 
     [Test]
+    public void ManageAccount_ActiveCreator_TracksCreatorSignupConversion()
+    {
+        SetupCreatorAccountPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true
+        });
+
+        var cut = TestContext.Render<ManageAccount>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var trackingInvocations = GetGoogleAdsTrackingInvocations();
+            Assert.That(trackingInvocations, Has.Count.EqualTo(1));
+
+            var trackingInvocation = trackingInvocations.Single();
+            Assert.That(trackingInvocation.Arguments[0]?.ToString(), Is.EqualTo("AW-18188763957/zvw_CJ6in74cELWGiuFD"));
+            Assert.That(trackingInvocation.Arguments[1]?.ToString(), Is.EqualTo("creator-7"));
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task ManageAccount_ActiveCreator_DoesNotTrackConversionTwice()
+    {
+        SetupCreatorAccountPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true
+        });
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForAssertion(() => Assert.That(GetGoogleAdsTrackingInvocations(), Has.Count.EqualTo(1)), TimeSpan.FromSeconds(5));
+
+        var showDialogMethod = typeof(ManageAccountModel).GetMethod(
+            "ShowCreatorActivatedDialog",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+        await (Task)showDialogMethod!.Invoke(cut.Instance, null)!;
+        await (Task)showDialogMethod.Invoke(cut.Instance, null)!;
+
+        Assert.That(GetGoogleAdsTrackingInvocations(), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ManageAccount_ActiveCreator_DoesNotTrackConversion_WhenHostIsNotAllowed()
+    {
+        SetupCreatorAccountPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true
+        }, "davidtest.dev");
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Payout Email Address"), TimeSpan.FromSeconds(5));
+
+        Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
+    }
+
+    [Test]
+    public void ManageAccount_PendingCreator_DoesNotTrackCreatorSignupConversion()
+    {
+        SetupCreatorAccountPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = false,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Pending,
+            PayPalAccountAffirmed = true
+        });
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Complete Tax Form"), TimeSpan.FromSeconds(5));
+
+        Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
+    }
+
+    [Test]
+    public void ManageAccount_IneligibleCreator_DoesNotTrackCreatorSignupConversion()
+    {
+        SetupCreatorAccountPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = false,
+            OnboardingStatus = CreatorOnboardingStatus.Ineligible,
+            TaxFormStatus = TaxFormStatus.NotStarted,
+            PayPalAccountAffirmed = true
+        });
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("not eligible to register as a creator"), TimeSpan.FromSeconds(5));
+
+        Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
+    }
+
+    [Test]
     public void ManageAccount_AppleActiveSubscriptionWithFutureEndDate_ShowsManageSubscriptionAndNoNewSubscriptionPrompt()
     {
         SetupAuthorizedUser(1, "testuser@test.com");
@@ -362,4 +472,80 @@ public class ManageAccountTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("Cancel Subscription"));
         Assert.That(cut.Markup, Does.Not.Contain("Manage Subscription"));
     }
+
+    private void SetupCreatorAccountPage(Creator creator, params string[] enabledHosts)
+    {
+        if (enabledHosts.Length == 0)
+        {
+            enabledHosts = new[] { "localhost" };
+        }
+
+        ConfigureRequestHost("localhost");
+        SetupAuthorizedUser(creator.UserId, "testuser@test.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = creator.UserId,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+
+        MockCreatorService.Setup(x => x.GetCreatorByUserIdAsync(creator.UserId))
+            .ReturnsAsync(creator);
+
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new
+            {
+                HasSubscription = false,
+                Status = SubscriptionStatuses.Expired,
+                SubscriptionPrice = "3.99"
+            });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        var configValues = new Dictionary<string, string>
+            {
+                ["Facebook:AppId"] = "test-facebook-app-id",
+                ["PayPal:SubscriptionPrice"] = "3.99",
+                [GoogleAdsTrackingConfigKeys.Enabled] = "true",
+                [GoogleAdsTrackingConfigKeys.TagId] = "AW-18188763957",
+                [GoogleAdsTrackingConfigKeys.CreatorSignupConversionLabel] = "zvw_CJ6in74cELWGiuFD"
+            };
+
+        for (var i = 0; i < enabledHosts.Length; i++)
+        {
+            configValues[$"{GoogleAdsTrackingConfigKeys.EnabledHosts}:{i}"] = enabledHosts[i];
+        }
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(configValues)
+            .Build();
+        TestContext.Services.AddSingleton<IConfiguration>(configuration);
+
+        SetupRendererInfo();
+    }
+
+    private void ConfigureRequestHost(string host)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Host = new HostString(host);
+
+        MockHttpContextAccessor
+            .Setup(x => x.HttpContext)
+            .Returns(httpContext);
+    }
+
+    private List<Bunit.JSRuntimeInvocation> GetGoogleAdsTrackingInvocations()
+        => TestContext.JSInterop.Invocations
+            .Where(invocation => invocation.Identifier == GoogleAdsTrackingConfigKeys.TrackConversionFunctionName)
+            .ToList();
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
@@ -81,6 +82,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _stoppingCreatorStatus = false;
     protected bool _updatingTaxForm = false;
     protected string _stopSellingConfirmEmail = string.Empty;
+    private int? _creatorId = null;
+    private bool _creatorSignupConversionTracked = false;
     
     // Creator attestation fields
     protected string _locationCertification = "None";
@@ -893,6 +896,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
             if (creator != null)
             {
+                _creatorId = creator.Id;
                 _isActiveCreator = creator.IsActive;
                 _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
                 _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
@@ -929,6 +933,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
             }
             else
             {
+                _creatorId = null;
                 _isActiveCreator = false;
                 _creatorOnboardingStatus = null;
                 _creatorTaxFormStatus = null;
@@ -1140,10 +1145,85 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
     protected async Task ShowCreatorActivatedDialog()
     {
+        await TrackCreatorSignupConversionAsync();
+
         if (_creatorActivatedDialog != null)
         {
             await _creatorActivatedDialog.ShowAsync();
         }
+    }
+
+    private async Task TrackCreatorSignupConversionAsync()
+    {
+        if (_creatorSignupConversionTracked || !_isActiveCreator)
+        {
+            return;
+        }
+
+        if (!IsGoogleAdsTrackingAllowedForCurrentHost())
+        {
+            return;
+        }
+
+        var googleAdsTagId = Configuration[GoogleAdsTrackingConfigKeys.TagId];
+        var creatorSignupConversionLabel = Configuration[GoogleAdsTrackingConfigKeys.CreatorSignupConversionLabel];
+        if (string.IsNullOrWhiteSpace(googleAdsTagId) || string.IsNullOrWhiteSpace(creatorSignupConversionLabel))
+        {
+            return;
+        }
+
+        if (!_creatorId.HasValue && _currentUser != null)
+        {
+            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
+            if (creator?.IsActive == true)
+            {
+                _creatorId = creator.Id;
+            }
+        }
+
+        if (!_creatorId.HasValue)
+        {
+            return;
+        }
+
+        var sendTo = $"{googleAdsTagId}/{creatorSignupConversionLabel}";
+        var transactionId = $"{GoogleAdsTrackingConfigKeys.CreatorSignupTransactionIdPrefix}{_creatorId.Value}";
+        _creatorSignupConversionTracked = true;
+
+        try
+        {
+            await JS.InvokeVoidAsync(GoogleAdsTrackingConfigKeys.TrackConversionFunctionName, sendTo, transactionId);
+        }
+        catch (Exception ex) when (ex is JSException || ex is InvalidOperationException)
+        {
+            Logger.LogWarning(ex, "Failed to send Google Ads creator signup conversion for creator {CreatorId}", _creatorId.Value);
+        }
+    }
+
+    private bool IsGoogleAdsTrackingAllowedForCurrentHost()
+    {
+        if (!Configuration.GetValue<bool>(GoogleAdsTrackingConfigKeys.Enabled))
+        {
+            return false;
+        }
+
+        var enabledHosts = Configuration
+            .GetSection(GoogleAdsTrackingConfigKeys.EnabledHosts)
+            .Get<string[]>() ?? Array.Empty<string>();
+        if (enabledHosts.Length == 0)
+        {
+            return false;
+        }
+
+        var currentHost = HttpContextAccessor.HttpContext?.Request.Host.Host;
+        if (string.IsNullOrWhiteSpace(currentHost)
+            && Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var navigationUri))
+        {
+            currentHost = navigationUri.Host;
+        }
+
+        return !string.IsNullOrWhiteSpace(currentHost)
+            && enabledHosts.Contains(currentHost, StringComparer.OrdinalIgnoreCase);
     }
 
     protected void LogoutAfterCreatorActivation()

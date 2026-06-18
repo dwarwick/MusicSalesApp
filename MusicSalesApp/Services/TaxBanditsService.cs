@@ -19,6 +19,8 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public sealed class TaxBanditsService : ITaxBanditsService
 {
+    private const string DefaultApiVersion = "v1.7.3";
+
     private readonly HttpClient _http;
     private readonly ILogger<TaxBanditsService> _logger;
     private readonly IConfiguration _configuration;
@@ -172,7 +174,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request with query parameters (not a request body)
-            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
+            var apiUrl = GetTaxBanditsApiBaseUrl();
 
             var deleteUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Delete?PayeeRef={Uri.EscapeDataString(payeeRef)}";
 
@@ -316,7 +318,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request
-            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
+            var apiUrl = GetTaxBanditsApiBaseUrl();
 
             // Build TxnData array with all transactions grouped by recipient
             // TaxBandits API structure: TxnData[] -> each has Business, Recipients[] where each recipient has Txns[]
@@ -560,7 +562,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
                 return response;
             }
 
-            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
+            var apiUrl = GetTaxBanditsApiBaseUrl();
 
             var statusUrl = $"{apiUrl.TrimEnd('/')}/WhCertificate/Status?PayeeRef={Uri.EscapeDataString(payeeRef)}&BusinessId={Uri.EscapeDataString(businessId)}";
 
@@ -802,7 +804,7 @@ public sealed class TaxBanditsService : ITaxBanditsService
             }
 
             // Build the API request
-            var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
+            var apiUrl = GetTaxBanditsApiBaseUrl();
 
             var requestBody = new Dictionary<string, object?>
             {
@@ -941,5 +943,29 @@ public sealed class TaxBanditsService : ITaxBanditsService
         }
 
         return response;
+    }
+
+    private string GetTaxBanditsApiBaseUrl()
+    {
+        var apiUrl = _configuration["TaxBandits:ApiUrl"] ?? string.Empty;
+        return NormalizeTaxBanditsApiBaseUrl(apiUrl);
+    }
+
+    private static string NormalizeTaxBanditsApiBaseUrl(string apiUrl)
+    {
+        apiUrl = apiUrl.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(apiUrl))
+        {
+            return string.Empty;
+        }
+
+        if (Uri.TryCreate(apiUrl, UriKind.Absolute, out var uri)
+            && uri.Host.EndsWith("taxbandits.com", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(uri.AbsolutePath.Trim('/')))
+        {
+            return $"{apiUrl}/{DefaultApiVersion}";
+        }
+
+        return apiUrl;
     }
 }

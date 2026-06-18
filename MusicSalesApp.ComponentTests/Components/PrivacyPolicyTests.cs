@@ -141,7 +141,7 @@ public class PrivacyPolicyTests : BUnitTestBase
 
         // Assert - Verify last updated date
         Assert.That(cut.Markup, Does.Contain("Last Updated"));
-        Assert.That(cut.Markup, Does.Contain("2026"));
+        Assert.That(cut.Markup, Does.Contain("June 13, 2026"));
     }
 
     [Test]
@@ -152,5 +152,15 @@ public class PrivacyPolicyTests : BUnitTestBase
 
         // Assert - Verify Nevada state reference
         Assert.That(cut.Markup, Does.Contain("Nevada"));
+    }
+
+    [Test]
+    public void PrivacyPolicy_DisclosesGoogleTracking()
+    {
+        var cut = TestContext.Render<PrivacyPolicy>();
+
+        Assert.That(cut.Markup, Does.Contain("Google Tag Manager"));
+        Assert.That(cut.Markup, Does.Contain("Google Ads"));
+        Assert.That(cut.Markup, Does.Not.Contain("We do NOT use cookies for third-party advertising or tracking across other websites."));
     }
 }

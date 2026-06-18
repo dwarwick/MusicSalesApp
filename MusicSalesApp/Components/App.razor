@@ -5,6 +5,7 @@
 <html lang="en">
 
 <head>
+    @((MarkupString)googleTagManagerHeadHtml)
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="manifest" href="@Assets["manifest.webmanifest"]" />
     <meta charset="utf-8" />
@@ -12,6 +13,7 @@
     <base href="/" />
     
     @((MarkupString)metaHtml)
+    @((MarkupString)googleAdsHeadHtml)
     
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
@@ -34,6 +36,7 @@
 </head>
 
 <body>
+    @((MarkupString)googleTagManagerBodyHtml)
     <!-- Facebook SDK for JavaScript -->
     <div id="fb-root"></div>
     <script async defer crossorigin="anonymous" 
@@ -47,6 +50,7 @@
     <script src="https://kit.fontawesome.com/40e6b04585.js" crossorigin="anonymous"></script>
     <script src="@Assets["js/passkey-helper.js"]"></script>    
     <script src="@Assets["js/dashboard-helper.js"]"></script>
+    <script src="@Assets["js/google-ads-tracking.js"]"></script>
     <!-- DotLottie web component (registers <dotlottie-wc>) -->
     <script type="module"
             src="https://unpkg.com/&#64;lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js"></script>

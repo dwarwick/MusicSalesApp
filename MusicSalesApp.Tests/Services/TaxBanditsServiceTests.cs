@@ -984,6 +984,78 @@ public class TaxBanditsServiceTests
     }
 
     [Test]
+    public async Task RequestInstantTinMatchAsync_AppendsDefaultApiVersion_WhenApiUrlIsTaxBanditsRoot()
+    {
+        // Arrange
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientId"]).Returns("test-client");
+        _mockConfiguration.Setup(c => c["TaxBandits:ClientSecret"]).Returns("test-secret");
+        _mockConfiguration.Setup(c => c["TaxBandits:UserToken"]).Returns("test-token");
+        _mockConfiguration.Setup(c => c["TaxBandits:BusinessId"]).Returns("test-business-id");
+        _mockConfiguration.Setup(c => c["TaxBandits:ApiUrl"]).Returns("https://api.taxbandits.com/");
+
+        var authResponseJson = JsonSerializer.Serialize(new
+        {
+            AccessToken = "test-token",
+            TokenType = "Bearer",
+            ExpiresIn = 3600,
+            StatusCode = 200
+        });
+        var tinMatchResponseJson = JsonSerializer.Serialize(new
+        {
+            StatusCode = 200,
+            StatusName = "Ok",
+            StatusMessage = "Successful API call",
+            RecordId = "a73f6045-b051-4ab1-af47-c91d3f080b79",
+            RecipientId = "42003b44-663c-41f5-88c4-f548a81bb5b9",
+            TINStatusCode = "TIN-001",
+            TINStatus = "SUCCESS",
+            TINStatusMsg = "TIN and Name combination matches IRS records."
+        });
+
+        HttpRequestMessage tinMatchRequest = null!;
+        var callCount = 0;
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    tinMatchRequest = req;
+                }
+            })
+            .ReturnsAsync(() =>
+            {
+                callCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(callCount == 1 ? authResponseJson : tinMatchResponseJson)
+                };
+            });
+
+        var request = new InstantTinMatchRequest
+        {
+            TINType = "EIN",
+            TIN = "210811100",
+            BusinessNm = "Snowdaze LLC",
+            UserId = 1
+        };
+
+        // Act
+        var result = await _service.RequestInstantTinMatchAsync(request);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(tinMatchRequest, Is.Not.Null);
+        Assert.That(
+            tinMatchRequest!.RequestUri!.ToString(),
+            Is.EqualTo("https://api.taxbandits.com/v1.7.3/InstantTINMatch/Request"));
+    }
+
+    [Test]
     public async Task RequestInstantTinMatchAsync_ParsesErrorsArray_WhenHttpNonSuccess()
     {
         // Arrange — simulate a 400 Bad Request response with Errors array
