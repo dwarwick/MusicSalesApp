@@ -115,6 +115,17 @@ public class LoginTests : BUnitTestBase
     }
 
     [Test]
+    public void Login_HasGoogleLoginButton()
+    {
+        // Act
+        var cut = TestContext.Render<Login>();
+
+        // Assert
+        Assert.That(cut.Markup, Does.Contain("Continue with Google"));
+        Assert.That(cut.Markup, Does.Contain("google_logo.svg"));
+    }
+
+    [Test]
     public void Login_HasPasswordLoginButton()
     {
         // Act

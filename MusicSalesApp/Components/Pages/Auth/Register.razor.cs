@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
 
@@ -11,8 +12,14 @@ public partial class RegisterModel : BlazorBase, IDisposable
     [SupplyParameterFromQuery(Name = "needsVerification")]
     public bool NeedsVerification { get; set; }
 
-    [SupplyParameterFromQuery(Name = "email")]
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.Email)]
     public string QueryEmail { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.Error)]
+    public string Error { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.PendingRegistrationToken)]
+    public string PendingGoogleRegistrationToken { get; set; } = string.Empty;
 
     [Required]
     [EmailAddress]
@@ -27,20 +34,24 @@ public partial class RegisterModel : BlazorBase, IDisposable
     // Legal agreement checkboxes
     public bool AcceptTermsOfUse { get; set; } = false;
     public bool AcceptPrivacyPolicy { get; set; } = false;
+    public bool AcceptRefundPolicy { get; set; } = false;
 
     // Email preference
     public bool ReceiveNewSongEmails { get; set; } = false;
 
     // Computed property to check if user can register
-    protected bool CanRegister => AcceptTermsOfUse && AcceptPrivacyPolicy;
+    protected bool CanRegister => AcceptTermsOfUse && AcceptPrivacyPolicy && AcceptRefundPolicy;
+    protected bool IsGoogleRegistrationPending => !string.IsNullOrWhiteSpace(PendingGoogleRegistrationToken);
 
     // Dialog references
     protected SfDialog _termsDialog = default!;
     protected SfDialog _privacyDialog = default!;
+    protected SfDialog _refundDialog = default!;
 
     protected string errorMessage = string.Empty;
     protected string successMessage = string.Empty;
     protected string infoMessage = string.Empty;
+    protected string antiForgeryToken = string.Empty;
     protected bool isSubmitting = false;
     protected bool showVerificationSection = false;
     protected bool canResendEmail = false;
@@ -48,6 +59,16 @@ public partial class RegisterModel : BlazorBase, IDisposable
     private System.Timers.Timer countdownTimer = null!;
     private bool disposed = false;
     private bool _hasLoadedData = false;
+
+    protected override void OnInitialized()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            var tokens = Antiforgery.GetAndStoreTokens(httpContext);
+            antiForgeryToken = tokens.RequestToken ?? string.Empty;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -67,6 +88,11 @@ public partial class RegisterModel : BlazorBase, IDisposable
 
     private async Task LoadDataAsync()
     {
+        if (!string.IsNullOrWhiteSpace(Error))
+        {
+            errorMessage = Error;
+        }
+
         var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (auth.User.Identity != null && auth.User.Identity.IsAuthenticated)
         {
@@ -97,6 +123,13 @@ public partial class RegisterModel : BlazorBase, IDisposable
             showVerificationSection = true;
             infoMessage = "Your email address is not verified. Please verify your email to get full access to the site.";
             await CheckResendAvailability();
+            return;
+        }
+
+        if (IsGoogleRegistrationPending && !string.IsNullOrEmpty(QueryEmail))
+        {
+            Email = QueryEmail;
+            NewEmail = Email;
         }
     }
 
@@ -118,6 +151,16 @@ public partial class RegisterModel : BlazorBase, IDisposable
     protected async Task ClosePrivacyDialog()
     {
         await _privacyDialog.HideAsync();
+    }
+
+    protected async Task ShowRefundPolicy()
+    {
+        await _refundDialog.ShowAsync();
+    }
+
+    protected async Task CloseRefundDialog()
+    {
+        await _refundDialog.HideAsync();
     }
 
     protected async Task HandleSubmit(EditContext context)
@@ -145,9 +188,9 @@ public partial class RegisterModel : BlazorBase, IDisposable
                 errorMessage = "Passwords do not match";
                 return;
             }
-            if (!AcceptTermsOfUse || !AcceptPrivacyPolicy)
+            if (!AcceptTermsOfUse || !AcceptPrivacyPolicy || !AcceptRefundPolicy)
             {
-                errorMessage = "You must accept the Terms of Use and Privacy Policy to register";
+                errorMessage = "You must accept the Terms of Use, Privacy Policy, and Refund Policy to register";
                 return;
             }
             // Call registration service

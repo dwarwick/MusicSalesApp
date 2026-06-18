@@ -105,7 +105,7 @@ public class MobileAuthController : ControllerBase
             {
                 return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                 {
-                    ["error"] = "Google sign-in could not be completed."
+                    [MobileExternalAuthQueryKeys.Error] = "Google sign-in could not be completed."
                 }));
             }
 
@@ -113,7 +113,7 @@ public class MobileAuthController : ControllerBase
             {
                 return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                 {
-                    ["error"] = "Google account did not provide a verified email address."
+                    [MobileExternalAuthQueryKeys.Error] = "Google account did not provide a verified email address."
                 }));
             }
 
@@ -123,12 +123,20 @@ public class MobileAuthController : ControllerBase
                 user = await _userManager.FindByEmailAsync(email);
                 if (user != null)
                 {
+                    if (user.IsSuspended)
+                    {
+                        return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
+                        {
+                            [MobileExternalAuthQueryKeys.Error] = "Your account has been suspended."
+                        }));
+                    }
+
                     var (linked, linkError) = await EnsureExternalLoginAsync(user, info.LoginProvider, info.ProviderKey);
                     if (!linked)
                     {
                         return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                         {
-                            ["error"] = linkError
+                            [MobileExternalAuthQueryKeys.Error] = linkError
                         }));
                     }
 
@@ -137,7 +145,7 @@ public class MobileAuthController : ControllerBase
                     {
                         return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                         {
-                            ["error"] = promoteError
+                            [MobileExternalAuthQueryKeys.Error] = promoteError
                         }));
                     }
                 }
@@ -154,9 +162,9 @@ public class MobileAuthController : ControllerBase
 
                 return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                 {
-                    ["requiresRegistration"] = bool.TrueString,
-                    ["pendingRegistrationToken"] = pendingToken,
-                    ["email"] = email
+                    [MobileExternalAuthQueryKeys.RequiresRegistration] = bool.TrueString,
+                    [MobileExternalAuthQueryKeys.PendingRegistrationToken] = pendingToken,
+                    [MobileExternalAuthQueryKeys.Email] = email
                 }));
             }
 
@@ -164,15 +172,15 @@ public class MobileAuthController : ControllerBase
             {
                 return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
                 {
-                    ["error"] = "Your account has been suspended."
+                    [MobileExternalAuthQueryKeys.Error] = "Your account has been suspended."
                 }));
             }
 
             var exchangeToken = _mobileExternalAuthTokenService.ProtectLoginExchange(user.Id);
             return Redirect(BuildMobileExternalAuthCallback(callbackUrl, new Dictionary<string, string>
             {
-                ["exchangeToken"] = exchangeToken,
-                ["email"] = user.Email ?? string.Empty
+                [MobileExternalAuthQueryKeys.ExchangeToken] = exchangeToken,
+                [MobileExternalAuthQueryKeys.Email] = user.Email ?? string.Empty
             }));
         }
         finally
@@ -674,7 +682,7 @@ public class MobileAuthController : ControllerBase
     private static bool TryGetGoogleEmail(ClaimsPrincipal principal, out string email)
     {
         email = principal.FindFirstValue(ClaimTypes.Email)
-            ?? principal.FindFirstValue("email")
+            ?? principal.FindFirstValue(GoogleClaimTypes.Email)
             ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(email))
@@ -682,7 +690,7 @@ public class MobileAuthController : ControllerBase
             return false;
         }
 
-        var emailVerified = principal.FindFirstValue("email_verified");
+        var emailVerified = principal.FindFirstValue(GoogleClaimTypes.EmailVerified);
         return !string.Equals(emailVerified, bool.FalseString, StringComparison.OrdinalIgnoreCase);
     }
 

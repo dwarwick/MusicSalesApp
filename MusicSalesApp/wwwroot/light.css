@@ -769,3 +769,14 @@ body {
     color: #212529;
 }
 
+.google-auth-button {
+    background-color: #ffffff !important;
+    border-color: #dadce0 !important;
+    color: #1f1f1f !important;
+}
+
+.google-auth-button:hover {
+    background-color: #f8fafd !important;
+    border-color: #c6c6c6 !important;
+    color: #1f1f1f !important;
+}

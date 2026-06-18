@@ -464,6 +464,20 @@ public class AuthenticationService : IAuthenticationService
             await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.User, NormalizedName = Roles.User.ToUpper() });
         }
 
+        var role = await _roleManager.FindByNameAsync(Roles.User);
+        if (role != null)
+        {
+            var claims = await _roleManager.GetClaimsAsync(role);
+            if (!claims.Any(c => c.Type == CustomClaimTypes.Permission && c.Value == Permissions.ValidatedUser))
+            {
+                var rc = await _roleManager.AddClaimAsync(role, new Claim(CustomClaimTypes.Permission, Permissions.ValidatedUser));
+                if (!rc.Succeeded)
+                {
+                    _logger.LogWarning("Failed adding permission claim to role User");
+                }
+            }
+        }
+
         if (!await _userManager.IsInRoleAsync(user, Roles.User))
         {
             await _userManager.AddToRoleAsync(user, Roles.User);

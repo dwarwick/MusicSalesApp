@@ -309,6 +309,7 @@ try
     builder.Services.AddScoped<ServerAuthenticationStateProvider>();
     builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
     builder.Services.AddSingleton<IMobileExternalAuthTokenService, MobileExternalAuthTokenService>();
+    builder.Services.AddSingleton<IWebGoogleAuthTokenService, WebGoogleAuthTokenService>();
     builder.Services.AddScoped<IMusicService, MusicService>();
     builder.Services.AddScoped<IMusicUploadService, MusicUploadService>();
     builder.Services.AddScoped<IEmailService, EmailService>();

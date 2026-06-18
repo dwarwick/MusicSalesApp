@@ -1782,6 +1782,16 @@ h1:focus {
     border-radius: 0.375rem;
 }
 
+.google-auth-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-auth-icon {
+    flex: 0 0 auto;
+}
+
 .legal-text {
     font-size: 0.9rem;
     line-height: 1.5;
