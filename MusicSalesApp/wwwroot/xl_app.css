@@ -795,3 +795,12 @@
 .playlists-page-dialog-content {
     padding: 20px 0;
 }
+
+.google-auth-button {
+    gap: 0.75rem;
+}
+
+.google-auth-icon {
+    width: 20px;
+    height: 20px;
+}

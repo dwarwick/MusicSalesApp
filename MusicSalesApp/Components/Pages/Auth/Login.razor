@@ -54,7 +54,11 @@
                         <hr />
                     </div>
 
-                    <div class="d-grid">
+                    <div class="d-grid gap-2">
+                        <SfButton IsPrimary="false" CssClass="e-btn e-outline google-auth-button" OnClick="ContinueWithGoogle">
+                            <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
+                            <span>Continue with Google</span>
+                        </SfButton>
                         <SfButton IsPrimary="false" Content="Login with Passkey" CssClass="e-btn e-outline" OnClick="LoginWithPasskey" />
                     </div>
                 </CardContent>

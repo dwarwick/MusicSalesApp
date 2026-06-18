@@ -57,24 +57,15 @@
                     }
                     else
                     {
-                        <EditForm Model="this" OnValidSubmit="HandleSubmit">
-                            <DataAnnotationsValidator />
-                            <ValidationSummary />
+                        @if (IsGoogleRegistrationPending)
+                        {
+                            <p class="text-muted">Finish creating your Google account by accepting the policies below.</p>
 
                             <div class="mb-3">
-                                <label for="email" class="e-label">Email</label>
-                                <InputText id="email" class="form-control" @bind-Value="Email" />
+                                <label for="googleEmail" class="e-label">Email</label>
+                                <SfTextBox ID="googleEmail" Value="@Email" Enabled="false" CssClass="e-outline" />
                             </div>
-                            <div class="mb-3">
-                                <label for="password" class="e-label">Password</label>
-                                <InputText id="password" class="form-control" type="password" @bind-Value="Password" />
-                                <small class="text-muted">Must be at least 8 characters and include upper, lower, digit, and symbol.</small>
-                            </div>
-                            <div class="mb-3">
-                                <label for="confirm" class="e-label">Confirm Password</label>
-                                <InputText id="confirm" class="form-control" type="password" @bind-Value="ConfirmPassword" />
-                            </div>
-                            
+
                             <div class="mb-3 legal-agreements">
                                 <div class="d-flex align-items-start mb-2">
                                     <SfCheckBox @bind-Checked="AcceptTermsOfUse" TChecked="bool" CssClass="me-2" />
@@ -88,6 +79,12 @@
                                         I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
                                     </span>
                                 </div>
+                                <div class="d-flex align-items-start mb-2">
+                                    <SfCheckBox @bind-Checked="AcceptRefundPolicy" TChecked="bool" CssClass="me-2" />
+                                    <span class="legal-text">
+                                        I have read and agree to the <a href="javascript:void(0)" @onclick="ShowRefundPolicy" @onclick:preventDefault class="legal-link">Refund Policy</a>
+                                    </span>
+                                </div>
                                 <div class="d-flex align-items-start">
                                     <SfCheckBox @bind-Checked="ReceiveNewSongEmails" TChecked="bool" CssClass="me-2" />
                                     <span class="legal-text">
@@ -96,8 +93,91 @@
                                 </div>
                             </div>
 
-                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(isSubmitting || !CanRegister)" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn e-primary w-100" />
-                        </EditForm>
+                            <form method="post" action="@GoogleAuthRoutes.WebRegisterPath">
+                                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                                <input type="hidden" name="@ExternalAuthFormFields.PendingRegistrationToken" value="@PendingGoogleRegistrationToken" />
+                                <input type="hidden" name="@ExternalAuthFormFields.Email" value="@Email" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="/" />
+
+                                <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(!CanRegister)" Content="Complete Google Sign Up" CssClass="e-btn e-primary w-100" />
+                            </form>
+                        }
+                        else
+                        {
+                            <EditForm Model="this" OnValidSubmit="HandleSubmit">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary />
+
+                                <div class="mb-3">
+                                    <label for="email" class="e-label">Email</label>
+                                    <InputText id="email" class="form-control" @bind-Value="Email" />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="password" class="e-label">Password</label>
+                                    <InputText id="password" class="form-control" type="password" @bind-Value="Password" />
+                                    <small class="text-muted">Must be at least 8 characters and include upper, lower, digit, and symbol.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="confirm" class="e-label">Confirm Password</label>
+                                    <InputText id="confirm" class="form-control" type="password" @bind-Value="ConfirmPassword" />
+                                </div>
+
+                                <div class="mb-3 legal-agreements">
+                                    <div class="d-flex align-items-start mb-2">
+                                        <SfCheckBox @bind-Checked="AcceptTermsOfUse" TChecked="bool" CssClass="me-2" />
+                                        <span class="legal-text">
+                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowTermsOfUse" @onclick:preventDefault class="legal-link">Terms of Use</a>
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-start mb-2">
+                                        <SfCheckBox @bind-Checked="AcceptPrivacyPolicy" TChecked="bool" CssClass="me-2" />
+                                        <span class="legal-text">
+                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowPrivacyPolicy" @onclick:preventDefault class="legal-link">Privacy Policy</a>
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-start mb-2">
+                                        <SfCheckBox @bind-Checked="AcceptRefundPolicy" TChecked="bool" CssClass="me-2" />
+                                        <span class="legal-text">
+                                            I have read and agree to the <a href="javascript:void(0)" @onclick="ShowRefundPolicy" @onclick:preventDefault class="legal-link">Refund Policy</a>
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-start">
+                                        <SfCheckBox @bind-Checked="ReceiveNewSongEmails" TChecked="bool" CssClass="me-2" />
+                                        <span class="legal-text">
+                                            I would like to receive email notifications when new music is added
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <SfButton Type="ButtonType.Submit" IsPrimary="true" Disabled="@(isSubmitting || !CanRegister)" Content="@(isSubmitting ? "Please wait..." : "Register")" CssClass="e-btn e-primary w-100" />
+                            </EditForm>
+
+                            <div class="text-center mb-3">
+                                <hr />
+                                <span class="text-muted">OR</span>
+                                <hr />
+                            </div>
+
+                            <form method="post" action="@GoogleAuthRoutes.WebStartPath">
+                                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptTermsOfUse" value="@AcceptTermsOfUse.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptPrivacyPolicy" value="@AcceptPrivacyPolicy.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.AcceptRefundPolicy" value="@AcceptRefundPolicy.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.ReceiveNewSongEmails" value="@ReceiveNewSongEmails.ToString().ToLowerInvariant()" />
+                                <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="/" />
+
+                                <div class="d-grid">
+                                    <SfButton Type="ButtonType.Submit" IsPrimary="false" CssClass="e-btn e-outline google-auth-button">
+                                        <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
+                                        <span>Continue with Google</span>
+                                    </SfButton>
+                                </div>
+                            </form>
+                        }
                     }
                 </CardContent>
             </SfCard>
@@ -134,3 +214,15 @@
     </DialogTemplates>
 </SfDialog>
 
+<!-- Refund Policy Dialog -->
+<SfDialog @ref="_refundDialog" Width="90%" Height="80%" IsModal="true" ShowCloseIcon="true" Visible="false" CssClass="legal-dialog">
+    <DialogTemplates>
+        <Header>Refund Policy</Header>
+        <Content>
+            <iframe src="/user-refund-policy" class="legal-iframe" title="Refund Policy"></iframe>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Close" OnClick="CloseRefundDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

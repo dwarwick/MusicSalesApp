@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages.Auth;
 
 public partial class LoginModel : BlazorBase
 {   
-    [SupplyParameterFromQuery(Name = "error")]
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.Error)]
     public string Error { get; set; }
 
     protected string errorMessage = string.Empty;
@@ -67,5 +68,10 @@ public partial class LoginModel : BlazorBase
             Logger.LogError(ex, "Error initiating passkey login");
             errorMessage = "Failed to login with passkey.";
         }
+    }
+
+    protected void ContinueWithGoogle()
+    {
+        NavigationManager.NavigateTo(GoogleAuthRoutes.WebStartPath, forceLoad: true);
     }
 }

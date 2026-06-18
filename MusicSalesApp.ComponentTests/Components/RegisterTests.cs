@@ -1,4 +1,7 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.ComponentTests.Testing;
 using Moq;
@@ -25,13 +28,37 @@ public class RegisterTests : BUnitTestBase
     }
 
     [Test]
-    public void Register_DisplaysTermsAndPrivacyCheckboxes()
+    public void Register_DisplaysPolicyCheckboxes()
     {
         var cut = TestContext.Render<Register>();
         // Verify the legal agreement section is rendered
         Assert.That(cut.Markup, Does.Contain("Terms of Use"));
         Assert.That(cut.Markup, Does.Contain("Privacy Policy"));
+        Assert.That(cut.Markup, Does.Contain("Refund Policy"));
         Assert.That(cut.Markup, Does.Contain("legal-agreements"));
+    }
+
+    [Test]
+    public void Register_HasGoogleRegisterButton()
+    {
+        var cut = TestContext.Render<Register>();
+
+        Assert.That(cut.Markup, Does.Contain("Continue with Google"));
+        Assert.That(cut.Markup, Does.Contain(GoogleAuthRoutes.WebStartPath));
+        Assert.That(cut.Markup, Does.Contain("google_logo.svg"));
+    }
+
+    [Test]
+    public void Register_GoogleRegisterButton_DoesNotRequirePoliciesBeforeChallenge()
+    {
+        var cut = TestContext.Render<Register>();
+
+        var googleForm = cut.FindAll("form")
+            .Single(form => form.GetAttribute("action") == GoogleAuthRoutes.WebStartPath);
+        var googleButton = googleForm.QuerySelector("button");
+
+        Assert.That(googleButton, Is.Not.Null);
+        Assert.That(googleButton!.HasAttribute("disabled"), Is.False);
     }
 
     [Test]
@@ -56,7 +83,21 @@ public class RegisterTests : BUnitTestBase
         // Submit without checking the checkboxes
         cut.Find("form").Submit();
         
-        // Should show error message about accepting terms
-        Assert.That(cut.Markup, Does.Contain("accept the Terms of Use and Privacy Policy"));
+        // Should show error message about accepting policies
+        Assert.That(cut.Markup, Does.Contain("accept the Terms of Use, Privacy Policy, and Refund Policy"));
+    }
+
+    [Test]
+    public void Register_PendingGoogleRegistration_HidesPasswordFieldsAndShowsCompletionButton()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/register?{ExternalAuthFormFields.PendingRegistrationToken}=pending-token&{ExternalAuthFormFields.Email}=google%40example.com");
+
+        var cut = TestContext.Render<Register>();
+
+        Assert.That(cut.Markup, Does.Contain("Finish creating your Google account"));
+        Assert.That(cut.Markup, Does.Contain("google@example.com"));
+        Assert.That(cut.Markup, Does.Contain("Complete Google Sign Up"));
+        Assert.Throws<ElementNotFoundException>(() => cut.Find("input#password"));
     }
 }

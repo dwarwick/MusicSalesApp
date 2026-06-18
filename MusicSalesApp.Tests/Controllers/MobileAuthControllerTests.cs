@@ -269,7 +269,7 @@ public class MobileAuthControllerTests
         var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.Email, "new-google@test.com"),
-            new Claim("email_verified", bool.TrueString),
+            new Claim(GoogleClaimTypes.EmailVerified, bool.TrueString),
             new Claim(ClaimTypes.Name, "New Google User")
         }, ExternalLoginProviders.Google));
         var externalLogin = new ExternalLoginInfo(principal, ExternalLoginProviders.Google, "google-provider-key", ExternalLoginProviders.Google);
@@ -288,9 +288,114 @@ public class MobileAuthControllerTests
         Assert.That(redirect!.Url, Does.StartWith("streamtunes://auth"));
 
         var query = QueryHelpers.ParseQuery(new Uri(redirect.Url!).Query);
-        Assert.That(query["requiresRegistration"].ToString(), Is.EqualTo(bool.TrueString));
-        Assert.That(query["pendingRegistrationToken"].ToString(), Is.Not.Empty);
-        Assert.That(query["email"].ToString(), Is.EqualTo("new-google@test.com"));
+        Assert.That(query[MobileExternalAuthQueryKeys.RequiresRegistration].ToString(), Is.EqualTo(bool.TrueString));
+        Assert.That(query[MobileExternalAuthQueryKeys.PendingRegistrationToken].ToString(), Is.Not.Empty);
+        Assert.That(query[MobileExternalAuthQueryKeys.Email].ToString(), Is.EqualTo("new-google@test.com"));
+    }
+
+    [Test]
+    public async Task GoogleCallback_ExistingPasswordUserByGoogleEmail_LinksAndRedirectsWithExchangeToken()
+    {
+        var existingUser = CreateTestUser(id: 42, emailConfirmed: false);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.Email, existingUser.Email!),
+            new Claim(GoogleClaimTypes.EmailVerified, bool.TrueString),
+            new Claim(ClaimTypes.Name, "Existing User")
+        }, ExternalLoginProviders.Google));
+        var externalLogin = new ExternalLoginInfo(principal, ExternalLoginProviders.Google, "google-provider-key", ExternalLoginProviders.Google);
+
+        _mockSignInManager.Setup(x => x.GetExternalLoginInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync(externalLogin);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync(existingUser.Email!))
+            .ReturnsAsync(existingUser);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(existingUser))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(existingUser, It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+        _mockAuthService.Setup(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser))
+            .ReturnsAsync((true, string.Empty));
+
+        var result = await _controller.GoogleCallback();
+
+        var redirect = result as RedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Does.StartWith("streamtunes://auth"));
+
+        var query = QueryHelpers.ParseQuery(new Uri(redirect.Url!).Query);
+        Assert.That(query[MobileExternalAuthQueryKeys.ExchangeToken].ToString(), Is.Not.Empty);
+        Assert.That(query[MobileExternalAuthQueryKeys.Email].ToString(), Is.EqualTo(existingUser.Email));
+        _mockUserManager.Verify(x => x.AddLoginAsync(
+            existingUser,
+            It.Is<UserLoginInfo>(login =>
+                login.LoginProvider == ExternalLoginProviders.Google &&
+                login.ProviderKey == "google-provider-key")), Times.Once);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(existingUser), Times.Once);
+    }
+
+    [Test]
+    public async Task GoogleCallback_SuspendedExistingPasswordUserByGoogleEmail_DoesNotLinkOrPromote()
+    {
+        var existingUser = CreateTestUser(id: 44, emailConfirmed: false);
+        existingUser.IsSuspended = true;
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.Email, existingUser.Email!),
+            new Claim(GoogleClaimTypes.EmailVerified, bool.TrueString),
+            new Claim(ClaimTypes.Name, "Suspended User")
+        }, ExternalLoginProviders.Google));
+        var externalLogin = new ExternalLoginInfo(principal, ExternalLoginProviders.Google, "google-provider-key", ExternalLoginProviders.Google);
+
+        _mockSignInManager.Setup(x => x.GetExternalLoginInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync(externalLogin);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync(existingUser.Email!))
+            .ReturnsAsync(existingUser);
+
+        var result = await _controller.GoogleCallback();
+
+        var redirect = result as RedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Does.StartWith("streamtunes://auth"));
+
+        var query = QueryHelpers.ParseQuery(new Uri(redirect.Url!).Query);
+        Assert.That(query[MobileExternalAuthQueryKeys.Error].ToString(), Is.EqualTo("Your account has been suspended."));
+        _mockUserManager.Verify(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
+        _mockAuthService.Verify(x => x.MarkEmailVerifiedAndPromoteRoleAsync(It.IsAny<ApplicationUser>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GoogleCallback_ExistingLinkedGoogleUser_RedirectsWithExchangeToken()
+    {
+        var existingUser = CreateTestUser(id: 43, emailConfirmed: true);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.Email, existingUser.Email!),
+            new Claim(GoogleClaimTypes.EmailVerified, bool.TrueString),
+            new Claim(ClaimTypes.Name, "Linked User")
+        }, ExternalLoginProviders.Google));
+        var externalLogin = new ExternalLoginInfo(principal, ExternalLoginProviders.Google, "google-provider-key", ExternalLoginProviders.Google);
+
+        _mockSignInManager.Setup(x => x.GetExternalLoginInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync(externalLogin);
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync(existingUser);
+
+        var result = await _controller.GoogleCallback();
+
+        var redirect = result as RedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Does.StartWith("streamtunes://auth"));
+
+        var query = QueryHelpers.ParseQuery(new Uri(redirect.Url!).Query);
+        Assert.That(query[MobileExternalAuthQueryKeys.ExchangeToken].ToString(), Is.Not.Empty);
+        Assert.That(query[MobileExternalAuthQueryKeys.Email].ToString(), Is.EqualTo(existingUser.Email));
+        Assert.That(query.ContainsKey(MobileExternalAuthQueryKeys.PendingRegistrationToken), Is.False);
+        _mockUserManager.Verify(x => x.FindByEmailAsync(It.IsAny<string>()), Times.Never);
+        _mockUserManager.Verify(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()), Times.Never);
     }
 
     [Test]
