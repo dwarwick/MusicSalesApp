@@ -1,7 +1,9 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.ComponentTests.Testing;
 
@@ -144,5 +146,31 @@ public class LoginTests : BUnitTestBase
         // Assert
         Assert.That(cut.Markup, Does.Contain("Forgot Password?"));
         Assert.That(cut.Markup, Does.Contain("href=\"/forgot-password\""));
+    }
+
+    [Test]
+    public void Login_ReturnUrlQuery_PopulatesPasswordLoginHiddenField()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/login?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Login>();
+
+        var returnUrlInput = cut.Find($"input[name='{ExternalAuthFormFields.ReturnUrl}']");
+        Assert.That(returnUrlInput.GetAttribute("value"), Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
+    public void Login_ContinueWithGoogle_UsesReturnUrlQuery()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/login?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+        var cut = TestContext.Render<Login>();
+
+        var googleButton = cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Continue with Google"));
+        googleButton.Click();
+
+        Assert.That(navigationManager.Uri, Does.EndWith($"{GoogleAuthRoutes.WebStartPath}?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings"));
     }
 }

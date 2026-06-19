@@ -19,6 +19,36 @@
             you can publish it here and earn from it.
         </p>
 
+        @if (!_isAuthenticated)
+        {
+            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                <a href="@CreatorRegisterUrl" class="e-control e-btn cta-button cta-button-register">
+                    Create Free Account
+                </a>
+                <p style="margin-top: 1rem;">Already registered?</p>
+                <a href="@CreatorLoginUrl" class="e-control e-btn cta-button cta-button-login">
+                    Log In
+                </a>
+            </div>
+        }
+        else if (!_isActiveCreator)
+        {
+            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                @if (_isEmailVerified)
+                {
+                    <a href="@AppPageRoutes.CreatorSettings" class="e-control e-btn cta-button cta-button-register">
+                        Get Started
+                    </a>
+                }
+                else
+                {
+                    <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button cta-button-register">
+                        Validate Your Email for Full Functionality
+                    </a>
+                }
+            </div>
+        }
+
         <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
 
         <section class="mb-4">
@@ -198,6 +228,23 @@
         </section>
 
         <section class="mb-4">
+            <h2>How to Become a Creator</h2>
+            <p>
+                Start by creating a free Streamtunes account or logging in to your existing account. If you register with
+                email and password, check your inbox and verify your email address when prompted.
+            </p>
+            <p>
+                Once your account is verified, open <a href="@AppPageRoutes.CreatorSettings">Creator / Artist Settings</a>
+                to complete your creator setup, add your artist information, and prepare your account for uploads and payouts.
+            </p>
+            <ul>
+                <li><a href="@CreatorRegisterUrl">Create a free account</a> if you are new to Streamtunes.</li>
+                <li><a href="@CreatorLoginUrl">Log in</a> if you already have an account.</li>
+                <li><a href="@AppPageRoutes.ValidateEmail">Verify your email</a> if your account still needs validation.</li>
+            </ul>
+        </section>
+
+        <section class="mb-4">
             <h2>🎬 The Process Is Simple</h2>
             <ul style="list-style: none; padding-left: 0;">
                 <li>1️⃣ Create a free account</li>
@@ -229,11 +276,11 @@
             @if (!_isAuthenticated)
             {
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
-                    <a href="/register" class="e-control e-btn cta-button cta-button-register">
+                    <a href="@CreatorRegisterUrl" class="e-control e-btn cta-button cta-button-register">
                         Create Free Account
                     </a>
                     <p style="margin-top: 1rem;">Already registered?</p>
-                    <a href="/login" class="e-control e-btn cta-button cta-button-login">
+                    <a href="@CreatorLoginUrl" class="e-control e-btn cta-button cta-button-login">
                         Log In
                     </a>
                 </div>
@@ -243,13 +290,13 @@
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
                     @if (_isEmailVerified)
                     {
-                        <a href="/CreatorSettings" class="e-control e-btn cta-button cta-button-register">
+                        <a href="@AppPageRoutes.CreatorSettings" class="e-control e-btn cta-button cta-button-register">
                             Get Started
                         </a>
                     }
                     else
                     {
-                        <a href="/validate-email" class="e-control e-btn cta-button cta-button-register">
+                        <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button cta-button-register">
                             Validate Your Email for Full Functionality
                         </a>
                     }

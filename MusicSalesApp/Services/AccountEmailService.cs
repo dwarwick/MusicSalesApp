@@ -27,17 +27,31 @@ public class AccountEmailService : IAccountEmailService
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
+            var creatorSettingsUrl = System.Web.HttpUtility.HtmlAttributeEncode(
+                BuildAbsoluteUrl(baseUrl, AppPageRoutes.CreatorSettings));
+            var manageAccountUrl = System.Web.HttpUtility.HtmlAttributeEncode(
+                BuildAbsoluteUrl(baseUrl, AppPageRoutes.ManageAccount));
 
             var body = new StringBuilder();
             body.Append(BuildEmailHeader(logoUrl, "Welcome to StreamTunes!"));
             body.Append(BuildGreeting(userName));
-            body.Append(@"
+            body.Append($@"
                 <p style='font-size: 16px; color: #333;'>Thank you for creating an account with StreamTunes!</p>
                 <p style='font-size: 16px; color: #333;'>Your account has been successfully created. You can now:</p>
                 <ul style='font-size: 16px; color: #333;'>                    
                     <li>Create personalized playlists</li>
                     <li>Subscribe for unlimited streaming access</li>
                 </ul>
+                <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
+                    <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Become a Creator</h3>
+                    <p style='font-size: 16px; color: #333; margin: 0 0 10px 0;'>If you create original music and control the rights to it, you can sign up as a Streamtunes creator.</p>
+                    <p style='font-size: 16px; color: #333; margin: 0;'>Open <a href='{creatorSettingsUrl}' style='color: #1db954; text-decoration: underline;'>Creator / Artist Settings</a> to complete your creator setup.</p>
+                </div>
+                <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
+                    <h3 style='margin: 0 0 10px 0; color: #333; font-size: 18px;'>Start a Subscription</h3>
+                    <p style='font-size: 16px; color: #333; margin: 0 0 10px 0;'>Subscribe for unlimited streaming access, playlists, and the full Streamtunes catalog.</p>
+                    <p style='font-size: 16px; color: #333; margin: 0;'>Visit <a href='{manageAccountUrl}' style='color: #1db954; text-decoration: underline;'>Manage Account</a> to sign up for a subscription.</p>
+                </div>
                 <p style='font-size: 16px; color: #333;'>If you did not create this account, please contact our support team immediately.</p>
             ");
             body.Append(BuildEmailFooter());
@@ -270,4 +284,7 @@ public class AccountEmailService : IAccountEmailService
             BillingSources.Apple => "Apple App Store",
             _ => "PayPal"
         };
+
+    private static string BuildAbsoluteUrl(string baseUrl, string route)
+        => $"{baseUrl.TrimEnd('/')}{route}";
 }

@@ -11,12 +11,16 @@ public partial class LoginModel : BlazorBase
     [SupplyParameterFromQuery(Name = ExternalAuthFormFields.Error)]
     public string Error { get; set; }
 
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.ReturnUrl)]
+    public string ReturnUrl { get; set; } = AppPageRoutes.Home;
+
     protected string errorMessage = string.Empty;
     protected string antiForgeryToken = string.Empty;
     protected bool isDevelopment = false;
     protected string usernameValue = string.Empty;
     protected bool reactivateAccount = false;
     protected bool showReactivateCheckbox = false;
+    protected string LoginReturnUrl => NormalizeLocalReturnUrl(ReturnUrl);
 
     protected override async Task OnInitializedAsync()
     {
@@ -72,6 +76,32 @@ public partial class LoginModel : BlazorBase
 
     protected void ContinueWithGoogle()
     {
-        NavigationManager.NavigateTo(GoogleAuthRoutes.WebStartPath, forceLoad: true);
+        var googleStartUrl = $"{GoogleAuthRoutes.WebStartPath}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(LoginReturnUrl)}";
+        NavigationManager.NavigateTo(googleStartUrl, forceLoad: true);
+    }
+
+    private static string NormalizeLocalReturnUrl(string returnUrl)
+        => string.IsNullOrWhiteSpace(returnUrl) || !IsLocalUrl(returnUrl)
+            ? AppPageRoutes.Home
+            : returnUrl;
+
+    private static bool IsLocalUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            return false;
+        }
+
+        if (url[0] == '/')
+        {
+            return url.Length == 1 || (url[1] != '/' && url[1] != '\\');
+        }
+
+        if (url[0] == '~' && url.Length > 1 && url[1] == '/')
+        {
+            return url.Length == 2 || (url[2] != '/' && url[2] != '\\');
+        }
+
+        return false;
     }
 }

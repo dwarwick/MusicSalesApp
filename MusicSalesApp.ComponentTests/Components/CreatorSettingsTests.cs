@@ -242,6 +242,30 @@ public class CreatorSettingsTests : BUnitTestBase
     }
 
     [Test]
+    public async Task CreatorSettings_StopBeingCreator_TrimsConfirmationEmail()
+    {
+        SetupCreatorSettingsPage(new Creator
+        {
+            Id = 7,
+            UserId = 1,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalAccountAffirmed = true
+        });
+        MockCreatorService.Setup(x => x.StopBeingCreatorAsync(1))
+            .ReturnsAsync(true);
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Stop Being a Creator"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_stopSellingConfirmEmail", "  testuser@test.com  ");
+        await InvokeNonPublicTask(cut.Instance, "ConfirmStopSelling");
+
+        MockCreatorService.Verify(x => x.StopBeingCreatorAsync(1), Times.Once);
+    }
+
+    [Test]
     public void CreatorSettings_IneligibleCreator_DoesNotTrackCreatorSignupConversion()
     {
         SetupCreatorSettingsPage(new Creator

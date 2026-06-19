@@ -30,7 +30,28 @@ public class LearnMoreTests : BUnitTestBase
         var cut = TestContext.Render<LearnMore>();
         cut.WaitForState(() => cut.Markup.Contains("Get Started"), TimeSpan.FromSeconds(5));
 
+        Assert.That(cut.FindAll("a.cta-button-register[href='/CreatorSettings']").Count, Is.EqualTo(2));
         Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
         Assert.That(cut.Markup, Does.Not.Contain("href=\"/manage-account\" class=\"e-control e-btn cta-button cta-button-register\""));
+    }
+
+    [Test]
+    public void LearnMore_AnonymousUser_ShowsTopAndBottomCreatorAuthButtons()
+    {
+        var cut = TestContext.Render<LearnMore>();
+        cut.WaitForState(() => cut.Markup.Contains("Create Free Account"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));
+        Assert.That(cut.FindAll("a.cta-button-login[href='/login?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void LearnMore_IncludesHowToBecomeCreatorSection()
+    {
+        var cut = TestContext.Render<LearnMore>();
+
+        Assert.That(cut.Markup, Does.Contain("How to Become a Creator"));
+        Assert.That(cut.Markup, Does.Contain("Creator / Artist Settings"));
+        Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
     }
 }
