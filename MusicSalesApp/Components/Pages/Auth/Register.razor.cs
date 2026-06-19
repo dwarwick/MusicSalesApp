@@ -21,6 +21,9 @@ public partial class RegisterModel : BlazorBase, IDisposable
     [SupplyParameterFromQuery(Name = ExternalAuthFormFields.PendingRegistrationToken)]
     public string PendingGoogleRegistrationToken { get; set; } = string.Empty;
 
+    [SupplyParameterFromQuery(Name = ExternalAuthFormFields.ReturnUrl)]
+    public string ReturnUrl { get; set; } = AppPageRoutes.Home;
+
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
@@ -42,6 +45,8 @@ public partial class RegisterModel : BlazorBase, IDisposable
     // Computed property to check if user can register
     protected bool CanRegister => AcceptTermsOfUse && AcceptPrivacyPolicy && AcceptRefundPolicy;
     protected bool IsGoogleRegistrationPending => !string.IsNullOrWhiteSpace(PendingGoogleRegistrationToken);
+    protected string RegistrationReturnUrl => NormalizeLocalReturnUrl(ReturnUrl);
+    protected string LoginUrl => BuildReturnUrl(AppPageRoutes.Login, RegistrationReturnUrl);
 
     // Dialog references
     protected SfDialog _termsDialog = default!;
@@ -111,7 +116,7 @@ public partial class RegisterModel : BlazorBase, IDisposable
                     return;
                 }
             }
-            NavigationManager.NavigateTo("/", forceLoad: true);
+            NavigationManager.NavigateTo(RegistrationReturnUrl, forceLoad: true);
             return;
         }
 
@@ -369,6 +374,34 @@ public partial class RegisterModel : BlazorBase, IDisposable
         return minutes > 0 
             ? $"{minutes} minute{(minutes != 1 ? "s" : "")} and {secs} second{(secs != 1 ? "s" : "")}"
             : $"{secs} second{(secs != 1 ? "s" : "")}";
+    }
+
+    private static string BuildReturnUrl(string route, string returnUrl)
+        => $"{route}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
+
+    private static string NormalizeLocalReturnUrl(string returnUrl)
+        => string.IsNullOrWhiteSpace(returnUrl) || !IsLocalUrl(returnUrl)
+            ? AppPageRoutes.Home
+            : returnUrl;
+
+    private static bool IsLocalUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            return false;
+        }
+
+        if (url[0] == '/')
+        {
+            return url.Length == 1 || (url[1] != '/' && url[1] != '\\');
+        }
+
+        if (url[0] == '~' && url.Length > 1 && url[1] == '/')
+        {
+            return url.Length == 2 || (url[2] != '/' && url[2] != '\\');
+        }
+
+        return false;
     }
 
     public void Dispose()

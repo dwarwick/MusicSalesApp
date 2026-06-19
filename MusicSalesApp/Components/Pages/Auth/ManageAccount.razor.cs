@@ -59,6 +59,8 @@ public partial class ManageAccountModel : BlazorBase
     // Account closure
     protected bool _hasPurchasedMusic = false;
     protected string _accountActionConfirmEmail = string.Empty;
+    protected bool IsAccountActionConfirmEmailMatch =>
+        string.Equals(_accountActionConfirmEmail?.Trim(), _currentUser?.Email, StringComparison.Ordinal);
 
     // Creator account deletion guard
     protected bool _isActiveCreator = false;
@@ -481,7 +483,7 @@ public partial class ManageAccountModel : BlazorBase
     {
         _errorMessage = string.Empty;
 
-        if (_accountActionConfirmEmail != _currentUser.Email)
+        if (!IsAccountActionConfirmEmailMatch)
         {
             _errorMessage = "Email does not match. Please enter your exact email address to confirm.";
             return;
@@ -559,7 +561,7 @@ public partial class ManageAccountModel : BlazorBase
     {
         _errorMessage = string.Empty;
 
-        if (_accountActionConfirmEmail != _currentUser.Email)
+        if (!IsAccountActionConfirmEmailMatch)
         {
             _errorMessage = "Email does not match. Please enter your exact email address to confirm.";
             return;

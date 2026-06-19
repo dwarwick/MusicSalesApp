@@ -38,6 +38,8 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected bool _stoppingCreatorStatus = false;
     protected bool _updatingTaxForm = false;
     protected string _stopSellingConfirmEmail = string.Empty;
+    protected bool CanConfirmStopSelling =>
+        string.Equals(_stopSellingConfirmEmail?.Trim(), _userEmail, StringComparison.Ordinal);
     private int? _creatorId = null;
     private bool _creatorSignupConversionTracked = false;
 
@@ -461,7 +463,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
     protected async Task ConfirmStopSelling()
     {
-        if (_stopSellingConfirmEmail != _userEmail)
+        if (!CanConfirmStopSelling)
         {
             _errorMessage = "Please enter your email address to confirm.";
             return;

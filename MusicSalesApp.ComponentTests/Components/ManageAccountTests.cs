@@ -7,6 +7,7 @@ using MusicSalesApp.Components.Pages.Auth;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Models;
+using System.Reflection;
 using System.Security.Claims;
 
 namespace MusicSalesApp.ComponentTests.Components;
@@ -238,4 +239,60 @@ public class ManageAccountTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("Manage Subscription"));
     }
 
+    [Test]
+    public async Task ManageAccount_DeleteAccount_TrimsConfirmationEmail()
+    {
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = 1,
+            UserName = "testuser@test.com",
+            Email = "testuser@test.com",
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+        MockCreatorService.Setup(x => x.IsActiveCreatorAsync(1))
+            .ReturnsAsync(false);
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new
+            {
+                HasSubscription = false,
+                Status = SubscriptionStatuses.Expired,
+                SubscriptionPrice = "3.99"
+            });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_accountActionConfirmEmail", "  testuser@test.com  ");
+        await InvokeNonPublicTask(cut.Instance, "DeleteAccount");
+
+        MockAccountDeletionService.Verify(x => x.DeleteAccountAsync(testUser), Times.Once);
+    }
+
+    private static void SetField(object instance, string fieldName, object value)
+    {
+        var field = typeof(ManageAccountModel).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, $"Expected field {fieldName} to exist.");
+        field!.SetValue(instance, value);
+    }
+
+    private static Task InvokeNonPublicTask(object instance, string methodName)
+    {
+        var method = typeof(ManageAccountModel).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, $"Expected method {methodName} to exist.");
+        return (Task)method!.Invoke(instance, null)!;
+    }
 }

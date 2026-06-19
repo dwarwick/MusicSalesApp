@@ -126,6 +126,25 @@ public class WebGoogleAuthControllerTests
     }
 
     [Test]
+    public void StartLogin_IncludesReturnUrlInGoogleCallback()
+    {
+        var redirectUrl = string.Empty;
+        _mockSignInManager.Setup(x => x.ConfigureExternalAuthenticationProperties(
+                ExternalLoginProviders.Google,
+                It.IsAny<string>(),
+                null))
+            .Callback<string, string, string>((_, url, _) => redirectUrl = url)
+            .Returns(new AuthenticationProperties());
+
+        var result = _controller.StartLogin(AppPageRoutes.CreatorSettings);
+
+        var challenge = result as ChallengeResult;
+        Assert.That(challenge, Is.Not.Null);
+        var query = QueryHelpers.ParseQuery(new Uri(redirectUrl).Query);
+        Assert.That(query[ExternalAuthFormFields.ReturnUrl].ToString(), Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
     public async Task Callback_ExistingPasswordUserByGoogleEmail_LinksPromotesAndSignsIn()
     {
         var user = CreateUser(email: "existing@example.com", emailConfirmed: false);
@@ -152,6 +171,21 @@ public class WebGoogleAuthControllerTests
     }
 
     [Test]
+    public async Task Callback_ExistingLinkedGoogleUser_WithReturnUrl_RedirectsToReturnUrl()
+    {
+        var user = CreateUser(emailConfirmed: true);
+        SetupExternalLogin("linked@example.com", "google-provider-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync(user);
+
+        var result = await _controller.Callback(callbackReturnUrl: AppPageRoutes.CreatorSettings);
+
+        var redirect = result as LocalRedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
     public async Task Callback_NewLoginPageGoogleUser_RedirectsToRegisterWithPendingToken()
     {
         SetupExternalLogin("new@example.com", "google-provider-key");
@@ -169,6 +203,38 @@ public class WebGoogleAuthControllerTests
         var query = QueryHelpers.ParseQuery(new Uri($"https://streamtunes.net{redirect.Url}").Query);
         Assert.That(query[ExternalAuthFormFields.PendingRegistrationToken].ToString(), Is.Not.Empty);
         Assert.That(query[ExternalAuthFormFields.Email].ToString(), Is.EqualTo("new@example.com"));
+    }
+
+    [Test]
+    public async Task Callback_NewLoginPageGoogleUser_PreservesReturnUrlOnPendingRegistration()
+    {
+        SetupExternalLogin("new-return@example.com", "google-provider-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-return@example.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+
+        var result = await _controller.Callback(callbackReturnUrl: AppPageRoutes.CreatorSettings);
+
+        var redirect = result as RedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        var query = QueryHelpers.ParseQuery(new Uri($"https://streamtunes.net{redirect!.Url}").Query);
+        Assert.That(query[ExternalAuthFormFields.ReturnUrl].ToString(), Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
+    public async Task Callback_NonLocalReturnUrl_FallsBackToHome()
+    {
+        var user = CreateUser(emailConfirmed: true);
+        SetupExternalLogin("linked@example.com", "google-provider-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync(user);
+
+        var result = await _controller.Callback(callbackReturnUrl: "https://evil.example/path");
+
+        var redirect = result as LocalRedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Is.EqualTo(AppPageRoutes.Home));
     }
 
     [Test]

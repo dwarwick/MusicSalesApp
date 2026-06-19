@@ -100,4 +100,47 @@ public class RegisterTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Complete Google Sign Up"));
         Assert.Throws<ElementNotFoundException>(() => cut.Find("input#password"));
     }
+
+    [Test]
+    public void Register_GoogleRegisterForm_PreservesReturnUrl()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/register?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Register>();
+
+        var googleForm = cut.FindAll("form")
+            .Single(form => form.GetAttribute("action") == GoogleAuthRoutes.WebStartPath);
+        var returnUrlInput = googleForm.QuerySelector($"input[name='{ExternalAuthFormFields.ReturnUrl}']");
+
+        Assert.That(returnUrlInput, Is.Not.Null);
+        Assert.That(returnUrlInput!.GetAttribute("value"), Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
+    public void Register_PendingGoogleRegistration_PreservesReturnUrl()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/register?{ExternalAuthFormFields.PendingRegistrationToken}=pending-token&{ExternalAuthFormFields.Email}=google%40example.com&{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Register>();
+
+        var googleForm = cut.FindAll("form")
+            .Single(form => form.GetAttribute("action") == GoogleAuthRoutes.WebRegisterPath);
+        var returnUrlInput = googleForm.QuerySelector($"input[name='{ExternalAuthFormFields.ReturnUrl}']");
+
+        Assert.That(returnUrlInput, Is.Not.Null);
+        Assert.That(returnUrlInput!.GetAttribute("value"), Is.EqualTo(AppPageRoutes.CreatorSettings));
+    }
+
+    [Test]
+    public void Register_LoginLink_PreservesReturnUrl()
+    {
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/register?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Register>();
+
+        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2FCreatorSettings\""));
+    }
 }

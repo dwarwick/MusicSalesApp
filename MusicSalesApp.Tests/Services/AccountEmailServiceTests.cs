@@ -54,6 +54,28 @@ public class AccountEmailServiceTests
     }
 
     [Test]
+    public async Task SendAccountCreatedEmailAsync_IncludesCreatorAndSubscriptionSignupLinks()
+    {
+        var userEmail = "test@example.com";
+        var userName = "Test User";
+        var baseUrl = "https://streamtunes.net/";
+
+        var result = await _service.SendAccountCreatedEmailAsync(userEmail, userName, baseUrl);
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                userEmail,
+                It.IsAny<string>(),
+                It.Is<string>(body =>
+                    body.Contains("Become a Creator") &&
+                    body.Contains("Start a Subscription") &&
+                    body.Contains("https://streamtunes.net/CreatorSettings") &&
+                    body.Contains("https://streamtunes.net/manage-account"))),
+            Times.Once);
+    }
+
+    [Test]
     public async Task SendAccountClosedEmailAsync_SendsEmailWithCorrectDetails()
     {
         // Arrange

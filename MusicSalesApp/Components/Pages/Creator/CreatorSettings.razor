@@ -367,7 +367,7 @@
             <SfTextBox @bind-Value="_stopSellingConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
         </Content>
         <FooterTemplate>
-            <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(_stopSellingConfirmEmail != _userEmail)" />
+            <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(!CanConfirmStopSelling)" />
             <SfButton Content="Cancel" OnClick="CloseStopSellingDialog" />
         </FooterTemplate>
     </DialogTemplates>

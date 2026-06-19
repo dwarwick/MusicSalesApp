@@ -48,7 +48,7 @@ public class WebGoogleAuthController : Controller
     }
 
     [HttpGet("start")]
-    public IActionResult StartLogin([FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = "/")
+    public IActionResult StartLogin([FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = AppPageRoutes.Home)
     {
         return StartGoogleChallenge(registrationIntentToken: null, returnUrl);
     }
@@ -60,7 +60,7 @@ public class WebGoogleAuthController : Controller
         [FromForm(Name = ExternalAuthFormFields.AcceptPrivacyPolicy)] bool acceptPrivacyPolicy,
         [FromForm(Name = ExternalAuthFormFields.AcceptRefundPolicy)] bool acceptRefundPolicy,
         [FromForm(Name = ExternalAuthFormFields.ReceiveNewSongEmails)] bool receiveNewSongEmails,
-        [FromForm(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = "/")
+        [FromForm(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = AppPageRoutes.Home)
     {
         var normalizedReturnUrl = NormalizeLocalReturnUrl(returnUrl);
         string? registrationIntentToken = null;
@@ -80,7 +80,8 @@ public class WebGoogleAuthController : Controller
 
     [HttpGet("callback")]
     public async Task<IActionResult> Callback(
-        [FromQuery(Name = ExternalAuthFormFields.RegistrationIntentToken)] string registrationIntentToken = "")
+        [FromQuery(Name = ExternalAuthFormFields.RegistrationIntentToken)] string registrationIntentToken = "",
+        [FromQuery(Name = ExternalAuthFormFields.ReturnUrl)] string callbackReturnUrl = AppPageRoutes.Home)
     {
         try
         {
@@ -95,7 +96,7 @@ public class WebGoogleAuthController : Controller
                 return RedirectToLoginError("Google account did not provide a verified email address.");
             }
 
-            var returnUrl = "/";
+            var returnUrl = NormalizeLocalReturnUrl(callbackReturnUrl);
             WebGoogleRegistrationIntentTokenPayload? registrationIntent = null;
             if (!string.IsNullOrWhiteSpace(registrationIntentToken))
             {
@@ -104,7 +105,7 @@ public class WebGoogleAuthController : Controller
                     || !payload.AcceptPrivacyPolicy
                     || !payload.AcceptRefundPolicy)
                 {
-                    return RedirectToRegisterError("Google registration session expired. Please try again.");
+                    return RedirectToRegisterError("Google registration session expired. Please try again.", returnUrl: returnUrl);
                 }
 
                 registrationIntent = payload;
@@ -141,7 +142,7 @@ public class WebGoogleAuthController : Controller
                     email,
                     info.Principal.Identity?.Name ?? string.Empty));
 
-            return RedirectToRegisterPending(pendingRegistrationToken, email);
+            return RedirectToRegisterPending(pendingRegistrationToken, email, returnUrl);
         }
         finally
         {
@@ -158,11 +159,12 @@ public class WebGoogleAuthController : Controller
         [FromForm(Name = ExternalAuthFormFields.AcceptRefundPolicy)] bool acceptRefundPolicy,
         [FromForm(Name = ExternalAuthFormFields.ReceiveNewSongEmails)] bool receiveNewSongEmails,
         [FromForm(Name = ExternalAuthFormFields.Email)] string email = "",
-        [FromForm(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = "/")
+        [FromForm(Name = ExternalAuthFormFields.ReturnUrl)] string returnUrl = AppPageRoutes.Home)
     {
+        var normalizedReturnUrl = NormalizeLocalReturnUrl(returnUrl);
         if (string.IsNullOrWhiteSpace(pendingRegistrationToken))
         {
-            return RedirectToRegisterError("Google registration session expired. Please try again.");
+            return RedirectToRegisterError("Google registration session expired. Please try again.", returnUrl: normalizedReturnUrl);
         }
 
         if (!acceptTermsOfUse || !acceptPrivacyPolicy || !acceptRefundPolicy)
@@ -170,13 +172,14 @@ public class WebGoogleAuthController : Controller
             return RedirectToRegisterError(
                 "You must accept the Terms of Use, Privacy Policy, and Refund Policy to register.",
                 pendingRegistrationToken,
-                email);
+                email,
+                normalizedReturnUrl);
         }
 
         if (!_mobileExternalAuthTokenService.TryUnprotectPendingRegistration(pendingRegistrationToken, out var payload)
             || !string.Equals(payload.LoginProvider, ExternalLoginProviders.Google, StringComparison.Ordinal))
         {
-            return RedirectToRegisterError("Google registration session expired. Please try again.");
+            return RedirectToRegisterError("Google registration session expired. Please try again.", returnUrl: normalizedReturnUrl);
         }
 
         return await CompleteGoogleRegistrationAsync(
@@ -185,7 +188,7 @@ public class WebGoogleAuthController : Controller
             payload.Email,
             payload.DisplayName,
             receiveNewSongEmails,
-            NormalizeLocalReturnUrl(returnUrl));
+            normalizedReturnUrl);
     }
 
     private IActionResult StartGoogleChallenge(string? registrationIntentToken, string returnUrl)
@@ -196,11 +199,17 @@ public class WebGoogleAuthController : Controller
             return RedirectToLoginError("Google sign-in is not configured.");
         }
 
+        var normalizedReturnUrl = NormalizeLocalReturnUrl(returnUrl);
         var callbackUrl = UriHelper.BuildAbsolute(
             Request.Scheme,
             Request.Host,
             Request.PathBase,
             new PathString(GoogleAuthRoutes.WebCallbackPath));
+
+        callbackUrl = QueryHelpers.AddQueryString(
+            callbackUrl,
+            ExternalAuthFormFields.ReturnUrl,
+            normalizedReturnUrl);
 
         if (!string.IsNullOrWhiteSpace(registrationIntentToken))
         {
@@ -380,7 +389,7 @@ public class WebGoogleAuthController : Controller
     private static string NormalizeLocalReturnUrl(string returnUrl)
     {
         return string.IsNullOrWhiteSpace(returnUrl) || !IsLocalUrl(returnUrl)
-            ? "/"
+            ? AppPageRoutes.Home
             : returnUrl;
     }
 
@@ -406,10 +415,14 @@ public class WebGoogleAuthController : Controller
 
     private RedirectResult RedirectToLoginError(string error)
     {
-        return Redirect(QueryHelpers.AddQueryString("/login", ExternalAuthFormFields.Error, error));
+        return Redirect(QueryHelpers.AddQueryString(AppPageRoutes.Login, ExternalAuthFormFields.Error, error));
     }
 
-    private RedirectResult RedirectToRegisterError(string error, string pendingRegistrationToken = "", string email = "")
+    private RedirectResult RedirectToRegisterError(
+        string error,
+        string pendingRegistrationToken = "",
+        string email = "",
+        string returnUrl = AppPageRoutes.Home)
     {
         var query = new Dictionary<string, string?>
         {
@@ -426,17 +439,24 @@ public class WebGoogleAuthController : Controller
             query[ExternalAuthFormFields.Email] = email;
         }
 
-        return Redirect(QueryHelpers.AddQueryString("/register", query));
+        var normalizedReturnUrl = NormalizeLocalReturnUrl(returnUrl);
+        if (!string.Equals(normalizedReturnUrl, AppPageRoutes.Home, StringComparison.Ordinal))
+        {
+            query[ExternalAuthFormFields.ReturnUrl] = normalizedReturnUrl;
+        }
+
+        return Redirect(QueryHelpers.AddQueryString(AppPageRoutes.Register, query));
     }
 
-    private RedirectResult RedirectToRegisterPending(string pendingRegistrationToken, string email)
+    private RedirectResult RedirectToRegisterPending(string pendingRegistrationToken, string email, string returnUrl)
     {
         var query = new Dictionary<string, string?>
         {
             [ExternalAuthFormFields.PendingRegistrationToken] = pendingRegistrationToken,
-            [ExternalAuthFormFields.Email] = email
+            [ExternalAuthFormFields.Email] = email,
+            [ExternalAuthFormFields.ReturnUrl] = NormalizeLocalReturnUrl(returnUrl)
         };
 
-        return Redirect(QueryHelpers.AddQueryString("/register", query));
+        return Redirect(QueryHelpers.AddQueryString(AppPageRoutes.Register, query));
     }
 }
