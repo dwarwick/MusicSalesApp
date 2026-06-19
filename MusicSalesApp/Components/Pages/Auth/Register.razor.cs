@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
@@ -64,6 +65,7 @@ public partial class RegisterModel : BlazorBase, IDisposable
     private System.Timers.Timer countdownTimer = null!;
     private bool disposed = false;
     private bool _hasLoadedData = false;
+    private bool _creatorAccountRegisteredTracked = false;
 
     protected override void OnInitialized()
     {
@@ -220,6 +222,7 @@ public partial class RegisterModel : BlazorBase, IDisposable
             NewEmail = Email;
             showVerificationSection = true;
             successMessage = "Registration successful! Please check your email to verify your account.";
+            await TrackCreatorAccountRegisteredAsync();
 
             // Notify admin about new registration
             try
@@ -402,6 +405,60 @@ public partial class RegisterModel : BlazorBase, IDisposable
         }
 
         return false;
+    }
+
+    private async Task TrackCreatorAccountRegisteredAsync()
+    {
+        if (_creatorAccountRegisteredTracked
+            || !string.Equals(RegistrationReturnUrl, AppPageRoutes.CreatorSettings, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _creatorAccountRegisteredTracked = true;
+
+        await TrackRegistrationFunnelEventAsync();
+
+        try
+        {
+            var user = await UserManager.FindByEmailAsync(Email);
+            if (user == null)
+            {
+                return;
+            }
+
+            await AdminNotificationService.RecordUserHistoryAsync(
+                user.Id,
+                user.Email ?? Email,
+                UserHistoryEventTypes.CreatorAccountRegistered,
+                "Creator-intent account registered.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record creator account registration funnel history for {Email}", Email);
+        }
+    }
+
+    private async Task TrackRegistrationFunnelEventAsync()
+    {
+        var payload = new Dictionary<string, object>
+        {
+            [FunnelAnalyticsParameters.Category] = FunnelAnalyticsLabels.CreatorCategory,
+            [FunnelAnalyticsParameters.Label] = FunnelAnalyticsLabels.EmailPasswordRegistration,
+            [FunnelAnalyticsParameters.Source] = RegistrationReturnUrl
+        };
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName,
+                FunnelAnalyticsEvents.CreatorAccountRegistered,
+                payload);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to send creator account registration funnel analytics event");
+        }
     }
 
     public void Dispose()

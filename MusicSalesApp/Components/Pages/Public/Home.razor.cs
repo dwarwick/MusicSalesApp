@@ -21,6 +21,10 @@ public partial class HomeModel : BlazorBase
         (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0));
 
     protected bool HasLikedSongsToShow => _likedSongsPlaylist != null && _likedSongsCount > 0;
+    protected string CreatorLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.CreatorSettings);
+    protected string CreatorRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.CreatorSettings);
+    protected string SubscriberLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.ManageAccount);
+    protected string SubscriberRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.ManageAccount);
 
     protected override async Task OnInitializedAsync()
     {
@@ -119,4 +123,7 @@ public partial class HomeModel : BlazorBase
             Logger.LogError(ex, "Failed to check creator status for user {UserId}", _currentUserId);
         }
     }
+
+    private static string BuildReturnUrl(string route, string returnUrl)
+        => $"{route}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
 }

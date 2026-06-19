@@ -273,6 +273,43 @@ public class WebGoogleAuthControllerTests
     }
 
     [Test]
+    public async Task Callback_RegisterPageGoogleUser_WithCreatorReturnUrl_RecordsCreatorAccountRegistered()
+    {
+        ApplicationUser createdUser = null!;
+        var registrationIntentToken = _webGoogleAuthTokenService.ProtectRegistrationIntent(
+            new WebGoogleRegistrationIntentTokenPayload(true, true, true, true, AppPageRoutes.CreatorSettings));
+        SetupExternalLogin("new-creator-register@example.com", "google-provider-key");
+        _mockUserManager.Setup(x => x.FindByLoginAsync(ExternalLoginProviders.Google, "google-provider-key"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.FindByEmailAsync("new-creator-register@example.com"))
+            .ReturnsAsync((ApplicationUser)null!);
+        _mockUserManager.Setup(x => x.CreateAsync(It.IsAny<ApplicationUser>()))
+            .Callback<ApplicationUser>(user =>
+            {
+                createdUser = user;
+                user.Id = 43;
+            })
+            .ReturnsAsync(IdentityResult.Success);
+        _mockUserManager.Setup(x => x.GetLoginsAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(new List<UserLoginInfo>());
+        _mockUserManager.Setup(x => x.AddLoginAsync(It.IsAny<ApplicationUser>(), It.IsAny<UserLoginInfo>()))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var result = await _controller.Callback(registrationIntentToken);
+
+        var redirect = result as LocalRedirectResult;
+        Assert.That(redirect, Is.Not.Null);
+        Assert.That(redirect!.Url, Is.EqualTo(AppPageRoutes.CreatorSettings));
+        _mockAdminNotificationService.Verify(x => x.RecordUserHistoryAsync(
+            createdUser.Id,
+            createdUser.Email,
+            UserHistoryEventTypes.CreatorAccountRegistered,
+            It.IsAny<string>(),
+            null,
+            null), Times.Once);
+    }
+
+    [Test]
     public async Task Register_MissingPolicyAcceptance_DoesNotCreateUser()
     {
         var payload = new MobilePendingExternalRegistrationTokenPayload(

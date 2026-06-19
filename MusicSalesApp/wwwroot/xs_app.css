@@ -84,6 +84,11 @@
         min-width: calc(100vw / 1.2 - 32px);
     }
 
+    .creator-trust-note {
+        padding: 0.875rem;
+        margin: 1rem 0;
+    }
+
     /* NavMenu */
     .cart-link {
         margin-right: 70px;

@@ -42,6 +42,9 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         string.Equals(_stopSellingConfirmEmail?.Trim(), _userEmail, StringComparison.Ordinal);
     private int? _creatorId = null;
     private bool _creatorSignupConversionTracked = false;
+    private bool _creatorActivatedFunnelTracked = false;
+    private bool _creatorSettingsViewedTracked = false;
+    private bool _creatorSignupStartedTracked = false;
 
     protected string _locationCertification = "None";
     protected bool _acknowledgmentAccepted = false;
@@ -100,6 +103,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
                         await DetectAndPersistUserTimeZoneAsync();
                         await LoadCreatorStatus();
+                        await TrackCreatorSettingsViewedAsync();
 
                         if (_isActiveCreator && !user.IsInRole(Roles.Creator))
                         {
@@ -322,13 +326,19 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             }
             else if (result.IsActive)
             {
+                await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
                 await LoadCreatorStatus();
                 await ShowCreatorActivatedDialog();
             }
             else if (result.TaxFormPending)
             {
-                NavigationManager.NavigateTo("/submittaxform");
+                await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupTaxFormPending);
+                NavigationManager.NavigateTo(AppPageRoutes.SubmitTaxForm);
                 return;
+            }
+            else
+            {
+                await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupStarted);
             }
         }
         catch (Exception ex)
@@ -391,6 +401,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
     protected async Task ShowCreatorActivatedDialog()
     {
+        await TrackCreatorActivatedFunnelAsync();
         await TrackCreatorSignupConversionAsync();
 
         if (_creatorActivatedDialog != null)
@@ -547,6 +558,119 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         catch (Exception ex) when (ex is JSException || ex is InvalidOperationException)
         {
             Logger.LogWarning(ex, "Failed to send Google Ads creator signup conversion for creator {CreatorId}", _creatorId.Value);
+        }
+    }
+
+    private async Task TrackCreatorSettingsViewedAsync()
+    {
+        if (_creatorSettingsViewedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _creatorSettingsViewedTracked = true;
+
+        await TrackCreatorFunnelEventAsync(
+            FunnelAnalyticsEvents.CreatorSettingsViewed,
+            FunnelAnalyticsLabels.CreatorSettings,
+            new Dictionary<string, object>
+            {
+                [FunnelAnalyticsParameters.CreatorStatus] = _isActiveCreator
+                    ? FunnelAnalyticsLabels.CreatorSignupActive
+                    : _creatorOnboardingStatus ?? FunnelAnalyticsLabels.CreatorSignupStarted
+            });
+
+        await RecordCreatorHistoryAsync(
+            UserHistoryEventTypes.CreatorSettingsViewed,
+            "Creator / Artist Settings viewed.");
+    }
+
+    private async Task TrackCreatorSignupStartedAsync(string creatorStatus)
+    {
+        if (_creatorSignupStartedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _creatorSignupStartedTracked = true;
+
+        await TrackCreatorFunnelEventAsync(
+            FunnelAnalyticsEvents.CreatorSignupStarted,
+            creatorStatus,
+            new Dictionary<string, object>
+            {
+                [FunnelAnalyticsParameters.CreatorStatus] = creatorStatus
+            });
+
+        await RecordCreatorHistoryAsync(
+            UserHistoryEventTypes.CreatorSignupStarted,
+            $"Creator signup started. Status: {creatorStatus}.");
+    }
+
+    private async Task TrackCreatorActivatedFunnelAsync()
+    {
+        if (_creatorActivatedFunnelTracked || !_isActiveCreator || _currentUser == null)
+        {
+            return;
+        }
+
+        _creatorActivatedFunnelTracked = true;
+
+        await TrackCreatorFunnelEventAsync(
+            FunnelAnalyticsEvents.CreatorActivated,
+            FunnelAnalyticsLabels.CreatorActivated,
+            new Dictionary<string, object>
+            {
+                [FunnelAnalyticsParameters.CreatorStatus] = FunnelAnalyticsLabels.CreatorSignupActive
+            });
+
+        await RecordCreatorHistoryAsync(
+            UserHistoryEventTypes.CreatorActivated,
+            "Creator account activated.");
+    }
+
+    private async Task TrackCreatorFunnelEventAsync(
+        string eventName,
+        string label,
+        Dictionary<string, object> parameters = null)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            [FunnelAnalyticsParameters.Category] = FunnelAnalyticsLabels.CreatorCategory,
+            [FunnelAnalyticsParameters.Label] = label
+        };
+
+        if (parameters != null)
+        {
+            foreach (var parameter in parameters)
+            {
+                payload[parameter.Key] = parameter.Value;
+            }
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync(GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName, eventName, payload);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to send creator funnel analytics event {EventName}", eventName);
+        }
+    }
+
+    private async Task RecordCreatorHistoryAsync(string eventType, string description)
+    {
+        try
+        {
+            await AdminNotificationService.RecordUserHistoryAsync(
+                _currentUser.Id,
+                _currentUser.Email ?? _userEmail,
+                eventType,
+                description);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record creator funnel history event {EventType}", eventType);
         }
     }
 

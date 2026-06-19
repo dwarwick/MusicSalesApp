@@ -7,6 +7,8 @@ public static class AppPageRoutes
     public const string LearnMore = "/learnmore";
     public const string Login = "/login";
     public const string ManageAccount = "/manage-account";
+    public const string MusicLibrary = "/music-library";
     public const string Register = "/register";
+    public const string SubmitTaxForm = "/submittaxform";
     public const string ValidateEmail = "/validate-email";
 }

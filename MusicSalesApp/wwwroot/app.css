@@ -480,6 +480,12 @@ h1:focus {
     scroll-snap-align: start;
 }
 
+.creator-trust-note {
+    border-radius: 8px;
+    border-style: solid;
+    border-width: 1px;
+}
+
 .music-card {
     border-radius: 8px;
     padding: 16px;

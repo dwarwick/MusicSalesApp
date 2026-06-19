@@ -186,6 +186,12 @@ body {
     background: #353535;
 }
 
+.creator-trust-note {
+    color: #d8eaff;
+    background-color: #142336;
+    border-color: #31567d;
+}
+
 .card-album-art-placeholder {
     background: #353535;
 }
