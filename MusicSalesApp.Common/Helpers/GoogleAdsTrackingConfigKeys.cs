@@ -10,5 +10,6 @@ public static class GoogleAdsTrackingConfigKeys
     public const string EnabledHosts = SectionName + ":EnabledHosts";
 
     public const string TrackConversionFunctionName = "streamtunesGoogleAds.trackConversion";
+    public const string TrackFunnelEventFunctionName = "streamtunesGoogleAds.trackFunnelEvent";
     public const string CreatorSignupTransactionIdPrefix = "creator-";
 }

@@ -456,6 +456,11 @@
         margin-bottom: 1rem;
     }
 
+    .creator-trust-note {
+        padding: 1rem;
+        margin: 1.25rem 0;
+    }
+
     /* Subscription CTA Section - MD Breakpoint */
     .subscription-cta-section {
         padding: 3rem 2rem;

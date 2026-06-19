@@ -18,6 +18,8 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _loading = true;
     protected bool _isAuthenticated = false;
     private bool _hasLoadedData = false;
+    private bool _subscriberManageAccountViewedTracked = false;
+    private bool _subscriberSubscribeClickedTracked = false;
     
     protected string _successMessage = string.Empty;
     protected string _errorMessage = string.Empty;
@@ -108,6 +110,7 @@ public partial class ManageAccountModel : BlazorBase
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
                         await LoadCreatorStatus();
+                        await TrackSubscriberManageAccountViewedAsync();
 
                         // Handle return from PayPal subscription
                         if (Success.HasValue)
@@ -644,6 +647,8 @@ public partial class ManageAccountModel : BlazorBase
             return;
         }
 
+        await TrackSubscriberSubscribeClickedAsync();
+
         _subscribing = true;
         _errorMessage = null;
         _successMessage = null;
@@ -792,6 +797,81 @@ public partial class ManageAccountModel : BlazorBase
         {
             Logger.LogError(ex, "Error loading creator account deletion guard");
             _isActiveCreator = false;
+        }
+    }
+
+    private async Task TrackSubscriberManageAccountViewedAsync()
+    {
+        if (_subscriberManageAccountViewedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _subscriberManageAccountViewedTracked = true;
+
+        await TrackSubscriberFunnelEventAsync(
+            FunnelAnalyticsEvents.SubscriberManageAccountViewed,
+            FunnelAnalyticsLabels.SubscriberManageAccount);
+
+        await RecordSubscriberHistoryAsync(
+            UserHistoryEventTypes.SubscriberManageAccountViewed,
+            "Subscriber Manage Account viewed.");
+    }
+
+    private async Task TrackSubscriberSubscribeClickedAsync()
+    {
+        if (_subscriberSubscribeClickedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _subscriberSubscribeClickedTracked = true;
+
+        await TrackSubscriberFunnelEventAsync(
+            FunnelAnalyticsEvents.SubscriberSubscribeClicked,
+            FunnelAnalyticsLabels.SubscriberSubscribe);
+
+        await RecordSubscriberHistoryAsync(
+            UserHistoryEventTypes.SubscriberSubscribeClicked,
+            "Subscriber subscription CTA clicked.");
+    }
+
+    private async Task TrackSubscriberFunnelEventAsync(string eventName, string label)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            [FunnelAnalyticsParameters.Category] = FunnelAnalyticsLabels.SubscriberCategory,
+            [FunnelAnalyticsParameters.Label] = label,
+            [FunnelAnalyticsParameters.HasSubscription] = _hasSubscription,
+            [FunnelAnalyticsParameters.SubscriptionStatus] = _subscriptionStatus ?? string.Empty
+        };
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName,
+                eventName,
+                payload);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to send subscriber funnel analytics event {EventName}", eventName);
+        }
+    }
+
+    private async Task RecordSubscriberHistoryAsync(string eventType, string description)
+    {
+        try
+        {
+            await AdminNotificationService.RecordUserHistoryAsync(
+                _currentUser.Id,
+                _currentUser.Email ?? _userEmail,
+                eventType,
+                description);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record subscriber funnel history event {EventType}", eventType);
         }
     }
 }

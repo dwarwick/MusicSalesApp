@@ -459,6 +459,11 @@
         margin-bottom: 1.25rem;
     }
 
+    .creator-trust-note {
+        padding: 1rem;
+        margin: 1.5rem 0;
+    }
+
     /* Subscription CTA Section - LG Breakpoint */
     .subscription-cta-section {
         padding: 3.5rem;

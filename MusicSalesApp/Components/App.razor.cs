@@ -15,6 +15,7 @@ public partial class App : ComponentBase
     private IOpenGraphService OpenGraphService { get; set; } = default!;
 
     private string metaHtml = string.Empty;
+    private string googleConsentDefaultHtml = string.Empty;
     private string googleTagManagerHeadHtml = string.Empty;
     private string googleTagManagerBodyHtml = string.Empty;
     private string googleAdsHeadHtml = string.Empty;
@@ -33,13 +34,20 @@ public partial class App : ComponentBase
         }
 
         var googleTagManagerId = Configuration[GoogleAdsTrackingConfigKeys.GoogleTagManagerId];
+        var googleAdsTagId = Configuration[GoogleAdsTrackingConfigKeys.TagId];
+        if (string.IsNullOrWhiteSpace(googleTagManagerId) && string.IsNullOrWhiteSpace(googleAdsTagId))
+        {
+            return;
+        }
+
+        googleConsentDefaultHtml = BuildGoogleConsentDefaultHtml();
+
         if (!string.IsNullOrWhiteSpace(googleTagManagerId))
         {
             googleTagManagerHeadHtml = BuildGoogleTagManagerHeadHtml(googleTagManagerId);
             googleTagManagerBodyHtml = BuildGoogleTagManagerBodyHtml(googleTagManagerId);
         }
 
-        var googleAdsTagId = Configuration[GoogleAdsTrackingConfigKeys.TagId];
         if (!string.IsNullOrWhiteSpace(googleAdsTagId))
         {
             googleAdsHeadHtml = BuildGoogleAdsHeadHtml(googleAdsTagId);
@@ -64,6 +72,25 @@ public partial class App : ComponentBase
             .Get<string[]>() ?? Array.Empty<string>();
 
         return enabledHosts.Contains(requestHost, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string BuildGoogleConsentDefaultHtml()
+    {
+        return """
+            <!-- Google Consent Mode default -->
+            <script>
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('consent', 'default', {
+                'ad_storage': 'denied',
+                'analytics_storage': 'denied',
+                'ad_user_data': 'denied',
+                'ad_personalization': 'denied',
+                'wait_for_update': 500
+              });
+            </script>
+            <!-- End Google Consent Mode default -->
+            """;
     }
 
     private static string BuildGoogleTagManagerHeadHtml(string googleTagManagerId)

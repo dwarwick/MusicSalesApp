@@ -271,6 +271,7 @@ public class WebGoogleAuthController : Controller
         if (isNewUser)
         {
             await NotifyGoogleRegistrationAsync(user, displayName);
+            await RecordCreatorIntentGoogleRegistrationAsync(user, returnUrl);
         }
 
         return signInResult;
@@ -367,6 +368,27 @@ public class WebGoogleAuthController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send admin email-confirmed notification for Google user {Email}", email);
+        }
+    }
+
+    private async Task RecordCreatorIntentGoogleRegistrationAsync(ApplicationUser user, string returnUrl)
+    {
+        if (!string.Equals(NormalizeLocalReturnUrl(returnUrl), AppPageRoutes.CreatorSettings, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            await _adminNotificationService.RecordUserHistoryAsync(
+                user.Id,
+                user.Email ?? string.Empty,
+                UserHistoryEventTypes.CreatorAccountRegistered,
+                "Creator-intent account registered with Google.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record creator account registration funnel history for Google user {Email}", user.Email);
         }
     }
 

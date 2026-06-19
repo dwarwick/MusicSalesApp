@@ -1,8 +1,10 @@
 #nullable enable
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Helpers;
+using MusicSalesApp.Models;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages.Creator;
@@ -20,6 +22,9 @@ public partial class SubmitTaxFormModel : BlazorBase
     protected string _maintenanceStartLocal = string.Empty;
     protected string _maintenanceEndLocal = string.Empty;
     protected string _maintenanceTimeZoneAbbreviation = string.Empty;
+    private ApplicationUser? _currentUser = null;
+    private bool _taxFormLoadedTracked = false;
+    private bool _taxFormReturnedTracked = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -33,7 +38,14 @@ public partial class SubmitTaxFormModel : BlazorBase
 
                 if (user.Identity?.IsAuthenticated != true)
                 {
-                    NavigationManager.NavigateTo("/login");
+                    NavigationManager.NavigateTo(AppPageRoutes.Login);
+                    return;
+                }
+
+                _currentUser = await UserManager.GetUserAsync(user);
+                if (_currentUser == null)
+                {
+                    NavigationManager.NavigateTo(AppPageRoutes.Login);
                     return;
                 }
 
@@ -89,6 +101,8 @@ public partial class SubmitTaxFormModel : BlazorBase
                 Logger.LogInformation("Tax form token received successfully. BusinessId: {BusinessId}",
                     response.BusinessId);
 
+                await TrackTaxFormLoadedAsync();
+
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
 
@@ -119,10 +133,92 @@ public partial class SubmitTaxFormModel : BlazorBase
     /// Called from JavaScript when the tax form submission completes or is cancelled.
     /// </summary>
     [JSInvokable]
-    public void OnTaxFormComplete(string status)
+    public async Task OnTaxFormComplete(string status)
     {
         Logger.LogInformation("Tax form completed with status: {Status}", status);
-        NavigationManager.NavigateTo("/CreatorSettings", forceLoad: true);
+        await TrackTaxFormReturnedAsync(status);
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorSettings, forceLoad: true);
+    }
+
+    private async Task TrackTaxFormLoadedAsync()
+    {
+        if (_taxFormLoadedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _taxFormLoadedTracked = true;
+
+        await TrackTaxFormFunnelEventAsync(
+            FunnelAnalyticsEvents.CreatorTaxFormLoaded,
+            FunnelAnalyticsLabels.TaxFormLoaded,
+            null);
+
+        await RecordTaxFormHistoryAsync(
+            UserHistoryEventTypes.CreatorTaxFormLoaded,
+            "Creator tax form loaded through TaxBandits.");
+    }
+
+    private async Task TrackTaxFormReturnedAsync(string status)
+    {
+        if (_taxFormReturnedTracked || _currentUser == null)
+        {
+            return;
+        }
+
+        _taxFormReturnedTracked = true;
+
+        await TrackTaxFormFunnelEventAsync(
+            FunnelAnalyticsEvents.CreatorTaxFormCompletedOrReturned,
+            FunnelAnalyticsLabels.TaxFormReturned,
+            status);
+
+        await RecordTaxFormHistoryAsync(
+            UserHistoryEventTypes.CreatorTaxFormCompletedOrReturned,
+            $"Creator tax form completed or returned with status: {status}.");
+    }
+
+    private async Task TrackTaxFormFunnelEventAsync(string eventName, string label, string? taxFormStatus)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            [FunnelAnalyticsParameters.Category] = FunnelAnalyticsLabels.CreatorCategory,
+            [FunnelAnalyticsParameters.Label] = label,
+            [FunnelAnalyticsParameters.Source] = FunnelAnalyticsLabels.TaxBandits
+        };
+
+        if (!string.IsNullOrWhiteSpace(taxFormStatus))
+        {
+            payload[FunnelAnalyticsParameters.TaxFormStatus] = taxFormStatus;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName,
+                eventName,
+                payload);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to send tax form funnel analytics event {EventName}", eventName);
+        }
+    }
+
+    private async Task RecordTaxFormHistoryAsync(string eventType, string description)
+    {
+        try
+        {
+            await AdminNotificationService.RecordUserHistoryAsync(
+                _currentUser!.Id,
+                _currentUser.Email ?? string.Empty,
+                eventType,
+                description);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to record tax form funnel history event {EventType}", eventType);
+        }
     }
 }
 

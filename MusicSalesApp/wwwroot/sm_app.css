@@ -771,6 +771,11 @@
         margin-bottom: 1rem;
     }
 
+    .creator-trust-note {
+        padding: 0.875rem;
+        margin: 1.25rem 0;
+    }
+
     /* Subscription CTA Section - SM Breakpoint */
     .subscription-cta-section {
         padding: 2rem 1.5rem;
