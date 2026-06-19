@@ -21,9 +21,9 @@
         <div class="alert alert-warning mt-3">
             <h5>⏳ Please Wait Before Resubmitting</h5>
             <p>Your previous TIN verification failed. The IRS only allows one TIN match request per 24 hours.</p>
-            <p>Please return to your account page and wait for the cooldown timer to expire before trying again.</p>
+            <p>Please return to Creator / Artist Settings and wait for the cooldown timer to expire before trying again.</p>
         </div>
-        <a href="/manage-account" class="btn btn-primary mt-2">Return to Account</a>
+        <a href="/CreatorSettings" class="btn btn-primary mt-2">Return to Creator Settings</a>
     }
     else if (_isMaintenanceActive)
     {
@@ -33,14 +33,14 @@
             <p><strong>Maintenance Window:</strong> @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation</p>
             <p>Please return after the maintenance window ends to complete your tax form submission.</p>
         </div>
-        <a href="/manage-account" class="btn btn-primary mt-2">Return to Account</a>
+        <a href="/CreatorSettings" class="btn btn-primary mt-2">Return to Creator Settings</a>
     }
     else if (!string.IsNullOrEmpty(_errorMessage))
     {
         <div class="alert alert-danger mt-3">
             <p>@_errorMessage</p>
         </div>
-        <a href="/manage-account" class="btn btn-primary mt-2">Return to Account</a>
+        <a href="/CreatorSettings" class="btn btn-primary mt-2">Return to Creator Settings</a>
     }
     else
     {

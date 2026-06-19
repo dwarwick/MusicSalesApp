@@ -1,6 +1,7 @@
 #nullable enable
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Services;
 
@@ -77,7 +78,7 @@ public class WebhookStatusHubClient : IWebhookStatusHubClient
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<WebhookStatusMessage>("ReceiveWebhookStatus", (message) =>
+        _hubConnection.On<WebhookStatusMessage>(SignalRMethodNames.ReceiveWebhookStatus, (message) =>
         {
             OnWebhookStatusReceived?.Invoke(message);
         });

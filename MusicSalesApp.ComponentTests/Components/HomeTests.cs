@@ -18,9 +18,9 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
 
         // Assert - Check for key elements in the redesigned home page
-        Assert.That(cut.Markup, Does.Contain("Your Music."));
-        Assert.That(cut.Markup, Does.Contain("Unlimited."));
-        Assert.That(cut.Markup, Does.Contain("Stream Tunes"));
+        Assert.That(cut.Markup, Does.Contain("Discover your"));
+        Assert.That(cut.Markup, Does.Contain("next favorite artist"));
+        Assert.That(cut.Markup, Does.Contain("Stream all songs"));
     }
 
     [Test]
@@ -101,7 +101,7 @@ public class HomeTests : BUnitTestBase
 
         // Assert - Verify featured music section is present
         Assert.That(cut.Markup, Does.Contain("Featured Music"));
-        Assert.That(cut.Markup, Does.Contain("Listen to samples"));
+        Assert.That(cut.Markup, Does.Contain("Subscribe for unlimited access"));
         Assert.That(cut.Markup, Does.Contain("View All"));
     }
 
@@ -133,6 +133,7 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Keep 100% control of your music rights"));
         Assert.That(cut.Markup, Does.Contain("Quick upload process"));
         Assert.That(cut.Markup, Does.Contain("No cost to join"));
+        Assert.That(cut.Markup, Does.Contain("href=\"/learnmore\""));
     }
 
     [Test]
@@ -146,6 +147,31 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
         Assert.That(cut.Markup, Does.Contain("Log In"));
         Assert.That(cut.Markup, Does.Contain("Register"));
+        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=/CreatorSettings\""));
+    }
+
+    [Test]
+    public void Home_VerifiedNonCreatorCta_LinksToCreatorSettings()
+    {
+        const int userId = 1;
+        SetupAuthorizedUser(userId, "test@user.com");
+
+        var testUser = new ApplicationUser
+        {
+            Id = userId,
+            UserName = "test@user.com",
+            Email = "test@user.com",
+            EmailConfirmed = true
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(testUser);
+        MockUserManager.Setup(x => x.IsInRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>())).ReturnsAsync(false);
+        MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForState(() => cut.Markup.Contains("Click Here to Get Started"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
     }
 
     [Test]

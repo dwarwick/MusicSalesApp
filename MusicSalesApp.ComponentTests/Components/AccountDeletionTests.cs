@@ -31,6 +31,8 @@ public class AccountDeletionTests : BUnitTestBase
         var cut = TestContext.Render<AccountDeletion>();
 
         Assert.That(cut.Markup, Does.Contain("Active Creators Must Stop First"));
+        Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
+        Assert.That(cut.Markup, Does.Contain("Creator / Artist Settings"));
         Assert.That(cut.Markup, Does.Contain("Stop Being a Creator"));
         Assert.That(cut.Markup, Does.Contain("removes those songs from playlists across the service"));
     }

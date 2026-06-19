@@ -289,6 +289,26 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string payoutEmail)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var creator = await context.Creators.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (creator == null)
+        {
+            _logger.LogWarning("Creator record not found while updating payout email for user {UserId}", userId);
+            return null;
+        }
+
+        creator.PayPalEmail = payoutEmail;
+        creator.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation("Updated payout email for creator {CreatorId}", creator.Id);
+        return creator;
+    }
+
+    /// <inheritdoc />
     public async Task<Creator> ActivateCreatorAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

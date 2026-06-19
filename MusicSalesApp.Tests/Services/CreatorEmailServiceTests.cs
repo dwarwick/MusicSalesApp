@@ -183,7 +183,10 @@ public class CreatorEmailServiceTests
         _mockEmailService.Verify(e => e.SendEmailAsync(
             TestUserEmail,
             It.IsAny<string>(),
-            It.Is<string>(body => body.Contains("Account Management") && body.Contains("Request a new tax form"))),
+            It.Is<string>(body => body.Contains("Creator / Artist Settings") &&
+                body.Contains("/CreatorSettings") &&
+                body.Contains("Request a new tax form") &&
+                body.Contains("/manage-account"))),
             Times.Once);
     }
 
@@ -279,7 +282,10 @@ public class CreatorEmailServiceTests
         _mockEmailService.Verify(e => e.SendEmailAsync(
             TestUserEmail,
             It.IsAny<string>(),
-            It.Is<string>(body => body.Contains("Account Management") && body.Contains("Request a new tax form"))),
+            It.Is<string>(body => body.Contains("Creator / Artist Settings") &&
+                body.Contains("/CreatorSettings") &&
+                body.Contains("Request a new tax form") &&
+                body.Contains("/manage-account"))),
             Times.Once);
     }
 
@@ -336,7 +342,9 @@ public class CreatorEmailServiceTests
             TestUserEmail,
             It.IsAny<string>(),
             It.Is<string>(body => 
-                body.Contains("Account Management") && 
+                body.Contains("Creator / Artist Settings") &&
+                body.Contains("/CreatorSettings") &&
+                body.Contains("/manage-account") &&
                 body.Contains("No further action is needed"))),
             Times.Once);
     }

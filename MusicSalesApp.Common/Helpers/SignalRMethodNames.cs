@@ -8,6 +8,12 @@ namespace MusicSalesApp.Common.Helpers;
 public static class SignalRMethodNames
 {
     /// <summary>
+    /// Broadcast by webhook controllers when a user-facing webhook status changes.
+    /// Payload: WebhookStatusMessage.
+    /// </summary>
+    public const string ReceiveWebhookStatus = "ReceiveWebhookStatus";
+
+    /// <summary>
     /// Sent to a connected user when their pending admin messages changed and the
     /// client should refresh its queue.
     /// </summary>

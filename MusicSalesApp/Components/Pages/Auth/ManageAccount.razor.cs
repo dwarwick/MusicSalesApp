@@ -1,20 +1,16 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
-using MusicSalesApp.Data;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
-using Syncfusion.Blazor.Notifications;
 using Syncfusion.Blazor.Popups;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages.Auth;
 
-public partial class ManageAccountModel : BlazorBase, IDisposable
+public partial class ManageAccountModel : BlazorBase
 {
     private const string DefaultAppleSubscriptionManagementUrl = "https://account.apple.com/account/manage/section/subscriptions";
     private const string DefaultGoogleSubscriptionManagementUrl = "https://play.google.com/store/account/subscriptions";
@@ -64,55 +60,8 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected bool _hasPurchasedMusic = false;
     protected string _accountActionConfirmEmail = string.Empty;
 
-    // Creator fields
+    // Creator account deletion guard
     protected bool _isActiveCreator = false;
-    protected string _creatorOnboardingStatus = null;
-    protected string _creatorTaxFormStatus = null;
-    protected string _lastTaxFormErrorMessage = null;
-    protected TimeSpan? _tinMatchCooldownRemaining = null;
-    private System.Threading.Timer _cooldownTimer;
-    protected string _creatorReferralUrl = null;
-    protected string _creatorDisplayName = string.Empty;
-    protected string _creatorBio = string.Empty;
-    protected string _creatorPayPalEmail = string.Empty;
-    protected string _paypalEmail = string.Empty;
-    protected bool _paypalAccountAffirmed = false;
-    protected bool _startingOnboarding = false;
-    protected bool _completingOnboarding = false;
-    protected bool _stoppingCreatorStatus = false;
-    protected bool _updatingTaxForm = false;
-    protected string _stopSellingConfirmEmail = string.Empty;
-    private int? _creatorId = null;
-    private bool _creatorSignupConversionTracked = false;
-    
-    // Creator attestation fields
-    protected string _locationCertification = "None";
-    protected bool _acknowledgmentAccepted = false;
-    
-    // Creator profile editing
-    protected string _editCreatorDisplayName = string.Empty;
-    protected string _editCreatorBio = string.Empty;
-    protected bool _savingCreatorProfile = false;
-    protected string _creatorProfileMessage = string.Empty;
-    protected bool _creatorProfileSuccess = false;
-
-    // Creator stream definition display values
-    protected int _creatorStreamQualifyingSeconds = 30;
-    protected decimal _creatorStreamPayRateDisplay = 5.00m;
-
-    // Tax Bandits maintenance window
-    protected bool _showMaintenanceWarning = false;
-    protected string _maintenanceStartLocal = string.Empty;
-    protected string _maintenanceEndLocal = string.Empty;
-    protected string _maintenanceTimeZoneAbbreviation = string.Empty;
-    
-    /// <summary>
-    /// Returns true if the user can start the creator onboarding process.
-    /// </summary>
-    protected bool CanStartOnboarding => !string.IsNullOrWhiteSpace(_creatorPayPalEmail) 
-        && _paypalAccountAffirmed 
-        && _locationCertification != "None"
-        && _acknowledgmentAccepted;
     
     // Dialogs
     protected SfDialog _addPasskeyDialog;
@@ -121,30 +70,14 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     protected SfDialog _accountClosureDialog;
     protected SfDialog _suspendAccountDialog;
     protected SfDialog _deleteAccountDialog;
-    protected SfDialog _stopSellingDialog;
-    protected SfDialog _creatorActivatedDialog;
-    private bool _wasActiveCreatorBefore;
-    
-    // Toast for webhook status notifications
-    protected SfToast _toastRef;
     
     private ApplicationUser _currentUser;
-    private Action<WebhookStatusMessage> _webhookStatusHandler;
-
-    [Inject]
-    private IDbContextFactory<AppDbContext> DbContextFactory { get; set; }
 
     [Inject]
     private IAccountDeletionService AccountDeletionService { get; set; }
 
     [SupplyParameterFromQuery(Name = "success")]
     public bool? Success { get; set; }
-
-    [SupplyParameterFromQuery(Name = "creator_onboarding")]
-    public string CreatorOnboardingResult { get; set; }
-
-    [SupplyParameterFromQuery(Name = "tracking_id")]
-    public string CreatorTrackingId { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -174,26 +107,6 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
                         await LoadSubscriptionStatus();
                         await LoadCreatorStatus();
 
-                        // If creator was just activated (DB says active but user's session
-                        // doesn't have the Creator role yet), show the congratulations popup.
-                        // This handles the case where the TaxBandits webhook fires before
-                        // the user returns to this page, so the SignalR message is missed.
-                        if (_isActiveCreator && !user.IsInRole(Roles.Creator))
-                        {
-                            await ShowCreatorActivatedDialog();
-                        }
-
-                        // Subscribe to SignalR webhook status updates
-                        _webhookStatusHandler = OnWebhookStatusReceived;
-                        WebhookStatusHubClient.OnWebhookStatusReceived += _webhookStatusHandler;
-                        await WebhookStatusHubClient.StartAsync();
-
-                        // Handle return from PayPal creator onboarding
-                        if (!string.IsNullOrEmpty(CreatorOnboardingResult) && CreatorOnboardingResult == "complete")
-                        {
-                            await CompleteCreatorOnboarding();
-                        }
-                        
                         // Handle return from PayPal subscription
                         if (Success.HasValue)
                         {
@@ -629,7 +542,7 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
 
         if (_isActiveCreator)
         {
-            _errorMessage = "Active creators must stop being a creator before deleting the account.";
+            _errorMessage = "Active creators must stop being a creator from Creator / Artist Settings before deleting the account.";
             return;
         }
 
@@ -871,548 +784,13 @@ public partial class ManageAccountModel : BlazorBase, IDisposable
     {
         try
         {
-            // Check maintenance window for Tax Bandits
-            _showMaintenanceWarning = await AppSettingsService.ShouldShowTaxBanditsMaintenanceWarningAsync();
-            if (_showMaintenanceWarning)
-            {
-                var startUtc = await AppSettingsService.GetTaxBanditsMaintenanceStartUtcAsync();
-                var endUtc = await AppSettingsService.GetTaxBanditsMaintenanceEndUtcAsync();
-                try
-                {
-                    var localInfo = await JS.InvokeAsync<ManageAccountMaintenanceInfo>("getMaintenanceLocalTime",
-                        startUtc?.ToString("O"), endUtc?.ToString("O"));
-                    _maintenanceStartLocal = localInfo.StartLocal;
-                    _maintenanceEndLocal = localInfo.EndLocal;
-                    _maintenanceTimeZoneAbbreviation = localInfo.TimeZoneAbbreviation;
-                }
-                catch
-                {
-                    _maintenanceStartLocal = startUtc?.ToString("g") ?? "";
-                    _maintenanceEndLocal = endUtc?.ToString("g") ?? "";
-                    _maintenanceTimeZoneAbbreviation = "UTC";
-                }
-            }
-
-            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
-            if (creator != null)
-            {
-                _creatorId = creator.Id;
-                _isActiveCreator = creator.IsActive;
-                _creatorOnboardingStatus = creator.OnboardingStatus.ToString();
-                _creatorTaxFormStatus = creator.TaxFormStatus.ToString();
-                _lastTaxFormErrorMessage = creator.LastTaxFormErrorMessage;
-                
-                // Calculate TIN match cooldown remaining if status is Failed
-                if (creator.TaxFormStatus == TaxFormStatus.Failed && creator.LastTinMatchFailedAt.HasValue)
-                {
-                    var cooldownEnd = creator.LastTinMatchFailedAt.Value.AddHours(24);
-                    var remaining = cooldownEnd - DateTime.UtcNow;
-                    _tinMatchCooldownRemaining = remaining > TimeSpan.Zero ? remaining : null;
-                    
-                    if (_tinMatchCooldownRemaining.HasValue)
-                    {
-                        StartCooldownTimer();
-                    }
-                }
-                else
-                {
-                    _tinMatchCooldownRemaining = null;
-                }
-                _creatorReferralUrl = null; // PayPal business account onboarding has been removed
-                _creatorDisplayName = creator.DisplayName ?? string.Empty;
-                _creatorBio = creator.Bio ?? string.Empty;
-                _paypalEmail = creator.PayPalEmail ?? string.Empty;
-                
-                // For returning creators, use values from the creator table
-                _creatorStreamQualifyingSeconds = creator.StreamQualifyingSeconds;
-                _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
-                
-                // Initialize edit fields
-                _editCreatorDisplayName = _creatorDisplayName;
-                _editCreatorBio = _creatorBio;
-            }
-            else
-            {
-                _creatorId = null;
-                _isActiveCreator = false;
-                _creatorOnboardingStatus = null;
-                _creatorTaxFormStatus = null;
-                _lastTaxFormErrorMessage = null;
-                
-                // For new creators, use current app settings values
-                _creatorStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-                var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
-                _creatorStreamPayRateDisplay = streamPayRate * 1000;
-            }
+            _isActiveCreator = _currentUser != null && await CreatorService.IsActiveCreatorAsync(_currentUser.Id);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading creator status");
+            Logger.LogError(ex, "Error loading creator account deletion guard");
+            _isActiveCreator = false;
         }
-    }
-
-    protected async Task SaveCreatorProfile()
-    {
-        _creatorProfileMessage = string.Empty;
-        _savingCreatorProfile = true;
-        
-        try
-        {
-            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
-            if (creator == null)
-            {
-                _creatorProfileMessage = "Creator profile not found.";
-                _creatorProfileSuccess = false;
-                return;
-            }
-            
-            // Validate display name length
-            if (!string.IsNullOrEmpty(_editCreatorDisplayName) && _editCreatorDisplayName.Length > 20)
-            {
-                _creatorProfileMessage = "Display name must be 20 characters or less.";
-                _creatorProfileSuccess = false;
-                return;
-            }
-            
-            await CreatorService.UpdateCreatorProfileAsync(creator.Id, _editCreatorDisplayName, _editCreatorBio);
-            
-            // Update local state
-            _creatorDisplayName = _editCreatorDisplayName;
-            _creatorBio = _editCreatorBio;
-            
-            _creatorProfileMessage = "Profile saved successfully!";
-            _creatorProfileSuccess = true;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error saving creator profile");
-            _creatorProfileMessage = $"Error saving profile: {ex.Message}";
-            _creatorProfileSuccess = false;
-        }
-        finally
-        {
-            _savingCreatorProfile = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    protected async Task SavePayPalEmail()
-    {
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-
-        try
-        {
-            // Validate email format
-            if (string.IsNullOrWhiteSpace(_paypalEmail))
-            {
-                _errorMessage = "Please enter a payout email address.";
-                return;
-            }
-
-            if (!_paypalEmail.Contains("@") || !_paypalEmail.Contains("."))
-            {
-                _errorMessage = "Please enter a valid email address.";
-                return;
-            }
-
-            await using var context = await DbContextFactory.CreateDbContextAsync();
-            var creator = await context.Creators.FirstOrDefaultAsync(s => s.UserId == _currentUser.Id);
-            
-            if (creator == null)
-            {
-                _errorMessage = "Creator record not found.";
-                return;
-            }
-
-            creator.PayPalEmail = _paypalEmail;
-            creator.UpdatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
-
-            _successMessage = "Payout email updated successfully!";
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error saving payout email");
-            _errorMessage = "Failed to save payout email. Please try again.";
-        }
-    }
-
-    protected async Task StartCreatorOnboarding()
-    {
-        _startingOnboarding = true;
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            // Parse the location certification enum value
-            if (!Enum.TryParse<CreatorLocationCertification>(_locationCertification, out var locationCertEnum))
-            {
-                locationCertEnum = CreatorLocationCertification.None;
-            }
-
-            var result = await CreatorService.StartOnboardingAsync(new CreatorOnboardingInput
-            {
-                UserId = _currentUser.Id,
-                UserEmail = _currentUser.Email,
-                DisplayName = _creatorDisplayName,
-                Bio = _creatorBio,
-                PayPalEmail = _creatorPayPalEmail,
-                PayPalAccountAffirmed = _paypalAccountAffirmed,
-                LocationCertification = locationCertEnum,
-                AcknowledgmentAccepted = _acknowledgmentAccepted
-            });
-
-            if (!result.Success)
-            {
-                _errorMessage = result.ErrorMessage ?? "Failed to start creator onboarding. Please try again.";
-            }
-            else if (result.IsIneligible)
-            {
-                _errorMessage = "At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.";
-                await LoadCreatorStatus();
-            }
-            else if (result.IsActive)
-            {
-                await LoadCreatorStatus();
-                await ShowCreatorActivatedDialog();
-            }
-            else if (result.TaxFormPending)
-            {
-                NavigationManager.NavigateTo("/submittaxform");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error starting creator onboarding");
-            _errorMessage = "Error starting creator onboarding. Please refresh the page to see your current status.";
-            await LoadCreatorStatus();
-        }
-        finally
-        {
-            _startingOnboarding = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    protected async Task CompleteCreatorOnboarding()
-    {
-        _completingOnboarding = true;
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            var result = await CreatorService.CompleteOnboardingAsync(_currentUser.Id);
-
-            if (!result.Success)
-            {
-                _errorMessage = result.ErrorMessage ?? "Could not verify your creator setup. Please try again.";
-            }
-            else if (result.IsActive)
-            {
-                _isActiveCreator = true;
-                _creatorOnboardingStatus = "Completed";
-                await ShowCreatorActivatedDialog();
-            }
-            else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
-            {
-                _successMessage = "Your PayPal account is being verified. Please check back soon.";
-                _creatorOnboardingStatus = "InProgress";
-            }
-            else
-            {
-                _errorMessage = "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.";
-            }
-
-            await LoadCreatorStatus();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error completing creator onboarding");
-            _errorMessage = $"Error completing creator onboarding: {ex.Message}";
-        }
-        finally
-        {
-            _completingOnboarding = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    protected async Task ShowCreatorActivatedDialog()
-    {
-        await TrackCreatorSignupConversionAsync();
-
-        if (_creatorActivatedDialog != null)
-        {
-            await _creatorActivatedDialog.ShowAsync();
-        }
-    }
-
-    private async Task TrackCreatorSignupConversionAsync()
-    {
-        if (_creatorSignupConversionTracked || !_isActiveCreator)
-        {
-            return;
-        }
-
-        if (!IsGoogleAdsTrackingAllowedForCurrentHost())
-        {
-            return;
-        }
-
-        var googleAdsTagId = Configuration[GoogleAdsTrackingConfigKeys.TagId];
-        var creatorSignupConversionLabel = Configuration[GoogleAdsTrackingConfigKeys.CreatorSignupConversionLabel];
-        if (string.IsNullOrWhiteSpace(googleAdsTagId) || string.IsNullOrWhiteSpace(creatorSignupConversionLabel))
-        {
-            return;
-        }
-
-        if (!_creatorId.HasValue && _currentUser != null)
-        {
-            var creator = await CreatorService.GetCreatorByUserIdAsync(_currentUser.Id);
-            if (creator?.IsActive == true)
-            {
-                _creatorId = creator.Id;
-            }
-        }
-
-        if (!_creatorId.HasValue)
-        {
-            return;
-        }
-
-        var sendTo = $"{googleAdsTagId}/{creatorSignupConversionLabel}";
-        var transactionId = $"{GoogleAdsTrackingConfigKeys.CreatorSignupTransactionIdPrefix}{_creatorId.Value}";
-        _creatorSignupConversionTracked = true;
-
-        try
-        {
-            await JS.InvokeVoidAsync(GoogleAdsTrackingConfigKeys.TrackConversionFunctionName, sendTo, transactionId);
-        }
-        catch (Exception ex) when (ex is JSException || ex is InvalidOperationException)
-        {
-            Logger.LogWarning(ex, "Failed to send Google Ads creator signup conversion for creator {CreatorId}", _creatorId.Value);
-        }
-    }
-
-    private bool IsGoogleAdsTrackingAllowedForCurrentHost()
-    {
-        if (!Configuration.GetValue<bool>(GoogleAdsTrackingConfigKeys.Enabled))
-        {
-            return false;
-        }
-
-        var enabledHosts = Configuration
-            .GetSection(GoogleAdsTrackingConfigKeys.EnabledHosts)
-            .Get<string[]>() ?? Array.Empty<string>();
-        if (enabledHosts.Length == 0)
-        {
-            return false;
-        }
-
-        var currentHost = HttpContextAccessor.HttpContext?.Request.Host.Host;
-        if (string.IsNullOrWhiteSpace(currentHost)
-            && Uri.TryCreate(NavigationManager.Uri, UriKind.Absolute, out var navigationUri))
-        {
-            currentHost = navigationUri.Host;
-        }
-
-        return !string.IsNullOrWhiteSpace(currentHost)
-            && enabledHosts.Contains(currentHost, StringComparer.OrdinalIgnoreCase);
-    }
-
-    protected void LogoutAfterCreatorActivation()
-    {
-        NavigationManager.NavigateTo("/account/logout", forceLoad: true);
-    }
-
-    protected void NavigateToTaxForm()
-    {
-        NavigationManager.NavigateTo("/submittaxform");
-    }
-
-    protected async Task InitiateTaxFormUpdate()
-    {
-        _updatingTaxForm = true;
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            var result = await CreatorService.InitiateTaxFormUpdateAsync(_currentUser.Id, _currentUser.Email);
-
-            if (result.Success)
-            {
-                NavigationManager.NavigateTo("/submittaxform");
-                return;
-            }
-            else
-            {
-                _errorMessage = result.ErrorMessage ?? "Failed to initiate tax form update.";
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error initiating tax form update");
-            _errorMessage = "An error occurred while initiating the tax form update. Please try again.";
-        }
-        finally
-        {
-            _updatingTaxForm = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private void StartCooldownTimer()
-    {
-        _cooldownTimer?.Dispose();
-        _cooldownTimer = new System.Threading.Timer(async _ =>
-        {
-            if (_tinMatchCooldownRemaining.HasValue)
-            {
-                _tinMatchCooldownRemaining = _tinMatchCooldownRemaining.Value - TimeSpan.FromSeconds(1);
-                if (_tinMatchCooldownRemaining.Value <= TimeSpan.Zero)
-                {
-                    _tinMatchCooldownRemaining = null;
-                    _cooldownTimer?.Dispose();
-                    _cooldownTimer = null;
-                }
-                await InvokeAsync(StateHasChanged);
-            }
-        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-    }
-
-    protected void NavigateToUpload()
-    {
-        NavigationManager.NavigateTo("/upload-files");
-    }
-
-    protected void NavigateToManageSongs()
-    {
-        NavigationManager.NavigateTo("/creator/songs");
-    }
-
-    protected async Task ShowStopSellingConfirmation()
-    {
-        _stopSellingConfirmEmail = string.Empty;
-        await _stopSellingDialog.ShowAsync();
-    }
-
-    protected async Task CloseStopSellingDialog()
-    {
-        await _stopSellingDialog.HideAsync();
-    }
-
-    protected async Task ConfirmStopSelling()
-    {
-        if (_stopSellingConfirmEmail != _userEmail)
-        {
-            _errorMessage = "Please enter your email address to confirm.";
-            return;
-        }
-
-        _stoppingCreatorStatus = true;
-        _errorMessage = string.Empty;
-        _successMessage = string.Empty;
-        await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            var success = await CreatorService.StopBeingCreatorAsync(_currentUser.Id);
-            if (success)
-            {
-                _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
-                _isActiveCreator = false;
-                _creatorOnboardingStatus = "Suspended";
-                await _stopSellingDialog.HideAsync();
-            }
-            else
-            {
-                _errorMessage = "You are not currently a creator or there was an error processing your request.";
-            }
-
-            await LoadCreatorStatus();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error stopping creator status");
-            _errorMessage = $"Error: {ex.Message}";
-        }
-        finally
-        {
-            _stoppingCreatorStatus = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    /// <summary>
-    /// Handles webhook status updates received via SignalR.
-    /// </summary>
-    private void OnWebhookStatusReceived(WebhookStatusMessage message)
-    {
-        // Only process messages for the current user
-        if (_currentUser == null || message.UserId != _currentUser.Id)
-        {
-            return;
-        }
-
-        InvokeAsync(async () =>
-        {
-            try
-            {
-                // Show toast notification
-                var toastModel = new ToastModel
-                {
-                    Title = message.IsSuccess ? "Success" : "Status Update",
-                    Content = message.Message,
-                    CssClass = message.IsSuccess ? "e-toast-success" : "e-toast-warning",
-                    Icon = message.IsSuccess ? "e-success" : "e-warning"
-                };
-
-                if (_toastRef != null)
-                {
-                    await _toastRef.ShowAsync(toastModel);
-                }
-
-                // Reload the relevant data based on webhook type
-                if (message.WebhookType.Contains("PayPal", StringComparison.OrdinalIgnoreCase) ||
-                    message.WebhookType.Contains("Creator", StringComparison.OrdinalIgnoreCase) ||
-                    message.WebhookType.Contains("TaxForm", StringComparison.OrdinalIgnoreCase))
-                {
-                    _wasActiveCreatorBefore = _isActiveCreator;
-                    await LoadCreatorStatus();
-
-                    if (_isActiveCreator && !_wasActiveCreatorBefore)
-                    {
-                        await ShowCreatorActivatedDialog();
-                    }
-                }
-
-                StateHasChanged();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error handling webhook status update");
-            }
-        });
-    }
-
-    /// <summary>
-    /// Disposes of the SignalR event handler subscription.
-    /// </summary>
-    public void Dispose()
-    {
-        if (_webhookStatusHandler != null)
-        {
-            WebhookStatusHubClient.OnWebhookStatusReceived -= _webhookStatusHandler;
-        }
-        _cooldownTimer?.Dispose();
     }
 }
 
@@ -1444,27 +822,4 @@ public class CancelSubscriptionResponse
 {
     public bool Success { get; set; }
     public DateTime? EndDate { get; set; }
-}
-
-public class StartCreatorOnboardingResponse
-{
-    public bool Success { get; set; }
-    public bool IsActive { get; set; }
-    public bool TaxFormPending { get; set; }
-    public bool IsIneligible { get; set; }
-}
-
-public class CompleteCreatorOnboardingResponse
-{
-    public bool Success { get; set; }
-    public bool IsActive { get; set; }
-    public bool PaymentsReceivable { get; set; }
-    public bool PrimaryEmailConfirmed { get; set; }
-}
-
-public class ManageAccountMaintenanceInfo
-{
-    public string StartLocal { get; set; } = string.Empty;
-    public string EndLocal { get; set; } = string.Empty;
-    public string TimeZoneAbbreviation { get; set; } = string.Empty;
 }

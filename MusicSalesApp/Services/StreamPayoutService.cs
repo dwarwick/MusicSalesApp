@@ -872,7 +872,7 @@ public class StreamPayoutService : IStreamPayoutService
         <p style='margin-top: 30px;'>The payment has been sent to your PayPal account associated with your creator account.</p>
         <p>Thank you for sharing your music on StreamTunes!</p>
         <p style='color: #999; font-size: 12px; margin-top: 30px;'>
-            <a href='{encodedBaseUrl}/manage-account' style='color: #666; text-decoration: underline;'>Manage your account preferences</a>
+            <a href='{encodedBaseUrl}/CreatorSettings' style='color: #666; text-decoration: underline;'>Manage your creator payout settings</a>
         </p>
         ");
 

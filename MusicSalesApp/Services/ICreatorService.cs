@@ -96,6 +96,11 @@ public interface ICreatorService
     Task<Creator> UpdateCreatorProfileAsync(int creatorId, string? displayName, string? bio);
 
     /// <summary>
+    /// Updates the active creator's payout email address.
+    /// </summary>
+    Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string payoutEmail);
+
+    /// <summary>
     /// Activates a creator account (admin function).
     /// </summary>
     Task<Creator> ActivateCreatorAsync(int creatorId);

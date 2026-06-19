@@ -241,6 +241,47 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region UpdateCreatorPayoutEmailAsync Tests
+
+    [Test]
+    public async Task UpdateCreatorPayoutEmailAsync_UpdatesPayPalEmail()
+    {
+        var user = new ApplicationUser { UserName = "payout@test.com", Email = "payout@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            PayPalEmail = "old@paypal.com",
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var result = await _service.UpdateCreatorPayoutEmailAsync(user.Id, "new@paypal.com");
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.PayPalEmail, Is.EqualTo("new@paypal.com"));
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(savedCreator.PayPalEmail, Is.EqualTo("new@paypal.com"));
+        Assert.That(savedCreator.UpdatedAt, Is.GreaterThan(DateTime.MinValue));
+    }
+
+    [Test]
+    public async Task UpdateCreatorPayoutEmailAsync_ReturnsNull_WhenCreatorDoesNotExist()
+    {
+        var result = await _service.UpdateCreatorPayoutEmailAsync(999, "new@paypal.com");
+
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
     #region StopBeingCreatorAsync → Re-signup Full Flow Test
 
     [Test]

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Controllers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Hubs;
@@ -522,7 +523,7 @@ public class TaxBanditsControllerTests
                 It.IsAny<CancellationToken>()))
             .Callback<string, object[], CancellationToken>((method, args, _) =>
             {
-                if (method == "ReceiveWebhookStatus" && args.Length > 0)
+                if (method == SignalRMethodNames.ReceiveWebhookStatus && args.Length > 0)
                 {
                     broadcastedMessage = args[0] as WebhookStatusMessage;
                 }

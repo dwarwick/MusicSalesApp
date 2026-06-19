@@ -1,5 +1,6 @@
 using Bunit;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Layout;
 using MusicSalesApp.Helpers;
@@ -67,6 +68,23 @@ public class NavMenuTests : BUnitTestBase
 
         // Assert – version div is not rendered
         Assert.That(cut.Markup, Does.Not.Contain("version:"));
+    }
+
+    [Test]
+    public void NavMenu_ShowsCreatorArtistSettingsLink_ForValidatedUsers()
+    {
+        var authContext = SetupAuthorizedUser(1, "testuser@test.com");
+        authContext.SetPolicies(Permissions.ValidatedUser);
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Manage Account"));
+            Assert.That(cut.Markup, Does.Contain("Creator / Artist Settings"));
+            Assert.That(cut.Markup, Does.Contain("/CreatorSettings"));
+        });
     }
 
     [Test]

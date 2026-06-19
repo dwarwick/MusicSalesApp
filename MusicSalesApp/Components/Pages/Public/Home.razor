@@ -99,14 +99,14 @@
                         </p>
                         <div class="cta-learn-row">
                             <span class="cta-learn-link">Learn how it works →</span>
-                            <a href="/LearnMore" class="e-control e-btn cta-button cta-button-learn">
+                            <a href="/learnmore" class="e-control e-btn cta-button cta-button-learn">
                                 Learn More
                             </a>
                         </div>
                         @if (!_isAuthenticated)
                         {
                             <div class="cta-button-group">
-                                <a href="/login?returnUrl=/manage-account" class="e-control e-btn cta-button cta-button-login">
+                                <a href="/login?returnUrl=/CreatorSettings" class="e-control e-btn cta-button cta-button-login">
                                     Log In
                                 </a>
                                 <a href="/register" class="e-control e-btn cta-button cta-button-register">
@@ -116,7 +116,7 @@
                         }
                         else if (_isEmailVerified)
                         {
-                            <a href="/manage-account" class="e-control e-btn cta-button">
+                            <a href="/CreatorSettings" class="e-control e-btn cta-button">
                                 Click Here to Get Started
                             </a>
                         }

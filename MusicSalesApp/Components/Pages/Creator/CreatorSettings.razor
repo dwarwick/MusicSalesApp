@@ -1,0 +1,390 @@
+@page "/CreatorSettings"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@using Syncfusion.Blazor.Notifications
+@attribute [Authorize(Policy = Permissions.ValidatedUser)]
+@inherits CreatorSettingsModel
+
+<PageTitle>Creator / Artist Settings</PageTitle>
+
+<SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
+    <ToastPosition X="Right" Y="Top"></ToastPosition>
+</SfToast>
+
+<div class="container mt-4">
+    <h2>Creator / Artist Settings</h2>
+
+    @if (_loading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (!_isAuthenticated)
+    {
+        <SfMessage Severity="MessageSeverity.Warning">You must be logged in to manage creator settings.</SfMessage>
+    }
+    else
+    {
+        <div class="user-email-section mb-4">
+            <p class="user-email"><strong>Account Email:</strong> @_userEmail</p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
+        }
+
+        @if (!_isActiveCreator)
+        {
+            @if (_showMaintenanceWarning)
+            {
+                <div class="alert alert-warning mb-4">
+                    <h5>🔧 Tax Bandits Scheduled Maintenance</h5>
+                    <p>New creators will not be able to submit their tax forms during the upcoming Tax Bandits maintenance window.</p>
+                    <p><strong>Maintenance Window:</strong> @_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation</p>
+                </div>
+            }
+
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="Become a Creator" />
+                <CardContent>
+                    @if (_creatorOnboardingStatus == "Ineligible")
+                    {
+                        <div class="creator-ineligible">
+                            <p>At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.</p>
+                        </div>
+                    }
+                    else if (_creatorOnboardingStatus == "NotStarted" || _creatorOnboardingStatus == null || _creatorOnboardingStatus == "Suspended" || _creatorOnboardingStatus == "ConsentRevoked")
+                    {
+                        <div class="creator-description">
+                            <h4>Share Your Music on StreamTunes!</h4>
+                            <p>Join our community of artists and start earning compensation from your music streams.</p>
+
+                            <div class="creator-benefits mt-3">
+                                <h5>Benefits of becoming a creator:</h5>
+                                <ul>
+                                    <li>Upload your original music to our streaming platform</li>
+                                    <li>Reach a global audience of music lovers</li>
+                                    <li>Earn compensation for every stream of your music</li>
+                                    <li>Get paid directly to your PayPal account</li>
+                                </ul>
+                            </div>
+
+                            <div class="creator-requirements mt-3">
+                                <h5>Requirements:</h5>
+                                <ul>
+                                    <li>A valid PayPal account in good standing to receive stream payments</li>
+                                    <li>Complete tax form (W-9/W-8) for tax reporting</li>
+                                    <li>Original music that you have the rights to distribute</li>
+                                    <li>Agreement to our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="mt-3">
+                                <p><strong>How You Earn:</strong> You earn based on the number of qualifying streams (@_creatorStreamQualifyingSeconds+ seconds of continuous playback) at a rate of $@_creatorStreamPayRateDisplay.ToString("F2") per 1,000 streams. Your pay rate and stream definition are set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
+                            </div>
+
+                            <div class="creator-signup-form mt-4">
+                                <div class="mb-3">
+                                    <label for="creatorDisplayName" class="e-label">Display Name (optional)</label>
+                                    <SfTextBox @bind-Value="_creatorDisplayName" ID="creatorDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" />
+                                    <small class="form-text">This name will be shown to listeners on your music listings.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="creatorBio" class="e-label">Bio (optional)</label>
+                                    <SfTextBox @bind-Value="_creatorBio" ID="creatorBio" Multiline="true" Placeholder="Tell listeners about yourself and your music" CssClass="e-outline" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
+                                    <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
+                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive payments.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
+                                    <span class="ms-2">I affirm that I have a valid PayPal account in good standing that can receive payments. I understand that if my PayPal account is not valid or cannot receive payments, I will not receive payouts. StreamTunes is not responsible for ensuring my PayPal account can receive payments.</span>
+                                </div>
+
+                                <div class="alert alert-warning mt-3">
+                                    <strong>Important:</strong> You only need a personal PayPal account to receive payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your payments may fail and StreamTunes is not responsible for recovering failed payments.
+                                </div>
+
+                                <div class="creator-eligibility mt-4">
+                                    <h5>Creator Eligibility Requirement</h5>
+                                    <p>At this time, Streamtunes supports paid creator participation only if:</p>
+                                    <ul>
+                                        <li>You are a U.S. person, or</li>
+                                        <li>You perform all creator activities for Streamtunes entirely outside the United States.</li>
+                                    </ul>
+                                    <p>If you perform any creator activities while physically present in the United States and are not a U.S. person, you are not currently eligible to receive payouts through the platform.</p>
+                                </div>
+
+                                <div class="creator-location-certification mt-4">
+                                    <h5>Creator Location and Tax Certification</h5>
+                                    <p>Please select the statement below that reflects your status (required):</p>
+                                    <p class="text-muted"><small>For U.S. tax purposes, a &ldquo;U.S. person&rdquo; has the meaning defined by the Internal Revenue Service. Creator activities means uploading, managing, or otherwise monetized participation related to your music on the platform.</small></p>
+
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am a U.S. person." Name="locationCertification" Value="USPerson" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am not a U.S. person and will perform all creator activities for Streamtunes entirely outside the United States." Name="locationCertification" Value="NonUSPersonOutsideUS" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <SfRadioButton Label="I am not a U.S. person and will perform some creator activities for Streamtunes while physically present in the United States." Name="locationCertification" Value="NonUSPersonInsideUS" @bind-Checked="_locationCertification" TChecked="string" />
+                                    </div>
+                                </div>
+
+                                <div class="creator-acknowledgment mt-4">
+                                    <h5>Acknowledgment (required)</h5>
+                                    <div class="mb-3">
+                                        <SfCheckBox @bind-Checked="_acknowledgmentAccepted" TChecked="bool" />
+                                        <span class="ms-2">I certify that the information above is accurate and understand that Streamtunes relies on this certification to determine my eligibility for payouts and applicable tax withholding and reporting. I agree to promptly update this information if my circumstances change.</span>
+                                    </div>
+                                </div>
+
+                                @if (!_startingOnboarding)
+                                {
+                                    <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" />
+                                    @if (!CanStartOnboarding)
+                                    {
+                                        <p class="text-danger mt-2">Please complete all required fields including your PayPal email, PayPal account confirmation, location certification, and acknowledgment.</p>
+                                    }
+                                }
+                                else
+                                {
+                                    <p>Processing your signup...</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (_creatorOnboardingStatus == "Pending" || _creatorOnboardingStatus == "InProgress" || _creatorOnboardingStatus == "Completed")
+                    {
+                        <div class="creator-pending">
+                            <h4>Complete Your Creator Onboarding</h4>
+
+                            <div class="onboarding-section mb-4">
+                                <h5>1. PayPal Account</h5>
+                                <p class="text-success"><strong>Status: Confirmed ✓</strong></p>
+                                <p>You have confirmed that you have a valid PayPal account to receive payments.</p>
+                            </div>
+
+                            <div class="onboarding-section mb-4">
+                                <h5>2. Tax Form (W-9/W-8)</h5>
+                                @if (_creatorTaxFormStatus == "Completed")
+                                {
+                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
+                                    <p>Both steps are complete. Your creator account will be activated shortly.</p>
+                                    @if (!_completingOnboarding)
+                                    {
+                                        <SfButton IsPrimary="true" Content="Activate My Creator Account" OnClick="CompleteCreatorOnboarding" />
+                                    }
+                                    else
+                                    {
+                                        <p>Activating your account...</p>
+                                    }
+                                }
+                                else if (_creatorTaxFormStatus == "Pending")
+                                {
+                                    <p class="text-warning"><strong>Status: Pending</strong></p>
+                                    @if (!string.IsNullOrWhiteSpace(_lastTaxFormErrorMessage))
+                                    {
+                                        <div class="alert alert-danger mb-3" role="alert" aria-live="assertive">
+                                            <strong>Your previous tax form submission had an error:</strong>
+                                            <br />@_lastTaxFormErrorMessage
+                                            <br /><small>Please correct the issue and resubmit your tax form.</small>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p>Please complete your tax form to activate your creator account.</p>
+                                    }
+                                    <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
+                                }
+                                else if (_creatorTaxFormStatus == "TinMatchInProgress")
+                                {
+                                    <p class="text-info"><strong>Status: TIN Match in Progress</strong></p>
+                                    <p>Your tax form has been completed successfully!</p>
+                                    <p>TIN verification with the IRS is currently in progress. This process may take up to 1 hour.</p>
+                                    <p>This status will update automatically when the verification is complete. You will receive an email notification.</p>
+                                }
+                                else if (_creatorTaxFormStatus == "Failed")
+                                {
+                                    <p class="text-danger"><strong>Status: Failed</strong></p>
+                                    <p>There was an issue with your TIN verification. The IRS could not match your TIN to the name provided.</p>
+                                    @if (_tinMatchCooldownRemaining.HasValue && _tinMatchCooldownRemaining.Value > TimeSpan.Zero)
+                                    {
+                                        <div class="alert alert-warning">
+                                            <strong>Retry W9 Submission:</strong> You must wait before submitting again.
+                                            <br />
+                                            <span class="fw-bold" style="font-size: 1.2em;">@_tinMatchCooldownRemaining.Value.ToString(@"hh\:mm\:ss")</span> remaining
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p>You may now resubmit your tax form. Please double-check that your TIN and name match exactly.</p>
+                                        <SfButton IsPrimary="true" Content="Retry W9 Submission" OnClick="NavigateToTaxForm" />
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="text-muted"><strong>Status: Not Started</strong></p>
+                                    <p>Your tax form request will be sent automatically as part of the onboarding process.</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (_creatorOnboardingStatus == "Failed")
+                    {
+                        <div class="creator-failed">
+                            <h4>Onboarding Failed</h4>
+                            <p class="text-danger">Unfortunately, your creator onboarding could not be completed.</p>
+                            <p>Please contact support for assistance or try again:</p>
+
+                            @if (!_startingOnboarding)
+                            {
+                                <SfButton IsPrimary="true" Content="Try Again" OnClick="StartCreatorOnboarding" />
+                            }
+                            else
+                            {
+                                <p>Preparing your signup...</p>
+                            }
+                        </div>
+                    }
+                </CardContent>
+            </SfCard>
+        }
+        else
+        {
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="Payout Email Address" />
+                <CardContent>
+                    <p class="mb-3">This email will be used to send stream payouts. It may be different from your login email.</p>
+                    <div class="mb-3">
+                        <label for="paypalEmail" class="e-label">Payout Email Address</label>
+                        <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
+                        <small class="form-text">Enter the email address where you want to receive payments.</small>
+                    </div>
+                    <SfButton IsPrimary="true" Content="Save Payout Email" OnClick="SavePayPalEmail" />
+                </CardContent>
+            </SfCard>
+
+            <SfCard CssClass="mb-4">
+                <CardHeader Title="Creator Profile" />
+                <CardContent>
+                    <div class="creator-active-info">
+                        <p class="text-success"><strong>✓ You are an active creator!</strong></p>
+                        <p>You can upload music to StreamTunes and earn compensation from streams.</p>
+
+                        <div class="mt-3">
+                            <div class="mb-3">
+                                <label for="editCreatorDisplayName" class="e-label">Display Name (max 20 characters)</label>
+                                <SfTextBox @bind-Value="_editCreatorDisplayName" ID="editCreatorDisplayName" Placeholder="Your artist/band name" CssClass="e-outline" MaxLength="20" />
+                                <small class="text-muted">This name will be shown on your song cards.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="editCreatorBio" class="e-label">Bio (optional)</label>
+                                <SfTextBox @bind-Value="_editCreatorBio" ID="editCreatorBio" Placeholder="Tell your listeners about yourself..." CssClass="e-outline" Multiline="true" MaxLength="1000" />
+                            </div>
+                            <SfButton IsPrimary="true" Content="Save Profile" OnClick="SaveCreatorProfile" Disabled="@_savingCreatorProfile" />
+                            @if (!string.IsNullOrEmpty(_creatorProfileMessage))
+                            {
+                                <span class="@(_creatorProfileSuccess ? "text-success" : "text-danger") ms-2">@_creatorProfileMessage</span>
+                            }
+                        </div>
+
+                        <div class="mt-3">
+                            <SfButton IsPrimary="true" Content="Upload Music" OnClick="NavigateToUpload" />
+                            <SfButton Content="Manage My Songs" OnClick="NavigateToManageSongs" CssClass="ms-2" />
+                        </div>
+
+                        <hr class="my-4" />
+
+                        <div class="stop-selling-section">
+                            <h5 class="text-danger">Stop Being a Creator</h5>
+                            <p>
+                                If you no longer want to share your music on StreamTunes, you can stop being a creator.
+                                <strong>Warning:</strong> This action will:
+                            </p>
+                            <ul>
+                                <li>Remove all your uploaded music from the platform</li>
+                                <li>Delete all your song files from storage</li>
+                                <li>Your music will no longer be available for streaming</li>
+                                <li>You will need to go through the creator onboarding process again if you want to share music in the future (you will not need to resubmit your tax form)</li>
+                            </ul>
+                            <p>
+                                See our <a href="/terms-of-use" target="_blank">Terms of Use</a> for more details.
+                            </p>
+
+                            @if (_showMaintenanceWarning)
+                            {
+                                <div class="alert alert-warning mb-3">
+                                    <strong>🔧 Tax Bandits Maintenance:</strong> Tax form updates are unavailable during the maintenance window (@_maintenanceStartLocal &ndash; @_maintenanceEndLocal @_maintenanceTimeZoneAbbreviation).
+                                </div>
+                            }
+
+                            @if (!_stoppingCreatorStatus)
+                            {
+                                <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ShowStopSellingConfirmation" />
+                                <SfButton CssClass="e-warning ms-2" Content="Update W8/W9 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
+                            }
+                            else
+                            {
+                                <p>Processing...</p>
+                            }
+                        </div>
+                    </div>
+                </CardContent>
+            </SfCard>
+        }
+    }
+</div>
+
+<SfDialog @ref="_stopSellingDialog" Width="500px" IsModal="true" ShowCloseIcon="true" Visible="false" Header="Stop Being a Creator">
+    <DialogTemplates>
+        <Content>
+            <p class="text-danger"><strong>Warning:</strong> This action cannot be undone!</p>
+            <p>By stopping your creator account:</p>
+            <ul>
+                <li>All your uploaded music will be permanently removed from the platform</li>
+                <li>All your song files will be deleted from storage</li>
+                <li>Your music will no longer be available for purchase or streaming</li>
+                <li><strong>Users who previously purchased your music will no longer be able to access it</strong></li>
+            </ul>
+            <p>To confirm, please type your email address below:</p>
+            <SfTextBox @bind-Value="_stopSellingConfirmEmail" Placeholder="Enter your email" CssClass="e-outline" />
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-danger" Content="Stop Being a Creator" OnClick="ConfirmStopSelling" Disabled="@(_stopSellingConfirmEmail != _userEmail)" />
+            <SfButton Content="Cancel" OnClick="CloseStopSellingDialog" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<SfDialog @ref="_creatorActivatedDialog" Width="450px" IsModal="true" ShowCloseIcon="false" Visible="false">
+    <DialogTemplates>
+        <Header>Creator Account Activated</Header>
+        <Content>
+            <div class="text-center mb-3">
+                <i class="fas fa-check-circle text-success" style="font-size: 3rem;"></i>
+            </div>
+            <p>Congratulations! Your creator account has been successfully activated.</p>
+            <p>To access your new creator features, you will need to log out and log back in so that your updated permissions take effect.</p>
+        </Content>
+        <FooterTemplate>
+            <SfButton IsPrimary="true" Content="Log Out" OnClick="LogoutAfterCreatorActivation" IconCss="fas fa-arrow-right-from-bracket" />
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

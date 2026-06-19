@@ -510,6 +510,7 @@ try
     app.MapStaticAssets();
     app.MapControllers();
     app.MapRazorPages(); // Add Razor Pages routing
+    app.MapGet("/LearnMore", () => Results.Redirect("/learnmore", permanent: true));
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
 

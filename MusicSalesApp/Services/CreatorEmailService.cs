@@ -70,6 +70,7 @@ public class CreatorEmailService : ICreatorEmailService
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
+            var creatorSettingsUrl = $"{baseUrl.TrimEnd('/')}/CreatorSettings";
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             // Email to the user
@@ -84,7 +85,7 @@ public class CreatorEmailService : ICreatorEmailService
                    related to the information you provided.</p>
                 <p><strong>What to do next:</strong></p>
                 <ol>
-                    <li>Go to <a href='{manageAccountUrl}'>Account Management</a></li>
+                    <li>Go to <a href='{creatorSettingsUrl}'>Creator / Artist Settings</a></li>
                     <li>Request a new tax form email</li>
                     <li>Complete the W-9 or W-8 form again</li>
                 </ol>
@@ -129,6 +130,7 @@ public class CreatorEmailService : ICreatorEmailService
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
+            var creatorSettingsUrl = $"{baseUrl.TrimEnd('/')}/CreatorSettings";
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             var reasonText = !string.IsNullOrWhiteSpace(failureReason)
@@ -146,7 +148,7 @@ public class CreatorEmailService : ICreatorEmailService
                 <p>This could be due to a TIN verification issue or other validation problem with the information provided.</p>
                 <p><strong>What to do next:</strong></p>
                 <ol>
-                    <li>Go to <a href='{manageAccountUrl}'>Account Management</a></li>
+                    <li>Go to <a href='{creatorSettingsUrl}'>Creator / Artist Settings</a></li>
                     <li>Request a new tax form email</li>
                     <li>Complete the {formType} form again</li>
                     <li>Double-check all the information you provide, especially your Tax Identification Number (TIN)</li>
@@ -174,6 +176,7 @@ public class CreatorEmailService : ICreatorEmailService
         try
         {
             var logoUrl = _emailService.GetLogoUrl();
+            var creatorSettingsUrl = $"{baseUrl.TrimEnd('/')}/CreatorSettings";
             var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
 
             // Email to user - keep it short, transactional, and avoid promotional language
@@ -184,8 +187,8 @@ public class CreatorEmailService : ICreatorEmailService
                 </div>
                 <h2>{formType} Form Status</h2>
                 <p>Your {formType} tax form has been processed. No further action is needed for this step.</p>
-                <p>You can view your account status and next steps on your 
-                   <a href='{manageAccountUrl}'>Account Management</a> page.</p>
+                <p>You can view your creator status and next steps on your
+                   <a href='{creatorSettingsUrl}'>Creator / Artist Settings</a> page.</p>
                 <p>If you have any questions, contact us at 
                    <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
                 <p style='color: #999; font-size: 12px;'>

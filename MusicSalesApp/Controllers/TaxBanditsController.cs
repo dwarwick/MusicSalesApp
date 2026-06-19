@@ -1509,7 +1509,7 @@ public class TaxBanditsController : ControllerBase
             };
 
             // Broadcast to all connected clients - the client will filter by UserId
-            await _hubContext.Clients.All.SendAsync("ReceiveWebhookStatus", statusMessage);
+            await _hubContext.Clients.All.SendAsync(SignalRMethodNames.ReceiveWebhookStatus, statusMessage);
 
             _logger.LogInformation(
                 "Broadcasted webhook status via SignalR: UserId={UserId}, Type={WebhookType}, Success={IsSuccess}",

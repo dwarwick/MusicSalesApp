@@ -80,7 +80,7 @@ public partial class SubmitTaxFormModel : BlazorBase
                 if (response == null || !response.Success)
                 {
                     Logger.LogWarning("Tax form token request failed: {Error}", response?.ErrorMessage ?? "null response");
-                    _errorMessage = response?.ErrorMessage ?? "Failed to load tax form. Please return to your account page and try again.";
+                    _errorMessage = response?.ErrorMessage ?? "Failed to load tax form. Please return to Creator / Artist Settings and try again.";
                     _loading = false;
                     await InvokeAsync(StateHasChanged);
                     return;
@@ -96,19 +96,19 @@ public partial class SubmitTaxFormModel : BlazorBase
                 _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Creator/SubmitTaxForm.razor.js");
                 
                 var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
-                Logger.LogInformation("Initializing TaxBandits Drop-in UI with return URL: {ReturnUrl}", $"{baseUrl}/manage-account");
+                Logger.LogInformation("Initializing TaxBandits Drop-in UI with return URL: {ReturnUrl}", $"{baseUrl}/CreatorSettings");
                 await _jsModule.InvokeVoidAsync("initTaxForm",
                     response.TransientToken,
                     response.PayeeRef,
                     response.BusinessId,
                     response.ScriptUrl,
-                    $"{baseUrl}/manage-account",
+                    $"{baseUrl}/CreatorSettings",
                     DotNetObjectReference.Create(this));
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error loading tax form");
-                _errorMessage = "An error occurred while loading the tax form. Please return to your account page and try again.";
+                _errorMessage = "An error occurred while loading the tax form. Please return to Creator / Artist Settings and try again.";
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
             }
@@ -122,7 +122,7 @@ public partial class SubmitTaxFormModel : BlazorBase
     public void OnTaxFormComplete(string status)
     {
         Logger.LogInformation("Tax form completed with status: {Status}", status);
-        NavigationManager.NavigateTo("/manage-account", forceLoad: true);
+        NavigationManager.NavigateTo("/CreatorSettings", forceLoad: true);
     }
 }
 
