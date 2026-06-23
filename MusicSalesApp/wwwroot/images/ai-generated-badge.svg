@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title desc">
-  <title id="title">AI generated</title>
-  <desc id="desc">Badge used to identify AI-generated songs.</desc>
-  <circle cx="24" cy="24" r="20.5" fill="#1db954" fill-opacity="0.9"/>
-  <circle cx="24" cy="24" r="20.5" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="1.8"/>
-  <text x="24" y="22" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15.5" font-weight="800" fill="#ffffff">AI</text>
-  <text x="24" y="31.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="4.4" font-weight="700" letter-spacing="0.85" fill="#ffffff">GENERATED</text>
-</svg>

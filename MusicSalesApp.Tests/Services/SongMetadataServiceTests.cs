@@ -245,6 +245,8 @@ public class SongMetadataServiceTests
             Mp3BlobPath = "track/ai-track.mp3",
             Genre = "Pop",
             IsAiGenerated = false,
+            IsAiVocals = false,
+            IsAiLyrics = false,
             IsActive = true,
             IsEnabled = true,
             CreatorId = 1
@@ -258,16 +260,22 @@ public class SongMetadataServiceTests
             Mp3BlobPath = "track/ai-track.mp3",
             Genre = "Pop",
             IsAiGenerated = true,
+            IsAiVocals = true,
+            IsAiLyrics = true,
             CreatorId = 1
         };
 
         var result = await _service.UpsertAsync(updatedMetadata);
 
         Assert.That(result.IsAiGenerated, Is.True);
+        Assert.That(result.IsAiVocals, Is.True);
+        Assert.That(result.IsAiLyrics, Is.True);
 
         await using var verifyContext = await _contextFactory.CreateDbContextAsync();
         var saved = await verifyContext.SongMetadata.FirstAsync(s => s.BlobPath == "track/ai-track.mp3");
         Assert.That(saved.IsAiGenerated, Is.True, "UpsertAsync should persist IsAiGenerated when updating an existing song");
+        Assert.That(saved.IsAiVocals, Is.True, "UpsertAsync should persist IsAiVocals when updating an existing song");
+        Assert.That(saved.IsAiLyrics, Is.True, "UpsertAsync should persist IsAiLyrics when updating an existing song");
     }
 
     [Test]

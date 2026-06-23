@@ -336,6 +336,9 @@ public class MusicControllerTests
                 TrackLength = 180.5,
                 DisplayOnHomePage = true,
                 DisplayOrder = 12,
+                IsAiGenerated = true,
+                IsAiVocals = true,
+                IsAiLyrics = true,
                 CreatorId = 77,
                 Creator = new Creator { Id = 77, UserId = 88, StreamQualifyingSeconds = 65 }
             },
@@ -370,6 +373,9 @@ public class MusicControllerTests
         Assert.That(songs[0].TrackLengthSeconds, Is.EqualTo(180.5));
         Assert.That(songs[0].DisplayOnHomePage, Is.True);
         Assert.That(songs[0].DisplayOrder, Is.EqualTo(12));
+        Assert.That(songs[0].IsAiGenerated, Is.True);
+        Assert.That(songs[0].IsAiVocals, Is.True);
+        Assert.That(songs[0].IsAiLyrics, Is.True);
         Assert.That(songs[0].CreatorId, Is.EqualTo(77));
         Assert.That(songs[0].CreatorUserId, Is.EqualTo(88));
         Assert.That(songs[0].StreamQualifyingSeconds, Is.EqualTo(65));
@@ -393,6 +399,9 @@ public class MusicControllerTests
                 Mp3BlobPath = "folder/test.mp3",
                 NumberOfStreams = 42,
                 TrackLength = 180.5,
+                IsAiGenerated = true,
+                IsAiVocals = true,
+                IsAiLyrics = true,
                 CreatorId = 77,
                 Creator = new Creator { Id = 77, UserId = 88, StreamQualifyingSeconds = 65 }
             }
@@ -411,6 +420,9 @@ public class MusicControllerTests
         var thresholdProperty = value.GetType().GetProperty("streamQualifyingSeconds");
         Assert.That(thresholdProperty, Is.Not.Null);
         Assert.That((int)thresholdProperty!.GetValue(value)!, Is.EqualTo(65));
+        Assert.That((bool)value.GetType().GetProperty("isAiGenerated")!.GetValue(value)!, Is.True);
+        Assert.That((bool)value.GetType().GetProperty("isAiVocals")!.GetValue(value)!, Is.True);
+        Assert.That((bool)value.GetType().GetProperty("isAiLyrics")!.GetValue(value)!, Is.True);
     }
 
     [Test]

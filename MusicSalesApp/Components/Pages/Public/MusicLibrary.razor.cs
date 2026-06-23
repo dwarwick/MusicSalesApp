@@ -17,7 +17,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 {
     private const double PREVIEW_DURATION_SECONDS = 60.0;
     protected const string AiFilterAll = "All";
-    protected const string AiFilterAi = "AI";
+    protected const string AiFilterAny = "AnyAI";
+    protected const string AiFilterAiMusic = "AIMusic";
+    protected const string AiFilterAiVocals = "AIVocals";
+    protected const string AiFilterAiLyrics = "AILyrics";
     protected const string AiFilterNonAi = "Non-AI";
 
     /// <summary>
@@ -83,8 +86,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected string _selectedAiFilter = AiFilterAll;
     protected bool _aiFilterDropdownOpen;
 
-    // Track AI-generated status by file name
+    // Track AI content disclosure status by file name
     private Dictionary<string, bool> _aiGeneratedMap = new Dictionary<string, bool>();
+    private Dictionary<string, bool> _aiVocalsMap = new Dictionary<string, bool>();
+    private Dictionary<string, bool> _aiLyricsMap = new Dictionary<string, bool>();
 
     private IJSObjectReference _jsModule;
     private DotNetObjectReference<MusicLibraryModel> _dotNetRef;
@@ -346,6 +351,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Clear home page songs tracking
             _homePageSongs.Clear();
             _aiGeneratedMap.Clear();
+            _aiVocalsMap.Clear();
+            _aiLyricsMap.Clear();
             _songDisplayOrders.Clear();
 
             // Build song art URL mappings and extract metadata for tracks
@@ -396,6 +403,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                         _songTitles[audioFile.Name] = songMeta.SongTitle;
                     }
                     _aiGeneratedMap[audioFile.Name] = songMeta.IsAiGenerated;
+                    _aiVocalsMap[audioFile.Name] = songMeta.IsAiVocals;
+                    _aiLyricsMap[audioFile.Name] = songMeta.IsAiLyrics;
                     // Store artist info
                     _artistInfoMap[audioFile.Name] = GetArtistDisplayInfo(songMeta);
                     // Store genre
@@ -580,7 +589,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     {
         return _selectedAiFilter switch
         {
-            AiFilterAi => "AI Music",
+            AiFilterAny => "Any AI",
+            AiFilterAiMusic => "AI Music",
+            AiFilterAiVocals => "AI Vocals",
+            AiFilterAiLyrics => "AI Lyrics",
             AiFilterNonAi => "Non-AI Music",
             _ => "Music Type"
         };
@@ -700,6 +712,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _aiGeneratedMap.TryGetValue(fileName, out var isAiGenerated) && isAiGenerated;
     }
 
+    protected bool IsAiVocalsSong(string fileName)
+    {
+        return _aiVocalsMap.TryGetValue(fileName, out var isAiVocals) && isAiVocals;
+    }
+
+    protected bool IsAiLyricsSong(string fileName)
+    {
+        return _aiLyricsMap.TryGetValue(fileName, out var isAiLyrics) && isAiLyrics;
+    }
+
     private bool MatchesAiFilter(StorageFileInfo file)
     {
         return MatchesAiFilter(file.Name);
@@ -707,12 +729,18 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     private bool MatchesAiFilter(string fileName)
     {
-        var isAiGenerated = IsAiGeneratedSong(fileName);
+        var isAiMusic = IsAiGeneratedSong(fileName);
+        var isAiVocals = IsAiVocalsSong(fileName);
+        var isAiLyrics = IsAiLyricsSong(fileName);
+        var hasAnyAi = isAiMusic || isAiVocals || isAiLyrics;
 
         return _selectedAiFilter switch
         {
-            AiFilterAi => isAiGenerated,
-            AiFilterNonAi => !isAiGenerated,
+            AiFilterAny => hasAnyAi,
+            AiFilterAiMusic => isAiMusic,
+            AiFilterAiVocals => isAiVocals,
+            AiFilterAiLyrics => isAiLyrics,
+            AiFilterNonAi => !hasAnyAi,
             _ => true
         };
     }

@@ -391,6 +391,8 @@ public class MusicLibraryTests : BUnitTestBase
                 Mp3BlobPath = "AiSong.mp3",
                 SongTitle = "AI Song",
                 IsAiGenerated = true,
+                IsAiVocals = true,
+                IsAiLyrics = true,
                 UpdatedAt = DateTime.Now
             }
         };
@@ -401,7 +403,53 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        Assert.That(cut.Markup, Does.Contain("ai-generated-badge.svg"));
+        Assert.That(cut.Markup, Does.Contain("music_icon_24.png"));
+        Assert.That(cut.Markup, Does.Contain("vocals_icon_24.png"));
+        Assert.That(cut.Markup, Does.Contain("lyrics_icon_24.png"));
+    }
+
+    [Test]
+    public void MusicLibrary_AiFilter_FiltersByAnyAndIndividualAiFlags()
+    {
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "AiMusic.mp3", SongTitle = "AI Music", IsAiGenerated = true, UpdatedAt = DateTime.Now },
+            new() { Id = 2, Mp3BlobPath = "AiVocals.mp3", SongTitle = "AI Vocals", IsAiVocals = true, UpdatedAt = DateTime.Now },
+            new() { Id = 3, Mp3BlobPath = "AiLyrics.mp3", SongTitle = "AI Lyrics", IsAiLyrics = true, UpdatedAt = DateTime.Now },
+            new() { Id = 4, Mp3BlobPath = "Human.mp3", SongTitle = "Human Song", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        FindFilterPill(cut, "Music Type").Click();
+
+        Assert.That(cut.Markup, Does.Contain("filter-pill-option-icon"));
+        Assert.That(cut.Markup, Does.Contain("music_icon_24.png"));
+        Assert.That(cut.Markup, Does.Contain("vocals_icon_24.png"));
+        Assert.That(cut.Markup, Does.Contain("lyrics_icon_24.png"));
+
+        cut.FindAll(".filter-pill-dropdown-option")
+            .First(option => option.TextContent.Contains("Any AI", StringComparison.Ordinal))
+            .Click();
+
+        Assert.That(cut.Markup, Does.Contain("AI Music"));
+        Assert.That(cut.Markup, Does.Contain("AI Vocals"));
+        Assert.That(cut.Markup, Does.Contain("AI Lyrics"));
+        Assert.That(cut.Markup, Does.Not.Contain("Human Song"));
+
+        FindFilterPill(cut, "Any AI").Click();
+        cut.FindAll(".filter-pill-dropdown-option")
+            .First(option => option.TextContent.Contains("AI Vocals", StringComparison.Ordinal))
+            .Click();
+
+        Assert.That(cut.Markup, Does.Not.Contain("AI Music"));
+        Assert.That(cut.Markup, Does.Contain("AI Vocals"));
+        Assert.That(cut.Markup, Does.Not.Contain("AI Lyrics"));
+        Assert.That(cut.Markup, Does.Not.Contain("Human Song"));
     }
 
     [Test]

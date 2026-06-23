@@ -27,6 +27,38 @@
     font-size: 14px;
 }
 
+.ai-content-badges {
+    gap: 4px;
+}
+
+.card-ai-content-badges {
+    margin-top: -8px;
+    margin-bottom: 10px;
+}
+
+.player-ai-content-badges {
+    margin-top: 8px;
+}
+
+.ai-content-badge-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.player-ai-content-badges .ai-content-badge-icon {
+    width: 36px;
+    height: 36px;
+}
+
+.filter-pill-option-label {
+    gap: 8px;
+}
+
+.filter-pill-option-icon {
+    width: 24px;
+    height: 24px;
+}
+
 /* 1. The Wrapper (Router Container) - Base styles for all breakpoints */
 .playlist-player-container {
     display: grid;

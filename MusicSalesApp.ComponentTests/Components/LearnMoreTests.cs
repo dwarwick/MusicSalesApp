@@ -39,7 +39,7 @@ public class LearnMoreTests : BUnitTestBase
     public void LearnMore_AnonymousUser_ShowsTopAndBottomCreatorAuthButtons()
     {
         var cut = TestContext.Render<LearnMore>();
-        cut.WaitForState(() => cut.Markup.Contains("Create Free Account"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Start Creator Signup"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));
         Assert.That(cut.FindAll("a.cta-button-login[href='/login?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));

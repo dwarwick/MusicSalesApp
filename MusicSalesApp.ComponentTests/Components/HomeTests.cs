@@ -127,7 +127,7 @@ public class HomeTests : BUnitTestBase
 
         // Assert - Verify Creator CTA is present for non-creators
         Assert.That(cut.Markup, Does.Contain("Monetize Your Music"));
-        Assert.That(cut.Markup, Does.Contain("Upload original tracks"));
+        Assert.That(cut.Markup, Does.Contain("Original music is welcome"));
         Assert.That(cut.Markup, Does.Contain("Get your songs heard worldwide"));
         Assert.That(cut.Markup, Does.Contain("Earn per stream"));
         Assert.That(cut.Markup, Does.Contain("Keep 100% control of your music rights"));
@@ -147,7 +147,7 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
         Assert.That(cut.Markup, Does.Contain("Log In"));
         Assert.That(cut.Markup, Does.Contain("Register"));
-        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=/CreatorSettings\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2FCreatorSettings\""));
     }
 
     [Test]

@@ -20,6 +20,8 @@ public class SongListItemDto
     public bool DisplayOnHomePage { get; set; }
     public int? DisplayOrder { get; set; }
     public bool IsAiGenerated { get; set; }
+    public bool IsAiVocals { get; set; }
+    public bool IsAiLyrics { get; set; }
     /// <summary>
     /// The Creator.Id that owns this song.
     /// Used by mobile clients to create tracked tip orders.

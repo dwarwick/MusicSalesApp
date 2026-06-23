@@ -16,6 +16,10 @@
     <SfButton CssClass="cta-primary" IconCss="fas fa-circle-info" OnClick=@(() => NavigationManager.NavigateTo("/uploadhelp"))>How does this work?</SfButton>
 </div>
 
+<SfMessage Severity="MessageSeverity.Info" CssClass="mb-3">
+    Audio files uploaded in formats other than MP3 will be converted to MP3 before storage. This conversion can add processing time, so larger files may take longer to finish uploading.
+</SfMessage>
+
 <div class="container-fluid">
     
     <label class="upload-box @(_isUploading ? "upload-box-disabled" : "") mb-2">

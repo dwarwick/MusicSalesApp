@@ -115,21 +115,19 @@
         align-items: center;
     }
 
-    .ai-generated-badge {
-        width: 38px;
-        height: 38px;
-        right: 6px;
-        bottom: 6px;
+    .ai-content-badge-icon {
+        width: 26px;
+        height: 26px;
     }
 
-    .player-art-badge-layout {
-        padding-right: 40px;
+    .player-ai-content-badges .ai-content-badge-icon {
+        width: 30px;
+        height: 30px;
     }
 
-    .player-ai-badge-offside {
-        width: 36px;
-        height: 36px;
-        bottom: 6px;
+    .filter-pill-option-icon {
+        width: 22px;
+        height: 22px;
     }
 
     .song-text-details {

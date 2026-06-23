@@ -159,13 +159,43 @@
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.ArtistName)" HeaderText="Artist Name" Width="150"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.Genre)" HeaderText="Genre" Width="100"></GridColumn>
-                <GridColumn Field="@nameof(SongAdminViewModel.IsAiGenerated)" HeaderText="AI" Width="100">
+                <GridColumn Field="@nameof(SongAdminViewModel.IsAiGenerated)" HeaderText="AI Music" Width="120" AllowFiltering="true" AllowSorting="true" AllowResizing="true">
                     <Template>
                         @{
                             var song = (context as SongAdminViewModel);
                             if (song.IsAiGenerated)
                             {
-                                <span class="badge bg-warning text-dark">AI</span>
+                                <span class="badge bg-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsAiVocals)" HeaderText="AI Vocals" Width="120" AllowFiltering="true" AllowSorting="true" AllowResizing="true">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsAiVocals)
+                            {
+                                <span class="badge bg-danger">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn Field="@nameof(SongAdminViewModel.IsAiLyrics)" HeaderText="AI Lyrics" Width="120" AllowFiltering="true" AllowSorting="true" AllowResizing="true">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+                            if (song.IsAiLyrics)
+                            {
+                                <span class="badge bg-primary">Yes</span>
                             }
                             else
                             {
@@ -325,8 +355,10 @@
                         }
                     </div>
 
-                    <div class="mb-3">
-                        <SfCheckBox @bind-Checked="_editIsAiGenerated" Label="Created with AI" CssClass="e-outline"></SfCheckBox>
+                    <div class="mb-3 d-flex flex-wrap gap-3">
+                        <SfCheckBox @bind-Checked="_editIsAiGenerated" Label="AI Music" CssClass="e-outline"></SfCheckBox>
+                        <SfCheckBox @bind-Checked="_editIsAiVocals" Label="AI Vocals" CssClass="e-outline"></SfCheckBox>
+                        <SfCheckBox @bind-Checked="_editIsAiLyrics" Label="AI Lyrics" CssClass="e-outline"></SfCheckBox>
                     </div>
 
                     <div class="mb-3">

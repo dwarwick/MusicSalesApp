@@ -508,6 +508,16 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         return _songMetadata?.IsAiGenerated == true;
     }
 
+    protected bool IsAiVocalsSong()
+    {
+        return _songMetadata?.IsAiVocals == true;
+    }
+
+    protected bool IsAiLyricsSong()
+    {
+        return _songMetadata?.IsAiLyrics == true;
+    }
+
     protected string GetArtistUrl()
     {
         return $"/artist/{Uri.EscapeDataString(GetArtistDisplayName())}";

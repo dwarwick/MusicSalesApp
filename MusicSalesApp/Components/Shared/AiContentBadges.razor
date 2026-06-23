@@ -1,0 +1,19 @@
+@inherits AiContentBadgesModel
+
+@if (HasAnyAiDisclosure)
+{
+    <div class="ai-content-badges @CssClass" aria-label="AI content disclosures">
+        @if (IsAiMusic)
+        {
+            <img src="/images/music_icon_24.png" alt="AI Music" title="AI Music" class="ai-content-badge-icon" />
+        }
+        @if (IsAiVocals)
+        {
+            <img src="/images/vocals_icon_24.png" alt="AI Vocals" title="AI Vocals" class="ai-content-badge-icon" />
+        }
+        @if (IsAiLyrics)
+        {
+            <img src="/images/lyrics_icon_24.png" alt="AI Lyrics" title="AI Lyrics" class="ai-content-badge-icon" />
+        }
+    </div>
+}

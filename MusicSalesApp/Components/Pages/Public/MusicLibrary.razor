@@ -28,9 +28,39 @@
                             <span class="filter-pill-option-indicator">✓</span>
                         }
                     </button>
-                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAi)" @onclick="() => SelectAiFilterOption(AiFilterAi)">
-                        <span>AI Music</span>
-                        @if (_selectedAiFilter == AiFilterAi)
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAny)" @onclick="() => SelectAiFilterOption(AiFilterAny)">
+                        <span>Any AI</span>
+                        @if (_selectedAiFilter == AiFilterAny)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiMusic)" @onclick="() => SelectAiFilterOption(AiFilterAiMusic)">
+                        <span class="filter-pill-option-label">
+                            <img src="/images/music_icon_24.png" alt="" class="filter-pill-option-icon" />
+                            <span>AI Music</span>
+                        </span>
+                        @if (_selectedAiFilter == AiFilterAiMusic)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiVocals)" @onclick="() => SelectAiFilterOption(AiFilterAiVocals)">
+                        <span class="filter-pill-option-label">
+                            <img src="/images/vocals_icon_24.png" alt="" class="filter-pill-option-icon" />
+                            <span>AI Vocals</span>
+                        </span>
+                        @if (_selectedAiFilter == AiFilterAiVocals)
+                        {
+                            <span class="filter-pill-option-indicator">✓</span>
+                        }
+                    </button>
+                    <button type="button" class="filter-pill-dropdown-option @GetAiFilterOptionClass(AiFilterAiLyrics)" @onclick="() => SelectAiFilterOption(AiFilterAiLyrics)">
+                        <span class="filter-pill-option-label">
+                            <img src="/images/lyrics_icon_24.png" alt="" class="filter-pill-option-icon" />
+                            <span>AI Lyrics</span>
+                        </span>
+                        @if (_selectedAiFilter == AiFilterAiLyrics)
                         {
                             <span class="filter-pill-option-indicator">✓</span>
                         }
@@ -95,11 +125,12 @@ else
                             <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
                         </div>
                     }
-                    @if (IsAiGeneratedSong(f.Name))
-                    {
-                        <img src="/images/ai-generated-badge.svg?v=2" alt="AI generated" class="ai-generated-badge" />
-                    }
                 </div>
+
+                <AiContentBadges IsAiMusic="IsAiGeneratedSong(f.Name)"
+                                  IsAiVocals="IsAiVocalsSong(f.Name)"
+                                  IsAiLyrics="IsAiLyricsSong(f.Name)"
+                                  CssClass="card-ai-content-badges" />
 
                 <!-- Song Title -->
                 <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>

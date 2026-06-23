@@ -49,6 +49,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     protected string _editArtistName = string.Empty;
     protected bool _editDisplayOnHomePage = false;
     protected bool _editIsAiGenerated = false;
+    protected bool _editIsAiVocals = false;
+    protected bool _editIsAiLyrics = false;
     protected IBrowserFile _songImageFile = null;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
@@ -154,6 +156,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     TrackLength = m.TrackLength,
                     DisplayOnHomePage = m.DisplayOnHomePage,
                     IsAiGenerated = m.IsAiGenerated,
+                    IsAiVocals = m.IsAiVocals,
+                    IsAiLyrics = m.IsAiLyrics,
                     IsEnabled = m.IsEnabled,
                     StatusReason = m.StatusReason ?? string.Empty,
                     IsImageSquare = m.IsImageSquare
@@ -185,6 +189,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
         _editIsAiGenerated = song.IsAiGenerated;
+        _editIsAiVocals = song.IsAiVocals;
+        _editIsAiLyrics = song.IsAiLyrics;
         _editIsDisabled = !song.IsEnabled;
         _editStatusReason = string.Empty; // Clear the reason field for new edits
         _songImageFile = null;
@@ -328,6 +334,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.Genre = _editGenre;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
                     existingMetadata.IsAiGenerated = _editIsAiGenerated;
+                    existingMetadata.IsAiVocals = _editIsAiVocals;
+                    existingMetadata.IsAiLyrics = _editIsAiLyrics;
                     existingMetadata.ImageWidth = CropOutputSize;
                     existingMetadata.ImageHeight = CropOutputSize;
                     await MetadataService.UpsertAsync(existingMetadata);
@@ -408,6 +416,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.Genre = _editGenre;
                     existingMetadata.DisplayOnHomePage = _editDisplayOnHomePage;
                     existingMetadata.IsAiGenerated = _editIsAiGenerated;
+                    existingMetadata.IsAiVocals = _editIsAiVocals;
+                    existingMetadata.IsAiLyrics = _editIsAiLyrics;
                     await MetadataService.UpsertAsync(existingMetadata);
                 }
                 else
@@ -421,7 +431,9 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                         IsAlbumCover = false,
                         Genre = _editGenre,
                         DisplayOnHomePage = _editDisplayOnHomePage,
-                        IsAiGenerated = _editIsAiGenerated
+                        IsAiGenerated = _editIsAiGenerated,
+                        IsAiVocals = _editIsAiVocals,
+                        IsAiLyrics = _editIsAiLyrics
                     });
                 }
             }
@@ -452,6 +464,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     // Update DisplayOnHomePage for all file types
                     metadata.DisplayOnHomePage = _editDisplayOnHomePage;
                     metadata.IsAiGenerated = _editIsAiGenerated;
+                    metadata.IsAiVocals = _editIsAiVocals;
+                    metadata.IsAiLyrics = _editIsAiLyrics;
 
                     // Update MP3 metadata
                     if (isMP3)
@@ -480,6 +494,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             _editingSong.Genre = _editGenre;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
             _editingSong.IsAiGenerated = _editIsAiGenerated;
+            _editingSong.IsAiVocals = _editIsAiVocals;
+            _editingSong.IsAiLyrics = _editIsAiLyrics;
             _editingSong.RawArtistName = _editArtistName;
 
             // Close modal and refresh

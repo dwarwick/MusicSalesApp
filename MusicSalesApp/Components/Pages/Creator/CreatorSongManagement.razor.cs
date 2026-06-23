@@ -32,6 +32,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected string _editSongTitle = string.Empty;
     protected string _editArtistName = string.Empty;
     protected bool _editIsAiGenerated = false;
+    protected bool _editIsAiVocals = false;
+    protected bool _editIsAiLyrics = false;
     protected List<string> _validationErrors = new();
     protected bool _isSaving = false;
     protected IBrowserFile _songImageFile = null;
@@ -150,6 +152,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             TrackLength = m.TrackLength,
             DisplayOnHomePage = m.DisplayOnHomePage,
             IsAiGenerated = m.IsAiGenerated,
+            IsAiVocals = m.IsAiVocals,
+            IsAiLyrics = m.IsAiLyrics,
             CreatorId = m.CreatorId,
             IsActive = m.IsActive,
             IsEnabled = m.IsEnabled,
@@ -288,6 +292,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _editIsAiGenerated = song.IsAiGenerated;
+        _editIsAiVocals = song.IsAiVocals;
+        _editIsAiLyrics = song.IsAiLyrics;
         _editPersonaId = song.PersonaId;
         _songImageFile = null;
         _newSongImagePreviewUrl = null;
@@ -586,6 +592,8 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     metadata.SongTitle = _editSongTitle;
                     metadata.Genre = _editGenre;
                     metadata.IsAiGenerated = _editIsAiGenerated;
+                    metadata.IsAiVocals = _editIsAiVocals;
+                    metadata.IsAiLyrics = _editIsAiLyrics;
                     // Strip email domain if artist name contains @ to avoid persisting email addresses
                     var artistNameToSave = _editArtistName;
                     if (!string.IsNullOrWhiteSpace(artistNameToSave) && artistNameToSave.Contains('@'))

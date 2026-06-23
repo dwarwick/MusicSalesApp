@@ -27,7 +27,7 @@ else if (!string.IsNullOrEmpty(_error))
                     @{
                         var displayImageUrl = GetTrackImageUrl(_currentTrackIndex);
                     }
-                    <div class="player-art-badge-layout">
+                    <div class="player-art-content">
                         <div class="player-art-shell">
                             @if (!string.IsNullOrEmpty(displayImageUrl))
                             {
@@ -40,10 +40,10 @@ else if (!string.IsNullOrEmpty(_error))
                                 </div>
                             }
                         </div>
-                        @if (IsCurrentTrackAiGenerated())
-                        {
-                            <img src="/images/ai-generated-badge.svg?v=2" alt="AI generated" class="player-ai-badge-offside" />
-                        }
+                        <AiContentBadges IsAiMusic="IsCurrentTrackAiGenerated()"
+                                          IsAiVocals="IsCurrentTrackAiVocals()"
+                                          IsAiLyrics="IsCurrentTrackAiLyrics()"
+                                          CssClass="player-ai-content-badges" />
                     </div>
                     <h1 class="song-title">@GetDisplayTitle()</h1>
                 </div>

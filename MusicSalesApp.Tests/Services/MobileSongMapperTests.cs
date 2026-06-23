@@ -54,4 +54,28 @@ public class MobileSongMapperTests
 
         Assert.That(mapped.StreamQualifyingSeconds, Is.EqualTo(45));
     }
+
+    [Test]
+    public void MapToSongDtos_IncludesAiDisclosureFields()
+    {
+        var song = new SongMetadata
+        {
+            Id = 10,
+            SongTitle = "AI Disclosure Song",
+            Mp3BlobPath = "folder/test.mp3",
+            IsAiGenerated = true,
+            IsAiVocals = true,
+            IsAiLyrics = true
+        };
+
+        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), defaultStreamQualifyingSeconds: 45);
+        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), userPlaylistId: 9, defaultStreamQualifyingSeconds: 45);
+
+        Assert.That(listItem.IsAiGenerated, Is.True);
+        Assert.That(listItem.IsAiVocals, Is.True);
+        Assert.That(listItem.IsAiLyrics, Is.True);
+        Assert.That(playlistItem.IsAiGenerated, Is.True);
+        Assert.That(playlistItem.IsAiVocals, Is.True);
+        Assert.That(playlistItem.IsAiLyrics, Is.True);
+    }
 }

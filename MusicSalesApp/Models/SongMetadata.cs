@@ -101,9 +101,19 @@ public class SongMetadata
     public int? DisplayOrder { get; set; }
 
     /// <summary>
-    /// Indicates whether this song was created using AI.
+    /// Indicates whether this song's music was created using AI.
     /// </summary>
     public bool IsAiGenerated { get; set; }
+
+    /// <summary>
+    /// Indicates whether this song uses AI-generated vocals.
+    /// </summary>
+    public bool IsAiVocals { get; set; }
+
+    /// <summary>
+    /// Indicates whether this song uses AI-generated lyrics.
+    /// </summary>
+    public bool IsAiLyrics { get; set; }
 
     /// <summary>
     /// Indicates whether this song is active and available for playback.

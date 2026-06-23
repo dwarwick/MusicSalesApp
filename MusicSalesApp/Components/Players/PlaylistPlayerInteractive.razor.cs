@@ -1423,6 +1423,16 @@ namespace MusicSalesApp.Components.Players
             return GetCurrentTrackMetadata()?.IsAiGenerated == true;
         }
 
+        protected bool IsCurrentTrackAiVocals()
+        {
+            return GetCurrentTrackMetadata()?.IsAiVocals == true;
+        }
+
+        protected bool IsCurrentTrackAiLyrics()
+        {
+            return GetCurrentTrackMetadata()?.IsAiLyrics == true;
+        }
+
         protected double? GetTrackLengthSeconds(int index)
         {
             if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return null;

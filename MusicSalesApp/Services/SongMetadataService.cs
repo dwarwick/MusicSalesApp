@@ -191,6 +191,8 @@ namespace MusicSalesApp.Services
                 existing.ImageBlobPath = metadata.ImageBlobPath;
                 existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
                 existing.IsAiGenerated = metadata.IsAiGenerated;
+                existing.IsAiVocals = metadata.IsAiVocals;
+                existing.IsAiLyrics = metadata.IsAiLyrics;
                 existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
                 existing.ArtistName = metadata.ArtistName;
                 existing.PersonaId = metadata.PersonaId;

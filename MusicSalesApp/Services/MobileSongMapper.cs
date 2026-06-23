@@ -46,6 +46,8 @@ public class MobileSongMapper : IMobileSongMapper
             DisplayOnHomePage = m.DisplayOnHomePage,
             DisplayOrder = m.DisplayOrder,
             IsAiGenerated = m.IsAiGenerated,
+            IsAiVocals = m.IsAiVocals,
+            IsAiLyrics = m.IsAiLyrics,
             CreatorId = m.CreatorId,
             CreatorUserId = m.Creator?.UserId
         };
@@ -70,6 +72,8 @@ public class MobileSongMapper : IMobileSongMapper
             DisplayOnHomePage = m.DisplayOnHomePage,
             DisplayOrder = m.DisplayOrder,
             IsAiGenerated = m.IsAiGenerated,
+            IsAiVocals = m.IsAiVocals,
+            IsAiLyrics = m.IsAiLyrics,
             CreatorId = m.CreatorId,
             CreatorUserId = m.Creator?.UserId
         };

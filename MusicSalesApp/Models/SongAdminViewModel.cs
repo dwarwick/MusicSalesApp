@@ -14,6 +14,8 @@ public class SongAdminViewModel
     public double? TrackLength { get; set; }
     public bool DisplayOnHomePage { get; set; }
     public bool IsAiGenerated { get; set; }
+    public bool IsAiVocals { get; set; }
+    public bool IsAiLyrics { get; set; }
     public int NumberOfStreams { get; set; }
 
     /// <summary>
