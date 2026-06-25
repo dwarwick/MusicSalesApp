@@ -18,7 +18,6 @@ public class CreatorController : ControllerBase
 {
     private readonly ICreatorService _creatorService;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ILogger<CreatorController> _logger;
     private readonly ITaxBanditsService _taxBanditsService;
     private readonly IConfiguration _configuration;
@@ -26,14 +25,12 @@ public class CreatorController : ControllerBase
     public CreatorController(
         ICreatorService creatorService,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<int>> roleManager,
         ILogger<CreatorController> logger,
         ITaxBanditsService taxBanditsService,
         IConfiguration configuration)
     {
         _creatorService = creatorService;
         _userManager = userManager;
-        _roleManager = roleManager;
         _logger = logger;
         _taxBanditsService = taxBanditsService;
         _configuration = configuration;
@@ -76,8 +73,8 @@ public class CreatorController : ControllerBase
     }
 
     /// <summary>
-    /// Starts the creator onboarding process. Now simplified to just require PayPal email and affirmation.
-    /// No longer requires PayPal business account onboarding.
+    /// Starts the creator onboarding process.
+    /// PayPal confirmation and tax form completion are optional at signup, but required before payouts.
     /// </summary>
     [HttpPost("start-onboarding")]
     public async Task<IActionResult> StartOnboarding([FromBody] StartOnboardingRequest request)
@@ -85,134 +82,37 @@ public class CreatorController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        if (string.IsNullOrWhiteSpace(user.Email))
+        var result = await _creatorService.StartOnboardingAsync(new CreatorOnboardingInput
         {
-            return BadRequest("User must have a verified email address to become a creator.");
-        }
+            UserId = user.Id,
+            UserEmail = user.Email,
+            DisplayName = request.DisplayName,
+            Bio = request.Bio,
+            PayPalEmail = request.PayPalEmail,
+            PayPalAccountAffirmed = request.PayPalAccountAffirmed,
+            LocationCertification = request.LocationCertification,
+            AcknowledgmentAccepted = request.AcknowledgmentAccepted,
+            PayoutRequirementsAcknowledged = request.PayoutRequirementsAcknowledged,
+            SubmitTaxFormNow = request.SubmitTaxFormNow
+        });
 
-        // Validate PayPal email is provided
-        if (string.IsNullOrWhiteSpace(request.PayPalEmail))
+        if (!result.Success)
         {
-            return BadRequest("PayPal email address is required to become a creator.");
+            return BadRequest(result.ErrorMessage);
         }
-
-        // Validate that the user has affirmed they have a valid PayPal account
-        if (!request.PayPalAccountAffirmed)
-        {
-            return BadRequest("You must affirm that you have a valid PayPal account in good standing to receive payments for streams.");
-        }
-
-        // Validate location certification
-        if (request.LocationCertification == CreatorLocationCertification.None)
-        {
-            return BadRequest("You must select a creator location and tax certification option.");
-        }
-
-        // Validate acknowledgment
-        if (!request.AcknowledgmentAccepted)
-        {
-            return BadRequest("You must accept the acknowledgment to proceed.");
-        }
-
-        // Check if user already has a creator record
-        var existingCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-        if (existingCreator != null && existingCreator.IsActive)
-        {
-            return BadRequest("You are already an active creator.");
-        }
-
-        // Create or update creator record
-        Creator creator;
-        if (existingCreator == null)
-        {
-            creator = await _creatorService.CreateCreatorAsync(user.Id, request.DisplayName, request.Bio);
-        }
-        else
-        {
-            creator = existingCreator;
-            if (!string.IsNullOrWhiteSpace(request.DisplayName))
-            {
-                await _creatorService.UpdateCreatorProfileAsync(creator.Id, request.DisplayName, request.Bio);
-                creator.DisplayName = request.DisplayName;
-                creator.Bio = request.Bio;
-            }
-        }
-
-        // Store attestation data
-        await _creatorService.UpdateLocationCertificationAsync(
-            creator.Id, 
-            request.LocationCertification, 
-            request.AcknowledgmentAccepted);
-
-        // Handle ineligible case: non-U.S. person performing activities in the U.S.
-        if (request.LocationCertification == CreatorLocationCertification.NonUSPersonInsideUS)
-        {
-            await _creatorService.UpdateOnboardingStatusAsync(creator.Id, CreatorOnboardingStatus.Ineligible);
-            _logger.LogInformation("Creator {CreatorId} for user {UserId} marked as Ineligible - non-U.S. person performing activities in the U.S.", 
-                creator.Id, user.Id);
-            return Ok(new StartOnboardingResponse
-            {
-                Success = true,
-                IsActive = false,
-                TaxFormPending = false,
-                IsIneligible = true
-            });
-        }
-
-        // Update creator with PayPal email, affirmation, and set OnboardingStatus to Completed.
-        // Uses the service method to ensure an atomic, logged state transition.
-        // Previously this was done via direct DbContext manipulation which could silently fail
-        // for returning creators whose OnboardingStatus was Suspended.
-        var resetCreator = await _creatorService.ResetCreatorOnboardingAsync(creator.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
-
-        // Returning creators who have already completed a tax form do not need to fill out another one.
-        // Activate them directly instead of requiring a new W8/W9 submission.
-        if (resetCreator.TaxFormStatus == TaxFormStatus.Completed)
-        {
-            await _creatorService.ActivateCreatorAsync(creator.Id);
-            var activatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-
-            _logger.LogInformation("Returning creator re-activated for user {UserId} (tax form already completed), PayPal email: {PayPalEmail}",
-                user.Id, request.PayPalEmail);
-
-            return Ok(new StartOnboardingResponse
-            {
-                Success = true,
-                IsActive = activatedCreator?.IsActive ?? false,
-                TaxFormPending = false
-            });
-        }
-
-        // Store the PayeeRef (email) used for the W-9/W-8 request.
-        // The creator will complete the tax form via the embedded Drop-in UI on the /submittaxform page,
-        // and the TaxBandits webhook will set the creator status to Complete.
-        if (!string.IsNullOrWhiteSpace(user.Email))
-        {
-            await _creatorService.UpdateTaxBanditsPayeeRefAsync(creator.Id, user.Email);
-        }
-
-        // Set tax form status to Pending — the user will be redirected to the embedded form page
-        await _creatorService.UpdateTaxFormStatusAsync(creator.Id, TaxFormStatus.Pending);
-
-        // Reload to get the latest state including tax form status.
-        // The creator will NOT be activated here — activation happens only when the
-        // TaxBandits webhook confirms the tax form is complete.
-        var updatedCreator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-
-        _logger.LogInformation("Started creator onboarding for user {UserId}, PayPal email: {PayPalEmail}, PayPal affirmed: {PayPalAffirmed}", 
-            user.Id, request.PayPalEmail, request.PayPalAccountAffirmed);
 
         return Ok(new StartOnboardingResponse
         {
-            Success = true,
-            IsActive = updatedCreator?.IsActive ?? false,
-            TaxFormPending = updatedCreator?.TaxFormStatus == TaxFormStatus.Pending
+            Success = result.Success,
+            IsActive = result.IsActive,
+            TaxFormPending = result.TaxFormPending,
+            IsIneligible = result.IsIneligible
         });
     }
 
     /// <summary>
     /// Completes the creator onboarding. This is now a simplified check that returns the current status.
-    /// The PayPal business account flow has been removed - we just need tax form completion.
+    /// PayPal and tax form completion are payout requirements, not creator activation requirements.
     /// </summary>
     [HttpPost("complete-onboarding")]
     public async Task<IActionResult> CompleteOnboarding([FromBody] CompleteOnboardingRequest request)
@@ -220,51 +120,20 @@ public class CreatorController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-        if (creator == null)
+        var result = await _creatorService.CompleteOnboardingAsync(user.Id);
+        if (!result.Success)
         {
-            return BadRequest("Creator record not found. Please start the onboarding process first.");
+            return BadRequest(result.ErrorMessage);
         }
 
-        // Check if the creator has completed PayPal affirmation
-        if (!creator.PayPalAccountAffirmed)
-        {
-            return BadRequest("Please complete the creator signup process first.");
-        }
-
-        // Check if both PayPal affirmation and tax form are complete
-        if (creator.OnboardingStatus == CreatorOnboardingStatus.Completed && 
-            creator.TaxFormStatus == TaxFormStatus.Completed)
-        {
-            // Activate the creator if not already active
-            if (!creator.IsActive)
-            {
-                await _creatorService.ActivateCreatorAsync(creator.Id);
-                creator = await _creatorService.GetCreatorByUserIdAsync(user.Id);
-            }
-
-            // Ensure the Creator role exists
-            if (!await _roleManager.RoleExistsAsync(Roles.Creator))
-            {
-                await _roleManager.CreateAsync(new IdentityRole<int> { Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpper() });
-            }
-
-            // Add Creator role if user doesn't already have it
-            if (!await _userManager.IsInRoleAsync(user, Roles.Creator))
-            {
-                await _userManager.AddToRoleAsync(user, Roles.Creator);
-                _logger.LogInformation("Added Creator role to user {UserId}", user.Id);
-            }
-        }
-
-        _logger.LogInformation("Checked creator onboarding status for user {UserId}, IsActive: {IsActive}", user.Id, creator?.IsActive);
+        _logger.LogInformation("Checked creator onboarding status for user {UserId}, IsActive: {IsActive}", user.Id, result.IsActive);
 
         return Ok(new CompleteOnboardingResponse
         {
-            Success = true,
-            IsActive = creator?.IsActive ?? false,
-            PaymentsReceivable = creator?.PaymentsReceivable ?? false,
-            PrimaryEmailConfirmed = creator?.PrimaryEmailConfirmed ?? false
+            Success = result.Success,
+            IsActive = result.IsActive,
+            PaymentsReceivable = result.PaymentsReceivable,
+            PrimaryEmailConfirmed = result.PrimaryEmailConfirmed
         });
     }
 
@@ -607,6 +476,14 @@ public class StartOnboardingRequest
     /// Whether the creator has accepted the acknowledgment checkbox.
     /// </summary>
     public bool AcknowledgmentAccepted { get; set; }
+    /// <summary>
+    /// Whether the creator acknowledges PayPal and tax form completion are required before payouts.
+    /// </summary>
+    public bool PayoutRequirementsAcknowledged { get; set; }
+    /// <summary>
+    /// Whether the creator wants to complete the W-9/W-8 tax form immediately after signup.
+    /// </summary>
+    public bool SubmitTaxFormNow { get; set; }
 }
 
 public class StartOnboardingResponse

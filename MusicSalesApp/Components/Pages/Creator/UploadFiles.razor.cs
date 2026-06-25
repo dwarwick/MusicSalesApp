@@ -389,6 +389,22 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
         }
         }
+        catch (JSException ex) when (
+            ex.Message.Contains("There is no file with ID", StringComparison.OrdinalIgnoreCase) &&
+            ex.Message.Contains("file list may have changed", StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.LogWarning(ex, "UploadFiles: Browser file list changed before selected files could be buffered.");
+            _isUploading = false;
+            _validationErrorMessage = "The browser changed the selected file list before StreamTunes could read it. Please drop the files again.";
+
+            try
+            {
+                await JS.InvokeVoidAsync("uploadFilesHelper.disableBeforeUnload");
+            }
+            catch (JSDisconnectedException) { }
+
+            await InvokeAsync(StateHasChanged);
+        }
         finally
         {
             _isProcessingFiles = false;

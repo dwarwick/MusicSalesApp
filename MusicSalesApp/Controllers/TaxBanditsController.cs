@@ -26,7 +26,6 @@ public class TaxBanditsController : ControllerBase
 {
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole<int>> _roleManager;
     private readonly ICreatorService _creatorService;
     private readonly ICreatorEmailService _creatorEmailService;
     private readonly ITaxBanditsService _taxBanditsService;
@@ -57,7 +56,6 @@ public class TaxBanditsController : ControllerBase
     public TaxBanditsController(
         IDbContextFactory<AppDbContext> dbContextFactory,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<int>> roleManager,
         ICreatorService creatorService,
         ICreatorEmailService creatorEmailService,
         ITaxBanditsService taxBanditsService,
@@ -68,7 +66,6 @@ public class TaxBanditsController : ControllerBase
     {
         _dbContextFactory = dbContextFactory;
         _userManager = userManager;
-        _roleManager = roleManager;
         _creatorService = creatorService;
         _creatorEmailService = creatorEmailService;
         _taxBanditsService = taxBanditsService;
@@ -658,7 +655,7 @@ public class TaxBanditsController : ControllerBase
             w9Request.CompletedAt = DateTime.UtcNow;
 
             _logger.LogInformation(
-                "Instant TIN Match passed for user {UserId}. Proceeding with creator role assignment. BackupWithholding={BackupWithholding}",
+                "Instant TIN Match passed for user {UserId}. Updating creator tax payout readiness. BackupWithholding={BackupWithholding}",
                 w9Request.UserId, subjectToBackupWithholding);
 
             Guid? submissionGuid = null;
@@ -928,7 +925,7 @@ public class TaxBanditsController : ControllerBase
                 w9Request.CompletedAt = DateTime.UtcNow;
 
                 _logger.LogInformation(
-                    "W-8BEN completed for user {UserId}. Proceeding with creator role assignment and tax data extraction.",
+                    "W-8BEN completed for user {UserId}. Updating creator tax payout readiness and tax data.",
                     w9Request.UserId);
 
                 // Extract W-8BEN tax residency data from FormData
@@ -1355,56 +1352,9 @@ public class TaxBanditsController : ControllerBase
                 return;
             }
 
-            // Check if PayPal onboarding is also complete.
-            // For returning creators who re-signed up, OnboardingStatus should be Completed.
-            // However, if it's Suspended/ConsentRevoked but PayPalAccountAffirmed is true,
-            // it means the creator completed the re-signup form but OnboardingStatus wasn't
-            // properly reset — fix it defensively and proceed with activation.
-            if (creator.OnboardingStatus != CreatorOnboardingStatus.Completed)
-            {
-                if (creator.PayPalAccountAffirmed)
-                {
-                    _logger.LogWarning(
-                        "User {UserId} completed tax form and has PayPalAccountAffirmed=true but OnboardingStatus={Status}. Resetting to Completed.",
-                        userId, creator.OnboardingStatus);
-                    await _creatorService.UpdateOnboardingStatusAsync(creator.Id, CreatorOnboardingStatus.Completed);
-                }
-                else
-                {
-                    _logger.LogInformation(
-                        "User {UserId} completed tax form but PayPal onboarding is not complete. PayPal Status: {PayPalStatus}, Tax Form Status: {TaxFormStatus}",
-                        userId, creator.OnboardingStatus, creator.TaxFormStatus);
-                    return;
-                }
-            }
-
-            // Both onboarding processes are complete - add Creator role
             _logger.LogInformation(
-                "Both PayPal and tax form onboarding complete for user {UserId}. Adding Creator role.",
-                userId);
-
-            // Ensure the Creator role exists
-            var normalizedRoleName = _roleManager.NormalizeKey(Common.Helpers.Roles.Creator);
-            if (!await _roleManager.RoleExistsAsync(Common.Helpers.Roles.Creator))
-            {
-                await _roleManager.CreateAsync(new IdentityRole<int> 
-                { 
-                    Name = Common.Helpers.Roles.Creator, 
-                    NormalizedName = normalizedRoleName
-                });
-            }
-
-            // Add Creator role if user doesn't already have it
-            var user = await _userManager.FindByIdAsync(userId.ToString());
-            if (user != null && !await _userManager.IsInRoleAsync(user, Common.Helpers.Roles.Creator))
-            {
-                await _userManager.AddToRoleAsync(user, Common.Helpers.Roles.Creator);
-                _logger.LogInformation("Added Creator role to user {UserId} after both PayPal and tax form completion", userId);
-            }
-
-            // Activate the creator
-            await _creatorService.ActivateCreatorAsync(creator.Id);
-            _logger.LogInformation("Activated creator {CreatorId} for user {UserId}", creator.Id, userId);
+                "Tax form completed for creator {CreatorId}, user {UserId}. Creator activation is handled during creator signup.",
+                creator.Id, userId);
         }
         catch (Exception ex)
         {

@@ -8,6 +8,16 @@ namespace MusicSalesApp.Services;
 public interface ICreatorEmailService
 {
     /// <summary>
+    /// Sends a welcome email when a user becomes an active creator.
+    /// </summary>
+    /// <param name="userEmail">The creator's email address.</param>
+    /// <param name="baseUrl">The base URL for links.</param>
+    /// <param name="payPalReady">Whether PayPal payout confirmation is already complete.</param>
+    /// <param name="taxFormReady">Whether the creator's tax form is already complete.</param>
+    /// <returns>True if the email was sent successfully.</returns>
+    Task<bool> SendCreatorWelcomeEmailAsync(string userEmail, string baseUrl, bool payPalReady, bool taxFormReady);
+
+    /// <summary>
     /// Sends an email to the creator when we receive a W-9/W-8 webhook response.
     /// Notifies them that we received the response and are analyzing it.
     /// </summary>

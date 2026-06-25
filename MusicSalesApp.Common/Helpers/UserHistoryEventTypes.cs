@@ -27,6 +27,7 @@ public static class UserHistoryEventTypes
     public const string CreatorAccountRegistered = "CreatorAccountRegistered";
     public const string CreatorSettingsViewed = "CreatorSettingsViewed";
     public const string CreatorSignupStarted = "CreatorSignupStarted";
+    public const string CreatorPayoutRequirementsAcknowledged = "CreatorPayoutRequirementsAcknowledged";
     public const string CreatorTaxFormLoaded = "CreatorTaxFormLoaded";
     public const string CreatorTaxFormCompletedOrReturned = "CreatorTaxFormCompletedOrReturned";
     public const string CreatorActivated = "CreatorActivated";

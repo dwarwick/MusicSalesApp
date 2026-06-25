@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -366,6 +367,25 @@ public class StreamPayoutService : IStreamPayoutService
         // Total to send via PayPal = net stream amount + net tip amount (withholding applies to both)
         var totalPayPalAmount = totalNetAmount + netTipAmount;
 
+        var missingPayoutTasks = await GetMissingPayoutRequirementTasksAsync(context, creator);
+        if (missingPayoutTasks.Count > 0)
+        {
+            await SendBlockedPayoutEmailsAsync(
+                creator,
+                totalPayPalAmount,
+                totalGrossAmount,
+                totalTipAmount,
+                missingPayoutTasks);
+
+            _logger.LogInformation(
+                "Blocked payout for creator {CreatorId}: Amount ${Amount:F2} USD, MissingTasks={MissingTasks}",
+                creator.Id,
+                totalPayPalAmount,
+                string.Join("; ", missingPayoutTasks));
+
+            return null;
+        }
+
         // Detailed logging for development/sandbox mode - Calculated data before PayPal call
         var sandboxMode = _configuration.GetValue<bool>("PayPal:SandboxMode", true);
         if (sandboxMode)
@@ -457,6 +477,166 @@ public class StreamPayoutService : IStreamPayoutService
             WithheldAmount = totalWithheldAmount + tipWithheldAmount,
             StreamPayoutIds = payoutIds
         };
+    }
+
+    private async Task<List<string>> GetMissingPayoutRequirementTasksAsync(AppDbContext context, Creator creator)
+    {
+        var missingTasks = new List<string>();
+
+        if (!creator.IsActive || creator.OnboardingStatus != CreatorOnboardingStatus.Completed)
+        {
+            missingTasks.Add("active creator status");
+        }
+
+        var creatorRoleId = await context.Roles
+            .Where(r => r.Name == Roles.Creator)
+            .Select(r => (int?)r.Id)
+            .FirstOrDefaultAsync();
+
+        var hasCreatorRole = creatorRoleId.HasValue &&
+            await context.UserRoles.AnyAsync(ur => ur.UserId == creator.UserId && ur.RoleId == creatorRoleId.Value);
+
+        if (!hasCreatorRole)
+        {
+            missingTasks.Add("Creator role");
+        }
+
+        if (string.IsNullOrWhiteSpace(creator.PayPalEmail) || !creator.PayPalAccountAffirmed)
+        {
+            missingTasks.Add("confirmed PayPal payout email");
+        }
+
+        if (creator.TaxFormStatus != TaxFormStatus.Completed)
+        {
+            missingTasks.Add("completed W-9 or W-8 tax form");
+        }
+
+        if (!creator.AcknowledgmentAccepted ||
+            (creator.LocationCertification != CreatorLocationCertification.USPerson &&
+             creator.LocationCertification != CreatorLocationCertification.NonUSPersonOutsideUS))
+        {
+            missingTasks.Add("eligible creator location certification");
+        }
+
+        if (!creator.PayoutRequirementsAcknowledged)
+        {
+            missingTasks.Add("payout requirements acknowledgment");
+        }
+
+        return missingTasks;
+    }
+
+    private async Task SendBlockedPayoutEmailsAsync(
+        Creator creator,
+        decimal blockedAmount,
+        decimal streamGrossAmount,
+        decimal tipGrossAmount,
+        List<string> missingTasks)
+    {
+        try
+        {
+            var userEmail = creator.User?.Email;
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                await using var context = await _contextFactory.CreateDbContextAsync();
+                userEmail = await context.Users
+                    .Where(u => u.Id == creator.UserId)
+                    .Select(u => u.Email)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (!string.IsNullOrWhiteSpace(userEmail))
+            {
+                await SendCreatorBlockedPayoutEmailAsync(userEmail, blockedAmount, missingTasks);
+            }
+            else
+            {
+                _logger.LogWarning("Could not send blocked payout creator email for creator {CreatorId}: user email missing",
+                    creator.Id);
+            }
+
+            await SendAdminBlockedPayoutEmailAsync(creator, userEmail, blockedAmount, streamGrossAmount, tipGrossAmount, missingTasks);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending blocked payout emails for creator {CreatorId}", creator.Id);
+        }
+    }
+
+    private async Task SendCreatorBlockedPayoutEmailAsync(string userEmail, decimal blockedAmount, List<string> missingTasks)
+    {
+        var logoUrl = _emailService.GetLogoUrl();
+        var baseUrl = _emailService.GetAppBaseUrl();
+        var creatorSettingsUrl = $"{baseUrl.TrimEnd('/')}/CreatorSettings";
+        var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+        var encodedLogoUrl = HtmlEncoder.Default.Encode(logoUrl);
+        var encodedCreatorSettingsUrl = HtmlEncoder.Default.Encode(creatorSettingsUrl);
+        var encodedManageAccountUrl = HtmlEncoder.Default.Encode(manageAccountUrl);
+
+        var missingItems = string.Join(
+            "",
+            missingTasks.Select(task => $"<li>{HtmlEncoder.Default.Encode(task)}</li>"));
+
+        var subject = $"StreamTunes - Payout Action Required (${blockedAmount:F2})";
+        var body = $@"
+            <div style='text-align: center; margin-bottom: 20px;'>
+                <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+            </div>
+            <h2>Payout Action Required</h2>
+            <p>Your StreamTunes creator account has ${blockedAmount:F2} ready for payout, but we cannot send it yet.</p>
+            <p>Please complete the following requirement(s):</p>
+            <ul>
+                {missingItems}
+            </ul>
+            <p>Once these tasks are complete, your eligible unpaid stream and tip earnings can be included in a future payout run.</p>
+            <p>You can complete payout setup on your
+               <a href='{encodedCreatorSettingsUrl}'>Creator / Artist Settings</a> page.</p>
+            <p style='color: #999; font-size: 12px;'>
+                <a href='{encodedManageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+            </p>";
+
+        await _emailService.SendEmailAsync(userEmail, subject, body);
+    }
+
+    private async Task SendAdminBlockedPayoutEmailAsync(
+        Creator creator,
+        string? userEmail,
+        decimal blockedAmount,
+        decimal streamGrossAmount,
+        decimal tipGrossAmount,
+        List<string> missingTasks)
+    {
+        var adminEmail = _configuration[AppSettingKeys.EmailAdminEmail] ?? AdminNotificationService.AdminEmail;
+        var logoUrl = _emailService.GetLogoUrl();
+        var encodedLogoUrl = HtmlEncoder.Default.Encode(logoUrl);
+        var encodedUserEmail = HtmlEncoder.Default.Encode(userEmail ?? "Unknown");
+        var encodedPayPalEmail = HtmlEncoder.Default.Encode(creator.PayPalEmail ?? "Not set");
+        var missingItems = string.Join(
+            "",
+            missingTasks.Select(task => $"<li>{HtmlEncoder.Default.Encode(task)}</li>"));
+
+        var subject = $"StreamTunes Admin - Creator Payout Blocked (${blockedAmount:F2} USD)";
+        var body = $@"
+            <div style='text-align: center; margin-bottom: 20px;'>
+                <img src='{encodedLogoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+            </div>
+            <h2>Creator Payout Blocked</h2>
+            <p>A creator met the payout amount threshold, but the payout was not sent because setup is incomplete.</p>
+            <div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                <p><strong>Creator ID:</strong> {creator.Id}</p>
+                <p><strong>User Email:</strong> {encodedUserEmail}</p>
+                <p><strong>PayPal Email:</strong> {encodedPayPalEmail}</p>
+                <p><strong>Blocked Payout Amount:</strong> ${blockedAmount:F2} USD</p>
+                <p><strong>Gross Stream Earnings:</strong> ${streamGrossAmount:F2} USD</p>
+                <p><strong>Gross Tip Earnings:</strong> ${tipGrossAmount:F2} USD</p>
+                <p><strong>Date/Time (UTC):</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</p>
+            </div>
+            <p><strong>Missing requirement(s):</strong></p>
+            <ul>
+                {missingItems}
+            </ul>";
+
+        await _emailService.SendEmailAsync(adminEmail, subject, body);
     }
 
     /// <summary>

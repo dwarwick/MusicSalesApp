@@ -76,22 +76,22 @@
                                     <li>Upload your original music to our streaming platform</li>
                                     <li>Reach a global audience of music lovers</li>
                                     <li>Earn compensation for every stream of your music</li>
-                                    <li>Get paid directly to your PayPal account</li>
+                                    <li>Accrue stream and tip earnings while you complete payout setup</li>
                                 </ul>
                             </div>
 
                             <div class="creator-requirements mt-3">
                                 <h5>Requirements:</h5>
                                 <ul>
-                                    <li>A valid PayPal account in good standing to receive stream payments</li>
-                                    <li>Complete tax form (W-9/W-8) for tax reporting</li>
+                                    <li>Creator eligibility certification</li>
+                                    <li>Acknowledgment that PayPal confirmation and W-9/W-8 completion are required before payouts</li>
                                     <li>Original music that you have the rights to distribute</li>
                                     <li>Agreement to our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a></li>
                                 </ul>
                             </div>
 
                             <div class="mt-3">
-                                <p><strong>How You Earn:</strong> You earn based on the number of qualifying streams (@_creatorStreamQualifyingSeconds+ seconds of continuous playback) at a rate of $@_creatorStreamPayRateDisplay.ToString("F2") per 1,000 streams. Your pay rate and stream definition are set during onboarding and locked in for the lifetime of your creator account. Payments are processed weekly via PayPal. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
+                                <p><strong>How You Earn:</strong> You earn based on the number of qualifying streams (@_creatorStreamQualifyingSeconds+ seconds of continuous playback) at a rate of $@_creatorStreamPayRateDisplay.ToString("F2") per 1,000 streams. Your pay rate and stream definition are set during onboarding and locked in for the lifetime of your creator account. Payouts are processed weekly via PayPal after payout setup is complete. See our <a href="/creator-agreement" target="_blank" rel="noopener noreferrer">Creator Agreement</a> and <a href="/terms-of-use" target="_blank" rel="noopener noreferrer">Terms of Use</a> for complete details.</p>
                             </div>
 
                             <div class="creator-signup-form mt-4">
@@ -107,18 +107,23 @@
                                 </div>
 
                                 <div class="mb-3">
-                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address <span class="text-danger">*</span></label>
+                                    <label for="paypalEmailOnboarding" class="e-label">PayPal Email Address (optional now)</label>
                                     <SfTextBox @bind-Value="_creatorPayPalEmail" ID="paypalEmailOnboarding" Type="InputType.Email" Placeholder="your-paypal-email@example.com" CssClass="e-outline" />
-                                    <small class="form-text">This is the email address associated with your PayPal account where you will receive payments.</small>
+                                    <small class="form-text">You may add this now or later. It is required before StreamTunes can send payouts.</small>
                                 </div>
 
                                 <div class="mb-3">
                                     <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
-                                    <span class="ms-2">I affirm that I have a valid PayPal account in good standing that can receive payments. I understand that if my PayPal account is not valid or cannot receive payments, I will not receive payouts. StreamTunes is not responsible for ensuring my PayPal account can receive payments.</span>
+                                    <span class="ms-2">If I entered a PayPal email above, I affirm that it belongs to a valid PayPal account in good standing that can receive payouts.</span>
+                                </div>
+
+                                <div class="mb-3">
+                                    <SfCheckBox @bind-Checked="_submitTaxFormNow" TChecked="bool" />
+                                    <span class="ms-2">Complete my W-9/W-8 tax form after creator signup.</span>
                                 </div>
 
                                 <div class="alert alert-warning mt-3">
-                                    <strong>Important:</strong> You only need a personal PayPal account to receive payments. You do not need a PayPal business account. However, you are responsible for ensuring your PayPal account is in good standing and can receive payments. If there are issues with your PayPal account, your payments may fail and StreamTunes is not responsible for recovering failed payments.
+                                    <strong>Important:</strong> You can become a creator now and upload music before completing PayPal and tax setup. StreamTunes cannot send payouts for streams or tips until you confirm a valid PayPal payout email and successfully complete your W-9 or W-8 tax form.
                                 </div>
 
                                 <div class="creator-eligibility mt-4">
@@ -153,6 +158,10 @@
                                         <SfCheckBox @bind-Checked="_acknowledgmentAccepted" TChecked="bool" />
                                         <span class="ms-2">I certify that the information above is accurate and understand that Streamtunes relies on this certification to determine my eligibility for payouts and applicable tax withholding and reporting. I agree to promptly update this information if my circumstances change.</span>
                                     </div>
+                                    <div class="mb-3">
+                                        <SfCheckBox @bind-Checked="_payoutRequirementsAcknowledged" TChecked="bool" />
+                                        <span class="ms-2">I understand that I can become a creator and upload music now, but StreamTunes will not send payouts for streams or tips until I confirm a valid PayPal payout email and successfully complete my W-9 or W-8 tax form.</span>
+                                    </div>
                                 </div>
 
                                 @if (!_startingOnboarding)
@@ -160,7 +169,7 @@
                                     <SfButton IsPrimary="true" Content="Start Creator Signup" OnClick="StartCreatorOnboarding" Disabled="@(!CanStartOnboarding)" />
                                     @if (!CanStartOnboarding)
                                     {
-                                        <p class="text-danger mt-2">Please complete all required fields including your PayPal email, PayPal account confirmation, location certification, and acknowledgment.</p>
+                                        <p class="text-danger mt-2">Please complete the required eligibility certification and acknowledgments. If you enter a PayPal email, you must also confirm that it can receive payouts.</p>
                                     }
                                 }
                                 else
@@ -173,20 +182,28 @@
                     else if (_creatorOnboardingStatus == "Pending" || _creatorOnboardingStatus == "InProgress" || _creatorOnboardingStatus == "Completed")
                     {
                         <div class="creator-pending">
-                            <h4>Complete Your Creator Onboarding</h4>
+                            <h4>Finish Creator Setup</h4>
 
                             <div class="onboarding-section mb-4">
                                 <h5>1. PayPal Account</h5>
-                                <p class="text-success"><strong>Status: Confirmed ✓</strong></p>
-                                <p>You have confirmed that you have a valid PayPal account to receive payments.</p>
+                                @if (IsPayoutPayPalReady)
+                                {
+                                    <p class="text-success"><strong>Status: Confirmed</strong></p>
+                                    <p>You have confirmed a valid PayPal payout email.</p>
+                                }
+                                else
+                                {
+                                    <p class="text-warning"><strong>Status: Needed Before Payouts</strong></p>
+                                    <p>You can upload music after creator activation, but payouts require a confirmed PayPal payout email.</p>
+                                }
                             </div>
 
                             <div class="onboarding-section mb-4">
                                 <h5>2. Tax Form (W-9/W-8)</h5>
                                 @if (_creatorTaxFormStatus == "Completed")
                                 {
-                                    <p class="text-success"><strong>Status: Completed ✓</strong></p>
-                                    <p>Both steps are complete. Your creator account will be activated shortly.</p>
+                                    <p class="text-success"><strong>Status: Completed</strong></p>
+                                    <p>Your tax form is complete for payout purposes.</p>
                                     @if (!_completingOnboarding)
                                     {
                                         <SfButton IsPrimary="true" Content="Activate My Creator Account" OnClick="CompleteCreatorOnboarding" />
@@ -209,7 +226,7 @@
                                     }
                                     else
                                     {
-                                        <p>Please complete your tax form to activate your creator account.</p>
+                                        <p>Please complete your tax form before payouts can be sent.</p>
                                     }
                                     <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="NavigateToTaxForm" />
                                 }
@@ -241,7 +258,8 @@
                                 else
                                 {
                                     <p class="text-muted"><strong>Status: Not Started</strong></p>
-                                    <p>Your tax form request will be sent automatically as part of the onboarding process.</p>
+                                    <p>You can complete your W-9 or W-8 before payouts are sent.</p>
+                                    <SfButton IsPrimary="true" Content="Complete Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
                                 }
                             </div>
                         </div>
@@ -269,13 +287,48 @@
         else
         {
             <SfCard CssClass="mb-4">
+                <CardHeader Title="Payout Readiness" />
+                <CardContent>
+                    @if (IsPayoutReady)
+                    {
+                        <SfMessage Severity="MessageSeverity.Success">Your payout setup is complete. Eligible stream and tip earnings can be included in payout runs.</SfMessage>
+                    }
+                    else
+                    {
+                        <SfMessage Severity="MessageSeverity.Warning">You are an active creator and can upload music, but payouts will wait until all payout requirements are complete.</SfMessage>
+                    }
+
+                    <div class="mt-3">
+                        <p class="@(IsPayoutPayPalReady ? "text-success" : "text-warning")">
+                            <strong>PayPal:</strong> @(IsPayoutPayPalReady ? "Confirmed" : "Confirm a valid PayPal payout email")
+                        </p>
+                        <p class="@(IsPayoutTaxReady ? "text-success" : "text-warning")">
+                            <strong>Tax Form:</strong> @(IsPayoutTaxReady ? "Completed" : "Complete your W-9 or W-8 tax form")
+                        </p>
+                        <p class="@(IsPayoutEligibilityReady && _payoutRequirementsAcknowledged ? "text-success" : "text-warning")">
+                            <strong>Eligibility:</strong> @(IsPayoutEligibilityReady && _payoutRequirementsAcknowledged ? "Certified" : "Creator payout certifications need review")
+                        </p>
+                    </div>
+
+                    @if (!IsPayoutTaxReady)
+                    {
+                        <SfButton IsPrimary="true" Content="Complete W-9/W-8 Tax Form" OnClick="InitiateTaxFormUpdate" Disabled="@_updatingTaxForm" />
+                    }
+                </CardContent>
+            </SfCard>
+
+            <SfCard CssClass="mb-4">
                 <CardHeader Title="Payout Email Address" />
                 <CardContent>
-                    <p class="mb-3">This email will be used to send stream payouts. It may be different from your login email.</p>
+                    <p class="mb-3">This PayPal email will be used to send stream and tip payouts. It may be different from your login email.</p>
                     <div class="mb-3">
                         <label for="paypalEmail" class="e-label">Payout Email Address</label>
                         <SfTextBox @bind-Value="_paypalEmail" ID="paypalEmail" Type="InputType.Email" Placeholder="your-email@example.com" CssClass="e-outline" />
-                        <small class="form-text">Enter the email address where you want to receive payments.</small>
+                        <small class="form-text">Enter the email address for a PayPal account that can receive payouts.</small>
+                    </div>
+                    <div class="mb-3">
+                        <SfCheckBox @bind-Checked="_paypalAccountAffirmed" TChecked="bool" />
+                        <span class="ms-2">I affirm that this email belongs to a valid PayPal account in good standing that can receive payouts.</span>
                     </div>
                     <SfButton IsPrimary="true" Content="Save Payout Email" OnClick="SavePayPalEmail" />
                 </CardContent>

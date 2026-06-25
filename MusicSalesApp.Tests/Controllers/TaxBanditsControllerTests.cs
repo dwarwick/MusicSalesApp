@@ -21,7 +21,6 @@ public class TaxBanditsControllerTests
 {
     private Mock<IDbContextFactory<AppDbContext>> _mockDbContextFactory;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
-    private Mock<RoleManager<IdentityRole<int>>> _mockRoleManager;
     private Mock<ICreatorService> _mockCreatorService;
     private Mock<ICreatorEmailService> _mockCreatorEmailService;
     private Mock<ITaxBanditsService> _mockTaxBanditsService;
@@ -41,11 +40,6 @@ public class TaxBanditsControllerTests
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
             userStore.Object, null, null, null, null, null, null, null, null);
         
-        // Setup RoleManager mock
-        var roleStore = new Mock<IRoleStore<IdentityRole<int>>>();
-        _mockRoleManager = new Mock<RoleManager<IdentityRole<int>>>(
-            roleStore.Object, null, null, null, null);
-        
         _mockCreatorService = new Mock<ICreatorService>();
         _mockCreatorEmailService = new Mock<ICreatorEmailService>();
         _mockTaxBanditsService = new Mock<ITaxBanditsService>();
@@ -63,7 +57,6 @@ public class TaxBanditsControllerTests
         _controller = new TaxBanditsController(
             _mockDbContextFactory.Object,
             _mockUserManager.Object,
-            _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockCreatorEmailService.Object,
             _mockTaxBanditsService.Object,
@@ -295,16 +288,11 @@ public class TaxBanditsControllerTests
             .ReturnsAsync(new ApplicationUser { Id = 42, Email = "creator@test.com" });
         _mockUserManager.Setup(u => u.IsInRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()))
             .ReturnsAsync(false);
-        _mockRoleManager.Setup(r => r.RoleExistsAsync(It.IsAny<string>()))
-            .ReturnsAsync(true);
-        _mockRoleManager.Setup(r => r.NormalizeKey(It.IsAny<string>()))
-            .Returns<string>(s => s.ToUpperInvariant());
 
         // Create the controller with in-memory db factory
         var controller = new TaxBanditsController(
             mockDbFactory.Object,
             _mockUserManager.Object,
-            _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockCreatorEmailService.Object,
             _mockTaxBanditsService.Object,
@@ -352,8 +340,8 @@ public class TaxBanditsControllerTests
         Assert.That(w9Request!.Email, Is.EqualTo("creator@test.com"));
         Assert.That(w9Request.SubmissionId, Is.EqualTo("sub-123"));
 
-        // Verify creator activation was attempted
-        _mockCreatorService.Verify(s => s.ActivateCreatorAsync(It.IsAny<int>()), Times.Once);
+        // Tax completion should not activate or assign creator role; signup activation happens separately.
+        _mockCreatorService.Verify(s => s.ActivateCreatorAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Test]
@@ -414,15 +402,10 @@ public class TaxBanditsControllerTests
             .ReturnsAsync(new ApplicationUser { Id = 50, Email = "foreign@test.com" });
         _mockUserManager.Setup(u => u.IsInRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()))
             .ReturnsAsync(false);
-        _mockRoleManager.Setup(r => r.RoleExistsAsync(It.IsAny<string>()))
-            .ReturnsAsync(true);
-        _mockRoleManager.Setup(r => r.NormalizeKey(It.IsAny<string>()))
-            .Returns<string>(s => s.ToUpperInvariant());
 
         var controller = new TaxBanditsController(
             mockDbFactory.Object,
             _mockUserManager.Object,
-            _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockCreatorEmailService.Object,
             _mockTaxBanditsService.Object,
@@ -465,8 +448,8 @@ public class TaxBanditsControllerTests
         Assert.That(w9Request, Is.Not.Null, "W9Request should have been created for Drop-in UI W-8BEN flow");
         Assert.That(w9Request!.Email, Is.EqualTo("foreign@test.com"));
 
-        // Verify creator activation was attempted
-        _mockCreatorService.Verify(s => s.ActivateCreatorAsync(It.IsAny<int>()), Times.Once);
+        // Tax completion should not activate or assign creator role; signup activation happens separately.
+        _mockCreatorService.Verify(s => s.ActivateCreatorAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Test]
@@ -538,7 +521,6 @@ public class TaxBanditsControllerTests
         var controller = new TaxBanditsController(
             mockDbFactory.Object,
             _mockUserManager.Object,
-            _mockRoleManager.Object,
             _mockCreatorService.Object,
             _mockCreatorEmailService.Object,
             _mockTaxBanditsService.Object,

@@ -2,7 +2,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -39,8 +41,16 @@ public class StreamPayoutServiceTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<StreamPayoutService>>();
         _mockEmailService = new Mock<IEmailService>();
+        _mockEmailService.Setup(x => x.GetLogoUrl()).Returns("https://streamtunes.test/logo.png");
+        _mockEmailService.Setup(x => x.GetAppBaseUrl()).Returns("https://streamtunes.test");
+        _mockEmailService
+            .Setup(x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(true);
         _mockTaxBanditsService = new Mock<ITaxBanditsService>();
         _mockTipService = new Mock<ITipService>();
+        _mockTipService.Setup(x => x.ProcessPendingToClearedAsync()).ReturnsAsync(0);
+        _mockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<Tip>());
         _mockAppSettingsService = new Mock<IAppSettingsService>();
 
         _service = new StreamPayoutService(
@@ -51,6 +61,73 @@ public class StreamPayoutServiceTests
             _mockTaxBanditsService.Object,
             _mockTipService.Object,
             _mockAppSettingsService.Object);
+    }
+
+    private async Task SeedCreatorRoleAsync(int userId)
+    {
+        var role = new IdentityRole<int> { Id = 1, Name = Roles.Creator, NormalizedName = Roles.Creator.ToUpperInvariant() };
+        _context.Roles.Add(role);
+        _context.UserRoles.Add(new IdentityUserRole<int> { UserId = userId, RoleId = role.Id });
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task<Creator> SeedPayoutEligibleCreatorAsync(
+        bool payPalReady = false,
+        bool taxReady = false,
+        bool includeStreams = true,
+        bool assignRole = true)
+    {
+        var creatorUser = new ApplicationUser
+        {
+            Id = 100,
+            UserName = "blockedcreator@test.com",
+            Email = "blockedcreator@test.com",
+            NormalizedEmail = "BLOCKEDCREATOR@TEST.COM",
+            NormalizedUserName = "BLOCKEDCREATOR@TEST.COM"
+        };
+        _context.Users.Add(creatorUser);
+
+        var creator = new Creator
+        {
+            Id = 100,
+            UserId = creatorUser.Id,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            DisplayName = "Blocked Creator",
+            PayPalEmail = payPalReady ? "paypal@test.com" : null,
+            PayPalAccountAffirmed = payPalReady,
+            TaxFormStatus = taxReady ? TaxFormStatus.Completed : TaxFormStatus.NotStarted,
+            TaxResidencyType = taxReady ? TaxResidencyType.US : TaxResidencyType.Unknown,
+            TaxBanditsPayeeRef = taxReady ? creatorUser.Email : null,
+            LocationCertification = CreatorLocationCertification.USPerson,
+            AcknowledgmentAccepted = true,
+            PayoutRequirementsAcknowledged = true,
+            StreamPayRate = 0.005m
+        };
+        _context.Creators.Add(creator);
+
+        if (includeStreams)
+        {
+            _context.SongMetadata.Add(new SongMetadata
+            {
+                Id = 100,
+                Mp3BlobPath = "creator/song.mp3",
+                SongTitle = "Eligible Song",
+                CreatorId = creator.Id,
+                IsActive = true,
+                IsAlbumCover = false,
+                NumberOfStreams = 2000,
+                StreamsAtLastPayout = 0
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        if (assignRole)
+        {
+            await SeedCreatorRoleAsync(creatorUser.Id);
+        }
+
+        return creator;
     }
 
     [TearDown]
@@ -108,6 +185,95 @@ public class StreamPayoutServiceTests
     }
 
     // ==================== RetryPending1099TransactionsAsync Tests ====================
+
+    [Test]
+    public async Task ProcessPendingPayoutsAsync_BlocksStreamPayoutAndEmails_WhenPayPalAndTaxIncomplete()
+    {
+        await SeedPayoutEligibleCreatorAsync(payPalReady: false, taxReady: false);
+
+        var processed = await _service.ProcessPendingPayoutsAsync();
+
+        Assert.That(processed, Is.EqualTo(0));
+
+        await using var verifyContext = new AppDbContext(_contextOptions);
+        var song = await verifyContext.SongMetadata.SingleAsync(s => s.Id == 100);
+        Assert.That(song.StreamsAtLastPayout, Is.EqualTo(0));
+        Assert.That(await verifyContext.StreamPayouts.CountAsync(), Is.EqualTo(0));
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "blockedcreator@test.com",
+                It.Is<string>(subject => subject.Contains("Payout Action Required ($10.00)")),
+                It.Is<string>(body => body.Contains("confirmed PayPal payout email")
+                    && body.Contains("completed W-9 or W-8 tax form"))),
+            Times.Once);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                AdminNotificationService.AdminEmail,
+                It.Is<string>(subject => subject.Contains("Creator Payout Blocked ($10.00 USD)")),
+                It.Is<string>(body => body.Contains("Blocked Payout Amount")
+                    && body.Contains("Gross Stream Earnings"))),
+            Times.Once);
+        _mockTaxBanditsService.Verify(
+            x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task ProcessPendingPayoutsAsync_BlocksTipOnlyPayoutAndLeavesTipsCleared_WhenRequirementsIncomplete()
+    {
+        await SeedPayoutEligibleCreatorAsync(payPalReady: false, taxReady: false, includeStreams: false);
+        var clearedTips = new List<Tip>
+        {
+            new()
+            {
+                Id = 200,
+                CreatorId = 100,
+                TipperUserId = 999,
+                Amount = 8.00m,
+                Status = TipStatus.Cleared
+            }
+        };
+        _mockTipService.Setup(x => x.GetClearedTipsForPayoutAsync(100))
+            .ReturnsAsync(clearedTips);
+
+        var processed = await _service.ProcessPendingPayoutsAsync();
+
+        Assert.That(processed, Is.EqualTo(0));
+        _mockTipService.Verify(x => x.MarkTipsAsPaidAsync(It.IsAny<List<int>>(), It.IsAny<string>()), Times.Never);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "blockedcreator@test.com",
+                It.Is<string>(subject => subject.Contains("Payout Action Required ($8.00)")),
+                It.IsAny<string>()),
+            Times.Once);
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                AdminNotificationService.AdminEmail,
+                It.Is<string>(subject => subject.Contains("Creator Payout Blocked ($8.00 USD)")),
+                It.Is<string>(body => body.Contains("Gross Tip Earnings"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ProcessPendingPayoutsAsync_BlocksPayout_WhenCreatorRoleMissing()
+    {
+        await SeedPayoutEligibleCreatorAsync(payPalReady: true, taxReady: true, assignRole: false);
+
+        var processed = await _service.ProcessPendingPayoutsAsync();
+
+        Assert.That(processed, Is.EqualTo(0));
+
+        await using var verifyContext = new AppDbContext(_contextOptions);
+        Assert.That(await verifyContext.StreamPayouts.CountAsync(), Is.EqualTo(0));
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "blockedcreator@test.com",
+                It.IsAny<string>(),
+                It.Is<string>(body => body.Contains("Creator role"))),
+            Times.Once);
+    }
 
     [Test]
     public async Task RetryPending1099_IncludesTipAmountInGrossAmount()
