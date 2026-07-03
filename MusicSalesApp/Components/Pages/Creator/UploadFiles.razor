@@ -8,7 +8,7 @@
 
 <PageTitle>Upload Music Files</PageTitle>
 
-<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="_isUploading" />
+<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="@(_isUploading || _isProcessingFiles)" />
 
 <div class="d-flex flex-row align-items-center mb-2">
     <h3 class="me-2 mb-0">Upload Music Files</h3>
@@ -22,7 +22,8 @@
 
 <div class="container-fluid">
     
-    <label class="upload-box @(_isUploading ? "upload-box-disabled" : "") mb-2">
+    <label class="upload-box @((_isUploading || _isProcessingFiles) ? "upload-box-disabled" : "") mb-2"
+           style="display: @((_isUploading || _isProcessingFiles) ? "none" : "flex")">
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
                    class="hidden-input"
@@ -57,6 +58,67 @@
         </div>
     }
 
+    @if (_initialUploadItems.Any())
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <h5>Upload Progress</h5>
+                <div class="mb-2">
+                    <span class="text-muted small">@_initialUploadStatusMessage</span>
+                </div>
+                <div class="progress mb-3">
+                    <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                         role="progressbar"
+                         style="width: @(_initialUploadBatchProgress)%"
+                         aria-valuenow="@_initialUploadBatchProgress"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                        @_initialUploadBatchProgress%
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Type</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _initialUploadItems)
+                            {
+                                <tr>
+                                    <td>@item.Name</td>
+                                    <td>@item.FileType</td>
+                                    <td>@item.FormattedSize</td>
+                                    <td>
+                                        <span class="badge @(item.Progress >= 100 ? "bg-success" : "bg-info")">@item.StatusMessage</span>
+                                    </td>
+                                    <td style="width: 30%;">
+                                        <div class="progress">
+                                            <div class="progress-bar @(item.Progress >= 100 ? "bg-success" : "bg-primary progress-bar-striped progress-bar-animated")"
+                                                 role="progressbar"
+                                                 style="width: @(item.Progress)%"
+                                                 aria-valuenow="@item.Progress"
+                                                 aria-valuemin="0"
+                                                 aria-valuemax="100">
+                                                @item.Progress%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+
     @if (_uploadItems.Any())
     {
         <div class="row mt-4">
@@ -78,7 +140,21 @@
                             {
                                 <tr>
                                     <td>@item.BaseName</td>
-                                    <td>@item.AudioFileName<br /><small class="text-muted">@FormatFileSize(item.AudioFileSize)</small></td>
+                                    <td>
+                                        @item.UploadedAudioFileName
+                                        @if (!string.Equals(item.AudioFileName, item.UploadedAudioFileName, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <br />
+
+                                            <small class="text-muted">Converted from @item.AudioFileName (@FormatFileSize(item.AudioFileSize))</small>
+                                        }
+                                        else
+                                        {
+                                            <br />
+
+                                            <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
+                                        }
+                                    </td>
                                     <td>
                                         @if (item.HasCoverArt)
                                         {
@@ -343,6 +419,10 @@
     // Warn user before closing tab/browser during uploads
     window.uploadFilesHelper = {
         enableBeforeUnload: function () {
+            if (window._uploadBeforeUnloadHandler) {
+                return;
+            }
+
             window._uploadBeforeUnloadHandler = function (e) {
                 e.preventDefault();
                 e.returnValue = '';
@@ -354,16 +434,6 @@
             if (window._uploadBeforeUnloadHandler) {
                 window.removeEventListener('beforeunload', window._uploadBeforeUnloadHandler);
                 window._uploadBeforeUnloadHandler = null;
-            }
-        },
-        showSpinner: function () {
-            var uploadBox = document.querySelector('.upload-box');
-            if (uploadBox) {
-                uploadBox.classList.add('upload-box-disabled');
-                var content = uploadBox.querySelector('.upload-content');
-                if (content) content.style.display = 'none';
-                var spinner = uploadBox.querySelector('.upload-spinner');
-                if (spinner) spinner.style.display = 'flex';
             }
         }
     };
