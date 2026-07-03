@@ -5,9 +5,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace MusicSalesApp.Models;
 
 /// <summary>
-/// Represents a creator who can upload and sell music on the platform.
-/// Creators are onboarded through PayPal Partner Referrals and TaxBandits (W-9/W-8 forms),
-/// and can receive payments for their music sales once both onboarding processes are complete.
+/// Represents a creator who can upload music on the platform.
+/// Creators can become active before payout setup is complete, but payouts require a confirmed
+/// PayPal payout email, completed TaxBandits W-9/W-8 form, and creator eligibility certification.
 /// </summary>
 public class Creator
 {
@@ -195,6 +195,17 @@ public class Creator
     public DateTime? AcknowledgmentDateTimeUtc { get; set; }
 
     /// <summary>
+    /// Whether the creator acknowledged that payouts require a confirmed PayPal account
+    /// and a successfully completed W-9/W-8 tax form.
+    /// </summary>
+    public bool PayoutRequirementsAcknowledged { get; set; } = false;
+
+    /// <summary>
+    /// The UTC date and time when the creator accepted the payout requirements acknowledgment.
+    /// </summary>
+    public DateTime? PayoutRequirementsAcknowledgedAtUtc { get; set; }
+
+    /// <summary>
     /// The UTC date and time of the last failed Instant TIN Match.
     /// Used to enforce the 24-hour cooldown period between TIN match attempts.
     /// </summary>
@@ -209,11 +220,17 @@ public class Creator
     public string? LastTaxFormErrorMessage { get; set; }
 
     /// <summary>
-    /// Checks if both PayPal and tax form onboarding are complete.
+    /// Checks if payout prerequisites are complete.
     /// </summary>
     [NotMapped]
     public bool IsFullyOnboarded => OnboardingStatus == CreatorOnboardingStatus.Completed 
-                                    && TaxFormStatus == TaxFormStatus.Completed;
+                                    && TaxFormStatus == TaxFormStatus.Completed
+                                    && PayPalAccountAffirmed
+                                    && !string.IsNullOrWhiteSpace(PayPalEmail)
+                                    && PayoutRequirementsAcknowledged
+                                    && AcknowledgmentAccepted
+                                    && (LocationCertification == CreatorLocationCertification.USPerson
+                                        || LocationCertification == CreatorLocationCertification.NonUSPersonOutsideUS);
 
     /// <summary>
     /// Gets the effective withholding rate.
@@ -225,7 +242,7 @@ public class Creator
 }
 
 /// <summary>
-/// Represents the status of a creator's PayPal onboarding process.
+/// Represents the status of a creator's signup process.
 /// </summary>
 public enum CreatorOnboardingStatus
 {
@@ -235,17 +252,17 @@ public enum CreatorOnboardingStatus
     NotStarted = 0,
 
     /// <summary>
-    /// Referral link has been generated, waiting for creator to complete PayPal signup.
+    /// Signup has started but is not complete.
     /// </summary>
     Pending = 1,
 
     /// <summary>
-    /// Creator has completed PayPal signup but additional verification may be needed.
+    /// Signup is in progress and additional action may be needed.
     /// </summary>
     InProgress = 2,
 
     /// <summary>
-    /// Creator has completed onboarding and can receive payments.
+    /// Creator signup is complete. Payouts may still require separate PayPal and tax setup.
     /// </summary>
     Completed = 3,
 
@@ -260,8 +277,7 @@ public enum CreatorOnboardingStatus
     Suspended = 5,
 
     /// <summary>
-    /// Creator has revoked their consent to the platform via PayPal.
-    /// This typically happens when the creator removes the platform's permissions in their PayPal account.
+    /// Creator has revoked their creator agreement or platform consent.
     /// </summary>
     ConsentRevoked = 6,
 

@@ -96,9 +96,9 @@ public interface ICreatorService
     Task<Creator> UpdateCreatorProfileAsync(int creatorId, string? displayName, string? bio);
 
     /// <summary>
-    /// Updates the active creator's payout email address.
+    /// Updates the active creator's payout email address and PayPal affirmation.
     /// </summary>
-    Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string payoutEmail);
+    Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string payoutEmail, bool payPalAccountAffirmed);
 
     /// <summary>
     /// Activates a creator account (admin function).
@@ -164,8 +164,7 @@ public interface ICreatorService
 
     /// <summary>
     /// Resets a returning creator's onboarding fields when they re-sign up.
-    /// Sets OnboardingStatus to Completed, stores PayPal email and affirmation,
-    /// and marks PaymentsReceivable/PrimaryEmailConfirmed as true.
+    /// Sets OnboardingStatus to Completed and stores optional PayPal payout details.
     /// This is used instead of direct DbContext manipulation in the controller
     /// to ensure an atomic, testable state transition.
     /// </summary>
@@ -173,7 +172,7 @@ public interface ICreatorService
     /// <param name="payPalEmail">The creator's PayPal email for payouts</param>
     /// <param name="payPalAccountAffirmed">Whether the creator affirmed their PayPal account</param>
     /// <returns>The updated creator</returns>
-    Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string payPalEmail, bool payPalAccountAffirmed);
+    Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string? payPalEmail, bool payPalAccountAffirmed);
 
     /// <summary>
     /// Updates the creator's location certification and acknowledgment.
@@ -186,15 +185,21 @@ public interface ICreatorService
     Task<Creator> UpdateLocationCertificationAsync(int creatorId, CreatorLocationCertification locationCertification, bool acknowledgmentAccepted);
 
     /// <summary>
+    /// Records the creator's assertion that they understand PayPal and tax form completion
+    /// are required before receiving payouts.
+    /// </summary>
+    Task<Creator> UpdatePayoutRequirementsAcknowledgmentAsync(int creatorId, bool payoutRequirementsAcknowledged);
+
+    /// <summary>
     /// Orchestrates the full creator onboarding flow: creates or updates the creator record,
     /// stores attestation data, handles ineligibility, resets onboarding for returning creators,
-    /// activates returning creators with completed tax forms, or sets up for tax form submission.
+    /// activates eligible creators, and optionally starts tax form submission.
     /// </summary>
     Task<StartOnboardingResult> StartOnboardingAsync(CreatorOnboardingInput request);
 
     /// <summary>
-    /// Checks the creator's onboarding and tax form status and activates the creator
-    /// if both are complete. Also assigns the Creator role to the user.
+    /// Checks the creator's signup certification status, activates eligible creators,
+    /// and assigns the Creator role when needed.
     /// </summary>
     Task<CompleteOnboardingResult> CompleteOnboardingAsync(int userId);
 
@@ -214,10 +219,12 @@ public class CreatorOnboardingInput
     public string? UserEmail { get; set; }
     public string? DisplayName { get; set; }
     public string? Bio { get; set; }
-    public string PayPalEmail { get; set; } = string.Empty;
+    public string? PayPalEmail { get; set; }
     public bool PayPalAccountAffirmed { get; set; }
     public CreatorLocationCertification LocationCertification { get; set; }
     public bool AcknowledgmentAccepted { get; set; }
+    public bool PayoutRequirementsAcknowledged { get; set; }
+    public bool SubmitTaxFormNow { get; set; }
 }
 
 /// <summary>
@@ -228,10 +235,10 @@ public class StartOnboardingResult
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
 
-    /// <summary>True if the creator was activated immediately (returning creator with completed tax form).</summary>
+    /// <summary>True if the creator is active after signup.</summary>
     public bool IsActive { get; set; }
 
-    /// <summary>True if the creator needs to fill out a tax form next.</summary>
+    /// <summary>True if the creator chose to fill out a tax form immediately after signup.</summary>
     public bool TaxFormPending { get; set; }
 
     /// <summary>True if the creator is ineligible (e.g. non-US person inside US).</summary>

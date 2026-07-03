@@ -28,6 +28,54 @@ public class CreatorEmailService : ICreatorEmailService
     }
 
     /// <inheritdoc />
+    public async Task<bool> SendCreatorWelcomeEmailAsync(string userEmail, string baseUrl, bool payPalReady, bool taxFormReady)
+    {
+        _logger.LogInformation("Sending creator welcome email to {Email}", userEmail);
+
+        try
+        {
+            var logoUrl = _emailService.GetLogoUrl();
+            var creatorSettingsUrl = $"{baseUrl.TrimEnd('/')}/CreatorSettings";
+            var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
+
+            var payPalStatus = payPalReady
+                ? "Your PayPal payout account confirmation is complete."
+                : "Confirm a valid PayPal payout email before payouts can be sent.";
+            var taxStatus = taxFormReady
+                ? "Your tax form is complete."
+                : "Complete your W-9 or W-8 tax form before payouts can be sent.";
+
+            var subject = "StreamTunes - Welcome, Creator!";
+            var body = $@"
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    <img src='{logoUrl}' alt='StreamTunes Logo' style='max-width: 150px; height: auto;' />
+                </div>
+                <h2>Welcome to StreamTunes Creator</h2>
+                <p>Congratulations! You can now upload music to StreamTunes and your music can begin earning qualifying streams and tips.</p>
+                <p><strong>Before we can send payouts for streams or tips, you must complete both payout requirements:</strong></p>
+                <ul>
+                    <li>{WebUtility.HtmlEncode(payPalStatus)}</li>
+                    <li>{WebUtility.HtmlEncode(taxStatus)}</li>
+                </ul>
+                <p>You must also remain either a U.S. person, or a non-U.S. person who conducts all StreamTunes creator tasks outside the United States.</p>
+                <p>You can review and complete payout setup on your
+                   <a href='{creatorSettingsUrl}'>Creator / Artist Settings</a> page.</p>
+                <p>If you have any questions, contact us at
+                   <a href='mailto:{_customerServiceEmail}'>{_customerServiceEmail}</a>.</p>
+                <p style='color: #999; font-size: 12px;'>
+                    <a href='{manageAccountUrl}' style='color: #666; text-decoration: underline;'>Manage your email preferences</a>
+                </p>";
+
+            return await _emailService.SendEmailAsync(userEmail, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending creator welcome email to {Email}", userEmail);
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<bool> SendTaxFormReceivedEmailAsync(string userEmail, string baseUrl, string formType)
     {
         _logger.LogInformation("Sending tax form received email to {Email} for {FormType}", userEmail, formType);

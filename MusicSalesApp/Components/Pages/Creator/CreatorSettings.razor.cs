@@ -33,6 +33,8 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected string _creatorPayPalEmail = string.Empty;
     protected string _paypalEmail = string.Empty;
     protected bool _paypalAccountAffirmed = false;
+    protected bool _payoutRequirementsAcknowledged = false;
+    protected bool _submitTaxFormNow = false;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
@@ -63,10 +65,31 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected string _maintenanceEndLocal = string.Empty;
     protected string _maintenanceTimeZoneAbbreviation = string.Empty;
 
-    protected bool CanStartOnboarding => !string.IsNullOrWhiteSpace(_creatorPayPalEmail)
-        && _paypalAccountAffirmed
+    protected bool CanStartOnboarding => IsOptionalPayPalSetupValid
         && _locationCertification != "None"
-        && _acknowledgmentAccepted;
+        && _acknowledgmentAccepted
+        && _payoutRequirementsAcknowledged;
+
+    private bool IsOptionalPayPalSetupValid =>
+        (string.IsNullOrWhiteSpace(_creatorPayPalEmail) && !_paypalAccountAffirmed)
+        || (!string.IsNullOrWhiteSpace(_creatorPayPalEmail) && _paypalAccountAffirmed);
+
+    protected bool IsPayoutPayPalReady =>
+        !string.IsNullOrWhiteSpace(_paypalEmail) && _paypalAccountAffirmed;
+
+    protected bool IsPayoutTaxReady =>
+        string.Equals(_creatorTaxFormStatus, TaxFormStatus.Completed.ToString(), StringComparison.Ordinal);
+
+    protected bool IsPayoutEligibilityReady =>
+        _acknowledgmentAccepted
+        && (_locationCertification == CreatorLocationCertification.USPerson.ToString()
+            || _locationCertification == CreatorLocationCertification.NonUSPersonOutsideUS.ToString());
+
+    protected bool IsPayoutReady =>
+        IsPayoutPayPalReady
+        && IsPayoutTaxReady
+        && IsPayoutEligibilityReady
+        && _payoutRequirementsAcknowledged;
 
     protected SfDialog _stopSellingDialog;
     protected SfDialog _creatorActivatedDialog;
@@ -104,11 +127,6 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                         await DetectAndPersistUserTimeZoneAsync();
                         await LoadCreatorStatus();
                         await TrackCreatorSettingsViewedAsync();
-
-                        if (_isActiveCreator && !user.IsInRole(Roles.Creator))
-                        {
-                            await ShowCreatorActivatedDialog();
-                        }
 
                         _webhookStatusHandler = OnWebhookStatusReceived;
                         WebhookStatusHubClient.OnWebhookStatusReceived += _webhookStatusHandler;
@@ -186,7 +204,12 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
+                _creatorPayPalEmail = creator.PayPalEmail ?? string.Empty;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
+                _paypalAccountAffirmed = creator.PayPalAccountAffirmed;
+                _payoutRequirementsAcknowledged = creator.PayoutRequirementsAcknowledged;
+                _locationCertification = creator.LocationCertification.ToString();
+                _acknowledgmentAccepted = creator.AcknowledgmentAccepted;
                 _creatorStreamQualifyingSeconds = creator.StreamQualifyingSeconds;
                 _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
                 _editCreatorDisplayName = _creatorDisplayName;
@@ -199,6 +222,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorOnboardingStatus = null;
                 _creatorTaxFormStatus = null;
                 _lastTaxFormErrorMessage = null;
+                _creatorPayPalEmail = string.Empty;
+                _paypalEmail = string.Empty;
+                _paypalAccountAffirmed = false;
+                _payoutRequirementsAcknowledged = false;
+                _locationCertification = "None";
+                _acknowledgmentAccepted = false;
+                _submitTaxFormNow = false;
 
                 _creatorStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
                 var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
@@ -267,13 +297,19 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 return;
             }
 
+            if (!_paypalAccountAffirmed)
+            {
+                _errorMessage = "Please confirm that this PayPal account is valid and can receive payouts.";
+                return;
+            }
+
             if (!_paypalEmail.Contains("@") || !_paypalEmail.Contains("."))
             {
                 _errorMessage = "Please enter a valid email address.";
                 return;
             }
 
-            var creator = await CreatorService.UpdateCreatorPayoutEmailAsync(_currentUser.Id, _paypalEmail);
+            var creator = await CreatorService.UpdateCreatorPayoutEmailAsync(_currentUser.Id, _paypalEmail, _paypalAccountAffirmed);
             if (creator == null)
             {
                 _errorMessage = "Creator record not found.";
@@ -312,7 +348,9 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 PayPalEmail = _creatorPayPalEmail,
                 PayPalAccountAffirmed = _paypalAccountAffirmed,
                 LocationCertification = locationCertEnum,
-                AcknowledgmentAccepted = _acknowledgmentAccepted
+                AcknowledgmentAccepted = _acknowledgmentAccepted,
+                PayoutRequirementsAcknowledged = _payoutRequirementsAcknowledged,
+                SubmitTaxFormNow = _submitTaxFormNow
             });
 
             if (!result.Success)
@@ -324,17 +362,17 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _errorMessage = "At this time, Streamtunes does not support paid creator participation for non-U.S. persons who will perform any creator activities while physically present in the United States. You are not eligible to register as a creator at this time.";
                 await LoadCreatorStatus();
             }
-            else if (result.IsActive)
-            {
-                await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
-                await LoadCreatorStatus();
-                await ShowCreatorActivatedDialog();
-            }
             else if (result.TaxFormPending)
             {
                 await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupTaxFormPending);
                 NavigationManager.NavigateTo(AppPageRoutes.SubmitTaxForm);
                 return;
+            }
+            else if (result.IsActive)
+            {
+                await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
+                await LoadCreatorStatus();
+                await ShowCreatorActivatedDialog();
             }
             else
             {
@@ -377,12 +415,12 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             }
             else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
             {
-                _successMessage = "Your PayPal account is being verified. Please check back soon.";
+                _successMessage = "Your creator setup is saved. Complete any remaining payout tasks before your next payout.";
                 _creatorOnboardingStatus = "InProgress";
             }
             else
             {
-                _errorMessage = "PayPal verification is not complete. Please ensure you've completed all steps in PayPal.";
+                _errorMessage = "Creator activation is not complete. Please review the required creator certifications.";
             }
 
             await LoadCreatorStatus();

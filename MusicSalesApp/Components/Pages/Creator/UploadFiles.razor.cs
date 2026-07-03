@@ -26,9 +26,30 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         public string FieldName { get; set; }
     }
 
+    protected sealed class InitialUploadProgressItem
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string FileType { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string FormattedSize { get; set; } = string.Empty;
+        public int Progress { get; set; }
+        public string StatusMessage { get; set; } = "Waiting...";
+    }
+
+    private sealed class InitialUploadProgressState
+    {
+        public long TotalBytes { get; set; }
+        public long BytesReceived { get; set; }
+        public DateTime LastReportedAtUtc { get; set; } = DateTime.MinValue;
+    }
+
     private CancellationTokenSource _uploadCts = new CancellationTokenSource();
 
     protected List<UploadPairItem> _uploadItems = new List<UploadPairItem>();
+    protected List<InitialUploadProgressItem> _initialUploadItems = new List<InitialUploadProgressItem>();
+    protected string _initialUploadStatusMessage = string.Empty;
+    protected int _initialUploadBatchProgress = 0;
     protected string _validationErrorMessage = string.Empty;
     protected List<string> _unmatchedMp3Files = new List<string>();
     protected List<string> _unmatchedCoverArtFiles = new List<string>();
@@ -41,7 +62,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     // Track upload state for navigation/close warnings and cleanup
     protected bool _isUploading = false;
-    private bool _isProcessingFiles = false;
+    protected bool _isProcessingFiles = false;
     private readonly List<string> _uploadedBlobPaths = new();
     private readonly object _blobPathsLock = new();
     private bool _disposed = false;
@@ -51,6 +72,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private const int ChunkSize = 8;
     private const int ImageOcrChunkSize = 4; // Max images buffered at once during the OCR matching phase
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
+    private static readonly TimeSpan InitialUploadProgressUpdateInterval = TimeSpan.FromSeconds(1);
 
     private long _maxAudioFileSize = 100 * 1024 * 1024; // default 100 MB, loaded from settings
     protected int _maxAudioUploadSizeMBDisplay = 100; // MB value for display in UI
@@ -146,23 +168,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // the finally block can always reach them.
         var audioTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var coverArtTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var beforeUnloadEnabled = false;
 
         try
         {
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
+        _initialUploadItems.Clear();
+        _initialUploadStatusMessage = string.Empty;
+        _initialUploadBatchProgress = 0;
         _unmatchedCoverArtFiles.Clear();
         _duplicateSongFiles.Clear();
-
-        // Show the lottie spinner immediately via direct DOM manipulation.
-        // We cannot call StateHasChanged here because re-rendering InputFile
-        // invalidates IBrowserFile references in .NET 9+.
-        try
-        {
-            await JS.InvokeVoidAsync("uploadFilesHelper.showSpinner");
-        }
-        catch (JSDisconnectedException) { }
 
         // Ensure CreatorId is loaded
         if (_currentCreatorId == null)
@@ -189,6 +206,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _uploadedBlobPaths.Clear();
         }
 
+        try
+        {
+            await EnableBeforeUnloadAsync();
+            beforeUnloadEnabled = true;
+        }
+        catch (JSDisconnectedException) { }
+
         // Capture file references BEFORE showing the spinner / calling StateHasChanged.
         // In .NET 9+ Blazor Server, calling StateHasChanged before GetMultipleFiles can
         // invalidate IBrowserFile references, causing "There is no file with ID X" errors
@@ -208,32 +232,45 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 coverArtFilesByName[file.Name] = file;
         }
 
+        _initialUploadItems = BuildInitialUploadProgressFiles(audioFilesByName.Values, coverArtFilesByName.Values);
+        var initialUploadItemsByName = _initialUploadItems.ToDictionary(f => f.Name, StringComparer.OrdinalIgnoreCase);
+        var initialUploadProgress = new InitialUploadProgressState
+        {
+            TotalBytes = _initialUploadItems.Sum(f => f.Size)
+        };
+
+        if (_initialUploadItems.Any())
+        {
+            _isUploading = true;
+            _initialUploadStatusMessage = _initialUploadItems.Count == 1
+                ? "Receiving 1 file..."
+                : $"Receiving {_initialUploadItems.Count} files...";
+            await InvokeAsync(StateHasChanged);
+        }
+
         // Buffer ALL IBrowserFile streams to temp files BEFORE calling StateHasChanged.
         // In .NET 9+ Blazor Server, re-rendering the InputFile component clears the
         // JS-side file list, invalidating all IBrowserFile references from the current
         // selection. After buffering to disk, re-renders are safe.
-        const int bufferSize = 81920;
 
         foreach (var kvp in audioFilesByName)
         {
             var tempPath = Path.GetTempFileName();
-            await using var stream = kvp.Value.OpenReadStream(_maxAudioFileSize);
-            await using var tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
-            await stream.CopyToAsync(tempFs, bufferSize, _uploadCts.Token);
             audioTempPaths[kvp.Key] = tempPath;
+            initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
+            await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxAudioFileSize, initialUploadItem, initialUploadProgress);
         }
 
         foreach (var kvp in coverArtFilesByName)
         {
             var tempPath = Path.GetTempFileName();
-            await using var stream = kvp.Value.OpenReadStream(_maxImageFileSize);
-            await using var tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
-            await stream.CopyToAsync(tempFs, bufferSize, _uploadCts.Token);
             coverArtTempPaths[kvp.Key] = tempPath;
+            initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
+            await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxImageFileSize, initialUploadItem, initialUploadProgress);
         }
 
-        // Show spinner — now safe to re-render since all IBrowserFile streams are consumed
-        _isUploading = true;
+        _initialUploadStatusMessage = "Files received. Matching cover art...";
+        _initialUploadBatchProgress = 100;
         await InvokeAsync(StateHasChanged);
 
         // Process all image files in chunks of ImageOcrChunkSize (4).
@@ -289,6 +326,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             {
                 BaseName = normalizedName,
                 AudioFileName = audioFileMeta.Name,
+                UploadedAudioFileName = normalizedName + ".mp3",
                 AudioFileSize = audioFileMeta.Size,
                 CoverArtFileName = coverArtFileName,
                 CoverArtFileSize = coverArtFileSize,
@@ -303,6 +341,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
         // Check for duplicate song titles before uploading
+        _initialUploadStatusMessage = "Files received. Checking for duplicate song titles...";
+        _initialUploadBatchProgress = 100;
+        await InvokeAsync(StateHasChanged);
         var candidateTitles = uploadItemsWithFiles.Select(x => x.NormalizedName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         HashSet<string> existingTitles;
         try
@@ -333,6 +374,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 .ToList();
         }
 
+        _initialUploadItems.Clear();
+        _initialUploadStatusMessage = string.Empty;
+        _initialUploadBatchProgress = 0;
         await InvokeAsync(StateHasChanged);
 
         // If all files were duplicates, no need to proceed with upload
@@ -342,13 +386,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
             return;
         }
-
-        // Enable browser warning for navigation away during upload
-        try
-        {
-            await JS.InvokeVoidAsync("uploadFilesHelper.enableBeforeUnload");
-        }
-        catch (JSDisconnectedException) { }
 
         try
         {
@@ -381,13 +418,25 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             // Uploads finished (completed or failed) — hide spinner, re-show upload box, disable warnings
             _isUploading = false;
-            try
-            {
-                await JS.InvokeVoidAsync("uploadFilesHelper.disableBeforeUnload");
-            }
-            catch (JSDisconnectedException) { }
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
             await InvokeAsync(StateHasChanged);
         }
+        }
+        catch (JSException ex) when (
+            ex.Message.Contains("There is no file with ID", StringComparison.OrdinalIgnoreCase) &&
+            ex.Message.Contains("file list may have changed", StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.LogWarning(ex, "UploadFiles: Browser file list changed before selected files could be buffered.");
+            _isUploading = false;
+            _validationErrorMessage = "The browser changed the selected file list before StreamTunes could read it. Please drop the files again.";
+
+            _initialUploadItems.Clear();
+            _initialUploadStatusMessage = string.Empty;
+            _initialUploadBatchProgress = 0;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
         }
         finally
         {
@@ -400,12 +449,162 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 try { await InvokeAsync(StateHasChanged); }
                 catch { }
             }
+
+            if (beforeUnloadEnabled)
+            {
+                await DisableBeforeUnloadAsync();
+            }
+
+            if (!_isUploading)
+            {
+                _initialUploadItems.Clear();
+                _initialUploadStatusMessage = string.Empty;
+                _initialUploadBatchProgress = 0;
+            }
+
             // Clean up ALL temp files (safe to call even if already deleted)
             foreach (var path in audioTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
             foreach (var path in coverArtTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
         }
+    }
+
+    private List<InitialUploadProgressItem> BuildInitialUploadProgressFiles(
+        IEnumerable<IBrowserFile> audioFiles,
+        IEnumerable<IBrowserFile> coverArtFiles)
+    {
+        var files = new List<InitialUploadProgressItem>();
+        var index = 0;
+
+        foreach (var file in audioFiles)
+        {
+            files.Add(new InitialUploadProgressItem
+            {
+                Index = index++,
+                Name = file.Name,
+                FileType = "Audio",
+                Size = file.Size,
+                FormattedSize = FormatFileSize(file.Size),
+                Progress = 0,
+                StatusMessage = "Waiting..."
+            });
+        }
+
+        foreach (var file in coverArtFiles)
+        {
+            files.Add(new InitialUploadProgressItem
+            {
+                Index = index++,
+                Name = file.Name,
+                FileType = "Cover Art",
+                Size = file.Size,
+                FormattedSize = FormatFileSize(file.Size),
+                Progress = 0,
+                StatusMessage = "Waiting..."
+            });
+        }
+
+        return files;
+    }
+
+    private async Task BufferBrowserFileToTempFileAsync(
+        IBrowserFile browserFile,
+        string tempPath,
+        long maxAllowedSize,
+        InitialUploadProgressItem progressItem,
+        InitialUploadProgressState progressState)
+    {
+        const int bufferSize = 81920;
+        var buffer = new byte[bufferSize];
+        long fileBytesReceived = 0;
+
+        await ReportInitialUploadProgressAsync(progressItem, fileBytesReceived, browserFile.Size, progressState, "Receiving...", force: true);
+
+        await using var browserStream = browserFile.OpenReadStream(maxAllowedSize);
+        await using var tempFileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
+
+        while (true)
+        {
+            var bytesRead = await browserStream.ReadAsync(buffer.AsMemory(0, buffer.Length), _uploadCts.Token);
+            if (bytesRead == 0)
+            {
+                break;
+            }
+
+            await tempFileStream.WriteAsync(buffer.AsMemory(0, bytesRead), _uploadCts.Token);
+            fileBytesReceived += bytesRead;
+            progressState.BytesReceived += bytesRead;
+
+            await ReportInitialUploadProgressAsync(progressItem, fileBytesReceived, browserFile.Size, progressState, "Receiving...");
+        }
+
+        await ReportInitialUploadProgressAsync(progressItem, fileBytesReceived, browserFile.Size, progressState, "Received", force: true);
+    }
+
+    private async Task ReportInitialUploadProgressAsync(
+        InitialUploadProgressItem progressItem,
+        long fileBytesReceived,
+        long fileSize,
+        InitialUploadProgressState progressState,
+        string statusText,
+        bool force = false)
+    {
+        if (progressItem == null)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (!force && now - progressState.LastReportedAtUtc < InitialUploadProgressUpdateInterval)
+        {
+            return;
+        }
+
+        progressState.LastReportedAtUtc = now;
+        var filePercent = CalculatePercent(fileBytesReceived, fileSize);
+        var batchPercent = CalculatePercent(progressState.BytesReceived, progressState.TotalBytes);
+
+        progressItem.Progress = filePercent;
+        progressItem.StatusMessage = statusText;
+        _initialUploadBatchProgress = batchPercent;
+        _initialUploadStatusMessage = statusText == "Received"
+            ? $"Received {progressItem.Name}"
+            : $"Receiving {progressItem.Name}...";
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static int CalculatePercent(long current, long total)
+    {
+        if (total <= 0)
+        {
+            return 100;
+        }
+
+        return (int)Math.Clamp(Math.Round(current * 100d / total), 0, 100);
+    }
+
+    private async Task EnableBeforeUnloadAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.enableBeforeUnload");
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private async Task DisableBeforeUnloadAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.disableBeforeUnload");
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (InvalidOperationException) { }
     }
 
     /// <summary>
@@ -796,6 +995,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     {
         public string BaseName { get; set; } = string.Empty;
         public string AudioFileName { get; set; } = string.Empty;
+        public string UploadedAudioFileName { get; set; } = string.Empty;
         public long AudioFileSize { get; set; }
         public string CoverArtFileName { get; set; } = string.Empty;
         public long CoverArtFileSize { get; set; }
@@ -822,7 +1022,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
     {
-        if (!_isUploading)
+        if (!_isUploading && !_isProcessingFiles)
             return;
 
         var isConfirmed = await JS.InvokeAsync<bool>("confirm",
