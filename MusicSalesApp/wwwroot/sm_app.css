@@ -849,7 +849,6 @@
         margin-bottom: 0.75rem;
     }
 
-    .cta-free-notice,
     .cta-price-highlight {
         font-size: 1.125rem;
         margin-bottom: 1.5rem;
@@ -878,17 +877,6 @@
     .cta-button-group .cta-button {
         width: 100%;
         min-width: auto;
-    }
-
-    .cta-learn-row {
-        flex-wrap: wrap;
-        margin-bottom: 1rem;
-    }
-
-    .cta-learn-row .cta-button {
-        width: auto !important;
-        min-width: auto;
-        padding: 0.5rem 1.25rem;
     }
 
     /* Dashboard responsive */

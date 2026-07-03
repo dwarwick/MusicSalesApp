@@ -3,10 +3,8 @@ using MusicSalesApp.Components.Base;
 
 namespace MusicSalesApp.Components.Pages.Public;
 
-public partial class LearnMoreModel : BlazorBase
+public partial class NewCreatorSignUpModel : BlazorBase
 {
-    protected string _streamPayRateDisplay = "0.005";
-    protected int _streamQualifyingSeconds = 30;
     protected bool _isAuthenticated = false;
     protected bool _isEmailVerified = false;
     protected bool _isActiveCreator = false;
@@ -27,10 +25,6 @@ public partial class LearnMoreModel : BlazorBase
 
     private async Task LoadDataAsync()
     {
-        var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
-        _streamPayRateDisplay = streamPayRate.ToString("0.###");
-        _streamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
-
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User?.Identity?.IsAuthenticated == true)
         {

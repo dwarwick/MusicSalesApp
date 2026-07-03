@@ -1521,36 +1521,6 @@ h1:focus {
     flex-shrink: 0;
 }
 
-.cta-subheading {
-    text-align: left;
-    margin: 0 auto;
-}
-
-.cta-free-notice {
-    text-align: center;
-    font-weight: 500;
-}
-
-.cta-learn-row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-}
-
-.cta-learn-link {
-    font-weight: 600;
-    cursor: default;
-}
-
-.cta-button-learn {
-    min-width: auto !important;
-    width: auto !important;
-    padding: 0.5rem 1.5rem !important;
-}
-
 .cta-price-highlight {
     text-align: center;
     font-weight: 500;
@@ -1714,6 +1684,11 @@ h1:focus {
     max-width: 900px;
     margin: 0 auto;
     line-height: 1.8;
+}
+
+.learn-more-content {
+    max-width: none;
+    margin: 0;
 }
 
 .terms-content h1 {
@@ -2178,4 +2153,67 @@ h1:focus {
     top: -5px;
     right: -5px;
     font-size: 0.6rem;
+}
+
+@media print {
+    html,
+    body,
+    .page,
+    main,
+    .content {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+
+    .page {
+        display: block !important;
+    }
+
+    main {
+        display: block !important;
+        flex: none !important;
+    }
+
+    .content {
+        padding: 0 !important;
+    }
+
+    .container {
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    sf-appbar,
+    .e-appbar,
+    .e-sidebar,
+    .mobile-app-install-banner,
+    .test-server-banner,
+    .maintenance-banner,
+    .e-toast-container,
+    .e-dlg-overlay,
+    .e-dialog,
+    #blazor-error-ui {
+        display: none !important;
+    }
+
+    button,
+    .e-btn {
+        display: none !important;
+    }
+
+    .creator-signup-form > .mb-3,
+    .creator-eligibility,
+    .creator-location-certification,
+    .creator-acknowledgment,
+    .onboarding-section,
+    .stop-selling-section,
+    .user-email-section,
+    .alert,
+    .e-message {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
 }

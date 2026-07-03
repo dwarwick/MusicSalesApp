@@ -1,0 +1,74 @@
+@page "/new-creator-signup"
+@inherits NewCreatorSignUpModel
+
+<PageTitle>New Creator Signup - Streamtunes</PageTitle>
+
+<div class="container my-5"
+     data-analytics-page-event="@FunnelAnalyticsEvents.CreatorLandingViewed"
+     data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
+     data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignup">
+    @* Featured Music Section *@
+    <section class="featured-music-section">
+        <div class="featured-music-header">
+            <h2 class="section-title">Free Featured Music</h2>
+            <a href="@AppPageRoutes.MusicLibrary" class="music-library-link">
+                View All Music
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                </svg>
+            </a>
+        </div>
+        <p class="section-subtitle">Listen to today's featured songs in full. Subscribe for unlimited access to the full library!</p>
+        <MusicLibrary ShowHomePageFeatured="true" EmbeddedPageTitle="New Creator Signup - Streamtunes" />
+    </section>
+
+    <h1 class="mb-4">Turn Your Creativity Into Streaming Revenue</h1>
+
+    <div class="terms-content learn-more-content">
+        <p>Streamtunes is built for modern independent creators. Original music is welcome, including AI-assisted or AI-generated music when you control the rights. If you create original music and control the rights to it, you can publish it here and earn from it.</p>
+
+        @if (!_isAuthenticated)
+        {
+            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                <a href="@CreatorRegisterUrl"
+                   class="e-control e-btn cta-button cta-button-register"
+                   data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
+                   data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
+                   data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupTopRegister">
+                    Start Creator Signup
+                </a>
+                <p style="margin-top: 1rem;">Already registered?</p>
+                <a href="@CreatorLoginUrl"
+                   class="e-control e-btn cta-button cta-button-login"
+                   data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
+                   data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
+                   data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupTopLogin">
+                    Log In
+                </a>
+            </div>
+        }
+        else if (!_isActiveCreator)
+        {
+            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                @if (_isEmailVerified)
+                {
+                    <a href="@AppPageRoutes.CreatorSettings"
+                       class="e-control e-btn cta-button cta-button-register"
+                       data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
+                       data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
+                       data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupTopCreatorSettings">
+                        Get Started
+                    </a>
+                }
+                else
+                {
+                    <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button cta-button-register">
+                        Validate Your Email for Full Functionality
+                    </a>
+                }
+            </div>
+        }
+
+        <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
+    </div>
+</div>

@@ -83,6 +83,11 @@
                     <MenuItems>
                         <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
                         <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
+                        <AuthorizeView Roles="@Roles.Creator">
+                            <NotAuthorized>
+                                <MenuItem Url="@AppPageRoutes.NewCreatorSignup" Text="Upload Your Music" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                            </NotAuthorized>
+                        </AuthorizeView>
 
                         <AuthorizeView Policy="@Permissions.NonValidatedUser">
                             <Authorized>

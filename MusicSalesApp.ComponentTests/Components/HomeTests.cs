@@ -111,47 +111,50 @@ public class HomeTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - Verify subscriber CTA card is present (not the old green box)
+        // Assert - Verify subscriber CTA card is present and fills the CTA section by itself
         Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
         Assert.That(cut.Markup, Does.Contain("subscriber-cta"));
         Assert.That(cut.Markup, Does.Contain("Full-length streaming"));
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
+        Assert.That(cut.FindAll(".cta-split-section .cta-card"), Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void Home_ShowsCreatorCta_ForNonCreators()
+    public void Home_HidesCreatorCta_ForNonCreators()
     {
         // Arrange - Setup non-authenticated user (default state)
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - Verify Creator CTA is present for non-creators
-        Assert.That(cut.Markup, Does.Contain("Monetize Your Music"));
-        Assert.That(cut.Markup, Does.Contain("Original music is welcome"));
-        Assert.That(cut.Markup, Does.Contain("Get your songs heard worldwide"));
-        Assert.That(cut.Markup, Does.Contain("Earn per stream"));
-        Assert.That(cut.Markup, Does.Contain("Keep 100% control of your music rights"));
-        Assert.That(cut.Markup, Does.Contain("Quick upload process"));
-        Assert.That(cut.Markup, Does.Contain("No cost to join"));
-        Assert.That(cut.Markup, Does.Contain("href=\"/learnmore\""));
+        // Assert - Verify Creator CTA was removed from the home page
+        Assert.That(cut.Markup, Does.Not.Contain("creator-cta"));
+        Assert.That(cut.Markup, Does.Not.Contain("Monetize Your Music"));
+        Assert.That(cut.Markup, Does.Not.Contain("Original music is welcome"));
+        Assert.That(cut.Markup, Does.Not.Contain("Get your songs heard worldwide"));
+        Assert.That(cut.Markup, Does.Not.Contain("Earn per stream"));
+        Assert.That(cut.Markup, Does.Not.Contain("Keep 100% control of your music rights"));
+        Assert.That(cut.Markup, Does.Not.Contain("Quick upload process"));
+        Assert.That(cut.Markup, Does.Not.Contain("No cost to join"));
     }
 
     [Test]
-    public void Home_ShowsSignInButton_ForCreatorCta_WhenNotAuthenticated()
+    public void Home_ShowsSubscriberAuthButtons_WhenNotAuthenticated()
     {
         // Arrange - Setup non-authenticated user (default state)
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - Verify new login/register buttons for non-authenticated users
+        // Assert - Verify subscriber login/register buttons remain for non-authenticated users
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
         Assert.That(cut.Markup, Does.Contain("Log In"));
         Assert.That(cut.Markup, Does.Contain("Register"));
-        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2FCreatorSettings\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2Fmanage-account\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/register?returnUrl=%2Fmanage-account\""));
+        Assert.That(cut.Markup, Does.Not.Contain("%2FCreatorSettings"));
     }
 
     [Test]
-    public void Home_VerifiedNonCreatorCta_LinksToCreatorSettings()
+    public void Home_VerifiedNonSubscriberCta_LinksToManageAccount()
     {
         const int userId = 1;
         SetupAuthorizedUser(userId, "test@user.com");
@@ -171,22 +174,24 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
         cut.WaitForState(() => cut.Markup.Contains("Click Here to Get Started"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/manage-account\""));
+        Assert.That(cut.Markup, Does.Not.Contain("href=\"/CreatorSettings\""));
     }
 
     [Test]
-    public void Home_ShowsBothCtas_ForNonSubscriberNonCreator()
+    public void Home_ShowsOnlySubscriberCta_ForNonSubscribers()
     {
         // Arrange - Setup non-authenticated user (default state)
         // Act
         var cut = TestContext.Render<Home>();
 
-        // Assert - Verify both CTAs are shown
+        // Assert - Verify only the subscriber CTA is shown
         Assert.That(cut.Markup, Does.Contain("cta-split-section"));
-        Assert.That(cut.Markup, Does.Contain("creator-cta"));
         Assert.That(cut.Markup, Does.Contain("subscriber-cta"));
-        Assert.That(cut.Markup, Does.Contain("Monetize Your Music"));
         Assert.That(cut.Markup, Does.Contain("Unlimited Music Streaming"));
+        Assert.That(cut.Markup, Does.Not.Contain("creator-cta"));
+        Assert.That(cut.Markup, Does.Not.Contain("Monetize Your Music"));
+        Assert.That(cut.FindAll(".cta-split-section .cta-card"), Has.Count.EqualTo(1));
     }
 
     [Test]

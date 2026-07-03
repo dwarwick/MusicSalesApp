@@ -15,14 +15,11 @@ public partial class HomeModel : BlazorBase
     protected int _likedSongsCount = 0;
     protected bool _loadingRecommendations = false;
     protected int _currentUserId;
-    protected bool _isActiveCreator = false;
 
     protected bool HasUserPlaylists => _isAuthenticated && 
         (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0));
 
     protected bool HasLikedSongsToShow => _likedSongsPlaylist != null && _likedSongsCount > 0;
-    protected string CreatorLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.CreatorSettings);
-    protected string CreatorRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.CreatorSettings);
     protected string SubscriberLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.ManageAccount);
     protected string SubscriberRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.ManageAccount);
 
@@ -43,7 +40,6 @@ public partial class HomeModel : BlazorBase
             await LoadSubscriptionStatusAsync();
             await LoadRecommendedPlaylistAsync();
             await LoadLikedSongsPlaylistAsync();
-            await LoadCreatorStatusAsync();
         }
     }
 
@@ -107,20 +103,6 @@ public partial class HomeModel : BlazorBase
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load Liked Songs playlist for user {UserId}", _currentUserId);
-        }
-    }
-
-    private async Task LoadCreatorStatusAsync()
-    {
-        if (_currentUserId == 0) return;
-
-        try
-        {
-            _isActiveCreator = await CreatorService.IsActiveCreatorAsync(_currentUserId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to check creator status for user {UserId}", _currentUserId);
         }
     }
 

@@ -29,6 +29,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     [Parameter]
     public bool ShowHomePageFeatured { get; set; }
 
+    [Parameter]
+    public string EmbeddedPageTitle { get; set; }
+
     protected bool _loading = true;
     protected string _error;
     protected List<StorageFileInfo> _files = new List<StorageFileInfo>();

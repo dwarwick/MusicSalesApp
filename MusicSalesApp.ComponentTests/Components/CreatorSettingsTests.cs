@@ -125,7 +125,7 @@ public class CreatorSettingsTests : BUnitTestBase
         });
 
         MockCreatorService
-            .Setup(x => x.UpdateCreatorPayoutEmailAsync(1, "payout@example.com"))
+            .Setup(x => x.UpdateCreatorPayoutEmailAsync(1, "payout@example.com", true))
             .ReturnsAsync(new Creator { Id = 7, UserId = 1, PayPalEmail = "payout@example.com" });
 
         var cut = TestContext.Render<CreatorSettings>();
@@ -134,7 +134,7 @@ public class CreatorSettingsTests : BUnitTestBase
         SetField(cut.Instance, "_paypalEmail", "payout@example.com");
         await InvokeNonPublicTask(cut.Instance, "SavePayPalEmail");
 
-        MockCreatorService.Verify(x => x.UpdateCreatorPayoutEmailAsync(1, "payout@example.com"), Times.Once);
+        MockCreatorService.Verify(x => x.UpdateCreatorPayoutEmailAsync(1, "payout@example.com", true), Times.Once);
     }
 
     [Test]

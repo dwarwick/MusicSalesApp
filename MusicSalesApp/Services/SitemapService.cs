@@ -115,7 +115,8 @@ public class SitemapService : ISitemapService
         WriteUrlEntry(xmlWriter, $"{baseUrl}/account-deletion", DateTime.UtcNow, "monthly", "0.5");
         WriteUrlEntry(xmlWriter, $"{baseUrl}/creator-agreement", DateTime.UtcNow, "monthly", "0.5");
         WriteUrlEntry(xmlWriter, $"{baseUrl}/user-refund-policy", DateTime.UtcNow, "monthly", "0.5");
-        WriteUrlEntry(xmlWriter, $"{baseUrl}/learnmore", DateTime.UtcNow, "weekly", "0.8");
+        WriteUrlEntry(xmlWriter, $"{baseUrl}{AppPageRoutes.NewCreatorSignup}", DateTime.UtcNow, "weekly", "0.8");
+        WriteUrlEntry(xmlWriter, $"{baseUrl}{AppPageRoutes.NewCreatorSignupQuestions}", DateTime.UtcNow, "weekly", "0.8");
 
         // Add song URLs
         foreach (var song in songs)

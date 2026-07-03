@@ -30,7 +30,7 @@ public class LearnMoreTests : BUnitTestBase
         var cut = TestContext.Render<LearnMore>();
         cut.WaitForState(() => cut.Markup.Contains("Get Started"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.FindAll("a.cta-button-register[href='/CreatorSettings']").Count, Is.EqualTo(2));
+        Assert.That(cut.FindAll("a.cta-button-register[href='/CreatorSettings']").Count, Is.EqualTo(1));
         Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
         Assert.That(cut.Markup, Does.Not.Contain("href=\"/manage-account\" class=\"e-control e-btn cta-button cta-button-register\""));
     }
@@ -41,17 +41,37 @@ public class LearnMoreTests : BUnitTestBase
         var cut = TestContext.Render<LearnMore>();
         cut.WaitForState(() => cut.Markup.Contains("Start Creator Signup"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));
-        Assert.That(cut.FindAll("a.cta-button-login[href='/login?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(2));
+        Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(1));
+        Assert.That(cut.FindAll("a.cta-button-login[href='/login?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(1));
     }
 
     [Test]
-    public void LearnMore_IncludesHowToBecomeCreatorSection()
+    public void LearnMore_DoesNotIncludeMovedQuestionSections()
     {
         var cut = TestContext.Render<LearnMore>();
 
+        Assert.That(cut.Markup, Does.Not.Contain("Why Streamtunes Exists"));
+        Assert.That(cut.Markup, Does.Not.Contain("How to Become a Creator"));
+    }
+
+    [Test]
+    public void NewCreatorSignupQuestions_IncludesMovedQuestionSections()
+    {
+        var cut = TestContext.Render<NewCreatorSignupQuestions>();
+
+        Assert.That(cut.Markup, Does.Contain("Why Streamtunes Exists"));
         Assert.That(cut.Markup, Does.Contain("How to Become a Creator"));
         Assert.That(cut.Markup, Does.Contain("Creator / Artist Settings"));
         Assert.That(cut.Markup, Does.Contain("href=\"/CreatorSettings\""));
+    }
+
+    [Test]
+    public void NewCreatorSignupQuestions_AnonymousUser_ShowsBottomCreatorAuthButtons()
+    {
+        var cut = TestContext.Render<NewCreatorSignupQuestions>();
+        cut.WaitForState(() => cut.Markup.Contains("Start Creator Signup"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(1));
+        Assert.That(cut.FindAll("a.cta-button-login[href='/login?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(1));
     }
 }

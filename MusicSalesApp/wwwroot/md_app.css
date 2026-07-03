@@ -534,7 +534,6 @@
         margin-bottom: 0.875rem;
     }
 
-    .cta-free-notice,
     .cta-price-highlight {
         font-size: 1.25rem;
         margin-bottom: 1.5rem;
@@ -565,13 +564,4 @@
         flex: 1;
     }
 
-    .cta-learn-row {
-        margin-bottom: 1.25rem;
-    }
-
-    .cta-learn-row .cta-button {
-        width: auto !important;
-        min-width: auto;
-        padding: 0.625rem 1.25rem;
-    }
 }

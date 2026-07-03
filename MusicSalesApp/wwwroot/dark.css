@@ -487,11 +487,6 @@ body {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-.creator-cta .cta-icon {
-    background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
-    color: #fff;
-}
-
 .subscriber-cta .cta-icon {
     background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
     color: #fff;
@@ -511,18 +506,6 @@ body {
 
 .cta-benefits li svg {
     color: #1db954;
-}
-
-.creator-cta .cta-benefits li svg {
-    color: #8e44ad;
-}
-
-.cta-free-notice {
-    color: #c39bd3;
-}
-
-.cta-learn-link {
-    color: #ffffff;
 }
 
 .cta-price-highlight {
@@ -548,14 +531,12 @@ body {
     box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
 }
 
-.creator-cta .cta-button,
 .hero-secondary-cta {
     background-color: #8e44ad !important;
     color: #fff !important;
     border: none !important;
 }
 
-.creator-cta .cta-button:hover,
 .hero-secondary-cta:hover {
     background-color: #9b59b6 !important;
     box-shadow: 0 8px 20px rgba(142, 68, 173, 0.4);

@@ -8,16 +8,16 @@
     @* Featured Music Section *@
     <section class="featured-music-section">
         <div class="featured-music-header">
-            <h2 class="section-title">Featured Music</h2>
+            <h2 class="section-title">Free Featured Music</h2>
             <a href="@AppPageRoutes.MusicLibrary" class="music-library-link">
-                View All
+                View All Music
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                     <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
                 </svg>
             </a>
         </div>
         <p class="section-subtitle">Listen to today's featured songs in full. Subscribe for unlimited access to the full library!</p>
-        <MusicLibrary ShowHomePageFeatured="true" />
+        <MusicLibrary ShowHomePageFeatured="true" EmbeddedPageTitle="Stream Tunes - Unlimited Music Streaming" />
     </section>
 
     @* Hero Section *@
@@ -78,110 +78,15 @@
         </div>
     </section>
 
-    @* CTA Split Section - Creators and Subscribers (under hero, before features) *@
-    @if (!_hasActiveSubscription || !_isActiveCreator)
+    @* CTA Split Section - Subscribers (under hero, before features) *@
+    @if (!_hasActiveSubscription)
     {
         <section class="cta-split-section">
             <div class="cta-split-container">
-                @* Creator CTA - Left side (or top on mobile) - Only show if not an active creator *@
-                @if (!_isActiveCreator)
-                {
-                    <div class="cta-card creator-cta">
-                        <div class="cta-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                                <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>
-                            </svg>
-                        </div>
-                        <h2 class="cta-title">Monetize Your Music</h2>
-                        <p class="cta-description">Original music is welcome, including AI-assisted or AI-generated music when you control the rights.</p>
-                        <h4 class="cta-subheading"><strong>Why creators choose Streamtunes:</strong></h4>
-                        <ul class="cta-benefits">
-                            <li>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                                Get your songs heard worldwide
-                            </li>
-                            <li>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                                Earn per stream — straight to you
-                            </li>
-                            <li>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                                Keep 100% control of your music rights
-                            </li>
-                            <li>
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                </svg>
-                                Quick upload process — start earning fast
-                            </li>
-                        </ul>
-                        <p class="cta-free-notice">
-                            No cost to join — full platform access included.
-                        </p>
-                        <div class="creator-trust-note">
-                            Tax forms are completed through TaxBandits. Streamtunes does not store your SSN/TIN locally; it stores only payout and compliance status needed to process creator payments.
-                        </div>
-                        <div class="cta-learn-row">
-                            <span class="cta-learn-link">Learn how it works →</span>
-                            <a href="@AppPageRoutes.LearnMore"
-                               class="e-control e-btn cta-button cta-button-learn"
-                               data-analytics-event="@FunnelAnalyticsEvents.CreatorLandingViewed"
-                               data-analytics-category="creator"
-                               data-analytics-label="home_creator_learn_more">
-                                Learn More
-                            </a>
-                        </div>
-                        @if (!_isAuthenticated)
-                        {
-                            <div class="cta-button-group">
-                                <a href="@CreatorLoginUrl"
-                                   class="e-control e-btn cta-button cta-button-login"
-                                   data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
-                                   data-analytics-category="creator"
-                                   data-analytics-label="home_creator_login">
-                                    Log In
-                                </a>
-                                <a href="@CreatorRegisterUrl"
-                                   class="e-control e-btn cta-button cta-button-register"
-                                   data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
-                                   data-analytics-category="creator"
-                                   data-analytics-label="home_creator_register">
-                                    Start Creator Signup
-                                </a>
-                            </div>
-                        }
-                        else if (_isEmailVerified)
-                        {
-                            <a href="@AppPageRoutes.CreatorSettings"
-                               class="e-control e-btn cta-button"
-                               data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
-                               data-analytics-category="creator"
-                               data-analytics-label="home_creator_settings">
-                                Click Here to Get Started
-                            </a>
-                        }
-                        else
-                        {
-                            <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button">
-                                Validate Your Email for Full Functionality
-                            </a>
-                        }
-                    </div>
-                }
-
-                @* Subscriber CTA - Right side (or bottom on mobile) - Only show if not a subscriber *@
-                @if (!_hasActiveSubscription)
-                {
-                    <div class="cta-card subscriber-cta"
-                         data-analytics-page-event="@FunnelAnalyticsEvents.SubscriberCtaViewed"
-                         data-analytics-category="subscriber"
-                         data-analytics-label="home_subscriber_cta">
+                <div class="cta-card subscriber-cta"
+                     data-analytics-page-event="@FunnelAnalyticsEvents.SubscriberCtaViewed"
+                     data-analytics-category="subscriber"
+                     data-analytics-label="home_subscriber_cta">
                         <div class="cta-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
                                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
@@ -256,8 +161,7 @@
                                 Validate Your Email for Full Functionality
                             </a>
                         }
-                    </div>
-                }
+                </div>
             </div>
         </section>
     }

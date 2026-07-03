@@ -88,6 +88,49 @@ public class NavMenuTests : BUnitTestBase
     }
 
     [Test]
+    public void NavMenu_ShowsUploadYourMusicLink_ForAnonymousUsers()
+    {
+        var cut = TestContext.Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Upload Your Music"));
+            Assert.That(cut.Markup, Does.Contain($"href=\"{AppPageRoutes.NewCreatorSignup}\""));
+        });
+    }
+
+    [Test]
+    public void NavMenu_ShowsUploadYourMusicLink_ForAuthenticatedNonCreators()
+    {
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        var cut = TestContext.Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Upload Your Music"));
+            Assert.That(cut.Markup, Does.Contain($"href=\"{AppPageRoutes.NewCreatorSignup}\""));
+        });
+    }
+
+    [Test]
+    public void NavMenu_HidesUploadYourMusicLink_ForCreatorRole_AndKeepsCreatorUploadLink()
+    {
+        var authContext = SetupAuthorizedUser(1, "creator@test.com", Roles.Creator);
+        authContext.SetPolicies(Permissions.UploadFiles);
+
+        var cut = TestContext.Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Upload Your Music"));
+            Assert.That(cut.Markup, Does.Not.Contain($"href=\"{AppPageRoutes.NewCreatorSignup}\""));
+            Assert.That(cut.Markup, Does.Contain("Upload Music"));
+            Assert.That(cut.Markup, Does.Contain("href=\"/upload-files\""));
+        });
+    }
+
+    [Test]
     public void NavMenu_ShowsTestingServerBanner_WhenRunningInTestEnvironment()
     {
         // Arrange
