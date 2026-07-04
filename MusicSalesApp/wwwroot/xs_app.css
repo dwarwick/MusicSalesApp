@@ -1,5 +1,27 @@
 /* Extra small breakpoint styles (<576px) */
 @media (max-width: 576px) {
+    .creator-settings-page {
+        padding: 22px 10px 40px;
+    }
+
+    .creator-settings-card .e-card-content {
+        padding: 18px;
+    }
+
+    .creator-settings-title h2 {
+        font-size: 24px;
+    }
+
+    .creator-settings-card h3 {
+        font-size: 22px;
+    }
+
+    .creator-agreement-box,
+    .creator-info-strip,
+    .creator-payout-section {
+        padding: 14px;
+    }
+
     .mobile-app-install-banner {
         min-height: 54px;
         padding: 8px 10px;

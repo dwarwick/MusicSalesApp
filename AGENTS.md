@@ -54,6 +54,17 @@ This application uses Syncfusion Blazor components for all UI elements to provid
   - `SfAppBar` for navigation bar
   - `SfSidebar` for side navigation
 
+### Site Theme Button and Control Styling
+
+Syncfusion components should still look like StreamTunes, not Syncfusion defaults:
+
+- For prominent page actions on public, account, creator setup, and creator settings surfaces, prefer the existing site CTA classes over plain `IsPrimary="true"` when `IsPrimary` renders the default Syncfusion blue.
+- Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`, plus a page-specific hook when needed (for example `creator-settings-cta`).
+- Keep destructive actions on `e-danger`; do not restyle stop/delete/destructive buttons as purple CTAs.
+- Keep secondary utility/navigation actions visually quieter unless the workflow clearly treats them as the primary next step.
+- If Syncfusion checkboxes, text boxes, or focused inputs appear in a themed page, scope overrides to the page container and put the purple/brand color values in `light.css` and `dark.css`. Checked checkbox states, hover states, and input focus rings should follow the site palette instead of the default blue.
+- Put only structural/layout pieces for those controls in `app.css`; put spacing/sizing in the breakpoint CSS files.
+
 ### Component Code-Behind Pattern
 All Blazor components and pages must follow these conventions:
 

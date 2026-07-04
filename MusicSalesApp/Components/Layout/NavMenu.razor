@@ -81,70 +81,70 @@
             <div class="sidebar-menu">
                 <SfMenu CssClass="e-inherit ms-2 mt-2" TValue="MenuItem" Orientation="Orientation.Vertical">
                     <MenuItems>
-                        <MenuItem Url="/" Text="Home" IconCss="fas fa-house"></MenuItem>
-                        <MenuItem Url="/music-library" Text="Music Library" IconCss="fas fa-music"></MenuItem>
+                        <MenuItem Url="/" Text="Home" IconCss="streamtunes-menu-icon streamtunes-menu-icon-home"></MenuItem>
+                        <MenuItem Url="/music-library" Text="Music Library" IconCss="streamtunes-menu-icon streamtunes-menu-icon-semiquaver"></MenuItem>
                         <AuthorizeView Roles="@Roles.Creator">
                             <NotAuthorized>
-                                <MenuItem Url="@AppPageRoutes.NewCreatorSignup" Text="Upload Your Music" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                                <MenuItem Url="@AppPageRoutes.NewCreatorSignup" Text="Upload Your Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
                             </NotAuthorized>
                         </AuthorizeView>
 
                         <AuthorizeView Policy="@Permissions.NonValidatedUser">
                             <Authorized>
-                                <MenuItem Url="/validate-email" Text="Validate my Email" IconCss="fas fa-envelope-circle-check"></MenuItem>
+                                <MenuItem Url="/validate-email" Text="Validate my Email" IconCss="streamtunes-menu-icon streamtunes-menu-icon-check"></MenuItem>
                             </Authorized>
                         </AuthorizeView>
 
                         <AuthorizeView Policy="@Permissions.ValidatedUser">
                             <Authorized>
-                                <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="fas fa-list"></MenuItem>
-                                <MenuItem Url="/manage-account" Text="Manage Account" IconCss="fas fa-user-gear"></MenuItem>
-                                <MenuItem Url="/CreatorSettings" Text="Creator / Artist Settings" IconCss="fas fa-microphone-lines"></MenuItem>
+                                <MenuItem Url="/my-playlists" Text="My Playlists" IconCss="streamtunes-menu-icon streamtunes-menu-icon-list"></MenuItem>
+                                <MenuItem Url="/manage-account" Text="Manage Account" IconCss="streamtunes-menu-icon streamtunes-menu-icon-account"></MenuItem>
+                                <MenuItem Url="/CreatorSettings" Text="Creator / Artist Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-creator"></MenuItem>
                             </Authorized>
                         </AuthorizeView>
 
                         <AuthorizeView Policy="@Permissions.UploadFiles">
                             <Authorized>
-                                <MenuItem Url="/upload-files" Text="  Upload Music" IconCss="fas fa-cloud-arrow-up"></MenuItem>
+                                <MenuItem Url="/upload-files" Text="  Upload Music" IconCss="streamtunes-menu-icon streamtunes-menu-icon-upload-music"></MenuItem>
                             </Authorized>
                         </AuthorizeView>
 
                         <AuthorizeView Policy="@Permissions.ManageOwnSongs">
                             <Authorized>
-                                <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="fas fa-chart-column"></MenuItem>
-                                <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="fas fa-file-audio"></MenuItem>
-                                <MenuItem Url="/creator/personas" Text="  Manage My Personas" IconCss="fas fa-person-rays"></MenuItem>
+                                <MenuItem Url="/creator/dashboard" Text="  Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-dashboard"></MenuItem>
+                                <MenuItem Url="/creator/songs" Text="  Manage My Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-song-list"></MenuItem>
+                                <MenuItem Url="/creator/personas" Text="  Manage My Personas" IconCss="streamtunes-menu-icon streamtunes-menu-icon-personality"></MenuItem>
                             </Authorized>
                         </AuthorizeView>
 
                 <AuthorizeView Policy="@Permissions.ManageUsers">
                     <Authorized>
                         <MenuItem Separator="true"></MenuItem>
-                        <MenuItem Text="Admin" IconCss="fas fa-shield-halved" Disabled="true"></MenuItem>
-                        <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="fas fa-users-gear"></MenuItem>                        
-                        <MenuItem Url="/admin/messages" Text="  User Messages" IconCss="fas fa-envelope-open-text"></MenuItem>
-                        <MenuItem Url="/admin/contact-messages" Text="  Contact Messages" IconCss="fas fa-inbox"></MenuItem>
-                        <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="fas fa-file-audio"></MenuItem>
-                        <MenuItem Url="/admin/song-status-history" Text="  Song Status History" IconCss="fas fa-clock-rotate-left"></MenuItem>
-                        <MenuItem Url="/admin/personas" Text="  Persona Management" IconCss="fas fa-person-rays"></MenuItem>
-                        <MenuItem Url="/admin/user-history" Text="  User History" IconCss="fas fa-user-clock"></MenuItem>
-                        <MenuItem Url="/admin/payouts" Text="  Payouts" IconCss="fas fa-money-bill-transfer"></MenuItem>
-                        <MenuItem Url="/admin/tip-fraud" Text="  Tip Fraud Monitor" IconCss="fas fa-shield-virus"></MenuItem>
-                        <MenuItem Url="/admin/reported-songs" Text="  Reported Songs" IconCss="fas fa-flag"></MenuItem>
-                        <MenuItem Url="/admin/logs" Text="  View Logs" IconCss="fas fa-file-lines"></MenuItem>
-                        <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="fas fa-gauge-high"></MenuItem>
-                        <MenuItem Url="/admin/settings" Text="  Settings" IconCss="fas fa-solid fa-gear"></MenuItem>
+                        <MenuItem Text="Admin" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock" Disabled="true"></MenuItem>
+                        <MenuItem Url="/admin/users" Text="  Manage Users" IconCss="streamtunes-menu-icon streamtunes-menu-icon-users"></MenuItem>
+                        <MenuItem Url="/admin/messages" Text="  User Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-mail"></MenuItem>
+                        <MenuItem Url="/admin/contact-messages" Text="  Contact Messages" IconCss="streamtunes-menu-icon streamtunes-menu-icon-inbox"></MenuItem>
+                        <MenuItem Url="/admin/songs" Text="  Song Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-catalog"></MenuItem>
+                        <MenuItem Url="/admin/song-status-history" Text="  Song Status History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-status-history"></MenuItem>
+                        <MenuItem Url="/admin/personas" Text="  Persona Management" IconCss="streamtunes-menu-icon streamtunes-menu-icon-masks"></MenuItem>
+                        <MenuItem Url="/admin/user-history" Text="  User History" IconCss="streamtunes-menu-icon streamtunes-menu-icon-user-history"></MenuItem>
+                        <MenuItem Url="/admin/payouts" Text="  Payouts" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
+                        <MenuItem Url="/admin/tip-fraud" Text="  Tip Fraud Monitor" IconCss="streamtunes-menu-icon streamtunes-menu-icon-warning"></MenuItem>
+                        <MenuItem Url="/admin/reported-songs" Text="  Reported Songs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-flag"></MenuItem>
+                        <MenuItem Url="/admin/logs" Text="  View Logs" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
+                        <MenuItem Url="/hangfire" Text="  Hangfire Dashboard" IconCss="streamtunes-menu-icon streamtunes-menu-icon-gauge"></MenuItem>
+                        <MenuItem Url="/admin/settings" Text="  Settings" IconCss="streamtunes-menu-icon streamtunes-menu-icon-settings"></MenuItem>
                         <MenuItem Separator="true"></MenuItem>
                     </Authorized>
                 </AuthorizeView>
 
                         <AuthorizeView>
                             <Authorized>
-                                <MenuItem Url="/logout" Text="Logout" IconCss="fas fa-arrow-right-from-bracket"></MenuItem>
+                                <MenuItem Url="/logout" Text="Logout" IconCss="streamtunes-menu-icon streamtunes-menu-icon-logout"></MenuItem>
                             </Authorized>
                             <NotAuthorized>
-                                <MenuItem Url="/login" Text="Login" IconCss="fas fa-arrow-right-to-bracket"></MenuItem>
-                                <MenuItem Url="/register" Text="Register" IconCss="fas fa-user-plus"></MenuItem>
+                                <MenuItem Url="/login" Text="Login" IconCss="streamtunes-menu-icon streamtunes-menu-icon-login"></MenuItem>
+                                <MenuItem Url="/register" Text="Register" IconCss="streamtunes-menu-icon streamtunes-menu-icon-add"></MenuItem>
                             </NotAuthorized>
                         </AuthorizeView>
                     </MenuItems>
@@ -154,12 +154,12 @@
             <div class="sidebar-footer">
                 <SfMenu CssClass="e-inherit ms-2" TValue="MenuItem" Orientation="Orientation.Vertical">
                     <MenuItems>
-                        <MenuItem Url="mailto://customerservice@streamtunes.net" Text="Contact Us" IconCss="fas fa-solid fa-paper-plane"></MenuItem>
-                        <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="fas fa-file-contract"></MenuItem>
-                        <MenuItem Url="/privacy-policy" Text="Privacy Policy" IconCss="fas fa-shield-halved"></MenuItem>
-                        <MenuItem Url="/account-deletion" Text="Account Deletion" IconCss="fas fa-user-slash"></MenuItem>
-                        <MenuItem Url="/creator-agreement" Text="Creator Agreement" IconCss="fas fa-file-signature"></MenuItem>
-                        <MenuItem Url="/user-refund-policy" Text="User Refund Policy" IconCss="fas fa-money-bill-wave"></MenuItem>
+                        <MenuItem Url="mailto://customerservice@streamtunes.net" Text="Contact Us" IconCss="streamtunes-menu-icon streamtunes-menu-icon-send"></MenuItem>
+                        <MenuItem Url="/terms-of-use" Text="Terms of Use" IconCss="streamtunes-menu-icon streamtunes-menu-icon-document"></MenuItem>
+                        <MenuItem Url="/privacy-policy" Text="Privacy Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-lock"></MenuItem>
+                        <MenuItem Url="/account-deletion" Text="Account Deletion" IconCss="streamtunes-menu-icon streamtunes-menu-icon-delete"></MenuItem>
+                        <MenuItem Url="/creator-agreement" Text="Creator Agreement" IconCss="streamtunes-menu-icon streamtunes-menu-icon-edit"></MenuItem>
+                        <MenuItem Url="/user-refund-policy" Text="User Refund Policy" IconCss="streamtunes-menu-icon streamtunes-menu-icon-money"></MenuItem>
                     </MenuItems>
                     <MenuEvents TValue="MenuItem" ItemSelected="CloseMenu"></MenuEvents>
                 </SfMenu>

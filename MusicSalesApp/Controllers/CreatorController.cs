@@ -90,6 +90,7 @@ public class CreatorController : ControllerBase
             Bio = request.Bio,
             PayPalEmail = request.PayPalEmail,
             PayPalAccountAffirmed = request.PayPalAccountAffirmed,
+            CreatorAgreementAccepted = request.CreatorAgreementAccepted,
             LocationCertification = request.LocationCertification,
             AcknowledgmentAccepted = request.AcknowledgmentAccepted,
             PayoutRequirementsAcknowledged = request.PayoutRequirementsAcknowledged,
@@ -465,19 +466,26 @@ public class StartOnboardingRequest
     public string? Bio { get; set; }
     public string? PayPalEmail { get; set; }
     /// <summary>
-    /// Whether the user affirms they have a valid PayPal account in good standing.
+    /// Whether the user affirms they own or are authorized to use a valid PayPal account in good standing.
     /// </summary>
     public bool PayPalAccountAffirmed { get; set; }
     /// <summary>
+    /// Whether the creator accepted the Creator Agreement required for activation.
+    /// </summary>
+    public bool CreatorAgreementAccepted { get; set; }
+    /// <summary>
     /// The creator's location certification selection for tax eligibility purposes.
+    /// Kept for API compatibility; not required for creator activation.
     /// </summary>
     public CreatorLocationCertification LocationCertification { get; set; }
     /// <summary>
     /// Whether the creator has accepted the acknowledgment checkbox.
+    /// Kept for API compatibility; not required for creator activation.
     /// </summary>
     public bool AcknowledgmentAccepted { get; set; }
     /// <summary>
     /// Whether the creator acknowledges PayPal and tax form completion are required before payouts.
+    /// Kept for API compatibility; not required for creator activation.
     /// </summary>
     public bool PayoutRequirementsAcknowledged { get; set; }
     /// <summary>

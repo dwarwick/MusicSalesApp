@@ -8,10 +8,10 @@ using System.Security.Claims;
 namespace MusicSalesApp.ComponentTests.Components;
 
 [TestFixture]
-public class LearnMoreTests : BUnitTestBase
+public class NewCreatorSignUpTests : BUnitTestBase
 {
     [Test]
-    public void LearnMore_VerifiedNonCreatorGetStarted_LinksToCreatorSettings()
+    public void NewCreatorSignUp_VerifiedNonCreatorGetStarted_LinksToCreatorSettings()
     {
         const int userId = 1;
         SetupAuthorizedUser(userId, "test@user.com");
@@ -27,7 +27,7 @@ public class LearnMoreTests : BUnitTestBase
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(testUser);
         MockUserManager.Setup(x => x.IsInRoleAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>())).ReturnsAsync(false);
 
-        var cut = TestContext.Render<LearnMore>();
+        var cut = TestContext.Render<NewCreatorSignUp>();
         cut.WaitForState(() => cut.Markup.Contains("Get Started"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.FindAll("a.cta-button-register[href='/CreatorSettings']").Count, Is.EqualTo(1));
@@ -36,9 +36,9 @@ public class LearnMoreTests : BUnitTestBase
     }
 
     [Test]
-    public void LearnMore_AnonymousUser_ShowsTopAndBottomCreatorAuthButtons()
+    public void NewCreatorSignUp_AnonymousUser_ShowsCreatorAuthButtons()
     {
-        var cut = TestContext.Render<LearnMore>();
+        var cut = TestContext.Render<NewCreatorSignUp>();
         cut.WaitForState(() => cut.Markup.Contains("Start Creator Signup"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.FindAll("a.cta-button-register[href='/register?returnUrl=%2FCreatorSettings']").Count, Is.EqualTo(1));
@@ -46,9 +46,9 @@ public class LearnMoreTests : BUnitTestBase
     }
 
     [Test]
-    public void LearnMore_DoesNotIncludeMovedQuestionSections()
+    public void NewCreatorSignUp_DoesNotIncludeMovedQuestionSections()
     {
-        var cut = TestContext.Render<LearnMore>();
+        var cut = TestContext.Render<NewCreatorSignUp>();
 
         Assert.That(cut.Markup, Does.Not.Contain("Why Streamtunes Exists"));
         Assert.That(cut.Markup, Does.Not.Contain("How to Become a Creator"));

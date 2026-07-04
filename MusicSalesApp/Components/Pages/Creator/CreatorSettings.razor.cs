@@ -31,14 +31,21 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected string _creatorDisplayName = string.Empty;
     protected string _creatorBio = string.Empty;
     protected string _creatorPayPalEmail = string.Empty;
+    protected bool _creatorPayPalAccountAffirmed = false;
     protected string _paypalEmail = string.Empty;
     protected bool _paypalAccountAffirmed = false;
     protected bool _payoutRequirementsAcknowledged = false;
     protected bool _submitTaxFormNow = false;
+    protected bool _creatorAgreementAccepted = false;
+    protected bool _showPayoutSetup = false;
+    protected bool _showActivationSuccess = false;
     protected bool _startingOnboarding = false;
     protected bool _completingOnboarding = false;
     protected bool _stoppingCreatorStatus = false;
+    protected bool _savingPayPalEmail = false;
     protected bool _updatingTaxForm = false;
+    protected string _payoutEmailMessage = string.Empty;
+    protected bool _payoutEmailSaveSuccess = false;
     protected string _stopSellingConfirmEmail = string.Empty;
     protected bool CanConfirmStopSelling =>
         string.Equals(_stopSellingConfirmEmail?.Trim(), _userEmail, StringComparison.Ordinal);
@@ -65,45 +72,39 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected string _maintenanceEndLocal = string.Empty;
     protected string _maintenanceTimeZoneAbbreviation = string.Empty;
 
-    protected bool CanStartOnboarding => IsOptionalPayPalSetupValid
-        && _locationCertification != "None"
-        && _acknowledgmentAccepted
-        && _payoutRequirementsAcknowledged;
-
-    private bool IsOptionalPayPalSetupValid =>
-        (string.IsNullOrWhiteSpace(_creatorPayPalEmail) && !_paypalAccountAffirmed)
-        || (!string.IsNullOrWhiteSpace(_creatorPayPalEmail) && _paypalAccountAffirmed);
+    protected bool CanStartOnboarding => _creatorAgreementAccepted;
 
     protected bool IsPayoutPayPalReady =>
-        !string.IsNullOrWhiteSpace(_paypalEmail) && _paypalAccountAffirmed;
+        PayoutEmailValidator.IsValidPayPalEmail(_creatorPayPalEmail) && _creatorPayPalAccountAffirmed;
 
     protected bool IsPayoutTaxReady =>
         string.Equals(_creatorTaxFormStatus, TaxFormStatus.Completed.ToString(), StringComparison.Ordinal);
 
     protected bool IsPayoutEligibilityReady =>
-        _acknowledgmentAccepted
-        && (_locationCertification == CreatorLocationCertification.USPerson.ToString()
-            || _locationCertification == CreatorLocationCertification.NonUSPersonOutsideUS.ToString());
+        true;
 
     protected bool IsPayoutReady =>
         IsPayoutPayPalReady
-        && IsPayoutTaxReady
-        && IsPayoutEligibilityReady
-        && _payoutRequirementsAcknowledged;
+        && IsPayoutTaxReady;
 
     protected SfDialog _stopSellingDialog;
-    protected SfDialog _creatorActivatedDialog;
     protected SfToast _toastRef;
 
     private ApplicationUser _currentUser;
     private Action<WebhookStatusMessage> _webhookStatusHandler;
     private bool _wasActiveCreatorBefore;
 
-    [SupplyParameterFromQuery(Name = "creator_onboarding")]
+    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorOnboarding)]
     public string CreatorOnboardingResult { get; set; }
 
-    [SupplyParameterFromQuery(Name = "tracking_id")]
+    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.TrackingId)]
     public string CreatorTrackingId { get; set; }
+
+    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorActivated)]
+    public bool CreatorActivated { get; set; }
+
+    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorDeactivated)]
+    public bool CreatorDeactivated { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -126,6 +127,16 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
                         await DetectAndPersistUserTimeZoneAsync();
                         await LoadCreatorStatus();
+
+                        if (CreatorActivated && _isActiveCreator)
+                        {
+                            await ShowCreatorActivatedDialog();
+                        }
+                        else if (CreatorDeactivated && !_isActiveCreator)
+                        {
+                            _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
+                        }
+
                         await TrackCreatorSettingsViewedAsync();
 
                         _webhookStatusHandler = OnWebhookStatusReceived;
@@ -205,15 +216,18 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorDisplayName = creator.DisplayName ?? string.Empty;
                 _creatorBio = creator.Bio ?? string.Empty;
                 _creatorPayPalEmail = creator.PayPalEmail ?? string.Empty;
+                _creatorPayPalAccountAffirmed = creator.PayPalAccountAffirmed;
                 _paypalEmail = creator.PayPalEmail ?? string.Empty;
                 _paypalAccountAffirmed = creator.PayPalAccountAffirmed;
                 _payoutRequirementsAcknowledged = creator.PayoutRequirementsAcknowledged;
                 _locationCertification = creator.LocationCertification.ToString();
                 _acknowledgmentAccepted = creator.AcknowledgmentAccepted;
+                _creatorAgreementAccepted = creator.IsActive && (creator.CreatorAgreementAccepted || creator.AcknowledgmentAccepted);
                 _creatorStreamQualifyingSeconds = creator.StreamQualifyingSeconds;
                 _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
                 _editCreatorDisplayName = _creatorDisplayName;
                 _editCreatorBio = _creatorBio;
+                _showActivationSuccess = CreatorActivated && creator.IsActive;
             }
             else
             {
@@ -223,12 +237,15 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorTaxFormStatus = null;
                 _lastTaxFormErrorMessage = null;
                 _creatorPayPalEmail = string.Empty;
+                _creatorPayPalAccountAffirmed = false;
                 _paypalEmail = string.Empty;
                 _paypalAccountAffirmed = false;
                 _payoutRequirementsAcknowledged = false;
                 _locationCertification = "None";
                 _acknowledgmentAccepted = false;
+                _creatorAgreementAccepted = false;
                 _submitTaxFormNow = false;
+                _showActivationSuccess = false;
 
                 _creatorStreamQualifyingSeconds = await AppSettingsService.GetStreamQualifyingSecondsAsync();
                 var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
@@ -288,40 +305,62 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     {
         _errorMessage = string.Empty;
         _successMessage = string.Empty;
+        _payoutEmailMessage = string.Empty;
+        _payoutEmailSaveSuccess = false;
+        _savingPayPalEmail = true;
 
         try
         {
-            if (string.IsNullOrWhiteSpace(_paypalEmail))
+            var normalizedPayPalEmail = _paypalEmail?.Trim();
+            var hasPayPalEmail = !string.IsNullOrWhiteSpace(normalizedPayPalEmail);
+
+            if (!hasPayPalEmail && _paypalAccountAffirmed)
             {
-                _errorMessage = "Please enter a payout email address.";
+                _payoutEmailMessage = PayoutEmailValidator.PayPalEmailRequiredForAffirmationMessage;
                 return;
             }
 
-            if (!_paypalAccountAffirmed)
+            if (hasPayPalEmail && !_paypalAccountAffirmed)
             {
-                _errorMessage = "Please confirm that this PayPal account is valid and can receive payouts.";
+                _payoutEmailMessage = PayoutEmailValidator.PayPalAffirmationRequiredMessage;
                 return;
             }
 
-            if (!_paypalEmail.Contains("@") || !_paypalEmail.Contains("."))
+            if (hasPayPalEmail && !PayoutEmailValidator.IsValidPayPalEmail(normalizedPayPalEmail!))
             {
-                _errorMessage = "Please enter a valid email address.";
+                _payoutEmailMessage = PayoutEmailValidator.InvalidPayPalEmailMessage;
                 return;
             }
 
-            var creator = await CreatorService.UpdateCreatorPayoutEmailAsync(_currentUser.Id, _paypalEmail, _paypalAccountAffirmed);
+            var creator = await CreatorService.UpdateCreatorPayoutEmailAsync(_currentUser.Id, normalizedPayPalEmail, _paypalAccountAffirmed);
             if (creator == null)
             {
-                _errorMessage = "Creator record not found.";
+                _payoutEmailMessage = "Creator record not found.";
                 return;
             }
 
-            _successMessage = "Payout email updated successfully!";
+            _creatorPayPalEmail = creator.PayPalEmail ?? string.Empty;
+            _creatorPayPalAccountAffirmed = creator.PayPalAccountAffirmed;
+            _paypalEmail = creator.PayPalEmail ?? string.Empty;
+            _paypalAccountAffirmed = creator.PayPalAccountAffirmed;
+            _payoutEmailMessage = IsPayoutPayPalReady ? "PayPal payout email saved." : "PayPal payout email cleared.";
+            _payoutEmailSaveSuccess = true;
+            await LoadCreatorStatus();
+        }
+        catch (ArgumentException ex)
+        {
+            Logger.LogWarning(ex, "Invalid payout email submitted for user {UserId}", _currentUser.Id);
+            _payoutEmailMessage = ex.Message;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error saving payout email");
-            _errorMessage = "Failed to save payout email. Please try again.";
+            _payoutEmailMessage = "Failed to save payout email. Please try again.";
+        }
+        finally
+        {
+            _savingPayPalEmail = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -334,23 +373,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
         try
         {
-            if (!Enum.TryParse<CreatorLocationCertification>(_locationCertification, out var locationCertEnum))
-            {
-                locationCertEnum = CreatorLocationCertification.None;
-            }
-
             var result = await CreatorService.StartOnboardingAsync(new CreatorOnboardingInput
             {
                 UserId = _currentUser.Id,
                 UserEmail = _currentUser.Email,
                 DisplayName = _creatorDisplayName,
                 Bio = _creatorBio,
-                PayPalEmail = _creatorPayPalEmail,
-                PayPalAccountAffirmed = _paypalAccountAffirmed,
-                LocationCertification = locationCertEnum,
-                AcknowledgmentAccepted = _acknowledgmentAccepted,
-                PayoutRequirementsAcknowledged = _payoutRequirementsAcknowledged,
-                SubmitTaxFormNow = _submitTaxFormNow
+                CreatorAgreementAccepted = _creatorAgreementAccepted
             });
 
             if (!result.Success)
@@ -372,7 +401,8 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             {
                 await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
                 await LoadCreatorStatus();
-                await ShowCreatorActivatedDialog();
+                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorActivated);
+                return;
             }
             else
             {
@@ -411,7 +441,9 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             {
                 _isActiveCreator = true;
                 _creatorOnboardingStatus = "Completed";
-                await ShowCreatorActivatedDialog();
+                _showActivationSuccess = true;
+                await TrackCreatorActivatedFunnelAsync();
+                await TrackCreatorSignupConversionAsync();
             }
             else if (result.PaymentsReceivable || result.PrimaryEmailConfirmed)
             {
@@ -441,21 +473,21 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     {
         await TrackCreatorActivatedFunnelAsync();
         await TrackCreatorSignupConversionAsync();
+        _showActivationSuccess = true;
 
-        if (_creatorActivatedDialog != null)
+        try
         {
-            await _creatorActivatedDialog.ShowAsync();
+            await InvokeAsync(StateHasChanged);
         }
-    }
-
-    protected void LogoutAfterCreatorActivation()
-    {
-        NavigationManager.NavigateTo("/account/logout", forceLoad: true);
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogDebug(ex, "Skipping creator activation render notification because no render handle is assigned.");
+        }
     }
 
     protected void NavigateToTaxForm()
     {
-        NavigationManager.NavigateTo("/submittaxform");
+        NavigationManager.NavigateTo(AppPageRoutes.SubmitTaxForm);
     }
 
     protected async Task InitiateTaxFormUpdate()
@@ -471,7 +503,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
             if (result.Success)
             {
-                NavigationManager.NavigateTo("/submittaxform");
+                NavigationManager.NavigateTo(AppPageRoutes.SubmitTaxForm);
                 return;
             }
 
@@ -491,12 +523,22 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
 
     protected void NavigateToUpload()
     {
-        NavigationManager.NavigateTo("/upload-files");
+        NavigationManager.NavigateTo(AppPageRoutes.UploadFiles);
     }
 
     protected void NavigateToManageSongs()
     {
-        NavigationManager.NavigateTo("/creator/songs");
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorSongs);
+    }
+
+    protected void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorDashboard);
+    }
+
+    protected void TogglePayoutSetup()
+    {
+        _showPayoutSetup = !_showPayoutSetup;
     }
 
     protected async Task ShowStopSellingConfirmation()
@@ -528,10 +570,9 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             var success = await CreatorService.StopBeingCreatorAsync(_currentUser.Id);
             if (success)
             {
-                _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
-                _isActiveCreator = false;
-                _creatorOnboardingStatus = "Suspended";
                 await _stopSellingDialog.HideAsync();
+                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorDeactivated);
+                return;
             }
             else
             {
@@ -550,6 +591,13 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             _stoppingCreatorStatus = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private void RefreshSignInAndReturnToCreatorSettings(string returnQueryKey)
+    {
+        var returnUrl = $"{AppPageRoutes.CreatorSettings}?{returnQueryKey}=true";
+        var refreshUrl = $"{AppPageRoutes.RefreshSignIn}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
+        NavigationManager.NavigateTo(refreshUrl, forceLoad: true);
     }
 
     private async Task TrackCreatorSignupConversionAsync()

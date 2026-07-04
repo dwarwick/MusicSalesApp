@@ -501,26 +501,16 @@ public class StreamPayoutService : IStreamPayoutService
             missingTasks.Add("Creator role");
         }
 
-        if (string.IsNullOrWhiteSpace(creator.PayPalEmail) || !creator.PayPalAccountAffirmed)
+        if (creator.PayPalEmail is not { } payPalEmail
+            || !PayoutEmailValidator.IsValidPayPalEmail(payPalEmail)
+            || !creator.PayPalAccountAffirmed)
         {
-            missingTasks.Add("confirmed PayPal payout email");
+            missingTasks.Add("owned or authorized PayPal payout email");
         }
 
         if (creator.TaxFormStatus != TaxFormStatus.Completed)
         {
             missingTasks.Add("completed W-9 or W-8 tax form");
-        }
-
-        if (!creator.AcknowledgmentAccepted ||
-            (creator.LocationCertification != CreatorLocationCertification.USPerson &&
-             creator.LocationCertification != CreatorLocationCertification.NonUSPersonOutsideUS))
-        {
-            missingTasks.Add("eligible creator location certification");
-        }
-
-        if (!creator.PayoutRequirementsAcknowledged)
-        {
-            missingTasks.Add("payout requirements acknowledgment");
         }
 
         return missingTasks;

@@ -40,7 +40,7 @@ public class CreatorEmailService : ICreatorEmailService
 
             var payPalStatus = payPalReady
                 ? "Your PayPal payout account confirmation is complete."
-                : "Confirm a valid PayPal payout email before payouts can be sent.";
+                : "Confirm an owned or authorized PayPal payout email before payouts can be sent.";
             var taxStatus = taxFormReady
                 ? "Your tax form is complete."
                 : "Complete your W-9 or W-8 tax form before payouts can be sent.";

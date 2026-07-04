@@ -98,7 +98,7 @@ public interface ICreatorService
     /// <summary>
     /// Updates the active creator's payout email address and PayPal affirmation.
     /// </summary>
-    Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string payoutEmail, bool payPalAccountAffirmed);
+    Task<Creator?> UpdateCreatorPayoutEmailAsync(int userId, string? payoutEmail, bool payPalAccountAffirmed);
 
     /// <summary>
     /// Activates a creator account (admin function).
@@ -164,13 +164,14 @@ public interface ICreatorService
 
     /// <summary>
     /// Resets a returning creator's onboarding fields when they re-sign up.
-    /// Sets OnboardingStatus to Completed and stores optional PayPal payout details.
+    /// Sets OnboardingStatus to Completed and preserves existing payout setup unless optional
+    /// PayPal payout details are supplied.
     /// This is used instead of direct DbContext manipulation in the controller
     /// to ensure an atomic, testable state transition.
     /// </summary>
     /// <param name="creatorId">The creator ID</param>
-    /// <param name="payPalEmail">The creator's PayPal email for payouts</param>
-    /// <param name="payPalAccountAffirmed">Whether the creator affirmed their PayPal account</param>
+    /// <param name="payPalEmail">The creator's owned or authorized PayPal email for payouts</param>
+    /// <param name="payPalAccountAffirmed">Whether the creator affirmed they own or are authorized to use the PayPal account</param>
     /// <returns>The updated creator</returns>
     Task<Creator> ResetCreatorOnboardingAsync(int creatorId, string? payPalEmail, bool payPalAccountAffirmed);
 
@@ -191,9 +192,8 @@ public interface ICreatorService
     Task<Creator> UpdatePayoutRequirementsAcknowledgmentAsync(int creatorId, bool payoutRequirementsAcknowledged);
 
     /// <summary>
-    /// Orchestrates the full creator onboarding flow: creates or updates the creator record,
-    /// stores attestation data, handles ineligibility, resets onboarding for returning creators,
-    /// activates eligible creators, and optionally starts tax form submission.
+    /// Orchestrates creator activation: creates or updates the creator record, stores Creator
+    /// Agreement acceptance, activates creator tools, and preserves payout setup for later.
     /// </summary>
     Task<StartOnboardingResult> StartOnboardingAsync(CreatorOnboardingInput request);
 
@@ -221,6 +221,7 @@ public class CreatorOnboardingInput
     public string? Bio { get; set; }
     public string? PayPalEmail { get; set; }
     public bool PayPalAccountAffirmed { get; set; }
+    public bool CreatorAgreementAccepted { get; set; }
     public CreatorLocationCertification LocationCertification { get; set; }
     public bool AcknowledgmentAccepted { get; set; }
     public bool PayoutRequirementsAcknowledged { get; set; }

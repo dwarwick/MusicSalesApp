@@ -163,6 +163,349 @@ h1:focus {
     cursor: default;
 }
 
+.streamtunes-menu-icon {
+    font-family: "Segoe UI Symbol", "Noto Sans Symbols", "Segoe UI Emoji", sans-serif;
+    font-style: normal;
+    font-weight: 400;
+    position: relative;
+    text-align: center;
+}
+
+.streamtunes-menu-icon::before {
+    display: inline-block;
+    line-height: inherit;
+}
+
+.streamtunes-menu-icon-home::before {
+    content: "\2302";
+}
+
+.streamtunes-menu-icon-semiquaver::before {
+    content: "\266C";
+}
+
+.streamtunes-menu-icon-upload-music::before {
+    content: "\2B06";
+    font-size: 1.18em;
+    font-weight: 800;
+}
+
+.streamtunes-menu-icon-check::before {
+    content: "\2713";
+}
+
+.streamtunes-menu-icon-list::before {
+    content: "\2630";
+}
+
+.streamtunes-menu-icon-account::before,
+.streamtunes-menu-icon-account::after,
+.streamtunes-menu-icon-song-list::before,
+.streamtunes-menu-icon-song-list::after,
+.streamtunes-menu-icon-personality::before,
+.streamtunes-menu-icon-personality::after,
+.streamtunes-menu-icon-masks::before,
+.streamtunes-menu-icon-masks::after {
+    box-sizing: border-box;
+    display: block;
+    position: absolute;
+}
+
+.streamtunes-menu-icon-account::before,
+.streamtunes-menu-icon-account::after,
+.streamtunes-menu-icon-song-list::after,
+.streamtunes-menu-icon-personality::before,
+.streamtunes-menu-icon-personality::after,
+.streamtunes-menu-icon-masks::before,
+.streamtunes-menu-icon-masks::after {
+    content: "";
+}
+
+.streamtunes-menu-icon-account::before {
+    border: 1.7px solid currentColor;
+    border-radius: 50%;
+    height: 0.36em;
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -75%);
+    width: 0.36em;
+}
+
+.streamtunes-menu-icon-account::after {
+    border: 1.7px solid currentColor;
+    border-bottom: 0;
+    border-radius: 0.75em 0.75em 0 0;
+    height: 0.42em;
+    left: 50%;
+    top: 56%;
+    transform: translateX(-50%);
+    width: 0.78em;
+}
+
+.streamtunes-menu-icon-song-list::before {
+    content: "\266A";
+    font-size: 0.9em;
+    font-weight: 700;
+    left: 0.03em;
+    line-height: 1;
+    top: 50%;
+    transform: translateY(-52%);
+}
+
+.streamtunes-menu-icon-song-list::after {
+    background:
+        linear-gradient(currentColor, currentColor) 0 0 / 100% 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 50% / 100% 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 100% / 100% 1.6px no-repeat;
+    height: 0.46em;
+    left: 0.54em;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.42em;
+}
+
+.streamtunes-menu-icon-personality::before,
+.streamtunes-menu-icon-personality::after {
+    border: 1.45px solid currentColor;
+    border-radius: 50% 50% 44% 44%;
+    height: 0.68em;
+    top: 50%;
+    width: 0.46em;
+}
+
+.streamtunes-menu-icon-personality::before {
+    background:
+        radial-gradient(circle at 36% 39%, currentColor 0 1px, transparent 1.2px),
+        radial-gradient(circle at 64% 39%, currentColor 0 1px, transparent 1.2px),
+        linear-gradient(currentColor, currentColor) 50% 68% / 0.16em 1.25px no-repeat;
+    left: 38%;
+    transform: translate(-50%, -52%) rotate(-9deg);
+}
+
+.streamtunes-menu-icon-personality::after {
+    background:
+        radial-gradient(circle at 36% 39%, currentColor 0 1px, transparent 1.2px),
+        radial-gradient(circle at 64% 39%, currentColor 0 1px, transparent 1.2px),
+        linear-gradient(currentColor, currentColor) 50% 69% / 0.18em 1.25px no-repeat;
+    left: 62%;
+    transform: translate(-50%, -48%) rotate(9deg);
+}
+
+.streamtunes-menu-icon-users::before {
+    content: "\25CC";
+}
+
+.streamtunes-menu-icon-dashboard::before {
+    content: "\25A6";
+}
+
+.streamtunes-menu-icon-creator::before {
+    content: "\2736";
+}
+
+.streamtunes-menu-icon-lock::before {
+    content: "\26BF";
+}
+
+.streamtunes-menu-icon-mail::before {
+    content: "\2709";
+}
+
+.streamtunes-menu-icon-inbox::before {
+    content: "\25A3";
+}
+
+.streamtunes-menu-icon-status-history::before {
+    content: "\231B";
+}
+
+.streamtunes-menu-icon-user-history::before {
+    content: "\21BA";
+    font-weight: 700;
+}
+
+.streamtunes-menu-icon-catalog::before {
+    content: "\25A7";
+}
+
+.streamtunes-menu-icon-money::before {
+    content: "$";
+    font-weight: 700;
+}
+
+.streamtunes-menu-icon-warning::before {
+    content: "!";
+    font-weight: 700;
+}
+
+.streamtunes-menu-icon-flag::before {
+    content: "\2691";
+}
+
+.streamtunes-menu-icon-document::before {
+    content: "\25A4";
+}
+
+.streamtunes-menu-icon-settings::before {
+    content: "\2699";
+}
+
+.streamtunes-menu-icon-masks::before,
+.streamtunes-menu-icon-masks::after {
+    border: 1.45px solid currentColor;
+    border-radius: 50% 50% 45% 45%;
+    height: 0.68em;
+    top: 50%;
+    width: 0.48em;
+}
+
+.streamtunes-menu-icon-masks::before {
+    left: 38%;
+    transform: translate(-50%, -52%) rotate(-8deg);
+}
+
+.streamtunes-menu-icon-masks::after {
+    left: 62%;
+    transform: translate(-50%, -48%) rotate(8deg);
+}
+
+.streamtunes-menu-icon-gauge::before {
+    content: "\25D4";
+}
+
+.streamtunes-menu-icon-logout::before {
+    content: "\21AA";
+}
+
+.streamtunes-menu-icon-login::before {
+    content: "\21A9";
+}
+
+.streamtunes-menu-icon-add::before {
+    content: "+";
+    font-weight: 700;
+}
+
+.streamtunes-menu-icon-send::before {
+    content: "\2708";
+}
+
+.streamtunes-menu-icon-delete::before {
+    content: "\00D7";
+    font-weight: 700;
+}
+
+.streamtunes-menu-icon-edit::before {
+    content: "\270E";
+}
+
+.streamtunes-button-icon {
+    display: inline-block;
+    font-family: "Segoe UI Symbol", "Noto Sans Symbols", "Segoe UI Emoji", sans-serif;
+    font-style: normal;
+    font-weight: 400;
+    height: 1em;
+    line-height: 1;
+    position: relative;
+    text-align: center;
+    width: 1em;
+}
+
+.streamtunes-button-icon::before {
+    display: inline-block;
+    line-height: 1;
+}
+
+.streamtunes-button-icon-song-list::before,
+.streamtunes-button-icon-song-list::after {
+    box-sizing: border-box;
+    display: block;
+    position: absolute;
+}
+
+.streamtunes-button-icon-upload-music::before {
+    content: "\2B06";
+    font-size: 1.12em;
+    font-weight: 800;
+}
+
+.streamtunes-button-icon-creator::before {
+    content: "\2736";
+}
+
+.streamtunes-button-icon-dashboard::before {
+    content: "\25A6";
+}
+
+.streamtunes-button-icon-song-list::before {
+    content: "\266A";
+    font-size: 0.86em;
+    font-weight: 700;
+    left: 0.02em;
+    line-height: 1;
+    top: 50%;
+    transform: translateY(-52%);
+}
+
+.streamtunes-button-icon-song-list::after {
+    background:
+        linear-gradient(currentColor, currentColor) 0 0 / 100% 1.5px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 50% / 100% 1.5px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 100% / 100% 1.5px no-repeat;
+    content: "";
+    height: 0.45em;
+    left: 0.53em;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.42em;
+}
+
+.streamtunes-button-icon-earnings::before {
+    content: "\25A5";
+}
+
+.streamtunes-button-icon-payout::before {
+    content: "$";
+    font-weight: 800;
+}
+
+.streamtunes-button-icon-save::before {
+    content: "\2713";
+    font-weight: 800;
+}
+
+.streamtunes-button-icon-tax-form::before {
+    content: "\270E";
+}
+
+.streamtunes-button-icon-retry::before {
+    content: "\21BA";
+    font-weight: 800;
+}
+
+.streamtunes-button-icon-warning::before {
+    content: "!";
+    font-weight: 800;
+}
+
+.streamtunes-button-icon-cancel::before {
+    content: "\00D7";
+    font-weight: 800;
+}
+
+.creator-settings-page .e-btn,
+.creator-settings-page .e-btn.creator-settings-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.creator-settings-page .e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left,
+.creator-settings-page .e-css.e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left {
+    flex: 0 0 auto;
+    vertical-align: middle;
+}
+
 /* PlaylistPlayer - 5-row layout structure */
 .playlist-image-title-row {
     display: flex;
@@ -1997,6 +2340,173 @@ h1:focus {
 /* Tip Dashboard Styles */
 .tip-dashboard-section {
     margin-top: 1.5rem;
+}
+
+/* Creator settings activation and payout setup */
+.creator-settings-page {
+    display: block;
+}
+
+.creator-settings-shell {
+    margin-inline: auto;
+}
+
+.creator-settings-topline,
+.creator-settings-actions,
+.creator-section-heading,
+.creator-settings-checkbox {
+    display: flex;
+    align-items: center;
+}
+
+.creator-settings-topline {
+    justify-content: space-between;
+}
+
+.creator-settings-actions {
+    flex-wrap: wrap;
+}
+
+.creator-settings-inline-message.e-message {
+    display: inline-flex;
+    align-items: center;
+}
+
+.creator-settings-title h2,
+.creator-settings-title p,
+.creator-settings-card h3,
+.creator-settings-card p,
+.creator-settings-kicker,
+.creator-agreement-box label,
+.creator-status-label,
+.creator-status-value,
+.creator-section-heading strong,
+.creator-section-heading span,
+.creator-checklist-item strong,
+.creator-checklist-item span,
+.creator-settings-field small,
+.creator-settings-hint {
+    margin: 0;
+}
+
+.creator-status-pill {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.creator-status-dot {
+    display: inline-block;
+    border-radius: 50%;
+}
+
+.creator-settings-card.e-card {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.creator-agreement-box,
+.creator-info-strip,
+.creator-status-card,
+.creator-checklist-item,
+.creator-payout-section,
+.creator-settings-alert {
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 8px;
+}
+
+.creator-agreement-box,
+.creator-info-strip,
+.creator-success-hero,
+.creator-status-grid,
+.creator-checklist,
+.creator-payout-grid,
+.creator-settings-form-grid {
+    display: grid;
+}
+
+.creator-agreement-box {
+    grid-template-columns: auto 1fr;
+    align-items: start;
+}
+
+.creator-success-hero {
+    grid-template-columns: auto 1fr;
+    align-items: start;
+}
+
+.creator-success-icon,
+.creator-checklist-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.creator-success-icon {
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 8px;
+}
+
+.creator-info-strip {
+    grid-template-columns: auto 1fr;
+}
+
+.creator-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.creator-checklist-item {
+    display: flex;
+}
+
+.creator-checklist-icon {
+    flex: none;
+    border-radius: 50%;
+    box-sizing: border-box;
+    line-height: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.creator-payout-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-section-heading {
+    align-items: flex-start;
+}
+
+.creator-section-heading span:not(.creator-checklist-icon) {
+    display: block;
+}
+
+.creator-settings-checkbox {
+    align-items: flex-start;
+}
+
+.creator-settings-field {
+    display: grid;
+}
+
+.creator-settings-page .e-input-group,
+.creator-settings-page .e-input-group.e-control-wrapper,
+.creator-settings-page .e-input-group.e-outline,
+.creator-settings-page .e-input-group.e-control-wrapper.e-outline {
+    border-radius: 8px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.creator-settings-page .e-checkbox-wrapper .e-frame,
+.creator-settings-page .e-css.e-checkbox-wrapper .e-frame {
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.creator-settings-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .tip-buckets {

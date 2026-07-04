@@ -11,19 +11,19 @@ public class PublicFeaturedMusicTests
 
         Assert.That(featuredIndex, Is.GreaterThanOrEqualTo(0));
         Assert.That(featuredIndex, Is.LessThan(markup.IndexOf("<section class=\"hero-section\">", StringComparison.Ordinal)));
-        Assert.That(markup, Does.Contain("<MusicLibrary ShowHomePageFeatured=\"true\" />"));
+        Assert.That(markup, Does.Contain("<MusicLibrary ShowHomePageFeatured=\"true\""));
         Assert.That(markup, Does.Not.Contain("FeaturedMusicStrip"));
     }
 
     [Test]
-    public void LearnMore_MovesExistingFeaturedMusicRenderingBeforeCreatorCopy()
+    public void NewCreatorSignUp_MovesExistingFeaturedMusicRenderingBeforeCreatorCopy()
     {
-        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Public", "LearnMore.razor");
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Public", "NewCreatorSignUp.razor");
         var featuredIndex = markup.IndexOf("<section class=\"featured-music-section\">", StringComparison.Ordinal);
 
         Assert.That(featuredIndex, Is.GreaterThanOrEqualTo(0));
         Assert.That(featuredIndex, Is.LessThan(markup.IndexOf("<h1", StringComparison.Ordinal)));
-        Assert.That(markup, Does.Contain("<MusicLibrary ShowHomePageFeatured=\"true\" />"));
+        Assert.That(markup, Does.Contain("<MusicLibrary ShowHomePageFeatured=\"true\""));
         Assert.That(markup, Does.Not.Contain("FeaturedMusicStrip"));
     }
 

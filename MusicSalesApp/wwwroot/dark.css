@@ -192,6 +192,109 @@ body {
     border-color: #31567d;
 }
 
+.creator-settings-page {
+    color: #f3f4f6;
+}
+
+.creator-settings-title h2,
+.creator-settings-card h3 {
+    color: #ffffff;
+}
+
+.creator-settings-title p,
+.creator-settings-card p,
+.creator-settings-hint,
+.creator-status-label,
+.creator-checklist-item span,
+.creator-settings-field small,
+.creator-section-heading span {
+    color: #cbd5e1;
+}
+
+.creator-settings-kicker {
+    color: #c084fc;
+}
+
+.creator-status-pill,
+.creator-settings-card.e-card,
+.creator-agreement-box,
+.creator-checklist-item,
+.creator-payout-section,
+.creator-status-card {
+    background-color: #1f2937;
+    border-color: #374151;
+}
+
+.creator-status-dot,
+.creator-success-icon,
+.creator-checklist-icon {
+    background-color: #052e1a;
+    color: #86efac;
+    border-color: #166534;
+}
+
+.creator-status-value.good,
+.creator-status-text-good {
+    color: #86efac;
+}
+
+.creator-status-value.pending,
+.creator-status-text-pending {
+    color: #facc15;
+}
+
+.creator-status-text-danger {
+    color: #fca5a5;
+}
+
+.creator-info-strip,
+.creator-settings-alert-warning {
+    background-color: #3a2e08;
+    border-color: #854d0e;
+    color: #fef3c7;
+}
+
+.creator-settings-alert-danger {
+    background-color: #450a0a;
+    border-color: #991b1b;
+    color: #fee2e2;
+}
+
+.creator-settings-alert-info {
+    background-color: #172554;
+    border-color: #1d4ed8;
+    color: #dbeafe;
+}
+
+.creator-settings-danger-zone.e-card {
+    border-color: #7f1d1d;
+}
+
+.creator-settings-page .e-checkbox-wrapper .e-frame.e-check,
+.creator-settings-page .e-css.e-checkbox-wrapper .e-frame.e-check,
+.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check,
+.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check {
+    background-color: #8e44ad !important;
+    border-color: #c084fc !important;
+    color: #ffffff !important;
+}
+
+.creator-settings-page .e-checkbox-wrapper:hover .e-frame,
+.creator-settings-page .e-css.e-checkbox-wrapper:hover .e-frame,
+.creator-settings-page .e-input-group.e-outline:not(.e-disabled):hover,
+.creator-settings-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled):hover,
+.creator-settings-page .e-input-group.e-input-focus,
+.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus {
+    border-color: #c084fc !important;
+}
+
+.creator-settings-page .e-input-group.e-input-focus,
+.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus,
+.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame,
+.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame {
+    box-shadow: 0 0 0 0.2rem rgba(192, 132, 252, 0.22) !important;
+}
+
 .card-album-art-placeholder {
     background: #353535;
 }

@@ -204,7 +204,7 @@ public class StreamPayoutServiceTests
             x => x.SendEmailAsync(
                 "blockedcreator@test.com",
                 It.Is<string>(subject => subject.Contains("Payout Action Required ($10.00)")),
-                It.Is<string>(body => body.Contains("confirmed PayPal payout email")
+                It.Is<string>(body => body.Contains("owned or authorized PayPal payout email")
                     && body.Contains("completed W-9 or W-8 tax form"))),
             Times.Once);
         _mockEmailService.Verify(
@@ -217,6 +217,30 @@ public class StreamPayoutServiceTests
         _mockTaxBanditsService.Verify(
             x => x.ReportForm1099TransactionsBatchAsync(It.IsAny<List<Form1099Transaction>>(), default),
             Times.Never);
+    }
+
+    [Test]
+    public async Task ProcessPendingPayoutsAsync_BlocksPayout_WhenPayPalEmailMalformed()
+    {
+        var creator = await SeedPayoutEligibleCreatorAsync(payPalReady: true, taxReady: true);
+        creator.PayPalEmail = "@angelaomalley72";
+        await _context.SaveChangesAsync();
+
+        Assert.That(creator.IsFullyOnboarded, Is.False);
+
+        var processed = await _service.ProcessPendingPayoutsAsync();
+
+        Assert.That(processed, Is.EqualTo(0));
+
+        await using var verifyContext = new AppDbContext(_contextOptions);
+        Assert.That(await verifyContext.StreamPayouts.CountAsync(), Is.EqualTo(0));
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                "blockedcreator@test.com",
+                It.Is<string>(subject => subject.Contains("Payout Action Required ($10.00)")),
+                It.Is<string>(body => body.Contains("owned or authorized PayPal payout email"))),
+            Times.Once);
     }
 
     [Test]

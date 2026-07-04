@@ -1,5 +1,35 @@
 /* Small breakpoint styles (<768px) */
 @media (max-width: 768px) {
+    .creator-settings-page {
+        padding: 28px 14px 48px;
+    }
+
+    .creator-settings-topline {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .creator-settings-card .e-card-content {
+        padding: 22px;
+    }
+
+    .creator-settings-card h3 {
+        font-size: 25px;
+    }
+
+    .creator-success-hero,
+    .creator-info-strip,
+    .creator-status-grid,
+    .creator-settings-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .creator-settings-actions .e-btn {
+        width: auto;
+        max-width: 100%;
+    }
+
     .mobile-app-install-banner {
         min-height: 58px;
         padding: 8px 12px;

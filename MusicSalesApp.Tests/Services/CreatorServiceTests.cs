@@ -131,6 +131,35 @@ public class CreatorServiceTests
     }
 
     [Test]
+    public async Task ResetCreatorOnboardingAsync_PreservesExistingPayPal_WhenNoNewPayPalProvided()
+    {
+        var user = new ApplicationUser { UserName = "preserve@test.com", Email = "preserve@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Suspended,
+            IsActive = false,
+            PayPalEmail = "existing@paypal.com",
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var result = await _service.ResetCreatorOnboardingAsync(creator.Id, null, false);
+
+        Assert.That(result.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+        Assert.That(result.PayPalEmail, Is.EqualTo("existing@paypal.com"));
+        Assert.That(result.PayPalAccountAffirmed, Is.True);
+        Assert.That(result.PaymentsReceivable, Is.True);
+        Assert.That(result.PrimaryEmailConfirmed, Is.True);
+    }
+
+    [Test]
     public async Task ResetCreatorOnboardingAsync_ResetsTaxFormStatusFromCompleted()
     {
         // Arrange — returning creator who previously completed tax form
@@ -306,6 +335,104 @@ public class CreatorServiceTests
         Assert.That(result, Is.Null);
     }
 
+    [Test]
+    public async Task UpdateCreatorPayoutEmailAsync_InvalidPayPalEmail_ThrowsAndDoesNotUpdate()
+    {
+        var user = new ApplicationUser { UserName = "badpayout@test.com", Email = "badpayout@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            PayPalEmail = "existing@paypal.com",
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(
+            () => _service.UpdateCreatorPayoutEmailAsync(user.Id, "@angelaomalley72", true));
+
+        Assert.That(ex!.Message, Is.EqualTo(PayoutEmailValidator.InvalidPayPalEmailMessage));
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(savedCreator.PayPalEmail, Is.EqualTo("existing@paypal.com"));
+        Assert.That(savedCreator.PayPalAccountAffirmed, Is.True);
+    }
+
+    [Test]
+    public async Task UpdateCreatorPayoutEmailAsync_EmptyEmailAndUnaffirmed_ClearsPayoutInfo()
+    {
+        var user = new ApplicationUser { UserName = "clearpayout@test.com", Email = "clearpayout@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            IsActive = true,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            PayPalEmail = "existing@paypal.com",
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var result = await _service.UpdateCreatorPayoutEmailAsync(user.Id, "   ", false);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.PayPalEmail, Is.Null);
+        Assert.That(result.PayPalAccountAffirmed, Is.False);
+        Assert.That(result.PaymentsReceivable, Is.False);
+        Assert.That(result.PrimaryEmailConfirmed, Is.False);
+        Assert.That(result.IsFullyOnboarded, Is.False);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(savedCreator.PayPalEmail, Is.Null);
+        Assert.That(savedCreator.PayPalAccountAffirmed, Is.False);
+        Assert.That(savedCreator.PaymentsReceivable, Is.False);
+        Assert.That(savedCreator.PrimaryEmailConfirmed, Is.False);
+    }
+
+    [Test]
+    public async Task UpdateCreatorPayoutEmailAsync_EmptyEmailWithAffirmation_ThrowsAndDoesNotUpdate()
+    {
+        var user = new ApplicationUser { UserName = "emptyaffirmed@test.com", Email = "emptyaffirmed@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            PayPalEmail = "existing@paypal.com",
+            PayPalAccountAffirmed = true,
+            PaymentsReceivable = true,
+            PrimaryEmailConfirmed = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(
+            () => _service.UpdateCreatorPayoutEmailAsync(user.Id, " ", true));
+
+        Assert.That(ex!.Message, Is.EqualTo(PayoutEmailValidator.PayPalEmailRequiredForAffirmationMessage));
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(savedCreator.PayPalEmail, Is.EqualTo("existing@paypal.com"));
+        Assert.That(savedCreator.PayPalAccountAffirmed, Is.True);
+        Assert.That(savedCreator.PaymentsReceivable, Is.True);
+        Assert.That(savedCreator.PrimaryEmailConfirmed, Is.True);
+    }
+
     #endregion
 
     #region StopBeingCreatorAsync → Re-signup Full Flow Test
@@ -381,6 +508,74 @@ public class CreatorServiceTests
             Assert.That(active!.IsActive, Is.True);
             Assert.That(active.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
         }
+    }
+
+    [Test]
+    public async Task StopBeingCreatorAsync_ClearsCreatorAgreementAcceptance()
+    {
+        var user = new ApplicationUser { UserName = "stopagreement@test.com", Email = "stopagreement@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            TaxFormStatus = TaxFormStatus.Completed,
+            IsActive = true,
+            CreatorAgreementAccepted = true,
+            CreatorAgreementAcceptedAtUtc = DateTime.UtcNow.AddDays(-2),
+            AcknowledgmentAccepted = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString()))
+            .ReturnsAsync(user);
+        _mockUserManager.Setup(x => x.IsInRoleAsync(user, Roles.Creator))
+            .ReturnsAsync(true);
+
+        var result = await _service.StopBeingCreatorAsync(user.Id);
+
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var stoppedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(stoppedCreator.IsActive, Is.False);
+        Assert.That(stoppedCreator.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Suspended));
+        Assert.That(stoppedCreator.CreatorAgreementAccepted, Is.False);
+        Assert.That(stoppedCreator.CreatorAgreementAcceptedAtUtc, Is.Null);
+        Assert.That(stoppedCreator.AcknowledgmentAccepted, Is.True, "Legacy acceptance is retained for historical compatibility.");
+    }
+
+    [Test]
+    public async Task RevokeCreatorConsentAsync_ClearsCreatorAgreementAcceptance()
+    {
+        var user = new ApplicationUser { UserName = "revokeagreement@test.com", Email = "revokeagreement@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            IsActive = true,
+            CreatorAgreementAccepted = true,
+            CreatorAgreementAcceptedAtUtc = DateTime.UtcNow.AddDays(-2)
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var result = await _service.RevokeCreatorConsentAsync(creator.Id);
+
+        Assert.That(result, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var revokedCreator = await verifyContext.Creators.SingleAsync(c => c.Id == creator.Id);
+        Assert.That(revokedCreator.IsActive, Is.False);
+        Assert.That(revokedCreator.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.ConsentRevoked));
+        Assert.That(revokedCreator.CreatorAgreementAccepted, Is.False);
+        Assert.That(revokedCreator.CreatorAgreementAcceptedAtUtc, Is.Null);
     }
 
     #endregion
@@ -502,6 +697,7 @@ public class CreatorServiceTests
         Bio = "Test bio",
         PayPalEmail = "paypal@test.com",
         PayPalAccountAffirmed = true,
+        CreatorAgreementAccepted = true,
         LocationCertification = CreatorLocationCertification.USPerson,
         AcknowledgmentAccepted = true,
         PayoutRequirementsAcknowledged = true
@@ -538,6 +734,8 @@ public class CreatorServiceTests
         Assert.That(creator.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
         Assert.That(creator.PayPalEmail, Is.Null);
         Assert.That(creator.PayPalAccountAffirmed, Is.False);
+        Assert.That(creator.CreatorAgreementAccepted, Is.True);
+        Assert.That(creator.CreatorAgreementAcceptedAtUtc, Is.Not.Null);
         Assert.That(creator.LocationCertification, Is.EqualTo(CreatorLocationCertification.USPerson));
         Assert.That(creator.AcknowledgmentAccepted, Is.True);
         Assert.That(creator.PayoutRequirementsAcknowledged, Is.True);
@@ -574,7 +772,7 @@ public class CreatorServiceTests
     }
 
     [Test]
-    public async Task StartOnboardingAsync_NonUSPersonInsideUS_ReturnsIneligible()
+    public async Task StartOnboardingAsync_NonUSPersonInsideUS_ActivatesBecauseAgreementOnly()
     {
         // Arrange
         var user = new ApplicationUser { UserName = "ineligible@test.com", Email = "ineligible@test.com" };
@@ -591,14 +789,16 @@ public class CreatorServiceTests
 
         // Assert
         Assert.That(result.Success, Is.True);
-        Assert.That(result.IsIneligible, Is.True);
-        Assert.That(result.IsActive, Is.False);
+        Assert.That(result.IsIneligible, Is.False);
+        Assert.That(result.IsActive, Is.True);
         Assert.That(result.TaxFormPending, Is.False);
 
-        // Verify creator is marked Ineligible in DB
+        // Verify legacy location data is preserved without blocking activation
         await using var verifyContext = await _contextFactory.CreateDbContextAsync();
         var creator = await verifyContext.Creators.FirstOrDefaultAsync(c => c.UserId == user.Id);
-        Assert.That(creator!.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Ineligible));
+        Assert.That(creator!.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
+        Assert.That(creator.IsActive, Is.True);
+        Assert.That(creator.LocationCertification, Is.EqualTo(CreatorLocationCertification.NonUSPersonInsideUS));
     }
 
     [Test]
@@ -812,39 +1012,83 @@ public class CreatorServiceTests
     }
 
     [Test]
-    public async Task StartOnboardingAsync_LocationCertificationNone_ReturnsError()
+    public async Task StartOnboardingAsync_InvalidPayPalEmail_ReturnsError()
     {
         var input = CreateValidOnboardingInput(1);
-        input.LocationCertification = CreatorLocationCertification.None;
+        input.PayPalEmail = "@angelaomalley72";
+        input.PayPalAccountAffirmed = true;
 
         var result = await _service.StartOnboardingAsync(input);
 
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("location"));
+        Assert.That(result.ErrorMessage, Is.EqualTo(PayoutEmailValidator.InvalidPayPalEmailMessage));
     }
 
     [Test]
-    public async Task StartOnboardingAsync_AcknowledgmentNotAccepted_ReturnsError()
+    public async Task StartOnboardingAsync_LocationCertificationNone_Activates()
+    {
+        var user = new ApplicationUser { UserName = "noloc@test.com", Email = "noloc@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.LocationCertification = CreatorLocationCertification.None;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_AcknowledgmentNotAccepted_ActivatesWhenAgreementAccepted()
+    {
+        var user = new ApplicationUser { UserName = "noack@test.com", Email = "noack@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.AcknowledgmentAccepted = false;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_PayoutRequirementsNotAcknowledged_ActivatesWhenAgreementAccepted()
+    {
+        var user = new ApplicationUser { UserName = "nopayoutack@test.com", Email = "nopayoutack@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _mockUserManager.Setup(x => x.FindByIdAsync(user.Id.ToString())).ReturnsAsync(user);
+
+        var input = CreateValidOnboardingInput(user.Id, user.Email!);
+        input.PayoutRequirementsAcknowledged = false;
+
+        var result = await _service.StartOnboardingAsync(input);
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.IsActive, Is.True);
+    }
+
+    [Test]
+    public async Task StartOnboardingAsync_CreatorAgreementNotAccepted_ReturnsError()
     {
         var input = CreateValidOnboardingInput(1);
+        input.CreatorAgreementAccepted = false;
         input.AcknowledgmentAccepted = false;
 
         var result = await _service.StartOnboardingAsync(input);
 
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("acknowledgment"));
-    }
-
-    [Test]
-    public async Task StartOnboardingAsync_PayoutRequirementsNotAcknowledged_ReturnsError()
-    {
-        var input = CreateValidOnboardingInput(1);
-        input.PayoutRequirementsAcknowledged = false;
-
-        var result = await _service.StartOnboardingAsync(input);
-
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("payout requirements"));
+        Assert.That(result.ErrorMessage, Does.Contain("Creator Agreement"));
     }
 
     [Test]
@@ -1558,9 +1802,9 @@ public class CreatorServiceTests
     }
 
     [Test]
-    public async Task FullFlow_IneligibleCreator_CannotProceed()
+    public async Task FullFlow_LegacyIneligibleLocation_ActivatesBecauseAgreementOnly()
     {
-        // Non-US person inside US tries to onboard — should be marked ineligible
+        // Legacy non-US-inside-US location data is preserved, but no longer blocks creator activation.
 
         // Arrange
         var user = new ApplicationUser { UserName = "blocked@test.com", Email = "blocked@test.com" };
@@ -1575,13 +1819,18 @@ public class CreatorServiceTests
         // Act
         var result = await _service.StartOnboardingAsync(input);
 
-        // Assert — marked ineligible but not an error
+        // Assert
         Assert.That(result.Success, Is.True);
-        Assert.That(result.IsIneligible, Is.True);
+        Assert.That(result.IsIneligible, Is.False);
+        Assert.That(result.IsActive, Is.True);
 
-        // Try to complete onboarding — should not activate
         var completeResult = await _service.CompleteOnboardingAsync(user.Id);
-        Assert.That(completeResult.IsActive, Is.False);
+        Assert.That(completeResult.IsActive, Is.True);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var creator = await verifyContext.Creators.FirstAsync(c => c.UserId == user.Id);
+        Assert.That(creator.LocationCertification, Is.EqualTo(CreatorLocationCertification.NonUSPersonInsideUS));
+        Assert.That(creator.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Completed));
     }
 
     #endregion

@@ -1,4 +1,180 @@
 /* Extra large breakpoint styles (>=1200px) */
+.creator-settings-page {
+    padding: 48px 24px 72px;
+}
+
+.creator-settings-shell {
+    max-width: 960px;
+}
+
+.creator-settings-topline {
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.creator-settings-title h2 {
+    font-size: 28px;
+    margin-bottom: 4px;
+}
+
+.creator-settings-title p,
+.creator-status-pill,
+.creator-settings-hint,
+.creator-status-label,
+.creator-checklist-item span,
+.creator-settings-field small,
+.creator-section-heading span {
+    font-size: 14px;
+}
+
+.creator-status-pill {
+    gap: 7px;
+    padding: 8px 12px;
+}
+
+.creator-status-dot {
+    width: 8px;
+    height: 8px;
+}
+
+.creator-settings-card.e-card {
+    margin-bottom: 24px;
+}
+
+.creator-settings-card .e-card-content {
+    padding: 30px;
+}
+
+.creator-settings-kicker {
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.creator-settings-card h3 {
+    font-size: 30px;
+    margin-bottom: 10px;
+}
+
+.creator-settings-card p {
+    font-size: 16px;
+}
+
+.creator-agreement-box,
+.creator-info-strip {
+    gap: 12px;
+    margin-top: 24px;
+    padding: 18px;
+}
+
+.creator-settings-actions {
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.creator-settings-page .creator-settings-actions .e-btn {
+    width: auto;
+    min-width: 0;
+}
+
+.creator-settings-page .e-btn {
+    gap: 10px;
+}
+
+.creator-settings-page .e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left,
+.creator-settings-page .e-css.e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-top: 0 !important;
+    width: 1em !important;
+}
+
+.creator-settings-page .e-btn.e-control .streamtunes-button-icon-song-list.e-btn-icon.e-icon-left,
+.creator-settings-page .e-css.e-btn.e-control .streamtunes-button-icon-song-list.e-btn-icon.e-icon-left {
+    width: 1.08em !important;
+}
+
+.creator-success-hero {
+    gap: 18px;
+}
+
+.creator-success-icon {
+    width: 70px;
+    height: 70px;
+    font-size: 34px;
+}
+
+.creator-status-grid {
+    gap: 14px;
+    margin-top: 24px;
+}
+
+.creator-status-card {
+    padding: 18px;
+}
+
+.creator-status-label {
+    margin-bottom: 6px;
+}
+
+.creator-status-value {
+    font-size: 17px;
+}
+
+.creator-checklist {
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.creator-checklist-item {
+    gap: 12px;
+    padding: 14px;
+}
+
+.creator-checklist-icon {
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+}
+
+.creator-payout-grid,
+.creator-settings-form-grid {
+    gap: 20px;
+    margin-top: 24px;
+}
+
+.creator-payout-section {
+    padding: 18px;
+}
+
+.creator-section-heading {
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.creator-settings-checkbox {
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.creator-payout-section > p + .e-btn,
+.creator-payout-section > .creator-settings-alert + .e-btn {
+    margin-top: 14px;
+}
+
+.creator-settings-field {
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.creator-settings-alert {
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+
+.creator-settings-loading {
+    min-height: 300px;
+}
+
 .mobile-app-install-banner {
     min-height: 64px;
     padding: 10px 24px;

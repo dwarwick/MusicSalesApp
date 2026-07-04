@@ -1,13 +1,14 @@
 #nullable enable
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using MusicSalesApp.Common.Helpers;
 
 namespace MusicSalesApp.Models;
 
 /// <summary>
 /// Represents a creator who can upload music on the platform.
 /// Creators can become active before payout setup is complete, but payouts require a confirmed
-/// PayPal payout email, completed TaxBandits W-9/W-8 form, and creator eligibility certification.
+/// PayPal payout email and completed TaxBandits W-9/W-8 form.
 /// </summary>
 public class Creator
 {
@@ -32,6 +33,7 @@ public class Creator
 
     /// <summary>
     /// The PayPal email address where this creator receives payouts.
+    /// The creator must own, control, or be authorized to use the associated PayPal account.
     /// This may be different from the creator's login email (User.Email).
     /// Used for PayPal Payouts API calls.
     /// </summary>
@@ -76,8 +78,8 @@ public class Creator
     public bool PrimaryEmailConfirmed { get; set; } = false;
 
     /// <summary>
-    /// Whether the creator has affirmed they have a valid PayPal account in good standing
-    /// that can receive payouts. This replaces the business account onboarding flow.
+    /// Whether the creator has affirmed they own or are authorized to use a valid PayPal account
+    /// in good standing that can receive payouts. This replaces the business account onboarding flow.
     /// Note: This constraint is enforced in StreamPayoutService.ProcessCreatorPayoutAsync()
     /// which checks PayPalAccountAffirmed before sending payouts.
     /// </summary>
@@ -118,6 +120,17 @@ public class Creator
     /// When the creator completed PayPal onboarding.
     /// </summary>
     public DateTime? OnboardedAt { get; set; }
+
+    /// <summary>
+    /// Whether the creator accepted the Creator Agreement required to activate creator tools.
+    /// Payout setup is handled separately through PayPal email and tax form completion.
+    /// </summary>
+    public bool CreatorAgreementAccepted { get; set; } = false;
+
+    /// <summary>
+    /// The UTC date and time when the creator accepted the Creator Agreement.
+    /// </summary>
+    public DateTime? CreatorAgreementAcceptedAtUtc { get; set; }
 
     /// <summary>
     /// When the creator record was last updated.
@@ -195,7 +208,7 @@ public class Creator
     public DateTime? AcknowledgmentDateTimeUtc { get; set; }
 
     /// <summary>
-    /// Whether the creator acknowledged that payouts require a confirmed PayPal account
+    /// Whether the creator acknowledged that payouts require an owned or authorized PayPal account
     /// and a successfully completed W-9/W-8 tax form.
     /// </summary>
     public bool PayoutRequirementsAcknowledged { get; set; } = false;
@@ -223,14 +236,12 @@ public class Creator
     /// Checks if payout prerequisites are complete.
     /// </summary>
     [NotMapped]
-    public bool IsFullyOnboarded => OnboardingStatus == CreatorOnboardingStatus.Completed 
+    public bool IsFullyOnboarded => IsActive
+                                    && OnboardingStatus == CreatorOnboardingStatus.Completed
                                     && TaxFormStatus == TaxFormStatus.Completed
                                     && PayPalAccountAffirmed
-                                    && !string.IsNullOrWhiteSpace(PayPalEmail)
-                                    && PayoutRequirementsAcknowledged
-                                    && AcknowledgmentAccepted
-                                    && (LocationCertification == CreatorLocationCertification.USPerson
-                                        || LocationCertification == CreatorLocationCertification.NonUSPersonOutsideUS);
+                                    && PayPalEmail is { } payPalEmail
+                                    && PayoutEmailValidator.IsValidPayPalEmail(payPalEmail);
 
     /// <summary>
     /// Gets the effective withholding rate.

@@ -26,7 +26,7 @@ public class CreatorAgreementTests : BUnitTestBase
 
         // Assert - Verify effective date
         Assert.That(cut.Markup, Does.Contain("Effective Date"));
-        Assert.That(cut.Markup, Does.Contain("2026"));
+        Assert.That(cut.Markup, Does.Contain("July 4, 2026"));
     }
 
     [Test]
@@ -50,6 +50,16 @@ public class CreatorAgreementTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Eligibility and Account Setup"));
         Assert.That(cut.Markup, Does.Contain("at least 18 years old"));
         Assert.That(cut.Markup, Does.Contain("PayPal account"));
+    }
+
+    [Test]
+    public void CreatorAgreement_RequiresOwnedOrAuthorizedPayPalAccount()
+    {
+        var cut = TestContext.Render<CreatorAgreement>();
+
+        Assert.That(cut.Markup, Does.Contain("own, control, or are authorized to use"));
+        Assert.That(cut.Markup, Does.Contain("you may not designate a third-party PayPal account"));
+        Assert.That(cut.Markup, Does.Contain("Disputes about PayPal account ownership, control, authorization, or access"));
     }
 
     [Test]
@@ -194,5 +204,15 @@ public class CreatorAgreementTests : BUnitTestBase
 
         Assert.That(cut.Markup, Does.Contain("AI-Generated Content Disclosure"));
         Assert.That(cut.Markup, Does.Contain("mark that song as AI-generated on your song management page"));
+    }
+
+    [Test]
+    public void CreatorAgreement_StatesCheckboxAcceptanceAndDoesNotRequireSeparatePreActivationPayoutAssertion()
+    {
+        var cut = TestContext.Render<CreatorAgreement>();
+
+        Assert.That(cut.Markup, Does.Contain("Creator Agreement Acceptance"));
+        Assert.That(cut.Markup, Does.Contain("By checking the Creator Agreement acceptance box"));
+        Assert.That(cut.Markup, Does.Not.Contain("Before becoming a Creator, you must affirmatively acknowledge"));
     }
 }
