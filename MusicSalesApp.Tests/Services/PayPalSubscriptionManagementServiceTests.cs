@@ -658,6 +658,67 @@ public class PayPalSubscriptionManagementServiceTests
     }
 
     [Test]
+    public async Task AbandonPendingCheckoutAsync_WhenPayPalAcceptsPendingCancellation_CleansLocalRecordWithoutWaitingForStatusPropagation()
+    {
+        var user = new ApplicationUser { Id = 42 };
+        var pending = new Subscription
+        {
+            Id = 7,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-ABANDONED-PENDING",
+            PayPalPlanId = "P-TRIAL",
+            Status = SubscriptionStatuses.ApprovalPending
+        };
+        var details = new PayPalSubscriptionDetails
+        {
+            Id = pending.PayPalSubscriptionId,
+            PlanId = pending.PayPalPlanId,
+            Status = SubscriptionStatuses.ApprovalPending,
+            Plan = CreateTrialPlan()
+        };
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync(pending);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                pending.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(details);
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(pending.PayPalSubscriptionId))
+            .ReturnsAsync(pending);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                pending.PayPalSubscriptionId,
+                It.Is<PayPalSubscriptionReconciliation>(state =>
+                    state.Status == SubscriptionStatuses.ApprovalPending
+                    && !state.LastPaymentDate.HasValue
+                    && !state.TrialEndDate.HasValue)))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = pending,
+                PreviousStatus = SubscriptionStatuses.ApprovalPending
+            });
+        _payPalApi.Setup(service => service.CancelSubscriptionAsync(
+                pending.PayPalSubscriptionId,
+                PayPalSubscriptionDefaults.UserCancellationReason,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _subscriptionService.Setup(service => service.CancelPayPalSubscriptionAsync(
+                pending.PayPalSubscriptionId,
+                null))
+            .ReturnsAsync(true);
+
+        var result = await _service.AbandonPendingCheckoutAsync(user);
+
+        Assert.That(result, Is.True);
+        _payPalApi.Verify(service => service.GetSubscriptionAsync(
+            pending.PayPalSubscriptionId,
+            It.IsAny<CancellationToken>()), Times.Once);
+        _subscriptionService.Verify(service => service.CancelPayPalSubscriptionAsync(
+            pending.PayPalSubscriptionId,
+            null), Times.Once);
+        _subscriptionService.Verify(service => service.DeletePendingSubscriptionAsync(user.Id), Times.Never);
+    }
+
+    [Test]
     public async Task AbandonPendingCheckoutAsync_ProviderCancelledWithoutActivation_ClearsStaleEntitlementDates()
     {
         var staleDate = DateTime.UtcNow.AddDays(3);

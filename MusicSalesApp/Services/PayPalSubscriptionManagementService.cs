@@ -617,6 +617,17 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
                 return false;
             }
 
+            if (!HasProviderActivationEvidence(details))
+            {
+                // PayPal has accepted cancellation of an agreement that was never
+                // activated or paid. Do not require an immediate follow-up GET to
+                // reflect CANCELLED; PayPal may continue returning APPROVAL_PENDING
+                // briefly even though the approval flow has been abandoned.
+                return await _subscriptionService.CancelPayPalSubscriptionAsync(
+                    pending.PayPalSubscriptionId,
+                    providerEntitlementEndDate: null);
+            }
+
             var cancelledDetails = await _payPalApi.GetSubscriptionAsync(
                 pending.PayPalSubscriptionId,
                 cancellationToken);
