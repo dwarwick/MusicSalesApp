@@ -28,6 +28,7 @@ namespace MusicSalesApp.ComponentTests.Testing;
 public abstract class BUnitTestBase
 {
     protected BunitContext TestContext { get; private set; } = default!;
+    protected BunitAuthorizationContext AuthorizationContext { get; private set; } = default!;
 
     protected Mock<IAuthenticationService> MockAuthService { get; private set; } = default!;
     protected Mock<AuthenticationStateProvider> MockAuthStateProvider { get; private set; } = default!;
@@ -180,7 +181,7 @@ public abstract class BUnitTestBase
         // Setup default returns for IThemeService methods
         MockThemeService.Setup(x => x.CurrentTheme).Returns("Light");
         MockThemeService.Setup(x => x.IsDarkTheme).Returns(false);
-        MockThemeService.Setup(x => x.SyncfusionCssUrl).Returns("https://cdn.syncfusion.com/blazor/31.2.2/styles/bootstrap5.3.css");
+        MockThemeService.Setup(x => x.SyncfusionCssUrl).Returns("https://cdn.syncfusion.com/blazor/33.1.44/styles/bootstrap5.3.css");
         MockThemeService.Setup(x => x.CustomCssFile).Returns("light.css");
         MockThemeService.Setup(x => x.SetThemeAsync(It.IsAny<string>(), It.IsAny<bool>()))
             .Returns(Task.CompletedTask);
@@ -501,7 +502,7 @@ public abstract class BUnitTestBase
 
         // Authorization for components using [Authorize] and AuthorizeView
         // Using bUnit's TestAuthorizationContext for proper auth testing
-        TestContext.AddAuthorization();
+        AuthorizationContext = TestContext.AddAuthorization();
 
         // Add Syncfusion Blazor services for component testing
         TestContext.Services.AddSyncfusionBlazor();
@@ -516,8 +517,8 @@ public abstract class BUnitTestBase
         // NavigationManager is provided by bUnit automatically.
         
         // NOTE: Cannot set RendererInfo here because it triggers service retrieval
-        // which prevents adding more services. This causes SfDialog components to fail
-        // in tests. See: https://github.com/bUnit-dev/bUnit/issues/XXX
+        // which prevents adding more services. Tests that render Syncfusion components
+        // requiring RendererInfo should call SetupRendererInfo after service setup.
     }
 
     /// <summary>
@@ -560,7 +561,7 @@ public abstract class BUnitTestBase
             .Setup(x => x.GetAuthenticationStateAsync())
             .ReturnsAsync(authState);
 
-        var authContext = TestContext.AddAuthorization();
+        var authContext = AuthorizationContext;
         authContext.SetAuthorized(userName);
         authContext.SetClaims(claims.ToArray());
         if (roles.Length > 0)

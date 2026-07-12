@@ -3,6 +3,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
@@ -41,7 +42,7 @@ public class ThemeService : IThemeService
     {
         get
         {
-            var baseUrl = _configuration["SyncfusionTheme"] ?? "https://cdn.syncfusion.com/blazor/31.2.2/styles/bootstrap5.3";
+            var baseUrl = _configuration[AppSettingKeys.SyncfusionTheme] ?? "https://cdn.syncfusion.com/blazor/33.1.44/styles/bootstrap5.3";
             return IsDarkTheme ? $"{baseUrl}-dark.css" : $"{baseUrl}.css";
         }
     }

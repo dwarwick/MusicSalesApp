@@ -12,6 +12,13 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class CreatorDashboardTests : BUnitTestBase
 {
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+        SetupRendererInfo();
+    }
+
     private void SetupAuthenticatedCreator(int userId = 1, int creatorId = 10)
     {
         var claims = new List<Claim>
@@ -36,7 +43,7 @@ public class CreatorDashboardTests : BUnitTestBase
             .Setup(x => x.GetCreatorIdForUserAsync(userId))
             .ReturnsAsync(creatorId);
 
-        var auth = TestContext.AddAuthorization();
+        var auth = AuthorizationContext;
         auth.SetAuthorized("creator@test.com");
         auth.SetClaims(
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),

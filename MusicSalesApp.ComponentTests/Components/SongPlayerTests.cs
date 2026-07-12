@@ -47,6 +47,7 @@ public class SongPlayerTests : BUnitTestBase
             new { Url = "http://localhost/api/music/TestSong.mp3" });
             
         TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        SetupRendererInfo();
     }
 
     [Test]
@@ -197,7 +198,7 @@ public class SongPlayerTests : BUnitTestBase
     public void SongPlayer_DisplaysTrackLengthFromMetadata()
     {
         // Arrange
-        var authContext = TestContext.AddAuthorization();
+        var authContext = AuthorizationContext;
         authContext.SetAuthorized("testuser");
         
         // Set up metadata with the expected track length (245.67 seconds = 4:05)

@@ -6,7 +6,6 @@ using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
-using Syncfusion.Blazor.Grids.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;

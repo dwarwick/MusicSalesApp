@@ -10,6 +10,13 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class NewCreatorSignUpTests : BUnitTestBase
 {
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+        SetupRendererInfo();
+    }
+
     [Test]
     public void NewCreatorSignUp_VerifiedNonCreatorGetStarted_LinksToCreatorSettings()
     {

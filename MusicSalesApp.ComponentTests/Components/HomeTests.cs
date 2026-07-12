@@ -11,6 +11,13 @@ namespace MusicSalesApp.ComponentTests.Components;
 [TestFixture]
 public class HomeTests : BUnitTestBase
 {
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+        SetupRendererInfo();
+    }
+
     [Test]
     public void Home_Renders()
     {

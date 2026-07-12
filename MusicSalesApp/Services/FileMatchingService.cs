@@ -128,23 +128,27 @@ public class FileMatchingService : IFileMatchingService
         try
         {
             var client = new OpenAIClient(_apiKey);
-            var responseClient = client.GetResponsesClient(VisionModel);
+            var responseClient = client.GetResponsesClient();
 
-            var clientResult = await responseClient.CreateResponseAsync(
-            [
-                ResponseItem.CreateUserMessageItem(
-                [
-                    ResponseContentPart.CreateInputTextPart(
-                        "Extract all readable text from this image. " +
-                        "If it is album art or a music cover, focus on the song title or artist name. " +
-                        "Preserve line breaks. Output ONLY the text, nothing else."
-                    ),
-                    ResponseContentPart.CreateInputImagePart(
-                        BinaryData.FromBytes(imageBytes),
-                        contentType
-                    )
-                ])
-            ]);
+            var clientResult = await responseClient.CreateResponseAsync(new CreateResponseOptions
+            {
+                Model = VisionModel,
+                InputItems =
+                {
+                    ResponseItem.CreateUserMessageItem(
+                    [
+                        ResponseContentPart.CreateInputTextPart(
+                            "Extract all readable text from this image. " +
+                            "If it is album art or a music cover, focus on the song title or artist name. " +
+                            "Preserve line breaks. Output ONLY the text, nothing else."
+                        ),
+                        ResponseContentPart.CreateInputImagePart(
+                            BinaryData.FromBytes(imageBytes),
+                            contentType
+                        )
+                    ])
+                }
+            });
 
             return clientResult.Value.GetOutputText()?.Trim() ?? string.Empty;
         }

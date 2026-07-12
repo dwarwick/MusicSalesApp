@@ -33,7 +33,7 @@ public class CreatorSettingsTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Creator activation"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("Account Email: testuser@test.com"));
-        Assert.That(cut.Markup, Does.Contain("Verified user"));
+        Assert.That(cut.Markup, Does.Contain("Review and accept the Creator Agreement"));
         Assert.That(cut.Markup, Does.Contain("Creator Agreement"));
         Assert.That(cut.Markup, Does.Contain("Become a Creator"));
         Assert.That(cut.FindAll(".creator-settings-card").Count, Is.EqualTo(1));

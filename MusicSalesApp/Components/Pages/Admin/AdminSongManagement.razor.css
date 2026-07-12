@@ -1,7 +1,7 @@
 /* Hide accessibility helper text in grid headers */
-.e-grid .e-headercelldiv .e-sortfilterdiv .e-icons::after,
 .e-grid .e-headertext::after,
-.e-grid .e-headercelldiv::after {
+.e-grid .e-headercelldiv::after,
+.e-grid .e-sortfilterdiv .e-icons::after {
     content: none !important;
     display: none !important;
 }

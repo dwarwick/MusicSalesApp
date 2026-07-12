@@ -45,6 +45,7 @@ public class MusicLibraryTests : BUnitTestBase
         handler.SetupJsonResponse(new Uri("http://localhost/api/cart"), new { Items = Array.Empty<object>(), Albums = Array.Empty<object>(), Total = 0 });
         
         TestContext.Services.AddSingleton<HttpClient>(httpClient);
+        SetupRendererInfo();
     }
 
     [Test]

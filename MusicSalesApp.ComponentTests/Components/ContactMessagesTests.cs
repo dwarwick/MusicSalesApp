@@ -3,6 +3,7 @@ using Moq;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Pages.Admin;
 using MusicSalesApp.Services;
+using Syncfusion.Blazor.Grids;
 
 namespace MusicSalesApp.ComponentTests.Components;
 
@@ -28,6 +29,18 @@ public class ContactMessagesTests : BUnitTestBase
         {
             Assert.That(cut.Markup, Does.Contain("Contact Messages"));
             Assert.That(cut.Markup, Does.Contain("Mobile Contact Form Submissions"));
+        });
+    }
+
+    [Test]
+    public void ContactMessages_GridAllowsColumnResizing()
+    {
+        var cut = TestContext.Render<ContactMessages>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var grid = cut.FindComponent<SfGrid<ContactRequestSubmissionDto>>();
+            Assert.That(grid.Instance.AllowResizing, Is.True);
         });
     }
 
