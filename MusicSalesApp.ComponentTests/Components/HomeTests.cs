@@ -2,6 +2,7 @@ using Bunit;
 using Moq;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Pages.Public;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -16,6 +17,9 @@ public class HomeTests : BUnitTestBase
     {
         base.BaseSetup();
         SetupRendererInfo();
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: false, isFirstTimeSubscriber: true, regularPrice: 2.99m));
     }
 
     [Test]
@@ -27,7 +31,7 @@ public class HomeTests : BUnitTestBase
         // Assert - Check for key elements in the redesigned home page
         Assert.That(cut.Markup, Does.Contain("Discover your"));
         Assert.That(cut.Markup, Does.Contain("next favorite artist"));
-        Assert.That(cut.Markup, Does.Contain("Stream all songs"));
+        Assert.That(cut.Markup, Does.Contain("stream the full catalog"));
     }
 
     [Test]
@@ -108,7 +112,7 @@ public class HomeTests : BUnitTestBase
 
         // Assert - Verify featured music section is present
         Assert.That(cut.Markup, Does.Contain("Featured Music"));
-        Assert.That(cut.Markup, Does.Contain("Subscribe for unlimited access"));
+        Assert.That(cut.Markup, Does.Contain("Explore the full library"));
         Assert.That(cut.Markup, Does.Contain("View All"));
     }
 
@@ -179,7 +183,7 @@ public class HomeTests : BUnitTestBase
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
 
         var cut = TestContext.Render<Home>();
-        cut.WaitForState(() => cut.Markup.Contains("Click Here to Get Started"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Subscribe with PayPal"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Contain("href=\"/manage-account\""));
         Assert.That(cut.Markup, Does.Not.Contain("href=\"/CreatorSettings\""));
@@ -199,6 +203,95 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Not.Contain("creator-cta"));
         Assert.That(cut.Markup, Does.Not.Contain("Monetize Your Music"));
         Assert.That(cut.FindAll(".cta-split-section .cta-card"), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void Home_AdvertisesConfiguredTrial_ToAnonymousVisitors()
+    {
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: true, isFirstTimeSubscriber: true, regularPrice: 0.99m));
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForState(() => cut.Markup.Contains("Try Unlimited Music Free for 3 days"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Support independent music"));
+            Assert.That(cut.Markup, Does.Contain("stream the full catalog free for 3 days"));
+            Assert.That(cut.Markup, Does.Contain("3 days free"));
+            Assert.That(cut.Markup, Does.Contain("$0.99"));
+            Assert.That(cut.Markup, Does.Contain("per month"));
+            Assert.That(cut.Markup, Does.Contain("Cancel anytime"));
+            Assert.That(cut.Markup, Does.Contain("Register for Free Trial"));
+        });
+        MockPayPalSubscriptionManagementService.Verify(
+            x => x.GetOfferQuoteAsync(null, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public void Home_AdvertisesTrial_ToEligibleAuthenticatedNonSubscriber()
+    {
+        const int userId = 41;
+        SetupAuthenticatedNonSubscriber(userId);
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: true, isFirstTimeSubscriber: true, regularPrice: 2.99m));
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForState(() => cut.Markup.Contains("Start My Free Trial"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("Start Your 3-Day Free Trial"));
+        Assert.That(cut.Markup, Does.Contain("$2.99"));
+        Assert.That(cut.Markup, Does.Contain("per month"));
+        Assert.That(cut.Markup, Does.Not.Contain("Log In or Register to Start Your Free Trial"));
+    }
+
+    [Test]
+    public void Home_ShowsNoTrialQuote_ToReturningNonSubscriber()
+    {
+        const int userId = 42;
+        SetupAuthenticatedNonSubscriber(userId);
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: false, isFirstTimeSubscriber: false, regularPrice: 0.99m));
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForState(() => cut.Markup.Contains("Subscribe with PayPal"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("$0.99"));
+            Assert.That(cut.Markup, Does.Contain("per month"));
+            Assert.That(cut.Markup, Does.Contain("Cancel anytime"));
+            Assert.That(cut.Markup, Does.Not.Contain("Free Trial"));
+            Assert.That(cut.Markup, Does.Not.Contain("days free"));
+        });
+    }
+
+    [Test]
+    public void Home_HidesTrialAdvertising_WhenSubscriptionStillProvidesAccess()
+    {
+        const int userId = 43;
+        SetupAuthenticatedNonSubscriber(userId);
+        MockSubscriptionService
+            .Setup(x => x.HasActiveSubscriptionAsync(userId))
+            .ReturnsAsync(true);
+
+        var cut = TestContext.Render<Home>();
+        cut.WaitForAssertion(() =>
+            MockSubscriptionService.Verify(x => x.HasActiveSubscriptionAsync(userId), Times.Once));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".cta-split-section"), Is.Empty);
+            Assert.That(cut.Markup, Does.Not.Contain("Free Trial"));
+            Assert.That(cut.Markup, Does.Not.Contain("Subscribe with PayPal"));
+        });
+        MockPayPalSubscriptionManagementService.Verify(
+            x => x.GetOfferQuoteAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Test]
@@ -299,4 +392,60 @@ public class HomeTests : BUnitTestBase
         // Assert - Liked Songs should not be shown when the playlist is empty
         Assert.That(cut.Markup, Does.Not.Contain("Liked Songs"));
     }
+
+    private void SetupAuthenticatedNonSubscriber(int userId)
+    {
+        const string userEmail = "listener@streamtunes.test";
+        SetupAuthorizedUser(userId, userEmail);
+        var testUser = new ApplicationUser
+        {
+            Id = userId,
+            UserName = userEmail,
+            Email = userEmail,
+            EmailConfirmed = true
+        };
+
+        MockUserManager
+            .Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+        MockUserManager
+            .Setup(x => x.IsInRoleAsync(testUser, Roles.NonValidatedUser))
+            .ReturnsAsync(false);
+        MockSubscriptionService
+            .Setup(x => x.HasActiveSubscriptionAsync(userId))
+            .ReturnsAsync(false);
+        MockRecommendationService
+            .Setup(x => x.GetRecommendedPlaylistAsync(userId))
+            .ReturnsAsync(new List<RecommendedPlaylist>());
+        MockPlaylistService
+            .Setup(x => x.GetOrCreateLikedSongsPlaylistAsync(userId))
+            .ReturnsAsync(new Playlist
+            {
+                Id = userId,
+                UserId = userId,
+                PlaylistName = "Liked Songs",
+                IsSystemGenerated = true
+            });
+        MockPlaylistService
+            .Setup(x => x.GetPlaylistSongsAsync(userId))
+            .ReturnsAsync(new List<UserPlaylist>());
+    }
+
+    private static PayPalWebOfferQuote CreateOfferQuote(
+        bool hasFreeTrial,
+        bool isFirstTimeSubscriber,
+        decimal regularPrice)
+        => new()
+        {
+            PlanId = hasFreeTrial ? "P-TRIAL" : "P-MONTHLY",
+            PlanName = hasFreeTrial ? "Trial plan" : "Monthly plan",
+            RegularPrice = regularPrice,
+            CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode,
+            IntervalUnit = PayPalBillingIntervals.Month,
+            IntervalCount = 1,
+            TrialDays = hasFreeTrial ? 3 : null,
+            SettingsVersion = 7,
+            IsFirstTimeSubscriber = isFirstTimeSubscriber,
+            IsConfigured = true
+        };
 }

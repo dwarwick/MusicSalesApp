@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Data;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -144,6 +145,103 @@ public class AppSettingsServiceTests
         Assert.That(result, Is.EqualTo(AppSettingsService.DefaultSubscriptionPrice));
     }
 
+    // ===== PayPal web subscription offer =====
+
+    [Test]
+    public async Task GetPayPalWebSubscriptionOfferAsync_ReturnsNull_WhenNotConfigured()
+    {
+        var result = await _service.GetPayPalWebSubscriptionOfferAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task SetPayPalWebSubscriptionOfferAsync_RoundTripsAtomicSnapshot()
+    {
+        var offer = CreatePayPalWebOffer();
+
+        var saved = await _service.SetPayPalWebSubscriptionOfferAsync(offer);
+        var loaded = await _service.GetPayPalWebSubscriptionOfferAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Version, Is.EqualTo(1));
+            Assert.That(saved.UpdatedAtUtc, Is.Not.EqualTo(default(DateTime)));
+            Assert.That(loaded, Is.EqualTo(saved));
+            Assert.That(loaded!.PrimaryPlan.TrialDays, Is.EqualTo(3));
+            Assert.That(loaded.ResubscriberPlan!.RegularPrice, Is.EqualTo(0.99m));
+        });
+
+        using var context = new AppDbContext(_dbOptions);
+        var storedSettings = await context.AppSettings
+            .Where(setting => setting.Key == AppSettingKeys.PayPalWebSubscriptionOfferSnapshot)
+            .ToListAsync();
+        Assert.That(storedSettings, Has.Count.EqualTo(1));
+        Assert.That(storedSettings[0].Value.Length, Is.LessThanOrEqualTo(2000));
+    }
+
+    [Test]
+    public async Task SetPayPalWebSubscriptionOfferAsync_IncrementsVersionWithoutChangingGlobalPrice()
+    {
+        await _service.SetSubscriptionPriceAsync(2.99m);
+        var first = await _service.SetPayPalWebSubscriptionOfferAsync(CreatePayPalWebOffer());
+        var second = await _service.SetPayPalWebSubscriptionOfferAsync(
+            CreatePayPalWebOffer() with
+            {
+                PrimaryPlan = CreatePayPalWebOffer().PrimaryPlan with { Name = "Updated trial plan" }
+            });
+
+        var globalPrice = await _service.GetSubscriptionPriceAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.Version, Is.EqualTo(1));
+            Assert.That(second.Version, Is.EqualTo(2));
+            Assert.That(second.PrimaryPlan.Name, Is.EqualTo("Updated trial plan"));
+            Assert.That(globalPrice, Is.EqualTo(2.99m));
+        });
+    }
+
+    [Test]
+    public async Task SetPayPalWebSubscriptionOfferAsync_ConcurrentSavesReceiveDistinctVersions()
+    {
+        var secondService = new AppSettingsService(_contextFactory, _mockLogger.Object);
+        var firstOffer = CreatePayPalWebOffer() with
+        {
+            PrimaryPlan = CreatePayPalWebOffer().PrimaryPlan with { Id = "P-FIRST" }
+        };
+        var secondOffer = CreatePayPalWebOffer() with
+        {
+            PrimaryPlan = CreatePayPalWebOffer().PrimaryPlan with { Id = "P-SECOND" }
+        };
+
+        var savedOffers = await Task.WhenAll(
+            _service.SetPayPalWebSubscriptionOfferAsync(firstOffer),
+            secondService.SetPayPalWebSubscriptionOfferAsync(secondOffer));
+        var loaded = await _service.GetPayPalWebSubscriptionOfferAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(savedOffers.Select(offer => offer.Version), Is.EquivalentTo(new[] { 1, 2 }));
+            Assert.That(loaded!.Version, Is.EqualTo(2));
+            Assert.That(
+                loaded.PrimaryPlan.Id,
+                Is.EqualTo(savedOffers.Single(offer => offer.Version == 2).PrimaryPlan.Id));
+        });
+    }
+
+    [Test]
+    public async Task GetPayPalWebSubscriptionOfferAsync_ReturnsNull_WhenSnapshotIsMalformed()
+    {
+        await _service.SetSettingAsync(
+            AppSettingKeys.PayPalWebSubscriptionOfferSnapshot,
+            "{not-json}");
+
+        var result = await _service.GetPayPalWebSubscriptionOfferAsync();
+
+        Assert.That(result, Is.Null);
+    }
+
     // ===== Site Maintenance Methods =====
 
     [Test]
@@ -151,6 +249,34 @@ public class AppSettingsServiceTests
     {
         var result = await _service.GetSiteMaintenanceStartUtcAsync();
         Assert.That(result, Is.Null);
+    }
+
+    private static PayPalWebSubscriptionOffer CreatePayPalWebOffer()
+    {
+        return new PayPalWebSubscriptionOffer
+        {
+            PrimaryPlan = new PayPalWebPlanSnapshot
+            {
+                Id = "P-TRIAL",
+                Name = "Three-day trial",
+                Status = PayPalPlanStatuses.Active,
+                RegularPrice = 0.99m,
+                CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode,
+                IntervalUnit = PayPalBillingIntervals.Month,
+                IntervalCount = 1,
+                TrialDays = 3
+            },
+            ResubscriberPlan = new PayPalWebPlanSnapshot
+            {
+                Id = "P-NO-TRIAL",
+                Name = "Monthly without trial",
+                Status = PayPalPlanStatuses.Active,
+                RegularPrice = 0.99m,
+                CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode,
+                IntervalUnit = PayPalBillingIntervals.Month,
+                IntervalCount = 1
+            }
+        };
     }
 
     [Test]

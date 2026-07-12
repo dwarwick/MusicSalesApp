@@ -83,7 +83,6 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             return BadRequest(new { success = false, error = $"Subscription is not active (status: {subscriptionInfo.Status})." });
         }
 
-        var monthlyPrice = decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], out var price) ? price : 3.99m;
         var appAccountToken = string.IsNullOrWhiteSpace(request.AppAccountToken)
             ? subscriptionInfo.AppAccountToken
             : request.AppAccountToken;
@@ -91,6 +90,18 @@ public class AppleAppStoreSubscriptionController : ControllerBase
         var existing = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId);
         if (existing != null)
         {
+            if (existing.UserId != user.Id)
+            {
+                _logger.LogWarning(
+                    "User {UserId} attempted to verify Apple transaction owned by user {OwnerUserId}",
+                    user.Id,
+                    existing.UserId);
+                return Forbid();
+            }
+
+            var existingPrice = subscriptionInfo.Price is > 0
+                ? subscriptionInfo.Price.Value
+                : existing.MonthlyPrice;
             var shouldSendConfirmationEmail = !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existing);
 
             _logger.LogInformation(
@@ -99,15 +110,34 @@ public class AppleAppStoreSubscriptionController : ControllerBase
                 user.Id,
                 shouldSendConfirmationEmail);
 
-            await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
-                subscriptionInfo.OriginalTransactionId,
-                subscriptionInfo.Status,
-                subscriptionInfo.ExpiryTime,
-                subscriptionInfo.TransactionId,
-                subscriptionInfo.Environment,
-                subscriptionInfo.ProductId,
-                appAccountToken,
-                monthlyPrice);
+            try
+            {
+                await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
+                    subscriptionInfo.OriginalTransactionId,
+                    subscriptionInfo.Status,
+                    subscriptionInfo.ExpiryTime,
+                    subscriptionInfo.TransactionId,
+                    subscriptionInfo.Environment,
+                    subscriptionInfo.ProductId,
+                    appAccountToken,
+                    existingPrice);
+            }
+            catch (SubscriptionProviderConflictException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Apple subscription reactivation was rejected for user {UserId} because a current {ExistingBillingSource} subscription exists",
+                    user.Id,
+                    ex.ExistingBillingSource);
+                return Conflict(new { success = false, error = ex.Message });
+            }
+            if (subscriptionInfo.Price is > 0)
+            {
+                await _subscriptionService.UpdateAppleStorePriceAsync(
+                    subscriptionInfo.OriginalTransactionId,
+                    subscriptionInfo.Price.Value,
+                    subscriptionInfo.PriceCurrencyCode);
+            }
 
             if (shouldSendConfirmationEmail)
             {
@@ -121,15 +151,41 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             return Ok(new { success = true, subscriptionId = existing.Id, status = subscriptionInfo.Status });
         }
 
-        var subscription = await _subscriptionService.CreateAppleSubscriptionAsync(
-            user.Id,
-            subscriptionInfo.TransactionId,
-            subscriptionInfo.OriginalTransactionId,
-            subscriptionInfo.ProductId,
-            appAccountToken,
-            subscriptionInfo.Environment,
-            monthlyPrice,
-            subscriptionInfo.PurchaseTime);
+        if (subscriptionInfo.Price is not > 0)
+        {
+            _logger.LogWarning(
+                "Apple App Store did not return the recurring price for new transaction {TransactionId} owned by user {UserId}",
+                subscriptionInfo.TransactionId,
+                user.Id);
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { success = false, error = "Apple App Store could not confirm the subscription price. Please try again later." });
+        }
+
+        var monthlyPrice = subscriptionInfo.Price.Value;
+
+        Subscription subscription;
+        try
+        {
+            subscription = await _subscriptionService.CreateAppleSubscriptionAsync(
+                user.Id,
+                subscriptionInfo.TransactionId,
+                subscriptionInfo.OriginalTransactionId,
+                subscriptionInfo.ProductId,
+                appAccountToken,
+                subscriptionInfo.Environment,
+                monthlyPrice,
+                subscriptionInfo.PurchaseTime);
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Apple subscription creation was rejected for user {UserId} because a current {ExistingBillingSource} subscription exists",
+                user.Id,
+                ex.ExistingBillingSource);
+            return Conflict(new { success = false, error = ex.Message });
+        }
 
         await _subscriptionService.UpdateAppleSubscriptionStatusAsync(
             subscriptionInfo.OriginalTransactionId,
@@ -140,6 +196,10 @@ public class AppleAppStoreSubscriptionController : ControllerBase
             subscriptionInfo.ProductId,
             appAccountToken,
             monthlyPrice);
+        await _subscriptionService.UpdateAppleStorePriceAsync(
+            subscriptionInfo.OriginalTransactionId,
+            monthlyPrice,
+            subscriptionInfo.PriceCurrencyCode);
 
         var refreshedSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(subscriptionInfo.OriginalTransactionId)
             ?? subscription;

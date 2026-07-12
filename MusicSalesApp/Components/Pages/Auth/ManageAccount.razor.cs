@@ -6,6 +6,7 @@ using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Popups;
+using System.Globalization;
 using System.Net.Http.Json;
 
 namespace MusicSalesApp.Components.Pages.Auth;
@@ -45,6 +46,8 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _hasSubscription;
     protected string _subscriptionStatus;
     protected decimal _monthlyPrice;
+    protected string _storeFormattedPrice;
+    protected string _storePriceCurrencyCode;
     protected DateTime? _startDate;
     protected DateTime? _endDate;
     protected DateTime? _nextBillingDate;
@@ -52,7 +55,7 @@ public partial class ManageAccountModel : BlazorBase
     protected DateTime? _trialEndDate;
     protected string _paypalSubscriptionId;
     protected string _billingSource;
-    protected string _subscriptionPrice = "3.99";
+    protected PayPalWebOfferQuote _payPalOfferQuote;
     protected string _userTimeZoneId = UserTimeZoneDisplayHelper.UtcTimeZoneId;
     protected bool _agreeToTerms = false;
     protected bool _subscribing = false;
@@ -109,6 +112,10 @@ public partial class ManageAccountModel : BlazorBase
                         await LoadPasskeys();
                         await CheckPurchasedMusic();
                         await LoadSubscriptionStatus();
+                        if (NeedsSubscriptionOffer)
+                        {
+                            await LoadPayPalOfferQuoteAsync();
+                        }
                         await LoadCreatorStatus();
                         await TrackSubscriberManageAccountViewedAsync();
 
@@ -119,15 +126,19 @@ public partial class ManageAccountModel : BlazorBase
                             {
                                 try
                                 {
-                                    var activateResponse = await Http.PostAsync("api/subscription/activate-current", null);
-                                    if (activateResponse.IsSuccessStatusCode)
+                                    var activation = await PayPalSubscriptionManagementService.ActivateCurrentSubscriptionAsync(
+                                        _currentUser,
+                                        NavigationManager.BaseUri);
+                                    if (activation.Success)
                                     {
-                                        _successMessage = "Your subscription has been activated successfully!";
+                                        _successMessage = activation.IsTrial
+                                            ? "Your free trial is active. You now have full access to stream every full song."
+                                            : "Your subscription has been activated successfully!";
                                         await LoadSubscriptionStatus();
                                     }
                                     else
                                     {
-                                        _errorMessage = "Failed to activate subscription. Please contact support.";
+                                        _errorMessage = activation.Error ?? "Failed to activate subscription. Please contact support.";
                                     }
                                 }
                                 catch (Exception ex)
@@ -140,15 +151,10 @@ public partial class ManageAccountModel : BlazorBase
                             {
                                 try
                                 {
-                                    var deleteResponse = await Http.PostAsync("api/subscription/delete-pending", null);
-                                    if (deleteResponse.IsSuccessStatusCode)
-                                    {
-                                        _errorMessage = "Subscription setup was cancelled.";
-                                    }
-                                    else
-                                    {
-                                        _errorMessage = "Subscription setup was cancelled. Please try again if you wish to subscribe.";
-                                    }
+                                    var abandoned = await PayPalSubscriptionManagementService.AbandonPendingCheckoutAsync(_currentUser);
+                                    _errorMessage = abandoned
+                                        ? "Subscription setup was cancelled."
+                                        : "PayPal checkout was cancelled, but we could not finish cleaning up the pending subscription. Please try again.";
                                     await LoadSubscriptionStatus();
                                 }
                                 catch (Exception ex)
@@ -422,12 +428,31 @@ public partial class ManageAccountModel : BlazorBase
     /// Returns true if the user has an active subscription that hasn't been cancelled yet.
     /// </summary>
     protected bool HasActiveSubscription => _hasSubscription;
-    protected bool HasCancelledSubscriptionAccess => _hasSubscription && IsNonRenewingSubscription;
-    protected bool CanCreateNewSubscription => !_hasSubscription ||
-        _subscriptionStatus == SubscriptionStatuses.Expired;
-    protected string SubscribeButtonLabel => HasCancelledSubscriptionAccess || _subscriptionStatus == SubscriptionStatuses.Expired
-        ? "Start New Subscription"
-        : "Sign Up for Monthly Subscription";
+    protected bool HasUnresolvedPayPalAgreement => !_hasSubscription
+        && string.Equals(_billingSource, BillingSources.PayPal, StringComparison.Ordinal)
+        && !string.IsNullOrWhiteSpace(_paypalSubscriptionId)
+        && (_subscriptionStatus == SubscriptionStatuses.Active
+            || _subscriptionStatus == SubscriptionStatuses.Suspended
+            || _subscriptionStatus == SubscriptionStatuses.Expired);
+    protected bool NeedsSubscriptionOffer => !_hasSubscription && !HasUnresolvedPayPalAgreement;
+    protected bool CanCreateNewSubscription => NeedsSubscriptionOffer && _payPalOfferQuote != null;
+    protected bool HasFreeTrialOffer => _payPalOfferQuote?.HasFreeTrial == true;
+    protected string TrialDurationDisplay => _payPalOfferQuote?.TrialDays is int trialDays
+        ? $"{trialDays} {(trialDays == 1 ? "day" : "days")}"
+        : string.Empty;
+    protected string TrialHeadlineDisplay => _payPalOfferQuote?.TrialDays is int trialDays
+        ? $"{trialDays}-Day"
+        : string.Empty;
+    protected string OfferPriceDisplay => FormatOfferPrice(_payPalOfferQuote);
+    protected string OfferCadenceDisplay => FormatOfferCadence(_payPalOfferQuote);
+    protected string OfferRegularTermsDisplay => _payPalOfferQuote == null
+        ? string.Empty
+        : $"{OfferPriceDisplay} {OfferCadenceDisplay}";
+    protected string SubscribeButtonLabel => HasFreeTrialOffer
+        ? $"Start My {TrialHeadlineDisplay} Free Trial"
+        : _payPalOfferQuote?.IsFirstTimeSubscriber == false
+            ? "Resubscribe with PayPal"
+            : "Subscribe with PayPal";
     protected bool IsNonRenewingSubscription =>
         _hasSubscription && string.Equals(_subscriptionStatus, SubscriptionStatuses.Cancelled, StringComparison.OrdinalIgnoreCase);
     protected bool ShouldUseExternalSubscriptionManagement =>
@@ -454,7 +479,9 @@ public partial class ManageAccountModel : BlazorBase
         : "Ended On";
     protected string SubscriptionTimeZoneLabel => UserTimeZoneDisplayHelper.GetTimeZoneDisplayLabel(_userTimeZoneId, _endDate ?? _nextBillingDate ?? _startDate);
     protected string ActiveSubscriptionMessage => IsNonRenewingSubscription
-        ? $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {FormatUserDateTimeWithTimeZone(_endDate)}."
+        ? _isOnTrial
+            ? $"Your free trial has been canceled, so you will not be charged. You still have full subscription benefits through {FormatUserDateTimeWithTimeZone(_trialEndDate ?? _endDate)}."
+            : $"Your subscription has been canceled. It will not automatically renew. You will continue to enjoy subscription benefits until {FormatUserDateTimeWithTimeZone(_endDate)}."
         : _isOnTrial
             ? $"Your free trial is active until {FormatUserDateTimeWithTimeZone(_trialEndDate ?? _endDate)}. During the trial, you have full subscription benefits. After the trial, your subscription will automatically renew unless canceled."
         : _endDate.HasValue
@@ -623,6 +650,8 @@ public partial class ManageAccountModel : BlazorBase
                 _hasSubscription = response.HasSubscription;
                 _subscriptionStatus = response.Status ?? "N/A";
                 _monthlyPrice = response.MonthlyPrice;
+                _storeFormattedPrice = response.StoreFormattedPrice;
+                _storePriceCurrencyCode = response.StorePriceCurrencyCode;
                 _startDate = response.StartDate;
                 _endDate = response.EndDate;
                 _nextBillingDate = response.NextBillingDate;
@@ -630,12 +659,26 @@ public partial class ManageAccountModel : BlazorBase
                 _trialEndDate = response.TrialEndDate;
                 _paypalSubscriptionId = response.PaypalSubscriptionId;
                 _billingSource = response.BillingSource;
-                _subscriptionPrice = response.SubscriptionPrice ?? "3.99";
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading subscription status");
+        }
+    }
+
+    private async Task LoadPayPalOfferQuoteAsync()
+    {
+        try
+        {
+            _payPalOfferQuote = await PayPalSubscriptionManagementService.GetOfferQuoteAsync(_currentUser.Id);
+            _agreeToTerms = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading the PayPal web subscription offer");
+            _payPalOfferQuote = null;
+            _errorMessage = "Subscription options are temporarily unavailable. Please try again later.";
         }
     }
 
@@ -655,27 +698,27 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/subscription/create", new { AgreeToTerms = _agreeToTerms });
-            
-            if (response.IsSuccessStatusCode)
+            if (_currentUser == null || _payPalOfferQuote == null)
             {
-                var result = await response.Content.ReadFromJsonAsync<CreateSubscriptionResponse>();
-                
-                if (!string.IsNullOrEmpty(result?.ApprovalUrl))
-                {
-                    // Redirect to PayPal for approval
-                    NavigationManager.NavigateTo(result.ApprovalUrl, forceLoad: true);
-                }
-                else
-                {
-                    _errorMessage = "Failed to create subscription. Please try again.";
-                    _subscribing = false;
-                }
+                _errorMessage = "Subscription options are temporarily unavailable. Please try again later.";
+                _subscribing = false;
+                return;
+            }
+
+            var result = await PayPalSubscriptionManagementService.CreateSubscriptionAsync(
+                _currentUser,
+                _agreeToTerms,
+                _payPalOfferQuote.SettingsVersion,
+                _payPalOfferQuote.PlanId,
+                NavigationManager.BaseUri);
+
+            if (result.Success && !string.IsNullOrWhiteSpace(result.ApprovalUrl))
+            {
+                NavigationManager.NavigateTo(result.ApprovalUrl, forceLoad: true);
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to create subscription: {errorContent}";
+                _errorMessage = result.Error ?? "Failed to create subscription. Please try again.";
                 _subscribing = false;
             }
         }
@@ -702,7 +745,17 @@ public partial class ManageAccountModel : BlazorBase
             return;
         }
 
-        if (!await JS.InvokeAsync<bool>("confirm", "Are you sure you want to cancel your subscription? You will have access until the end of your current billing period."))
+        var cancellingTrial = _isOnTrial;
+        var accessEnd = _trialEndDate ?? _endDate;
+        var confirmationMessage = accessEnd.HasValue
+            ? cancellingTrial
+                ? $"Are you sure you want to cancel your free trial? You will not be charged, and you will keep full access through {FormatUserDateTimeWithTimeZone(accessEnd)}."
+                : $"Are you sure you want to cancel your subscription? You will keep full access through {FormatUserDateTimeWithTimeZone(accessEnd)}."
+            : cancellingTrial
+                ? "Are you sure you want to cancel your free trial? You will not be charged, and you will keep full access through the provider-confirmed end of the trial."
+                : "Are you sure you want to cancel your subscription? You will keep full access through the provider-confirmed end of your current billing period.";
+
+        if (!await JS.InvokeAsync<bool>("confirm", confirmationMessage))
         {
             return;
         }
@@ -713,26 +766,30 @@ public partial class ManageAccountModel : BlazorBase
 
         try
         {
-            var response = await Http.PostAsync("api/subscription/cancel", null);
-            
-            if (response.IsSuccessStatusCode)
+            var result = await PayPalSubscriptionManagementService.CancelSubscriptionAsync(
+                _currentUser,
+                NavigationManager.BaseUri);
+
+            if (result.Success)
             {
-                var result = await response.Content.ReadFromJsonAsync<CancelSubscriptionResponse>();
-                
-                if (result?.Success == true)
+                _endDate = result.EndDate ?? accessEnd;
+                await LoadSubscriptionStatus();
+                if (NeedsSubscriptionOffer && _payPalOfferQuote == null)
                 {
-                    await LoadSubscriptionStatus();
-                    _successMessage = $"Your subscription has been cancelled. You can continue to listen to unlimited music until {FormatUserDateTimeWithTimeZone(_endDate)}.";
+                    await LoadPayPalOfferQuoteAsync();
                 }
-                else
-                {
-                    _errorMessage = "Failed to cancel subscription. Please try again.";
-                }
+                var confirmedEnd = result.EndDate ?? _trialEndDate ?? _endDate;
+                _successMessage = confirmedEnd.HasValue
+                    ? cancellingTrial
+                        ? $"Your free trial has been cancelled. You will not be charged, and you can continue streaming every full song through {FormatUserDateTimeWithTimeZone(confirmedEnd)}."
+                        : $"Your subscription has been cancelled. You can continue to listen to unlimited music through {FormatUserDateTimeWithTimeZone(confirmedEnd)}."
+                    : cancellingTrial
+                        ? "Your free trial has been cancelled. You will not be charged, and full access continues through the provider-confirmed end of the trial."
+                        : "Your subscription has been cancelled. Full access continues through the provider-confirmed end of the current billing period.";
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _errorMessage = $"Failed to cancel subscription: {errorContent}";
+                _errorMessage = result.Error ?? "Failed to cancel subscription. Please try again.";
             }
         }
         catch (Exception ex)
@@ -745,6 +802,52 @@ public partial class ManageAccountModel : BlazorBase
             _cancelling = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private static string FormatOfferPrice(PayPalWebOfferQuote offer)
+    {
+        if (offer == null)
+        {
+            return string.Empty;
+        }
+
+        var amount = offer.RegularPrice.ToString("0.00", CultureInfo.InvariantCulture);
+        return string.Equals(
+            offer.CurrencyCode,
+            PayPalSubscriptionDefaults.UsdCurrencyCode,
+            StringComparison.OrdinalIgnoreCase)
+            ? $"${amount}"
+            : $"{amount} {offer.CurrencyCode.ToUpperInvariant()}";
+    }
+
+    protected string CurrentMonthlyPriceDisplay => !string.IsNullOrWhiteSpace(_storeFormattedPrice)
+        ? _storeFormattedPrice
+        : FormatPrice(_monthlyPrice, _storePriceCurrencyCode);
+
+    private static string FormatPrice(decimal amount, string currencyCode)
+    {
+        var formattedAmount = amount.ToString("0.00", CultureInfo.InvariantCulture);
+        return string.IsNullOrWhiteSpace(currencyCode)
+            || string.Equals(
+                currencyCode,
+                PayPalSubscriptionDefaults.UsdCurrencyCode,
+                StringComparison.OrdinalIgnoreCase)
+            ? $"${formattedAmount}"
+            : $"{formattedAmount} {currencyCode.ToUpperInvariant()}";
+    }
+
+    private static string FormatOfferCadence(PayPalWebOfferQuote offer)
+    {
+        if (offer == null)
+        {
+            return string.Empty;
+        }
+
+        var intervalCount = Math.Max(offer.IntervalCount, 1);
+        var intervalUnit = offer.IntervalUnit.Trim().ToLowerInvariant();
+        return intervalCount == 1
+            ? $"per {intervalUnit}"
+            : $"every {intervalCount} {intervalUnit}s";
     }
 
     protected string GetExternalSubscriptionManagementUrl()
@@ -888,20 +991,8 @@ public class SubscriptionStatusResponse
     public DateTime? TrialEndDate { get; set; }
     public DateTime? TrialConvertedAt { get; set; }
     public decimal MonthlyPrice { get; set; }
+    public string StoreFormattedPrice { get; set; }
+    public string StorePriceCurrencyCode { get; set; }
     public string PaypalSubscriptionId { get; set; }
     public string BillingSource { get; set; }
-    public string SubscriptionPrice { get; set; }
-}
-
-public class CreateSubscriptionResponse
-{
-    public bool Success { get; set; }
-    public string SubscriptionId { get; set; }
-    public string ApprovalUrl { get; set; }
-}
-
-public class CancelSubscriptionResponse
-{
-    public bool Success { get; set; }
-    public DateTime? EndDate { get; set; }
 }

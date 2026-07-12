@@ -7,10 +7,19 @@ public class PublicFeaturedMusicTests
     public void Home_MovesExistingFeaturedMusicRenderingBeforeHero()
     {
         var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Public", "Home.razor");
+        var subscriptionIslandMarkup = ReadProjectFile(
+            "MusicSalesApp",
+            "Components",
+            "Pages",
+            "Public",
+            "HomeSubscriptionOffer.razor");
         var featuredIndex = markup.IndexOf("<section class=\"featured-music-section\">", StringComparison.Ordinal);
+        var subscriptionIslandIndex = markup.IndexOf("<HomeSubscriptionOffer", StringComparison.Ordinal);
 
         Assert.That(featuredIndex, Is.GreaterThanOrEqualTo(0));
-        Assert.That(featuredIndex, Is.LessThan(markup.IndexOf("<section class=\"hero-section\">", StringComparison.Ordinal)));
+        Assert.That(subscriptionIslandIndex, Is.GreaterThanOrEqualTo(0));
+        Assert.That(featuredIndex, Is.LessThan(subscriptionIslandIndex));
+        Assert.That(subscriptionIslandMarkup, Does.Contain("<section class=\"hero-section\">"));
         Assert.That(markup, Does.Contain("<MusicLibrary ShowHomePageFeatured=\"true\""));
         Assert.That(markup, Does.Not.Contain("FeaturedMusicStrip"));
     }

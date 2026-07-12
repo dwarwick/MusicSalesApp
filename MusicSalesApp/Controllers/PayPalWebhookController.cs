@@ -34,6 +34,7 @@ public class PayPalWebhookController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<PayPalWebhookController> _logger;
+    private readonly IPayPalSubscriptionManagementService? _payPalSubscriptionManagementService;
 
     public PayPalWebhookController(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -45,7 +46,8 @@ public class PayPalWebhookController : ControllerBase
         IHttpClientFactory httpClientFactory,
         UserManager<ApplicationUser> userManager,
         IWebHostEnvironment environment,
-        ILogger<PayPalWebhookController> logger)
+        ILogger<PayPalWebhookController> logger,
+        IPayPalSubscriptionManagementService? payPalSubscriptionManagementService = null)
     {
         _contextFactory = contextFactory;
         _subscriptionService = subscriptionService;
@@ -57,6 +59,7 @@ public class PayPalWebhookController : ControllerBase
         _userManager = userManager;
         _environment = environment;
         _logger = logger;
+        _payPalSubscriptionManagementService = payPalSubscriptionManagementService;
     }
 
     /// <summary>
@@ -124,9 +127,23 @@ public class PayPalWebhookController : ControllerBase
 
             if (IsSubscriptionLifecycleEvent(eventType))
             {
-                await HandleSubscriptionLifecycleEventAsync(eventType!, doc.RootElement);
+                if (!await HandleSubscriptionLifecycleEventAsync(eventType!, doc.RootElement))
+                {
+                    return StatusCode(
+                        StatusCodes.Status503ServiceUnavailable,
+                        "PayPal subscription reconciliation is temporarily unavailable");
+                }
             }
-            else if (eventType == "CUSTOMER.DISPUTE.CREATED")
+            else if (eventType == PayPalWebhookEventTypes.PaymentSaleCompleted)
+            {
+                if (!await HandleSubscriptionPaymentCompletedAsync(doc.RootElement))
+                {
+                    return StatusCode(
+                        StatusCodes.Status503ServiceUnavailable,
+                        "PayPal subscription reconciliation is temporarily unavailable");
+                }
+            }
+            else if (eventType == PayPalWebhookEventTypes.CustomerDisputeCreated)
             {
                 await HandleDisputeCreatedAsync(doc.RootElement);
             }
@@ -139,12 +156,12 @@ public class PayPalWebhookController : ControllerBase
         return Ok();
     }
 
-    private async Task HandleSubscriptionLifecycleEventAsync(string eventType, JsonElement root)
+    private async Task<bool> HandleSubscriptionLifecycleEventAsync(string eventType, JsonElement root)
     {
         if (!root.TryGetProperty("resource", out var resource))
         {
             _logger.LogWarning("PayPal subscription webhook {EventType} missing resource", eventType);
-            return;
+            return true;
         }
 
         var paypalSubscriptionId = resource.TryGetProperty("id", out var idProperty)
@@ -154,14 +171,38 @@ public class PayPalWebhookController : ControllerBase
         if (string.IsNullOrWhiteSpace(paypalSubscriptionId))
         {
             _logger.LogWarning("PayPal subscription webhook {EventType} missing subscription ID", eventType);
-            return;
+            return true;
         }
 
         var status = ResolveSubscriptionStatus(eventType, resource);
+        if (_payPalSubscriptionManagementService != null)
+        {
+            var reconciled = await _payPalSubscriptionManagementService.ReconcileSubscriptionAsync(
+                paypalSubscriptionId,
+                GetBaseUrl());
+            if (reconciled != null)
+            {
+                _logger.LogInformation(
+                    "Reconciled PayPal subscription webhook {EventType} for subscription {SubscriptionId} with provider status {Status}",
+                    eventType,
+                    paypalSubscriptionId,
+                    reconciled.Subscription.Status);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "PayPal subscription webhook {EventType} for {SubscriptionId} could not be reconciled; provider state was not guessed from the webhook payload",
+                    eventType,
+                    paypalSubscriptionId);
+            }
+
+            return reconciled != null;
+        }
+
         if (string.IsNullOrWhiteSpace(status))
         {
             _logger.LogInformation("Ignoring PayPal subscription webhook {EventType} because it did not resolve to a supported status", eventType);
-            return;
+            return true;
         }
 
         var nextBillingDate = TryGetNextBillingDate(resource);
@@ -177,29 +218,66 @@ public class PayPalWebhookController : ControllerBase
             eventType,
             paypalSubscriptionId,
             status);
+        return true;
     }
 
     private static bool IsSubscriptionLifecycleEvent(string? eventType)
-        => eventType is "BILLING.SUBSCRIPTION.ACTIVATED"
-            or "BILLING.SUBSCRIPTION.CANCELLED"
-            or "BILLING.SUBSCRIPTION.EXPIRED"
-            or "BILLING.SUBSCRIPTION.SUSPENDED"
-            or "BILLING.SUBSCRIPTION.UPDATED";
+        => eventType is PayPalWebhookEventTypes.SubscriptionActivated
+            or PayPalWebhookEventTypes.SubscriptionCancelled
+            or PayPalWebhookEventTypes.SubscriptionExpired
+            or PayPalWebhookEventTypes.SubscriptionSuspended
+            or PayPalWebhookEventTypes.SubscriptionUpdated
+            or PayPalWebhookEventTypes.SubscriptionPaymentFailed;
 
     private static string? ResolveSubscriptionStatus(string eventType, JsonElement resource)
     {
         return eventType switch
         {
-            "BILLING.SUBSCRIPTION.ACTIVATED" => SubscriptionStatuses.Active,
-            "BILLING.SUBSCRIPTION.CANCELLED" => SubscriptionStatuses.Cancelled,
-            "BILLING.SUBSCRIPTION.EXPIRED" => SubscriptionStatuses.Expired,
-            "BILLING.SUBSCRIPTION.SUSPENDED" => SubscriptionStatuses.Suspended,
-            "BILLING.SUBSCRIPTION.UPDATED" => MapPayPalSubscriptionStatus(
+            PayPalWebhookEventTypes.SubscriptionActivated => SubscriptionStatuses.Active,
+            PayPalWebhookEventTypes.SubscriptionCancelled => SubscriptionStatuses.Cancelled,
+            PayPalWebhookEventTypes.SubscriptionExpired => SubscriptionStatuses.Expired,
+            PayPalWebhookEventTypes.SubscriptionSuspended => SubscriptionStatuses.Suspended,
+            PayPalWebhookEventTypes.SubscriptionUpdated => MapPayPalSubscriptionStatus(
                 resource.TryGetProperty("status", out var statusProperty)
                     ? statusProperty.GetString()
                     : null),
             _ => null
         };
+    }
+
+    private async Task<bool> HandleSubscriptionPaymentCompletedAsync(JsonElement root)
+    {
+        if (_payPalSubscriptionManagementService == null)
+        {
+            _logger.LogWarning("PayPal subscription payment webhook cannot use shared reconciliation because the management service is unavailable");
+            return true;
+        }
+
+        if (!root.TryGetProperty("resource", out var resource)
+            || !resource.TryGetProperty("billing_agreement_id", out var billingAgreementProperty))
+        {
+            _logger.LogWarning("PayPal subscription payment webhook did not include a billing agreement ID");
+            return true;
+        }
+
+        var paypalSubscriptionId = billingAgreementProperty.GetString();
+        if (string.IsNullOrWhiteSpace(paypalSubscriptionId))
+        {
+            _logger.LogWarning("PayPal subscription payment webhook included an empty billing agreement ID");
+            return true;
+        }
+
+        var reconciled = await _payPalSubscriptionManagementService.ReconcileSubscriptionAsync(
+            paypalSubscriptionId,
+            GetBaseUrl());
+        if (reconciled == null || !reconciled.Subscription.LastPaymentDate.HasValue)
+        {
+            _logger.LogWarning(
+                "Completed PayPal payment for subscription {SubscriptionId} is not yet visible in provider-confirmed subscription details",
+                paypalSubscriptionId);
+        }
+
+        return reconciled?.Subscription.LastPaymentDate.HasValue == true;
     }
 
     private static string? MapPayPalSubscriptionStatus(string? paypalStatus)

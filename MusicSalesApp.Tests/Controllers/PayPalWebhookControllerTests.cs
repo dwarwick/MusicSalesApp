@@ -30,6 +30,7 @@ public class PayPalWebhookControllerTests
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IWebHostEnvironment> _mockEnvironment;
     private Mock<ILogger<PayPalWebhookController>> _mockLogger;
+    private Mock<IPayPalSubscriptionManagementService> _mockPayPalSubscriptionManagementService;
     private PayPalWebhookController _controller;
     private DbContextOptions<AppDbContext> _dbOptions;
 
@@ -75,8 +76,15 @@ public class PayPalWebhookControllerTests
         _mockEnvironment.Setup(e => e.EnvironmentName).Returns(Environments.Development);
 
         _mockLogger = new Mock<ILogger<PayPalWebhookController>>();
+        _mockPayPalSubscriptionManagementService = new Mock<IPayPalSubscriptionManagementService>();
 
-        _controller = new PayPalWebhookController(
+        _controller = CreateController();
+    }
+
+    private PayPalWebhookController CreateController(
+        IPayPalSubscriptionManagementService? payPalSubscriptionManagementService = null)
+    {
+        return new PayPalWebhookController(
             _mockDbContextFactory.Object,
             _mockSubscriptionService.Object,
             _mockAdminNotificationService.Object,
@@ -86,7 +94,8 @@ public class PayPalWebhookControllerTests
             _mockHttpClientFactory.Object,
             _mockUserManager.Object,
             _mockEnvironment.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            payPalSubscriptionManagementService);
     }
 
     private void SetRequestBody(string body)
@@ -138,6 +147,254 @@ public class PayPalWebhookControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<OkResult>());
+    }
+
+    [Test]
+    public async Task HandleWebhook_PaymentSaleCompleted_DelegatesDuplicateEventsToSharedReconciliation()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        var subscription = new Subscription
+        {
+            Id = 15,
+            UserId = 7,
+            PayPalSubscriptionId = "I-SUB123",
+            Status = SubscriptionStatuses.Active,
+            BillingSource = BillingSources.PayPal,
+            LastPaymentDate = DateTime.UtcNow.AddMinutes(-1)
+        };
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                "I-SUB123",
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = subscription,
+                PreviousStatus = SubscriptionStatuses.Active
+            });
+        const string body = """
+            {
+              "event_type": "PAYMENT.SALE.COMPLETED",
+              "resource": { "billing_agreement_id": "I-SUB123" }
+            }
+            """;
+
+        SetRequestBody(body);
+        var first = await _controller.HandleWebhook();
+        SetRequestBody(body);
+        var duplicate = await _controller.HandleWebhook();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first, Is.InstanceOf<OkResult>());
+            Assert.That(duplicate, Is.InstanceOf<OkResult>());
+        });
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            "I-SUB123",
+            "https://davidtest.dev",
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+        _mockSubscriptionService.Verify(service => service.UpdateSubscriptionStatusAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>()), Times.Never);
+    }
+
+    [Test]
+    public async Task HandleWebhook_SubscriptionPaymentFailed_ReconcilesProviderStateWithoutGuessingAccess()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        var paidThrough = DateTime.UtcNow.AddMinutes(-1);
+        var subscription = new Subscription
+        {
+            Id = 16,
+            UserId = 7,
+            PayPalSubscriptionId = "I-DECLINED",
+            Status = SubscriptionStatuses.Expired,
+            BillingSource = BillingSources.PayPal,
+            LastPaymentDate = DateTime.UtcNow.AddMonths(-1),
+            EndDate = paidThrough
+        };
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = subscription,
+                PreviousStatus = SubscriptionStatuses.Active
+            });
+        const string body = """
+            {
+              "event_type": "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+              "resource": {
+                "id": "I-DECLINED",
+                "status": "ACTIVE",
+                "billing_info": { "next_billing_time": "2030-01-09T12:00:00Z" }
+              }
+            }
+            """;
+
+        SetRequestBody(body);
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            "I-DECLINED",
+            "https://davidtest.dev",
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockSubscriptionService.Verify(service => service.UpdateSubscriptionStatusAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>()), Times.Never);
+    }
+
+    [Test]
+    public async Task HandleWebhook_SubscriptionPaymentFailed_WhenPayPalRefreshFails_ReturnsRetryableError()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                "I-DECLINED",
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionReconciliationResult?)null);
+        const string body = """
+            {
+              "event_type": "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+              "resource": { "id": "I-DECLINED", "status": "ACTIVE" }
+            }
+            """;
+
+        SetRequestBody(body);
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
+    }
+
+    [Test]
+    public async Task HandleWebhook_LatePaymentEventForCancelledTrial_ReturnsRetryableErrorWithoutReactivation()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        var trialEnd = DateTime.UtcNow.AddDays(2);
+        var cancelledTrial = new Subscription
+        {
+            Id = 17,
+            UserId = 7,
+            PayPalSubscriptionId = "I-CANCELLED-TRIAL",
+            Status = SubscriptionStatuses.Cancelled,
+            BillingSource = BillingSources.PayPal,
+            TrialEndDate = trialEnd,
+            EndDate = trialEnd
+        };
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                cancelledTrial.PayPalSubscriptionId,
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = cancelledTrial,
+                PreviousStatus = SubscriptionStatuses.Cancelled
+            });
+        const string body = """
+            {
+              "event_type": "PAYMENT.SALE.COMPLETED",
+              "resource": { "billing_agreement_id": "I-CANCELLED-TRIAL" }
+            }
+            """;
+
+        SetRequestBody(body);
+        var result = await _controller.HandleWebhook();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.InstanceOf<ObjectResult>());
+            Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
+            Assert.That(cancelledTrial.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(cancelledTrial.LastPaymentDate, Is.Null);
+            Assert.That(cancelledTrial.EndDate, Is.EqualTo(trialEnd));
+        });
+    }
+
+    [Test]
+    public async Task HandleWebhook_LifecycleReconciliationFailure_ReturnsServiceUnavailableWithoutGuessingState()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                "I-SUB123",
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionReconciliationResult?)null);
+        const string body = """
+            {
+              "event_type": "BILLING.SUBSCRIPTION.UPDATED",
+              "resource": {
+                "id": "I-SUB123",
+                "status": "ACTIVE",
+                "billing_info": { "next_billing_time": "2026-05-20T12:34:56Z" }
+              }
+            }
+            """;
+        SetRequestBody(body);
+
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            "I-SUB123",
+            "https://davidtest.dev",
+            It.IsAny<CancellationToken>()), Times.Once);
+        _mockSubscriptionService.Verify(service => service.UpdateSubscriptionStatusAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>()), Times.Never);
+    }
+
+    [Test]
+    public async Task HandleWebhook_PaymentReconciliationFailure_ReturnsServiceUnavailable()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                "I-SUB123",
+                "https://davidtest.dev",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionReconciliationResult?)null);
+        const string body = """
+            {
+              "event_type": "PAYMENT.SALE.COMPLETED",
+              "resource": { "billing_agreement_id": "I-SUB123" }
+            }
+            """;
+        SetRequestBody(body);
+
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        Assert.That(((ObjectResult)result).StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            "I-SUB123",
+            "https://davidtest.dev",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task HandleWebhook_MalformedPaymentEvent_RemainsIgnoredWhenManagementServiceIsAvailable()
+    {
+        _controller = CreateController(_mockPayPalSubscriptionManagementService.Object);
+        const string body = """
+            {
+              "event_type": "PAYMENT.SALE.COMPLETED",
+              "resource": {}
+            }
+            """;
+        SetRequestBody(body);
+
+        var result = await _controller.HandleWebhook();
+
+        Assert.That(result, Is.InstanceOf<OkResult>());
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Test]

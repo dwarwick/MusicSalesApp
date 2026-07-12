@@ -24,7 +24,7 @@ public class AppSettings
     /// Value of the setting stored as a string.
     /// </summary>
     [Required]
-    [MaxLength(500)]
+    [MaxLength(2000)]
     public string Value { get; set; } = string.Empty;
 
     /// <summary>

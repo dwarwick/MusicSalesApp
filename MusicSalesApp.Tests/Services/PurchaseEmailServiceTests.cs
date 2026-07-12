@@ -734,4 +734,38 @@ public class PurchaseEmailServiceTests
                     && !body.Contains("$205.00/month"))),
             Times.Once);
     }
+
+    [Test]
+    public async Task SendSubscriptionTrialStartedAsync_PayPalUsesPayPalCancellationTerms()
+    {
+        var subscription = new Subscription
+        {
+            Id = 46,
+            UserId = 1,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-PAYPAL-TRIAL",
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 0.99m,
+            TrialEndDate = DateTime.UtcNow.AddDays(3),
+            EndDate = DateTime.UtcNow.AddDays(3)
+        };
+
+        var result = await _service.SendSubscriptionTrialStartedAsync(
+            "test@example.com",
+            "Test User",
+            subscription,
+            subscription.PayPalSubscriptionId,
+            null,
+            "https://streamtunes.net");
+
+        Assert.That(result, Is.True);
+        _mockEmailService.Verify(
+            service => service.SendEmailAsync(
+                "test@example.com",
+                It.Is<string>(subject => subject.Contains("Free Trial Started")),
+                It.Is<string>(body => body.Contains("PayPal renewal billing stops immediately")
+                    && body.Contains("PayPal subscription reference")
+                    && !body.Contains("Google Play subscription settings"))),
+            Times.Once);
+    }
 }

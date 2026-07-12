@@ -9,6 +9,9 @@ public static class SubscriptionStatuses
     /// <summary>Subscription created, awaiting PayPal payment approval.</summary>
     public const string ApprovalPending = "APPROVAL_PENDING";
 
+    /// <summary>PayPal buyer approval completed while provider activation is still pending.</summary>
+    public const string Approved = "APPROVED";
+
     /// <summary>Subscription is active and payments are being made.</summary>
     public const string Active = "ACTIVE";
 

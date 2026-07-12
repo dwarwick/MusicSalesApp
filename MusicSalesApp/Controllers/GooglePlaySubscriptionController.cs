@@ -6,7 +6,6 @@ using MusicSalesApp.Data;
 using MusicSalesApp.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
-using System.Globalization;
 
 namespace MusicSalesApp.Controllers;
 
@@ -77,10 +76,31 @@ public class GooglePlaySubscriptionController : ControllerBase
             return BadRequest(new { success = false, error = $"Subscription is not active (state: {subscriptionInfo.SubscriptionState})." });
         }
 
+        var existing = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
         var orderId = subscriptionInfo.OrderId ?? request.OrderId ?? "";
-        var priceResolution = ResolveMonthlyPrice(subscriptionInfo, request);
-        var monthlyPrice = priceResolution.MonthlyPrice;
+        var priceResolution = ResolveMonthlyPrice(subscriptionInfo, existing);
+        if (!priceResolution.HasValue)
+        {
+            _logger.LogWarning(
+                "Google Play did not return the recurring subscription price for new purchase token owned by user {UserId}",
+                user.Id);
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { success = false, error = "Google Play could not confirm the recurring subscription price. Please try again later." });
+        }
+
+        var resolvedPrice = priceResolution.Value;
+        var monthlyPrice = resolvedPrice.MonthlyPrice;
         var localStatus = ResolveLocalStatus(subscriptionInfo);
+        var verifiedCurrencyCode = !string.IsNullOrWhiteSpace(subscriptionInfo.PriceCurrencyCode)
+            ? subscriptionInfo.PriceCurrencyCode
+            : existing?.StorePriceCurrencyCode;
+        var verifiedFormattedPrice = string.Equals(
+            request.PriceCurrencyCode,
+            verifiedCurrencyCode,
+            StringComparison.OrdinalIgnoreCase)
+                ? request.FormattedPrice
+                : null;
 
         _logger.LogInformation(
             "Recording Google Play subscription for user {UserId}: GoogleState={GoogleState}, LocalStatus={LocalStatus}, IsFreeTrial={IsFreeTrial}, Expiry={ExpiryTime}, AutoRenewEnabled={AutoRenewEnabled}, OrderId={OrderId}, MonthlyPrice={MonthlyPrice}, PriceSource={PriceSource}, RequestPriceAmountMicros={RequestPriceAmountMicros}, RequestPriceCurrencyCode={RequestPriceCurrencyCode}, RequestFormattedPrice={RequestFormattedPrice}",
@@ -92,15 +112,22 @@ public class GooglePlaySubscriptionController : ControllerBase
             subscriptionInfo.AutoRenewEnabled,
             orderId,
             monthlyPrice,
-            priceResolution.PriceSource,
+            resolvedPrice.PriceSource,
             request.PriceAmountMicros,
             request.PriceCurrencyCode,
             request.FormattedPrice);
 
-        // Check if we already have this token recorded
-        var existing = await _subscriptionService.GetSubscriptionByGooglePlayTokenAsync(request.PurchaseToken);
         if (existing != null)
         {
+            if (existing.UserId != user.Id)
+            {
+                _logger.LogWarning(
+                    "User {UserId} attempted to verify Google Play token owned by user {OwnerUserId}",
+                    user.Id,
+                    existing.UserId);
+                return Forbid();
+            }
+
             var shouldSendConfirmationEmail = !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existing);
             var shouldSendTrialStartedEmail = subscriptionInfo.IsFreeTrial && !existing.TrialActivationEmailSentAt.HasValue;
             var shouldSendTrialConvertedEmail = !subscriptionInfo.IsFreeTrial && existing.TrialEndDate.HasValue && !existing.TrialConversionEmailSentAt.HasValue;
@@ -113,16 +140,28 @@ public class GooglePlaySubscriptionController : ControllerBase
                 shouldSendTrialStartedEmail,
                 shouldSendTrialConvertedEmail);
 
-            await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
-                request.PurchaseToken,
-                localStatus,
-                subscriptionInfo.ExpiryTime?.UtcDateTime,
-                subscriptionInfo);
+            try
+            {
+                await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
+                    request.PurchaseToken,
+                    localStatus,
+                    subscriptionInfo.ExpiryTime?.UtcDateTime,
+                    subscriptionInfo);
+            }
+            catch (SubscriptionProviderConflictException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Google Play subscription reactivation was rejected for user {UserId} because a current {ExistingBillingSource} subscription exists",
+                    user.Id,
+                    ex.ExistingBillingSource);
+                return Conflict(new { success = false, error = ex.Message });
+            }
 
             await _subscriptionService.UpdateGooglePlayStorePriceAsync(
                 request.PurchaseToken,
-                request.FormattedPrice,
-                string.IsNullOrWhiteSpace(request.PriceCurrencyCode) ? subscriptionInfo.PriceCurrencyCode : request.PriceCurrencyCode);
+                verifiedFormattedPrice,
+                verifiedCurrencyCode);
 
             if (!subscriptionInfo.IsAcknowledged)
             {
@@ -156,8 +195,21 @@ public class GooglePlaySubscriptionController : ControllerBase
         }
 
         // Create new subscription record
-        var subscription = await _subscriptionService.CreateGooglePlaySubscriptionAsync(
-            user.Id, request.PurchaseToken, orderId, monthlyPrice, subscriptionInfo);
+        Subscription subscription;
+        try
+        {
+            subscription = await _subscriptionService.CreateGooglePlaySubscriptionAsync(
+                user.Id, request.PurchaseToken, orderId, monthlyPrice, subscriptionInfo);
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Google Play subscription creation was rejected for user {UserId} because a current {ExistingBillingSource} subscription exists",
+                user.Id,
+                ex.ExistingBillingSource);
+            return Conflict(new { success = false, error = ex.Message });
+        }
 
         await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
             request.PurchaseToken,
@@ -167,8 +219,8 @@ public class GooglePlaySubscriptionController : ControllerBase
 
         await _subscriptionService.UpdateGooglePlayStorePriceAsync(
             request.PurchaseToken,
-            request.FormattedPrice,
-            string.IsNullOrWhiteSpace(request.PriceCurrencyCode) ? subscriptionInfo.PriceCurrencyCode : request.PriceCurrencyCode);
+            verifiedFormattedPrice,
+            verifiedCurrencyCode);
 
         // Acknowledge the purchase so Google doesn't auto-refund
         if (!subscriptionInfo.IsAcknowledged)
@@ -210,24 +262,21 @@ public class GooglePlaySubscriptionController : ControllerBase
             ? SubscriptionStatuses.Cancelled
             : SubscriptionStatuses.Active;
 
-    private (decimal MonthlyPrice, string PriceSource) ResolveMonthlyPrice(GooglePlaySubscriptionInfo subscriptionInfo, GooglePlayPurchaseRequest request)
+    private static (decimal MonthlyPrice, string PriceSource)? ResolveMonthlyPrice(
+        GooglePlaySubscriptionInfo subscriptionInfo,
+        Subscription existingSubscription)
     {
         if (subscriptionInfo.RecurringPrice.HasValue && subscriptionInfo.RecurringPrice.Value > 0)
         {
             return (subscriptionInfo.RecurringPrice.Value, "GooglePlayVerificationRecurringPrice");
         }
 
-        if (request.PriceAmountMicros.HasValue && request.PriceAmountMicros.Value > 0)
+        if (existingSubscription != null)
         {
-            return (Math.Round(request.PriceAmountMicros.Value / 1_000_000m, 2, MidpointRounding.AwayFromZero), "MauiBillingClientPriceAmountMicros");
+            return (existingSubscription.MonthlyPrice, "ExistingVerifiedSubscriptionPrice");
         }
 
-        if (decimal.TryParse(_configuration["AppSettings:SubscriptionPrice"], NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
-        {
-            return (price, "AppSettingsSubscriptionPrice");
-        }
-
-        return (3.99m, "HardcodedFallback");
+        return null;
     }
 
     private string GetBaseUrl()

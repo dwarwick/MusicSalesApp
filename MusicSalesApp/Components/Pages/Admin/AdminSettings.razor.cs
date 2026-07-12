@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.SignalR;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Hubs;
+using MusicSalesApp.Models;
 using MusicSalesApp.Services;
+using System.Globalization;
 
 #nullable enable
 
@@ -20,8 +22,6 @@ public class AdminSettingsModel : BlazorBase
     protected bool _hasLoadedData = false;
 
     // Settings fields
-    protected decimal? _subscriptionPrice = null;
-    protected decimal? _originalSubscriptionPrice = null;
     protected decimal? _streamPayRateDisplay = null; // Display as per 1000 streams (e.g., 5.00)
     protected decimal? _originalStreamPayRateDisplay = null;
     protected int _streamQualifyingSeconds = 30;
@@ -77,8 +77,18 @@ public class AdminSettingsModel : BlazorBase
     protected string? _siteMaintenanceSuccessMessage = null;
     protected List<string> _siteMaintenanceValidationErrors = new();
 
-    protected bool _hasChanges => _subscriptionPrice != _originalSubscriptionPrice 
-                                   || _streamPayRateDisplay != _originalStreamPayRateDisplay
+    // PayPal web subscription offer fields
+    protected IReadOnlyList<PayPalPlanOption> _payPalPlanOptions = Array.Empty<PayPalPlanOption>();
+    protected PayPalWebSubscriptionOffer? _savedPayPalWebOffer;
+    protected string? _selectedPrimaryPayPalPlanId;
+    protected string? _selectedResubscriberPayPalPlanId;
+    protected bool _isRefreshingPayPalPlans;
+    protected bool _isSavingPayPalOffer;
+    protected string? _payPalOfferErrorMessage;
+    protected string? _payPalOfferSuccessMessage;
+    protected List<string> _payPalOfferValidationErrors = new();
+
+    protected bool _hasChanges => _streamPayRateDisplay != _originalStreamPayRateDisplay
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds
                                    || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
@@ -99,6 +109,25 @@ public class AdminSettingsModel : BlazorBase
 
     protected bool _hasSiteMaintenanceChanges => _siteMaintenanceStartPacific != _originalSiteMaintenanceStartPacific
                                                   || _siteMaintenanceEndPacific != _originalSiteMaintenanceEndPacific;
+
+    protected bool _hasPayPalOfferChanges =>
+        !string.Equals(_selectedPrimaryPayPalPlanId, _savedPayPalWebOffer?.PrimaryPlan.Id, StringComparison.Ordinal)
+        || !string.Equals(
+            _selectedResubscriberPayPalPlanId,
+            _savedPayPalWebOffer?.ResubscriberPlan?.Id,
+            StringComparison.Ordinal);
+
+    protected PayPalPlan? SelectedPrimaryPayPalPlan => FindPayPalPlan(_selectedPrimaryPayPalPlanId);
+
+    protected PayPalPlan? SelectedResubscriberPayPalPlan => FindPayPalPlan(_selectedResubscriberPayPalPlanId);
+
+    protected bool SelectedPrimaryRequiresCompanion =>
+        SelectedPrimaryPayPalPlan?.HasTrial == true
+        || (string.Equals(
+                _selectedPrimaryPayPalPlanId,
+                _savedPayPalWebOffer?.PrimaryPlan.Id,
+                StringComparison.Ordinal)
+            && _savedPayPalWebOffer?.PrimaryPlan.HasFreeTrial == true);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -123,9 +152,6 @@ public class AdminSettingsModel : BlazorBase
 
     protected async Task LoadSettingsAsync()
     {
-        _subscriptionPrice = await AppSettingsService.GetSubscriptionPriceAsync();
-        _originalSubscriptionPrice = _subscriptionPrice;
-        
         // Convert stream pay rate from per-stream to per-1000-streams for display
         var streamPayRate = await AppSettingsService.GetStreamPayRateAsync();
         _streamPayRateDisplay = streamPayRate * 1000;
@@ -142,6 +168,10 @@ public class AdminSettingsModel : BlazorBase
 
         _appVersion = await AppSettingsService.GetAppVersionAsync() ?? string.Empty;
         _originalAppVersion = _appVersion;
+
+        _savedPayPalWebOffer = await AppSettingsService.GetPayPalWebSubscriptionOfferAsync();
+        RestoreSavedPayPalOfferSelection();
+        await RefreshPayPalPlansAsync();
 
         // Load admin notification settings
         _notifyRegistration = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyRegistrationKey);
@@ -206,9 +236,397 @@ public class AdminSettingsModel : BlazorBase
         _originalSiteMaintenanceEndPacific = _siteMaintenanceEndPacific;
     }
 
+    protected async Task RefreshPayPalPlansAsync()
+    {
+        _isRefreshingPayPalPlans = true;
+        _payPalOfferErrorMessage = null;
+        _payPalOfferSuccessMessage = null;
+
+        try
+        {
+            var plans = (await PayPalSubscriptionApiService.GetActivePlansAsync()).ToList();
+            var selectedPlanIds = new[]
+                {
+                    _selectedPrimaryPayPalPlanId,
+                    _selectedResubscriberPayPalPlanId,
+                    _savedPayPalWebOffer?.PrimaryPlan.Id,
+                    _savedPayPalWebOffer?.ResubscriberPlan?.Id
+                }
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .Cast<string>();
+
+            foreach (var selectedPlanId in selectedPlanIds)
+            {
+                if (plans.Any(plan => string.Equals(plan.Id, selectedPlanId, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                var selectedPlan = await PayPalSubscriptionApiService.GetPlanAsync(selectedPlanId);
+                if (selectedPlan != null)
+                {
+                    plans.Add(selectedPlan);
+                }
+            }
+
+            _payPalPlanOptions = plans
+                .GroupBy(plan => plan.Id, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(plan => plan.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(plan => plan.Id, StringComparer.Ordinal)
+                .Select(plan => new PayPalPlanOption(plan))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _payPalOfferErrorMessage =
+                "PayPal plans could not be refreshed. The saved offer and current selections were preserved; retry when PayPal is available.";
+            Logger.LogError(ex, "Failed to refresh PayPal subscription plans for Admin Settings.");
+        }
+        finally
+        {
+            _isRefreshingPayPalPlans = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected void CancelPayPalOfferChanges()
+    {
+        RestoreSavedPayPalOfferSelection();
+        _payPalOfferValidationErrors.Clear();
+        _payPalOfferErrorMessage = null;
+        _payPalOfferSuccessMessage = null;
+        StateHasChanged();
+    }
+
+    protected async Task SavePayPalOfferAsync()
+    {
+        _isSavingPayPalOffer = true;
+        _payPalOfferValidationErrors.Clear();
+        _payPalOfferErrorMessage = null;
+        _payPalOfferSuccessMessage = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_selectedPrimaryPayPalPlanId))
+            {
+                _payPalOfferValidationErrors.Add("Select the PayPal plan offered to first-time subscribers.");
+                return;
+            }
+
+            var primaryPlan = await PayPalSubscriptionApiService.GetPlanAsync(_selectedPrimaryPayPalPlanId);
+            ValidatePrimaryPayPalPlan(primaryPlan);
+
+            PayPalPlan? resubscriberPlan = null;
+            if (primaryPlan?.HasTrial == true)
+            {
+                if (string.IsNullOrWhiteSpace(_selectedResubscriberPayPalPlanId))
+                {
+                    _payPalOfferValidationErrors.Add(
+                        "Select the matching no-trial plan offered to returning subscribers.");
+                }
+                else
+                {
+                    resubscriberPlan = await PayPalSubscriptionApiService.GetPlanAsync(
+                        _selectedResubscriberPayPalPlanId);
+                    ValidateResubscriberPayPalPlan(primaryPlan, resubscriberPlan);
+                }
+            }
+
+            if (_payPalOfferValidationErrors.Count > 0 || primaryPlan == null)
+            {
+                return;
+            }
+
+            var offer = new PayPalWebSubscriptionOffer
+            {
+                PrimaryPlan = CreatePayPalPlanSnapshot(primaryPlan),
+                ResubscriberPlan = resubscriberPlan == null
+                    ? null
+                    : CreatePayPalPlanSnapshot(resubscriberPlan)
+            };
+
+            _savedPayPalWebOffer = await AppSettingsService.SetPayPalWebSubscriptionOfferAsync(offer);
+            _selectedPrimaryPayPalPlanId = _savedPayPalWebOffer.PrimaryPlan.Id;
+            _selectedResubscriberPayPalPlanId = _savedPayPalWebOffer.ResubscriberPlan?.Id;
+            MergePayPalPlanOptions(primaryPlan, resubscriberPlan);
+            _payPalOfferSuccessMessage =
+                $"PayPal web subscription offer version {_savedPayPalWebOffer.Version} was saved.";
+
+            Logger.LogInformation(
+                "Saved PayPal web offer version {Version}: primary {PrimaryPlanId}, re-subscriber {ResubscriberPlanId}.",
+                _savedPayPalWebOffer.Version,
+                _savedPayPalWebOffer.PrimaryPlan.Id,
+                _savedPayPalWebOffer.ResubscriberPlan?.Id);
+        }
+        catch (Exception ex)
+        {
+            _payPalOfferErrorMessage =
+                "The PayPal web offer could not be saved. The previously saved offer is still in effect.";
+            Logger.LogError(ex, "Failed to validate or save the PayPal web subscription offer.");
+        }
+        finally
+        {
+            _isSavingPayPalOffer = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected static string FormatPayPalPlanTerms(PayPalPlan plan)
+    {
+        var regularTerms = FormatRegularTerms(
+            plan.RegularPrice,
+            plan.CurrencyCode,
+            plan.IntervalUnit,
+            plan.IntervalCount);
+
+        var trialDays = plan.TrialDays.GetValueOrDefault();
+        if (plan.HasTrial && (!plan.HasFreeTrial || trialDays <= 0))
+        {
+            return $"unsupported trial cadence, then {regularTerms}";
+        }
+
+        return plan.HasFreeTrial && trialDays > 0
+            ? $"{trialDays} {PluralizeDay(trialDays)} free, then {regularTerms}"
+            : regularTerms;
+    }
+
+    protected static string FormatPayPalPlanTerms(PayPalWebPlanSnapshot plan)
+    {
+        var regularTerms = FormatRegularTerms(
+            plan.RegularPrice,
+            plan.CurrencyCode,
+            plan.IntervalUnit,
+            plan.IntervalCount);
+
+        return plan.TrialDays > 0
+            ? $"{plan.TrialDays} {PluralizeDay(plan.TrialDays.Value)} free, then {regularTerms}"
+            : regularTerms;
+    }
+
+    private void ValidatePrimaryPayPalPlan(PayPalPlan? plan)
+    {
+        if (plan == null)
+        {
+            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan no longer exists in PayPal.");
+            return;
+        }
+
+        if (!string.Equals(plan.Status, PayPalPlanStatuses.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must be active in PayPal.");
+        }
+
+        if (!IsMonthlyPlan(plan))
+        {
+            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must bill once per month.");
+        }
+
+        if (!HasSingleRegularBillingCycle(plan))
+        {
+            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must have exactly one regular billing cycle.");
+        }
+
+        else if (plan.RegularBillingCycle.TotalCycles != 0)
+        {
+            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must have an unlimited regular billing cycle.");
+        }
+
+        ValidateNoEnrollmentCharges(plan, "first-time subscriber");
+
+        if (plan.RegularPrice <= 0 || string.IsNullOrWhiteSpace(plan.CurrencyCode))
+        {
+            _payPalOfferValidationErrors.Add("The selected plan must have a valid regular price and currency.");
+        }
+
+        if (plan.HasTrial
+            && (plan.TrialBillingCycles.Count != plan.FreeTrialBillingCycles.Count
+                || !plan.TrialDays.HasValue
+                || plan.TrialDays.Value <= 0))
+        {
+            _payPalOfferValidationErrors.Add(
+                "The selected trial plan must contain only free, whole-day trial cycles with a valid duration.");
+        }
+    }
+
+    private void ValidateResubscriberPayPalPlan(PayPalPlan primaryPlan, PayPalPlan? resubscriberPlan)
+    {
+        if (resubscriberPlan == null)
+        {
+            _payPalOfferValidationErrors.Add("The selected returning-subscriber plan no longer exists in PayPal.");
+            return;
+        }
+
+        if (string.Equals(primaryPlan.Id, resubscriberPlan.Id, StringComparison.Ordinal))
+        {
+            _payPalOfferValidationErrors.Add("The returning-subscriber plan must be a separate no-trial plan.");
+        }
+
+        if (!string.Equals(resubscriberPlan.Status, PayPalPlanStatuses.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            _payPalOfferValidationErrors.Add("The selected returning-subscriber plan must be active in PayPal.");
+        }
+
+        if (resubscriberPlan.HasTrial)
+        {
+            _payPalOfferValidationErrors.Add("The returning-subscriber plan cannot include any trial billing cycle.");
+        }
+
+        if (!IsMonthlyPlan(resubscriberPlan))
+        {
+            _payPalOfferValidationErrors.Add("The returning-subscriber plan must bill once per month.");
+        }
+
+        if (!HasSingleRegularBillingCycle(resubscriberPlan))
+        {
+            _payPalOfferValidationErrors.Add("The returning-subscriber plan must have exactly one regular billing cycle.");
+        }
+
+        else if (resubscriberPlan.RegularBillingCycle.TotalCycles != 0)
+        {
+            _payPalOfferValidationErrors.Add("The returning-subscriber plan must have an unlimited regular billing cycle.");
+        }
+
+        ValidateNoEnrollmentCharges(resubscriberPlan, "returning-subscriber");
+
+        if (resubscriberPlan.RegularPrice != primaryPlan.RegularPrice
+            || !string.Equals(
+                resubscriberPlan.CurrencyCode,
+                primaryPlan.CurrencyCode,
+                StringComparison.OrdinalIgnoreCase)
+            || resubscriberPlan.IntervalCount != primaryPlan.IntervalCount
+            || !string.Equals(
+                resubscriberPlan.IntervalUnit,
+                primaryPlan.IntervalUnit,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _payPalOfferValidationErrors.Add(
+                "The returning-subscriber plan must match the primary plan's regular price, currency, and monthly cadence.");
+        }
+    }
+
+    private static bool IsMonthlyPlan(PayPalPlan plan)
+    {
+        return plan.IntervalCount == 1
+               && string.Equals(
+                   plan.IntervalUnit,
+                   PayPalBillingIntervals.Month,
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasSingleRegularBillingCycle(PayPalPlan plan)
+    {
+        return plan.BillingCycles.Count(cycle => string.Equals(
+            cycle.TenureType,
+            PayPalBillingTenureTypes.Regular,
+            StringComparison.OrdinalIgnoreCase)) == 1;
+    }
+
+    private void ValidateNoEnrollmentCharges(PayPalPlan plan, string planLabel)
+    {
+        if (plan.SetupFee != decimal.Zero)
+        {
+            _payPalOfferValidationErrors.Add($"The selected {planLabel} plan cannot charge a setup fee.");
+        }
+
+        if (plan.TaxPercentage != decimal.Zero)
+        {
+            _payPalOfferValidationErrors.Add($"The selected {planLabel} plan cannot add a PayPal plan tax that is not shown in the offer.");
+        }
+    }
+
+    private static PayPalWebPlanSnapshot CreatePayPalPlanSnapshot(PayPalPlan plan)
+    {
+        return new PayPalWebPlanSnapshot
+        {
+            Id = plan.Id,
+            Name = plan.Name,
+            Status = plan.Status,
+            RegularPrice = plan.RegularPrice,
+            CurrencyCode = plan.CurrencyCode,
+            IntervalUnit = plan.IntervalUnit,
+            IntervalCount = plan.IntervalCount,
+            TrialDays = plan.HasFreeTrial ? plan.TrialDays : null
+        };
+    }
+
+    private PayPalPlan? FindPayPalPlan(string? planId)
+    {
+        if (string.IsNullOrWhiteSpace(planId))
+        {
+            return null;
+        }
+
+        return _payPalPlanOptions
+            .FirstOrDefault(option => string.Equals(option.Id, planId, StringComparison.Ordinal))
+            ?.Plan;
+    }
+
+    private void RestoreSavedPayPalOfferSelection()
+    {
+        _selectedPrimaryPayPalPlanId = _savedPayPalWebOffer?.PrimaryPlan.Id;
+        _selectedResubscriberPayPalPlanId = _savedPayPalWebOffer?.ResubscriberPlan?.Id;
+    }
+
+    private void MergePayPalPlanOptions(params PayPalPlan?[] plans)
+    {
+        _payPalPlanOptions = _payPalPlanOptions
+            .Select(option => option.Plan)
+            .Concat(plans.OfType<PayPalPlan>())
+            .GroupBy(plan => plan.Id, StringComparer.Ordinal)
+            .Select(group => group.Last())
+            .OrderBy(plan => plan.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(plan => plan.Id, StringComparer.Ordinal)
+            .Select(plan => new PayPalPlanOption(plan))
+            .ToList();
+    }
+
+    private static string FormatRegularTerms(
+        decimal price,
+        string currencyCode,
+        string intervalUnit,
+        int intervalCount)
+    {
+        if (price <= 0
+            || string.IsNullOrWhiteSpace(currencyCode)
+            || string.IsNullOrWhiteSpace(intervalUnit)
+            || intervalCount <= 0)
+        {
+            return "billing terms unavailable";
+        }
+
+        var priceText = string.Equals(
+                currencyCode,
+                PayPalSubscriptionDefaults.UsdCurrencyCode,
+                StringComparison.OrdinalIgnoreCase)
+            ? $"${price.ToString("0.00", CultureInfo.InvariantCulture)} {PayPalSubscriptionDefaults.UsdCurrencyCode}"
+            : $"{price.ToString("0.00", CultureInfo.InvariantCulture)} {currencyCode.ToUpperInvariant()}";
+        var interval = intervalUnit.ToLowerInvariant();
+
+        return intervalCount == 1
+            ? $"{priceText}/{interval}"
+            : $"{priceText} every {intervalCount} {interval}s";
+    }
+
+    private static string PluralizeDay(int days) => days == 1 ? "day" : "days";
+
+    protected sealed class PayPalPlanOption
+    {
+        public PayPalPlanOption(PayPalPlan plan)
+        {
+            Plan = plan;
+        }
+
+        public PayPalPlan Plan { get; }
+
+        public string Id => Plan.Id;
+
+        public string DisplayText => $"{Plan.Name} — {FormatPayPalPlanTerms(Plan)} — {Plan.Id}";
+    }
+
     protected void CancelChanges()
     {
-        _subscriptionPrice = _originalSubscriptionPrice;
         _streamPayRateDisplay = _originalStreamPayRateDisplay;
         _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
         _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
@@ -228,16 +646,6 @@ public class AdminSettingsModel : BlazorBase
         try
         {
             // Validation
-            if (!_subscriptionPrice.HasValue || _subscriptionPrice.Value <= 0)
-            {
-                _validationErrors.Add("Subscription price must be greater than 0.");
-            }
-
-            if (_subscriptionPrice.HasValue && _subscriptionPrice.Value > 999.99m)
-            {
-                _validationErrors.Add("Subscription price cannot exceed $999.99.");
-            }
-
             if (!_streamPayRateDisplay.HasValue || _streamPayRateDisplay.Value <= 0)
             {
                 _validationErrors.Add("Stream pay rate must be greater than 0.");
@@ -291,9 +699,6 @@ public class AdminSettingsModel : BlazorBase
                 return;
             }
 
-            // Save the subscription price
-            await AppSettingsService.SetSubscriptionPriceAsync(_subscriptionPrice!.Value);
-
             // Save the stream pay rate (convert from per-1000-streams to per-stream)
             await AppSettingsService.SetStreamPayRateAsync(_streamPayRateDisplay!.Value / 1000);
 
@@ -313,16 +718,15 @@ public class AdminSettingsModel : BlazorBase
             }
 
             // Update the original values to reflect the saved state
-            _originalSubscriptionPrice = _subscriptionPrice;
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
             _originalAppVersion = _appVersion;
-            _successMessage = $"Settings saved successfully. Subscription price: ${_subscriptionPrice.Value:F2}, Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB";
+            _successMessage = $"Settings saved successfully. Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB";
 
-            Logger.LogInformation("Settings updated - Subscription price: ${Price}, Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}, Max audio upload size: {MaxAudioMB} MB, Max image upload size: {MaxImageMB} MB", 
-                _subscriptionPrice.Value, _streamPayRateDisplay.Value, _streamQualifyingSeconds, _maxAudioUploadSizeMB, _maxImageUploadSizeMB);
+            Logger.LogInformation("Settings updated - Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}, Max audio upload size: {MaxAudioMB} MB, Max image upload size: {MaxImageMB} MB",
+                _streamPayRateDisplay.Value, _streamQualifyingSeconds, _maxAudioUploadSizeMB, _maxImageUploadSizeMB);
         }
         catch (Exception ex)
         {

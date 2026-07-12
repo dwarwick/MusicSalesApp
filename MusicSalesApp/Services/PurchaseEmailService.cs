@@ -146,11 +146,16 @@ public class PurchaseEmailService : IPurchaseEmailService
             body.Append(BuildGreeting(userName));
             body.Append($"<p style='font-size: 16px; color: #333;'>Your StreamTunes free trial is active until <strong>{trialEndDisplay}</strong>. During the trial, you have full subscription benefits.</p>");
             body.Append(BuildSubscriptionBenefitsSection());
-            body.Append(BuildGooglePlayTrialTermsSection(subscription, externalSubscriptionId, timeZoneId));
+            body.Append(BuildTrialTermsSection(subscription, externalSubscriptionId, timeZoneId));
             body.Append(BuildEmailFooter());
 
             var userSent = await _emailService.SendEmailAsync(userEmail, "StreamTunes - Free Trial Started", body.ToString());
-            var adminSent = await SendAdminSubscriptionEventEmailAsync("Google Play free trial started", userEmail, subscription, externalSubscriptionId, trialEndDisplay);
+            var adminSent = await SendAdminSubscriptionEventEmailAsync(
+                $"{GetBillingSourceDisplayName(subscription.BillingSource)} free trial started",
+                userEmail,
+                subscription,
+                externalSubscriptionId,
+                trialEndDisplay);
             return userSent && adminSent;
         }
         catch (Exception ex)
@@ -186,7 +191,12 @@ public class PurchaseEmailService : IPurchaseEmailService
             body.Append(BuildEmailFooter());
 
             var userSent = await _emailService.SendEmailAsync(userEmail, "StreamTunes - Subscription Active", body.ToString());
-            var adminSent = await SendAdminSubscriptionEventEmailAsync("Google Play trial converted to paid", userEmail, subscription, externalSubscriptionId, nextBillingDisplay);
+            var adminSent = await SendAdminSubscriptionEventEmailAsync(
+                $"{GetBillingSourceDisplayName(subscription.BillingSource)} trial converted to paid",
+                userEmail,
+                subscription,
+                externalSubscriptionId,
+                nextBillingDisplay);
             return userSent && adminSent;
         }
         catch (Exception ex)
@@ -452,11 +462,23 @@ public class PurchaseEmailService : IPurchaseEmailService
         ";
     }
 
-    private string BuildGooglePlayTrialTermsSection(Subscription subscription, string externalSubscriptionId, string? timeZoneId)
+    private string BuildTrialTermsSection(Subscription subscription, string externalSubscriptionId, string? timeZoneId)
     {
         var trialEndDisplay = subscription.TrialEndDate.HasValue
             ? UserTimeZoneDisplayHelper.FormatDateTimeWithTimeZone(subscription.TrialEndDate.Value, timeZoneId)
             : "the end of your trial";
+        var cancellationInstruction = subscription.BillingSource switch
+        {
+            BillingSources.PayPal => "You can cancel anytime in your StreamTunes account. PayPal renewal billing stops immediately, and full access continues through the trial end.",
+            BillingSources.Apple => "You can cancel anytime in your Apple subscription settings.",
+            _ => "You can cancel anytime in your Google Play subscription settings."
+        };
+        var referenceLabel = subscription.BillingSource switch
+        {
+            BillingSources.PayPal => "PayPal subscription reference",
+            BillingSources.Apple => "Apple subscription reference",
+            _ => "Google Play reference"
+        };
 
         return $@"
             <div style='border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin: 20px 0;'>
@@ -464,12 +486,20 @@ public class PurchaseEmailService : IPurchaseEmailService
                 <ul style='margin: 0; padding-left: 20px; color: #555;'>
                     <li style='margin-bottom: 8px;'>Your free trial is active until <strong>{trialEndDisplay}</strong>.</li>
                     <li style='margin-bottom: 8px;'>After the trial, your subscription automatically renews at <strong>{FormatMonthlyPrice(subscription)}</strong>.</li>
-                    <li style='margin-bottom: 8px;'>You can cancel anytime in your Google Play subscription settings.</li>
-                    <li style='margin-bottom: 8px;'>Google Play reference: <strong>{System.Web.HttpUtility.HtmlEncode(externalSubscriptionId)}</strong></li>
+                    <li style='margin-bottom: 8px;'>{cancellationInstruction}</li>
+                    <li style='margin-bottom: 8px;'>{referenceLabel}: <strong>{System.Web.HttpUtility.HtmlEncode(externalSubscriptionId)}</strong></li>
                 </ul>
             </div>
         ";
     }
+
+    private static string GetBillingSourceDisplayName(string billingSource)
+        => billingSource switch
+        {
+            BillingSources.PayPal => "PayPal",
+            BillingSources.Apple => "Apple",
+            _ => "Google Play"
+        };
 
     private string BuildSubscriptionBenefitsSection()
     {

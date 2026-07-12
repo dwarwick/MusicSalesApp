@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +19,13 @@ namespace MusicSalesApp.Services;
 
 public class AppleAppStoreVerificationService : IAppleAppStoreVerificationService
 {
+    private static readonly HashSet<string> AppleRootSha256Fingerprints = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Published by Apple for Apple Root CA - G2 and Apple Root CA - G3.
+        "C2B9B042DD57830E7D117DAC55AC8AE19407D38E41D88F3215BC3A890444A050",
+        "63343ABFB89A6A03EBB57E9B3F5FA7BE7C4F5C756F3017B3A8C488C3653E9179"
+    };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AppleAppStoreVerificationService> _logger;
     private readonly string _bundleId;
@@ -210,34 +220,43 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         return padded;
     }
 
-    internal static AppleSignedTransactionPayload DecodeSignedTransactionInfo(string signedTransactionInfo)
+    internal static AppleSignedTransactionPayload DecodeSignedTransactionInfo(
+        string signedTransactionInfo,
+        X509Certificate2 trustedRoot = null)
     {
         return DecodeSignedPayload<AppleSignedTransactionPayload>(
             signedTransactionInfo,
             "Apple App Store did not return signed transaction info.",
             "Apple App Store returned malformed signed transaction info.",
             "Apple App Store returned an empty transaction payload.",
-            "Failed to parse Apple App Store transaction data.");
+            "Failed to parse Apple App Store transaction data.",
+            trustedRoot);
     }
 
-    internal static AppleServerNotificationPayload DecodeServerNotificationPayload(string signedPayload)
+    internal static AppleServerNotificationPayload DecodeServerNotificationPayload(
+        string signedPayload,
+        X509Certificate2 trustedRoot = null)
     {
         return DecodeSignedPayload<AppleServerNotificationPayload>(
             signedPayload,
             "Apple App Store did not return a signed notification payload.",
             "Apple App Store returned malformed signed notification payload.",
             "Apple App Store returned an empty notification payload.",
-            "Failed to parse Apple App Store notification data.");
+            "Failed to parse Apple App Store notification data.",
+            trustedRoot);
     }
 
-    internal static AppleSignedRenewalInfoPayload DecodeSignedRenewalInfo(string signedRenewalInfo)
+    internal static AppleSignedRenewalInfoPayload DecodeSignedRenewalInfo(
+        string signedRenewalInfo,
+        X509Certificate2 trustedRoot = null)
     {
         return DecodeSignedPayload<AppleSignedRenewalInfoPayload>(
             signedRenewalInfo,
             "Apple App Store did not return signed renewal info.",
             "Apple App Store returned malformed signed renewal info.",
             "Apple App Store returned an empty renewal payload.",
-            "Failed to parse Apple App Store renewal data.");
+            "Failed to parse Apple App Store renewal data.",
+            trustedRoot);
     }
 
     internal static string DetermineSubscriptionStatus(DateTime utcNow, DateTime? expiryTimeUtc, DateTime? revocationTimeUtc)
@@ -301,7 +320,8 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         string missingPayloadMessage,
         string malformedPayloadMessage,
         string emptyPayloadMessage,
-        string parseFailureMessage)
+        string parseFailureMessage,
+        X509Certificate2 trustedRoot)
         where T : class
     {
         if (string.IsNullOrWhiteSpace(signedPayload))
@@ -310,13 +330,14 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         }
 
         var segments = signedPayload.Split('.');
-        if (segments.Length < 2)
+        if (segments.Length != 3)
         {
             throw new AppleAppStoreVerificationException(malformedPayloadMessage);
         }
 
         try
         {
+            VerifyAppleJwsSignature(segments, trustedRoot);
             var payloadJson = Base64UrlEncoder.Decode(segments[1]);
             var payload = JsonSerializer.Deserialize<T>(payloadJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             if (payload == null)
@@ -333,6 +354,86 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         catch (Exception ex)
         {
             throw new AppleAppStoreVerificationException(parseFailureMessage, ex);
+        }
+    }
+
+    private static void VerifyAppleJwsSignature(
+        string[] segments,
+        X509Certificate2 trustedRoot)
+    {
+        var headerJson = Base64UrlEncoder.Decode(segments[0]);
+        var header = JsonSerializer.Deserialize<AppleJwsHeader>(
+            headerJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (header == null
+            || !string.Equals(header.Algorithm, SecurityAlgorithms.EcdsaSha256, StringComparison.Ordinal)
+            || header.CertificateChain == null
+            || header.CertificateChain.Length == 0)
+        {
+            throw new AppleAppStoreVerificationException(
+                "Apple App Store signed data did not contain a valid ES256 certificate chain.");
+        }
+
+        var certificates = header.CertificateChain
+            .Select(encoded => X509CertificateLoader.LoadCertificate(Convert.FromBase64String(encoded)))
+            .ToArray();
+        try
+        {
+            var effectiveTrustedRoot = trustedRoot ?? certificates[^1];
+            var rootFingerprint = Convert.ToHexString(
+                SHA256.HashData(effectiveTrustedRoot.RawData));
+            if (trustedRoot == null && !AppleRootSha256Fingerprints.Contains(rootFingerprint))
+            {
+                throw new AppleAppStoreVerificationException(
+                    "Apple App Store signed data did not chain to a pinned Apple root certificate.");
+            }
+
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+            foreach (var intermediate in certificates.Skip(1).Where(certificate =>
+                         !certificate.RawData.AsSpan().SequenceEqual(effectiveTrustedRoot.RawData)))
+            {
+                chain.ChainPolicy.ExtraStore.Add(intermediate);
+            }
+
+            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(effectiveTrustedRoot);
+
+            if (!chain.Build(certificates[0]))
+            {
+                var errors = string.Join(
+                    ", ",
+                    chain.ChainStatus.Select(status => status.Status.ToString()));
+                throw new AppleAppStoreVerificationException(
+                    $"Apple App Store signed data certificate validation failed: {errors}.");
+            }
+
+            using var publicKey = certificates[0].GetECDsaPublicKey();
+            if (publicKey == null)
+            {
+                throw new AppleAppStoreVerificationException(
+                    "Apple App Store signed data did not use an EC signing certificate.");
+            }
+
+            var signedBytes = Encoding.ASCII.GetBytes($"{segments[0]}.{segments[1]}");
+            var signature = Base64UrlEncoder.DecodeBytes(segments[2]);
+            if (!publicKey.VerifyData(
+                    signedBytes,
+                    signature,
+                    HashAlgorithmName.SHA256,
+                    DSASignatureFormat.IeeeP1363FixedFieldConcatenation))
+            {
+                throw new AppleAppStoreVerificationException(
+                    "Apple App Store signed data signature validation failed.");
+            }
+        }
+        finally
+        {
+            foreach (var certificate in certificates)
+            {
+                certificate.Dispose();
+            }
         }
     }
 
@@ -469,6 +570,9 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             var revocationTime = payload.RevocationDate.HasValue
                 ? DateTimeOffset.FromUnixTimeMilliseconds(payload.RevocationDate.Value).UtcDateTime
                 : (DateTime?)null;
+            var transactionPrice = payload.Price.HasValue && payload.Price.Value > 0
+                ? payload.Price.Value / 1000m
+                : (decimal?)null;
 
             var resolvedStatus = DetermineSubscriptionStatus(DateTime.UtcNow, expiryTime, revocationTime);
             _logger.LogInformation(
@@ -489,7 +593,9 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
                 payload.OriginalTransactionId,
                 payload.ProductId,
                 payload.Environment,
-                payload.AppAccountToken);
+                payload.AppAccountToken,
+                transactionPrice,
+                payload.Currency);
         }
         catch (AppleAppStoreVerificationException)
         {
@@ -561,6 +667,8 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         public long? PurchaseDate { get; set; }
         public long? ExpiresDate { get; set; }
         public long? RevocationDate { get; set; }
+        public long? Price { get; set; }
+        public string Currency { get; set; }
     }
 
     internal sealed class AppleServerNotificationPayload
@@ -579,5 +687,52 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
     internal sealed class AppleSignedRenewalInfoPayload
     {
         public int? AutoRenewStatus { get; set; }
+        public long? RenewalPrice { get; set; }
+        public string Currency { get; set; }
+    }
+
+    public AppleAppStoreServerNotificationInfo VerifyServerNotification(string signedPayload)
+    {
+        var notification = DecodeServerNotificationPayload(signedPayload);
+        var transaction = DecodeSignedTransactionInfo(notification.Data?.SignedTransactionInfo);
+        var renewal = !string.IsNullOrWhiteSpace(notification.Data?.SignedRenewalInfo)
+            ? DecodeSignedRenewalInfo(notification.Data.SignedRenewalInfo)
+            : null;
+
+        if (!string.Equals(transaction.BundleId, _bundleId, StringComparison.Ordinal))
+        {
+            throw new AppleAppStoreVerificationException(
+                "Apple App Store notification bundle ID does not match the configured app.");
+        }
+
+        return new AppleAppStoreServerNotificationInfo(
+            notification.NotificationType,
+            notification.Subtype,
+            new AppleAppStoreServerTransactionInfo(
+                transaction.TransactionId,
+                transaction.OriginalTransactionId,
+                transaction.ProductId,
+                transaction.BundleId,
+                transaction.Environment,
+                transaction.AppAccountToken,
+                transaction.ExpiresDate,
+                transaction.RevocationDate,
+                transaction.Price,
+                transaction.Currency),
+            renewal == null
+                ? null
+                : new AppleAppStoreServerRenewalInfo(
+                    renewal.AutoRenewStatus,
+                    renewal.RenewalPrice,
+                    renewal.Currency));
+    }
+
+    private sealed class AppleJwsHeader
+    {
+        [JsonPropertyName("alg")]
+        public string Algorithm { get; set; }
+
+        [JsonPropertyName("x5c")]
+        public string[] CertificateChain { get; set; }
     }
 }

@@ -141,7 +141,20 @@ public class GooglePlayWebhookController : ControllerBase
             info?.RecurringPrice,
             status);
 
-        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(purchaseToken, status, expiryTime, info);
+        try
+        {
+            await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(purchaseToken, status, expiryTime, info);
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Google Play subscription {PurchaseToken} overlaps a current {ExistingBillingSource} subscription; stopping Google Play renewal",
+                purchaseToken,
+                ex.ExistingBillingSource);
+            await _verificationService.CancelSubscriptionAsync(purchaseToken, productId);
+            return;
+        }
 
         if (status == SubscriptionStatuses.Cancelled)
         {

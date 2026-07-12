@@ -30,6 +30,7 @@ public class SubscriptionController : ControllerBase
     private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
     private readonly IAccountEmailService _accountEmailService;
     private readonly IGooglePlayVerificationService _googlePlayVerificationService;
+    private readonly IPayPalSubscriptionManagementService _payPalSubscriptionManagementService;
 
     /// <summary>
     /// Initializes a new instance of the SubscriptionController.
@@ -52,7 +53,8 @@ public class SubscriptionController : ControllerBase
         IHttpClientFactory httpClientFactory,
         ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         IAccountEmailService accountEmailService,
-        IGooglePlayVerificationService googlePlayVerificationService)
+        IGooglePlayVerificationService googlePlayVerificationService,
+        IPayPalSubscriptionManagementService payPalSubscriptionManagementService)
     {
         _subscriptionService = subscriptionService;
         _appSettingsService = appSettingsService;
@@ -63,6 +65,7 @@ public class SubscriptionController : ControllerBase
         _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
         _accountEmailService = accountEmailService;
         _googlePlayVerificationService = googlePlayVerificationService;
+        _payPalSubscriptionManagementService = payPalSubscriptionManagementService;
     }
 
     [HttpGet("status")]
@@ -70,6 +73,8 @@ public class SubscriptionController : ControllerBase
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
+
+        await _payPalSubscriptionManagementService.RefreshIfNeededAsync(user.Id, GetBaseUrl());
 
         var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
         var latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
@@ -130,6 +135,8 @@ public class SubscriptionController : ControllerBase
             trialEndDate = latestSubscription.TrialEndDate,
             trialConvertedAt = latestSubscription.TrialConvertedAt,
             monthlyPrice = latestSubscription.MonthlyPrice,
+            storeFormattedPrice = latestSubscription.StoreFormattedPrice,
+            storePriceCurrencyCode = latestSubscription.StorePriceCurrencyCode,
             paypalSubscriptionId = latestSubscription.PayPalSubscriptionId,
             billingSource = latestSubscription.BillingSource,
             isSubscriptionBlocked = user.IsSubscriptionBlocked,
@@ -196,11 +203,23 @@ public class SubscriptionController : ControllerBase
             googlePlayInfo.PriceCurrencyCode,
             previousTrialNeededConversionEmail);
 
-        await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
-            latestSubscription.GooglePlayPurchaseToken,
-            refreshedStatus,
-            googlePlayInfo.ExpiryTime?.UtcDateTime,
-            googlePlayInfo);
+        try
+        {
+            await _subscriptionService.UpdateGooglePlaySubscriptionStatusAsync(
+                latestSubscription.GooglePlayPurchaseToken,
+                refreshedStatus,
+                googlePlayInfo.ExpiryTime?.UtcDateTime,
+                googlePlayInfo);
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Google Play refresh for user {UserId} was rejected because a current {ExistingBillingSource} subscription exists",
+                user.Id,
+                ex.ExistingBillingSource);
+            return false;
+        }
 
         if (!googlePlayInfo.IsAcknowledged)
         {
@@ -263,38 +282,22 @@ public class SubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        // Check if user is blocked from creating subscriptions (e.g., due to a previous chargeback)
-        if (user.IsSubscriptionBlocked)
+        var result = await _payPalSubscriptionManagementService.CreateSubscriptionAsync(
+            user,
+            request.AgreeToTerms,
+            request.OfferVersion,
+            request.PlanId,
+            GetBaseUrl());
+        if (!result.Success)
         {
-            _logger.LogWarning("User {UserId} attempted to create a subscription but is blocked due to a previous chargeback", user.Id);
-            return BadRequest("Your account is not eligible for a new subscription. Please contact support for assistance.");
+            return BadRequest(result.Error);
         }
-
-        // Create subscription plan with PayPal
-        var planId = await GetOrCreateSubscriptionPlanAsync();
-        if (string.IsNullOrEmpty(planId))
-        {
-            return BadRequest("Failed to create subscription plan");
-        }
-
-        // Create subscription with PayPal
-        var subscriptionId = await CreatePayPalSubscriptionAsync(planId);
-        if (string.IsNullOrEmpty(subscriptionId))
-        {
-            return BadRequest("Failed to create PayPal subscription");
-        }
-
-        // Save subscription to database - get price from database settings
-        var monthlyPrice = await _appSettingsService.GetSubscriptionPriceAsync();
-        var subscription = await _subscriptionService.CreateSubscriptionAsync(user.Id, subscriptionId, monthlyPrice);
-
-        _logger.LogInformation("User {UserId} created subscription {SubscriptionId}", user.Id, subscription.Id);
 
         return Ok(new
         {
             success = true,
-            subscriptionId = subscription.PayPalSubscriptionId,
-            approvalUrl = await GetSubscriptionApprovalUrlAsync(subscriptionId)
+            subscriptionId = result.SubscriptionId,
+            approvalUrl = result.ApprovalUrl
         });
     }
 
@@ -309,53 +312,29 @@ public class SubscriptionController : ControllerBase
             return BadRequest("Subscription ID is required");
         }
 
-        try
+        var localSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(request.SubscriptionId);
+        if (localSubscription == null || localSubscription.UserId != user.Id)
         {
-            // Get subscription details from PayPal
-            var subscriptionDetails = await GetPayPalSubscriptionDetailsAsync(request.SubscriptionId);
-            if (subscriptionDetails == null)
-            {
-                return BadRequest("Failed to retrieve subscription details from PayPal");
-            }
-
-            // Verify that PayPal has confirmed a payment before activating
-            if (subscriptionDetails.LastPaymentDate == null)
-            {
-                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
-                    request.SubscriptionId, user.Id);
-                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
-            }
-
-            // Verify that PayPal reports the subscription as ACTIVE
-            if (subscriptionDetails.Status != "ACTIVE")
-            {
-                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
-                    request.SubscriptionId, user.Id, subscriptionDetails.Status);
-                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
-            }
-
-            // Activate the subscription now that payment is confirmed
-            await _subscriptionService.ActivateSubscriptionAsync(
-                request.SubscriptionId,
-                subscriptionDetails.NextBillingDate,
-                subscriptionDetails.LastPaymentDate
-            );
-
-            _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", request.SubscriptionId, user.Id);
-
-            var subscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(request.SubscriptionId);
-            if (subscription != null)
-            {
-                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, subscription, GetBaseUrl());
-            }
-
-            return Ok(new { success = true });
+            return BadRequest("The PayPal subscription does not belong to the current user.");
         }
-        catch (Exception ex)
+
+        var reconciled = await _payPalSubscriptionManagementService.ReconcileSubscriptionAsync(
+            request.SubscriptionId,
+            GetBaseUrl());
+        if (reconciled == null)
         {
-            _logger.LogError(ex, "Error activating subscription {SubscriptionId}", request.SubscriptionId);
-            return StatusCode(500, "Failed to activate subscription");
+            return BadRequest("Failed to retrieve subscription details from PayPal.");
         }
+
+        var subscription = reconciled.Subscription;
+        var isTrial = subscription.TrialEndDate > DateTime.UtcNow && !subscription.LastPaymentDate.HasValue;
+        if (!string.Equals(subscription.Status, SubscriptionStatuses.Active, StringComparison.Ordinal)
+            || (!isTrial && !subscription.LastPaymentDate.HasValue))
+        {
+            return BadRequest($"Subscription is not active on PayPal. Current status: {subscription.Status}");
+        }
+
+        return Ok(new { success = true, isTrial });
     }
 
     private string GetBaseUrl()
@@ -375,66 +354,15 @@ public class SubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        try
+        var result = await _payPalSubscriptionManagementService.ActivateCurrentSubscriptionAsync(
+            user,
+            GetBaseUrl());
+        if (!result.Success)
         {
-            // Get the user's most recent pending subscription (APPROVAL_PENDING)
-            var subscription = await _subscriptionService.GetPendingSubscriptionAsync(user.Id);
-            if (subscription == null)
-            {
-                // Fall back to active subscription (for backward compatibility)
-                subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
-            }
-            if (subscription == null)
-            {
-                return BadRequest("No subscription found for user");
-            }
-
-            // Get subscription details from PayPal
-            var subscriptionDetails = await GetPayPalSubscriptionDetailsAsync(subscription.PayPalSubscriptionId);
-            if (subscriptionDetails == null)
-            {
-                return BadRequest("Failed to retrieve subscription details from PayPal");
-            }
-
-            // Verify that PayPal has confirmed a payment before activating
-            if (subscriptionDetails.LastPaymentDate == null)
-            {
-                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has no payment confirmed by PayPal yet",
-                    subscription.PayPalSubscriptionId, user.Id);
-                return BadRequest("Payment has not been completed yet. Please complete the PayPal payment flow.");
-            }
-
-            // Verify that PayPal reports the subscription as ACTIVE
-            if (subscriptionDetails.Status != "ACTIVE")
-            {
-                _logger.LogWarning("Subscription {SubscriptionId} for user {UserId} has PayPal status {Status}, expected ACTIVE",
-                    subscription.PayPalSubscriptionId, user.Id, subscriptionDetails.Status);
-                return BadRequest($"Subscription is not active on PayPal. Current status: {subscriptionDetails.Status}");
-            }
-
-            // Activate the subscription now that payment is confirmed
-            await _subscriptionService.ActivateSubscriptionAsync(
-                subscription.PayPalSubscriptionId,
-                subscriptionDetails.NextBillingDate,
-                subscriptionDetails.LastPaymentDate
-            );
-
-            _logger.LogInformation("Activated subscription {SubscriptionId} for user {UserId}", subscription.PayPalSubscriptionId, user.Id);
-
-            // Refresh subscription to get updated details
-            var updatedSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId);
-            if (updatedSubscription != null)
-            {
-                await _subscriptionConfirmationEmailService.SendConfirmationAsync(user, updatedSubscription, GetBaseUrl());
-            }
-
-            return Ok(new { success = true });
+            return BadRequest(result.Error);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error activating subscription for user {UserId}", user.Id);
-            return StatusCode(500, "Failed to activate subscription");
-        }
+
+        return Ok(new { success = true, isTrial = result.IsTrial });
     }
 
     [HttpPost("cancel")]
@@ -443,11 +371,34 @@ public class SubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var subscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
-        if (subscription == null)
+        var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+        var subscription = activeSubscription
+            ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+
+        // A PayPal agreement can still be billable while its locally cached entitlement
+        // has crossed an expiry boundary. Always let the provider-aware manager refresh
+        // and cancel the latest PayPal agreement before rejecting it as inactive.
+        if (subscription != null
+            && string.Equals(subscription.BillingSource, BillingSources.PayPal, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(subscription.PayPalSubscriptionId))
+        {
+            var payPalResult = await _payPalSubscriptionManagementService.CancelSubscriptionAsync(
+                user,
+                GetBaseUrl());
+            if (!payPalResult.Success)
+            {
+                return BadRequest(payPalResult.Error);
+            }
+
+            return Ok(new { success = true, endDate = payPalResult.EndDate });
+        }
+
+        if (activeSubscription == null)
         {
             return BadRequest("No active subscription found");
         }
+
+        subscription = activeSubscription;
 
         if (string.Equals(subscription.BillingSource, BillingSources.Apple, StringComparison.Ordinal))
         {
@@ -461,37 +412,36 @@ public class SubscriptionController : ControllerBase
             return BadRequest($"Failed to cancel subscription with {subscription.BillingSource}");
         }
 
-        // Update local database
-        await _subscriptionService.CancelSubscriptionAsync(user.Id);
+        // Google Play's verified EndDate is the current entitlement expiry for both
+        // trials and converted paid subscriptions. A historical TrialEndDate must not
+        // shorten a converted subscriber's paid-through access.
+        var providerEntitlementEnd = subscription.EndDate
+            ?? subscription.NextBillingDate
+            ?? subscription.TrialEndDate;
+        await _subscriptionService.CancelSubscriptionAsync(user.Id, providerEntitlementEnd);
 
         _logger.LogInformation("User {UserId} cancelled subscription", user.Id);
 
         // Get updated subscription to return end date
         var updatedSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
 
-        // Send subscription cancellation email (fire and forget - don't block the response)
         var userEmail = user.Email;
         if (!string.IsNullOrEmpty(userEmail))
         {
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    var baseUrl = GetBaseUrl();
-                    var userName = user.UserName ?? userEmail;
-                    await _accountEmailService.SendSubscriptionCancelledEmailAsync(
-                        userEmail,
-                        userName,
-                        updatedSubscription?.EndDate,
-                        updatedSubscription?.BillingSource,
-                        user.TimeZoneId,
-                        baseUrl);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to send subscription cancellation email to user {UserId}", user.Id);
-                }
-            });
+                await _accountEmailService.SendSubscriptionCancelledEmailAsync(
+                    userEmail,
+                    user.UserName ?? userEmail,
+                    updatedSubscription?.EndDate,
+                    updatedSubscription?.BillingSource,
+                    user.TimeZoneId,
+                    GetBaseUrl());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send subscription cancellation email to user {UserId}", user.Id);
+            }
         }
 
         return Ok(new
@@ -507,11 +457,11 @@ public class SubscriptionController : ControllerBase
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Unauthorized();
 
-        var deleted = await _subscriptionService.DeletePendingSubscriptionAsync(user.Id);
+        var deleted = await _payPalSubscriptionManagementService.AbandonPendingCheckoutAsync(user);
 
         if (deleted)
         {
-            _logger.LogInformation("User {UserId} deleted pending subscription after PayPal cancellation", user.Id);
+            _logger.LogInformation("User {UserId} abandoned pending PayPal checkout", user.Id);
             return Ok(new { success = true });
         }
         
@@ -1039,6 +989,8 @@ public class SubscriptionController : ControllerBase
 public class CreateSubscriptionRequest
 {
     public bool AgreeToTerms { get; set; }
+    public int? OfferVersion { get; set; }
+    public string PlanId { get; set; }
 }
 
 public class ActivateSubscriptionRequest

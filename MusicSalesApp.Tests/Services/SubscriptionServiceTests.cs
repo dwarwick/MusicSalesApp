@@ -117,6 +117,51 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task CancelPayPalSubscriptionAsync_TargetsExpiredPayPalRowWithoutCancellingOtherProvider()
+    {
+        var providerEnd = DateTime.UtcNow.AddHours(-1);
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.AddRange(
+                new Subscription
+                {
+                    UserId = 1,
+                    BillingSource = BillingSources.GooglePlay,
+                    GooglePlayPurchaseToken = "google-active",
+                    Status = SubscriptionStatuses.Active,
+                    LastPaymentDate = DateTime.UtcNow,
+                    EndDate = DateTime.UtcNow.AddDays(30),
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-2)
+                },
+                new Subscription
+                {
+                    UserId = 1,
+                    BillingSource = BillingSources.PayPal,
+                    PayPalSubscriptionId = "I-EXPIRED",
+                    Status = SubscriptionStatuses.Expired,
+                    EndDate = providerEnd,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-1)
+                });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.CancelPayPalSubscriptionAsync("I-EXPIRED", providerEnd);
+
+        await using var verificationContext = new AppDbContext(_dbOptions);
+        var payPal = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.PayPalSubscriptionId == "I-EXPIRED");
+        var google = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.GooglePlayPurchaseToken == "google-active");
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.True);
+            Assert.That(payPal.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(payPal.EndDate, Is.EqualTo(providerEnd));
+            Assert.That(google.Status, Is.EqualTo(SubscriptionStatuses.Active));
+        });
+    }
+
+    [Test]
     public async Task GetActiveSubscriptionAsync_ReturnsNullWhenNoActiveSubscription()
     {
         // Arrange
@@ -564,6 +609,52 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task CreateAppleSubscriptionAsync_DoesNotCancelCurrentGooglePlaySubscription()
+    {
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = BillingSources.GooglePlay,
+                GooglePlayPurchaseToken = "current-google-token",
+                Status = SubscriptionStatuses.Active,
+                StartDate = DateTime.UtcNow.AddDays(-2),
+                LastPaymentDate = DateTime.UtcNow.AddDays(-2),
+                EndDate = DateTime.UtcNow.AddDays(28),
+                MonthlyPrice = 2.99m,
+                CreatedAt = DateTime.UtcNow.AddDays(-2)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var exception = Assert.ThrowsAsync<SubscriptionProviderConflictException>(async () =>
+            await _service.CreateAppleSubscriptionAsync(
+                1,
+                "conflicting-apple-tx",
+                "conflicting-apple-original",
+                "streamtunes_monthly_sub_ios",
+                "1",
+                "Production",
+                0.99m));
+
+        await using var verificationContext = new AppDbContext(_dbOptions);
+        var googleSubscription = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.GooglePlayPurchaseToken == "current-google-token");
+        var appleSubscription = await verificationContext.Subscriptions
+            .SingleOrDefaultAsync(subscription => subscription.AppStoreOriginalTransactionId == "conflicting-apple-original");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.ExistingBillingSource, Is.EqualTo(BillingSources.GooglePlay));
+            Assert.That(exception.RequestedBillingSource, Is.EqualTo(BillingSources.Apple));
+            Assert.That(googleSubscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(googleSubscription.CancelledAt, Is.Null);
+            Assert.That(appleSubscription, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task GetSubscriptionByAppleTransactionIdAsync_ReturnsAppleSubscription()
     {
         await _service.CreateAppleSubscriptionAsync(
@@ -663,6 +754,50 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task UpdateAppleSubscriptionStatusAsync_DoesNotCancelCurrentPayPalSubscription_WhenReconcilingMissingNotification()
+    {
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = BillingSources.PayPal,
+                PayPalSubscriptionId = "current-paypal-subscription",
+                Status = SubscriptionStatuses.Active,
+                StartDate = DateTime.UtcNow.AddDays(-2),
+                LastPaymentDate = DateTime.UtcNow.AddDays(-2),
+                EndDate = DateTime.UtcNow.AddDays(28),
+                MonthlyPrice = 2.99m,
+                CreatedAt = DateTime.UtcNow.AddDays(-2)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await _service.UpdateAppleSubscriptionStatusAsync(
+            "conflicting-notification-original",
+            SubscriptionStatuses.Active,
+            DateTime.UtcNow.AddDays(30),
+            "conflicting-notification-tx",
+            "Production",
+            "streamtunes_monthly_sub_ios",
+            "1",
+            0.99m);
+
+        await using var verificationContext = new AppDbContext(_dbOptions);
+        var payPalSubscription = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.PayPalSubscriptionId == "current-paypal-subscription");
+        var appleSubscription = await verificationContext.Subscriptions
+            .SingleOrDefaultAsync(subscription => subscription.AppStoreOriginalTransactionId == "conflicting-notification-original");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(payPalSubscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(payPalSubscription.CancelledAt, Is.Null);
+            Assert.That(appleSubscription, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task CreateGooglePlaySubscriptionAsync_FreeTrial_GrantsEntitlementWithoutPaymentDate()
     {
         var trialEnd = DateTimeOffset.UtcNow.AddDays(3);
@@ -684,6 +819,84 @@ public class SubscriptionServiceTests
             Assert.That(subscription.TrialEndDate, Is.EqualTo(trialEnd.UtcDateTime));
             Assert.That(subscription.TrialOfferId, Is.EqualTo("trial-offer"));
             Assert.That(subscription.TrialOfferTags, Is.EqualTo("free-trial"));
+        });
+    }
+
+    [Test]
+    public async Task CreateGooglePlaySubscriptionAsync_DoesNotCancelCurrentAppleSubscription()
+    {
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = BillingSources.Apple,
+                AppStoreOriginalTransactionId = "current-apple-original",
+                Status = SubscriptionStatuses.Active,
+                StartDate = DateTime.UtcNow.AddDays(-2),
+                LastPaymentDate = DateTime.UtcNow.AddDays(-2),
+                EndDate = DateTime.UtcNow.AddDays(28),
+                MonthlyPrice = 2.99m,
+                CreatedAt = DateTime.UtcNow.AddDays(-2)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var exception = Assert.ThrowsAsync<SubscriptionProviderConflictException>(async () =>
+            await _service.CreateGooglePlaySubscriptionAsync(
+                1,
+                "conflicting-google-token",
+                "conflicting-google-order",
+                0.99m,
+                CreateGooglePlayInfo(
+                    isFreeTrial: false,
+                    expiryTime: DateTimeOffset.UtcNow.AddDays(30),
+                    recurringPrice: 0.99m)));
+
+        await using var verificationContext = new AppDbContext(_dbOptions);
+        var appleSubscription = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.AppStoreOriginalTransactionId == "current-apple-original");
+        var googleSubscription = await verificationContext.Subscriptions
+            .SingleOrDefaultAsync(subscription => subscription.GooglePlayPurchaseToken == "conflicting-google-token");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.ExistingBillingSource, Is.EqualTo(BillingSources.Apple));
+            Assert.That(exception.RequestedBillingSource, Is.EqualTo(BillingSources.GooglePlay));
+            Assert.That(appleSubscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(appleSubscription.CancelledAt, Is.Null);
+            Assert.That(googleSubscription, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task UpdateGooglePlaySubscriptionStatusAsync_CancelledTrial_RetainsAccessThroughVerifiedExpiry()
+    {
+        var trialEnd = DateTimeOffset.UtcNow.AddDays(3);
+        var trialInfo = CreateGooglePlayInfo(isFreeTrial: true, expiryTime: trialEnd);
+        await _service.CreateGooglePlaySubscriptionAsync(
+            1,
+            "cancelled-trial-token",
+            "cancelled-trial-order",
+            0.99m,
+            trialInfo);
+
+        await _service.UpdateGooglePlaySubscriptionStatusAsync(
+            "cancelled-trial-token",
+            SubscriptionStatuses.Cancelled,
+            trialEnd.UtcDateTime,
+            trialInfo);
+
+        var subscription = await _service.GetSubscriptionByGooglePlayTokenAsync("cancelled-trial-token");
+        var hasAccess = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(subscription!.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(subscription.LastPaymentDate, Is.Null);
+            Assert.That(subscription.TrialEndDate, Is.EqualTo(trialEnd.UtcDateTime));
+            Assert.That(subscription.EndDate, Is.EqualTo(trialEnd.UtcDateTime));
+            Assert.That(hasAccess, Is.True);
         });
     }
 
@@ -748,6 +961,531 @@ public class SubscriptionServiceTests
             Assert.That(subscription, Is.Not.Null);
             Assert.That(subscription!.StoreFormattedPrice, Is.EqualTo("\u20B1205.00"));
             Assert.That(subscription.StorePriceCurrencyCode, Is.EqualTo("PHP"));
+        });
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_WithPlan_StoresAuthoritativeOfferSnapshot()
+    {
+        var subscription = await _service.CreateSubscriptionAsync(
+            1,
+            "SUB-PLAN-SNAPSHOT",
+            " P-TRIAL-PLAN ",
+            0.99m,
+            " usd ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(subscription.PayPalPlanId, Is.EqualTo("P-TRIAL-PLAN"));
+            Assert.That(subscription.MonthlyPrice, Is.EqualTo(0.99m));
+            Assert.That(subscription.StorePriceCurrencyCode, Is.EqualTo("USD"));
+            Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+        });
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_StoresAcceptedOfferVersionAndTimestamp()
+    {
+        var acceptedAt = new DateTime(2030, 4, 5, 6, 7, 8, DateTimeKind.Utc);
+
+        var subscription = await _service.CreateSubscriptionAsync(
+            1,
+            "SUB-TERMS-SNAPSHOT",
+            "P-TRIAL-PLAN",
+            0.99m,
+            "USD",
+            payPalOfferVersion: 17,
+            subscriptionTermsAcceptedAt: acceptedAt);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(subscription.PayPalOfferVersion, Is.EqualTo(17));
+            Assert.That(subscription.SubscriptionTermsAcceptedAt, Is.EqualTo(acceptedAt));
+            Assert.That(subscription.SubscriptionTermsAcceptedAt!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+        });
+    }
+
+    [Test]
+    public async Task CreateSubscriptionAsync_DoesNotCancelExistingEntitledSubscription()
+    {
+        await _service.CreateSubscriptionAsync(1, "SUB-EXISTING", "P-OLD", 2.99m, "USD");
+        await _service.ActivateSubscriptionAsync(
+            "SUB-EXISTING",
+            DateTime.UtcNow.AddDays(30),
+            DateTime.UtcNow.AddMinutes(-1));
+
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _service.CreateSubscriptionAsync(1, "SUB-OVERLAP", "P-NEW", 0.99m, "USD"));
+
+        var existing = await _service.GetSubscriptionByPayPalIdAsync("SUB-EXISTING");
+        var overlapping = await _service.GetSubscriptionByPayPalIdAsync("SUB-OVERLAP");
+        Assert.Multiple(() =>
+        {
+            Assert.That(existing.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(overlapping, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task HasPriorActivatedSubscriptionAsync_ExcludesAbandonedApprovalPendingSubscription()
+    {
+        await _service.CreateSubscriptionAsync(1, "SUB-ABANDONED", "P-TRIAL", 0.99m, "USD");
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            var pending = await context.Subscriptions.SingleAsync(
+                subscription => subscription.PayPalSubscriptionId == "SUB-ABANDONED");
+            pending.NextBillingDate = DateTime.UtcNow.AddDays(3);
+            pending.EndDate = pending.NextBillingDate;
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.HasPriorActivatedSubscriptionAsync(1);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task HasPriorActivatedSubscriptionAsync_ExcludesLegacyCancelledPendingSubscriptionWithFabricatedDates()
+    {
+        await using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = BillingSources.PayPal,
+                PayPalSubscriptionId = "SUB-LEGACY-ABANDONED",
+                Status = SubscriptionStatuses.Cancelled,
+                StartDate = DateTime.UtcNow.AddDays(-10),
+                EndDate = DateTime.UtcNow.AddDays(20),
+                NextBillingDate = DateTime.UtcNow.AddDays(20),
+                CancelledAt = DateTime.UtcNow.AddDays(-10),
+                MonthlyPrice = 2.99m,
+                CreatedAt = DateTime.UtcNow.AddDays(-10)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.HasPriorActivatedSubscriptionAsync(1);
+
+        Assert.That(result, Is.False);
+    }
+
+    [TestCase(BillingSources.PayPal)]
+    [TestCase(BillingSources.GooglePlay)]
+    [TestCase(BillingSources.Apple)]
+    public async Task HasPriorActivatedSubscriptionAsync_DetectsPaidHistoryAcrossProviders(string billingSource)
+    {
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = billingSource,
+                Status = SubscriptionStatuses.Expired,
+                StartDate = DateTime.UtcNow.AddMonths(-2),
+                EndDate = DateTime.UtcNow.AddMonths(-1),
+                LastPaymentDate = DateTime.UtcNow.AddMonths(-2),
+                MonthlyPrice = 0.99m,
+                CreatedAt = DateTime.UtcNow.AddMonths(-2)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.HasPriorActivatedSubscriptionAsync(1);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task HasPriorActivatedSubscriptionAsync_DetectsExpiredTrialWithoutPayment()
+    {
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 1,
+                BillingSource = BillingSources.GooglePlay,
+                Status = SubscriptionStatuses.Expired,
+                StartDate = DateTime.UtcNow.AddDays(-5),
+                EndDate = DateTime.UtcNow.AddDays(-2),
+                TrialStartDate = DateTime.UtcNow.AddDays(-5),
+                TrialEndDate = DateTime.UtcNow.AddDays(-2),
+                MonthlyPrice = 0.99m,
+                CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var result = await _service.HasPriorActivatedSubscriptionAsync(1);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_ActiveTrialGrantsEntitlementWithoutPayment()
+    {
+        var providerStart = DateTime.UtcNow.AddMinutes(-2);
+        var trialEnd = DateTime.UtcNow.AddDays(3);
+        await _service.CreateSubscriptionAsync(1, "SUB-PAYPAL-TRIAL", "P-TRIAL", 0.99m, "USD");
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-PAYPAL-TRIAL",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                PlanId = "P-TRIAL",
+                ProviderStartDate = providerStart,
+                TrialStartDate = providerStart,
+                TrialEndDate = trialEnd,
+                NextBillingDate = trialEnd,
+                MonthlyPrice = 0.99m,
+                CurrencyCode = "USD"
+            });
+
+        var hasEntitlement = await _service.HasActiveSubscriptionAsync(1);
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.PreviousStatus, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+            Assert.That(result.BecameActive, Is.True);
+            Assert.That(result.BecamePaid, Is.False);
+            Assert.That(result.TrialConverted, Is.False);
+            Assert.That(result.ShouldSendTrialActivationEmail, Is.True);
+            Assert.That(result.Subscription.StartDate, Is.EqualTo(providerStart));
+            Assert.That(result.Subscription.TrialEndDate, Is.EqualTo(trialEnd));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+            Assert.That(result.Subscription.LastPaymentDate, Is.Null);
+            Assert.That(hasEntitlement, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task CancelSubscriptionAsync_DuringTrial_PreservesAccessUntilProviderEndThenExpires()
+    {
+        var trialEnd = DateTime.UtcNow.AddDays(3);
+        await _service.CreateSubscriptionAsync(1, "SUB-CANCEL-TRIAL", "P-TRIAL", 0.99m, "USD");
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CANCEL-TRIAL",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = DateTime.UtcNow,
+                TrialEndDate = trialEnd,
+                NextBillingDate = trialEnd
+            });
+
+        var cancelled = await _service.CancelSubscriptionAsync(1, trialEnd);
+        var duringTrial = await _service.GetActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cancelled, Is.True);
+            Assert.That(duringTrial, Is.Not.Null);
+            Assert.That(duringTrial.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(duringTrial.EndDate, Is.EqualTo(trialEnd));
+            Assert.That(duringTrial.LastPaymentDate, Is.Null);
+        });
+
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            var subscription = await context.Subscriptions.SingleAsync();
+            subscription.EndDate = DateTime.UtcNow.AddMinutes(-1);
+            subscription.TrialEndDate = subscription.EndDate;
+            await context.SaveChangesAsync();
+        }
+
+        var afterTrial = await _service.GetActiveSubscriptionAsync(1);
+        var expired = await _service.GetLatestSubscriptionAsync(1);
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterTrial, Is.Null);
+            Assert.That(expired.Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        });
+    }
+
+    [Test]
+    public async Task CancelSubscriptionAsync_WithoutConfirmedDate_DoesNotFabricateEndDate()
+    {
+        await _service.CreateSubscriptionAsync(1, "SUB-CANCEL-PENDING-NO-END", "P-NO-TRIAL", 0.99m, "USD");
+
+        var cancelled = await _service.CancelSubscriptionAsync(1);
+        var subscription = await _service.GetSubscriptionByPayPalIdAsync("SUB-CANCEL-PENDING-NO-END");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cancelled, Is.True);
+            Assert.That(subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(subscription.EndDate, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_TrialConversionAndRenewal_AreIdempotent()
+    {
+        var trialStart = DateTime.UtcNow.AddDays(-3);
+        var trialEnd = DateTime.UtcNow.AddMinutes(-5);
+        var firstPayment = DateTime.UtcNow.AddMinutes(-4);
+        var firstRenewal = DateTime.UtcNow.AddDays(30);
+        await _service.CreateSubscriptionAsync(1, "SUB-CONVERT", "P-TRIAL", 0.99m, "USD");
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CONVERT",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                NextBillingDate = trialEnd
+            });
+
+        var converted = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CONVERT",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                PlanId = "P-TRIAL",
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                LastPaymentDate = firstPayment,
+                NextBillingDate = firstRenewal,
+                MonthlyPrice = 0.99m,
+                CurrencyCode = "USD"
+            });
+
+        var duplicate = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CONVERT",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = firstPayment,
+                NextBillingDate = firstRenewal
+            });
+
+        await _service.MarkTrialConversionEmailSentAsync(converted.Subscription.Id);
+        var renewalPayment = firstPayment.AddMonths(1);
+        var secondRenewal = firstRenewal.AddMonths(1);
+        var renewed = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CONVERT",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = renewalPayment,
+                NextBillingDate = secondRenewal
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(converted.BecamePaid, Is.True);
+            Assert.That(converted.TrialConverted, Is.True);
+            Assert.That(converted.Subscription.TrialConvertedAt, Is.EqualTo(firstPayment));
+            Assert.That(converted.Subscription.EndDate, Is.EqualTo(firstRenewal));
+            Assert.That(converted.ShouldSendTrialConversionEmail, Is.True);
+            Assert.That(duplicate.BecamePaid, Is.False);
+            Assert.That(duplicate.TrialConverted, Is.False);
+            Assert.That(renewed.BecamePaid, Is.False);
+            Assert.That(renewed.TrialConverted, Is.False);
+            Assert.That(renewed.ShouldSendTrialConversionEmail, Is.False);
+            Assert.That(renewed.Subscription.LastPaymentDate, Is.EqualTo(renewalPayment));
+            Assert.That(renewed.Subscription.EndDate, Is.EqualTo(secondRenewal));
+            Assert.That(renewed.Subscription.TrialConvertedAt, Is.EqualTo(firstPayment));
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_Cancelled_PreservesProviderConfirmedTrialEnd()
+    {
+        var trialEnd = DateTime.UtcNow.AddDays(3);
+        await _service.CreateSubscriptionAsync(1, "SUB-RECONCILE-CANCEL", "P-TRIAL", 0.99m, "USD");
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RECONCILE-CANCEL",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = DateTime.UtcNow,
+                TrialEndDate = trialEnd,
+                NextBillingDate = trialEnd
+            });
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RECONCILE-CANCEL",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Cancelled
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(result.Subscription.CancelledAt, Is.Not.Null);
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_CancelledTrialDoesNotExtendToPaymentRetryDate()
+    {
+        var trialEnd = DateTime.UtcNow.AddDays(3);
+        var retryDate = trialEnd.AddDays(5);
+        await _service.CreateSubscriptionAsync(1, "SUB-TRIAL-RETRY", "P-TRIAL", 0.99m, "USD");
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-TRIAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Cancelled,
+                TrialStartDate = DateTime.UtcNow,
+                TrialEndDate = trialEnd,
+                NextBillingDate = retryDate
+            });
+
+        Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_FirstChargeDeclined_EndsAccessAtTrialEndNotRetryDate()
+    {
+        var trialStart = DateTime.UtcNow.AddDays(-3).AddMinutes(-5);
+        var trialEnd = DateTime.UtcNow.AddMinutes(-5);
+        var paymentRetryDate = DateTime.UtcNow.AddDays(5);
+        await _service.CreateSubscriptionAsync(1, "SUB-FIRST-CHARGE-FAILED", "P-TRIAL", 0.99m, "USD");
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-FIRST-CHARGE-FAILED",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                NextBillingDate = paymentRetryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var hasAccess = await _service.HasActiveSubscriptionAsync(1);
+        var latest = await _service.GetLatestSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.LastPaymentDate, Is.Null);
+            Assert.That(result.Subscription.NextBillingDate, Is.EqualTo(paymentRetryDate));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+            Assert.That(hasAccess, Is.False);
+            Assert.That(latest.Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_DeclinedRenewalAndSuccessfulRetry_UsesOnlyConfirmedPaidTime()
+    {
+        var trialStart = DateTime.UtcNow.AddMonths(-2).AddDays(-3);
+        var trialEnd = DateTime.UtcNow.AddMonths(-2);
+        var firstPayment = trialEnd.AddSeconds(2);
+        var firstRenewal = DateTime.UtcNow.AddMonths(-1).AddMinutes(-1);
+        var renewalPayment = firstRenewal.AddSeconds(2);
+        var confirmedPaidThrough = DateTime.UtcNow.AddMinutes(-1);
+        var paymentRetryDate = DateTime.UtcNow.AddDays(5);
+        var successfulRetry = DateTime.UtcNow;
+        var nextRenewal = successfulRetry.AddMonths(1);
+        await _service.CreateSubscriptionAsync(1, "SUB-RENEWAL-RETRY", "P-TRIAL", 0.99m, "USD");
+
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                LastPaymentDate = firstPayment,
+                NextBillingDate = firstRenewal,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = renewalPayment,
+                NextBillingDate = confirmedPaidThrough,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var declined = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = renewalPayment,
+                NextBillingDate = paymentRetryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var accessWhileDeclined = await _service.HasActiveSubscriptionAsync(1);
+
+        var recovered = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = successfulRetry,
+                NextBillingDate = nextRenewal,
+                FailedPaymentsCount = 0,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var accessAfterRetry = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(declined.Subscription.NextBillingDate, Is.EqualTo(paymentRetryDate));
+            Assert.That(declined.Subscription.EndDate, Is.EqualTo(confirmedPaidThrough));
+            Assert.That(accessWhileDeclined, Is.False);
+            Assert.That(recovered.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(recovered.Subscription.LastPaymentDate, Is.EqualTo(successfulRetry));
+            Assert.That(recovered.Subscription.EndDate, Is.EqualTo(nextRenewal));
+            Assert.That(accessAfterRetry, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_CancelledPaidSubscription_DoesNotUseDeclinedRetryAsPaidThrough()
+    {
+        var lastPayment = DateTime.UtcNow.AddMonths(-1);
+        var paidThrough = DateTime.UtcNow.AddHours(2);
+        var retryDate = DateTime.UtcNow.AddDays(5);
+        await _service.CreateSubscriptionAsync(1, "SUB-CANCELLED-PAID-RETRY", "P-NO-TRIAL", 0.99m, "USD");
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CANCELLED-PAID-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = lastPayment,
+                NextBillingDate = paidThrough,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CANCELLED-PAID-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Cancelled,
+                LastPaymentDate = lastPayment,
+                NextBillingDate = retryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var hasAccess = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(result.Subscription.NextBillingDate, Is.EqualTo(retryDate));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(paidThrough));
+            Assert.That(hasAccess, Is.True);
         });
     }
 

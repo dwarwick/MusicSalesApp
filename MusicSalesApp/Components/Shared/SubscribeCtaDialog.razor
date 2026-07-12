@@ -5,19 +5,36 @@
     <DialogTemplates>
         <Content>
             <div class="subscribe-cta-dialog-content">
-                <h2 class="cta-title">Unlimited Music Streaming</h2>
+                <h2 class="cta-title">@DialogTitle</h2>
+                <p class="cta-description">
+                    Support independent music and stream the full catalog with no limits.
+                </p>
                 <p class="cta-price-highlight">
-                    Just <span class="price">$@_subscriptionPrice</span> per month
+                    @if (HasFreeTrialOffer)
+                    {
+                        <span class="price">@TrialDurationDisplay free</span><br />
+                        <text>Then @OfferPriceDisplay @OfferCadenceDisplay through PayPal. Cancel anytime.</text>
+                    }
+                    else if (_offerQuote != null)
+                    {
+                        <text>Just <span class="price">@OfferPriceDisplay</span> @OfferCadenceDisplay through PayPal.<br />Cancel anytime.</text>
+                    }
+                    else
+                    {
+                        <text>Subscribe through PayPal. Cancel anytime.</text>
+                    }
                 </p>
                 @if (!IsAuthenticated)
                 {
-                    <p class="cta-auth-text">Log In or Register to Get Started</p>
+                    <p class="cta-auth-text">
+                        @(HasFreeTrialOffer ? "Log In or Register to Start Your Free Trial" : "Log In or Register to Get Started")
+                    </p>
                     <div class="cta-button-group">
                         <SfButton CssClass="cta-button cta-button-login" OnClick="@NavigateToLogin">
                             Log In
                         </SfButton>
                         <SfButton CssClass="cta-button cta-button-register" OnClick="@NavigateToRegister">
-                            Register
+                            @RegisterButtonLabel
                         </SfButton>
                     </div>
                 }
@@ -25,7 +42,7 @@
                 {
                     <div class="cta-button-group">
                         <SfButton CssClass="cta-button" OnClick="@NavigateToSubscribe">
-                            Subscribe
+                            @SubscribeButtonLabel
                         </SfButton>
                     </div>
                 }

@@ -85,6 +85,12 @@ public abstract class BlazorBase : ComponentBase
     protected IAppSettingsService AppSettingsService { get; set; } = default!;
 
     [Inject]
+    protected IPayPalSubscriptionApiService PayPalSubscriptionApiService { get; set; } = default!;
+
+    [Inject]
+    protected IPayPalSubscriptionManagementService PayPalSubscriptionManagementService { get; set; } = default!;
+
+    [Inject]
     protected IAccountEmailService AccountEmailService { get; set; } = default!;
 
     [Inject]

@@ -45,6 +45,29 @@ public class SubscriptionService : ISubscriptionService
             .FirstOrDefaultAsync();
     }
 
+    public async Task<Subscription> GetCurrentSubscriptionFromOtherProviderAsync(
+        int userId,
+        string billingSource)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await NormalizeExpiredSubscriptionsAsync(context, userId);
+
+        var now = DateTime.UtcNow;
+        return await context.Subscriptions
+            .Where(subscription => subscription.UserId == userId
+                && subscription.BillingSource != billingSource)
+            .Where(subscription =>
+                (subscription.Status == SubscriptionStatuses.Active
+                 && (subscription.LastPaymentDate.HasValue || subscription.TrialEndDate > now)
+                 && (!subscription.EndDate.HasValue || subscription.EndDate > now))
+                || (subscription.Status == SubscriptionStatuses.Suspended
+                    && (!subscription.EndDate.HasValue || subscription.EndDate > now))
+                || (subscription.Status == SubscriptionStatuses.Cancelled
+                    && subscription.EndDate > now))
+            .OrderByDescending(subscription => subscription.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<bool> HasActiveSubscriptionAsync(int userId)
     {
         var subscription = await GetActiveSubscriptionAsync(userId);
@@ -59,21 +82,82 @@ public class SubscriptionService : ISubscriptionService
         return true;
     }
 
+    public async Task<bool> HasPriorActivatedSubscriptionAsync(int userId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.Subscriptions
+            .Where(s => s.UserId == userId)
+            .AnyAsync(s => s.Status != SubscriptionStatuses.ApprovalPending &&
+                           (s.LastPaymentDate.HasValue ||
+                            s.TrialStartDate.HasValue ||
+                            s.TrialEndDate.HasValue ||
+                            s.TrialConvertedAt.HasValue ||
+                            s.Status == SubscriptionStatuses.Active ||
+                            s.Status == SubscriptionStatuses.Suspended ||
+                            (s.BillingSource == BillingSources.GooglePlay
+                             && s.GooglePlayPurchaseToken != null) ||
+                            (s.BillingSource == BillingSources.Apple
+                             && s.AppStoreOriginalTransactionId != null)));
+    }
+
     public async Task<int> NormalizeExpiredSubscriptionsAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         return await NormalizeExpiredSubscriptionsAsync(context);
     }
 
-    public async Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice)
+    public Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice)
     {
-        using var context = await _contextFactory.CreateDbContextAsync();
+        return CreateSubscriptionAsync(
+            userId,
+            paypalSubscriptionId,
+            paypalPlanId: null,
+            monthlyPrice,
+            priceCurrencyCode: null);
+    }
 
-        await CancelExistingActiveSubscriptionsAsync(context, userId);
+    public Task<Subscription> CreateSubscriptionAsync(
+        int userId,
+        string paypalSubscriptionId,
+        string paypalPlanId,
+        decimal monthlyPrice,
+        string priceCurrencyCode)
+    {
+        return CreateSubscriptionAsync(
+            userId,
+            paypalSubscriptionId,
+            paypalPlanId,
+            monthlyPrice,
+            priceCurrencyCode,
+            payPalOfferVersion: null,
+            subscriptionTermsAcceptedAt: DateTime.UtcNow);
+    }
+
+    public async Task<Subscription> CreateSubscriptionAsync(
+        int userId,
+        string paypalSubscriptionId,
+        string paypalPlanId,
+        decimal monthlyPrice,
+        string priceCurrencyCode,
+        int? payPalOfferVersion,
+        DateTime subscriptionTermsAcceptedAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(paypalSubscriptionId);
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await NormalizeExpiredSubscriptionsAsync(context, userId);
+
+        if (await HasCurrentEntitlementAsync(context, userId))
+        {
+            throw new InvalidOperationException("The user already has a current subscription entitlement.");
+        }
 
         // Remove any stale APPROVAL_PENDING subscriptions (user started but never completed)
         var pendingSubscriptions = await context.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.ApprovalPending)
+            .Where(s => s.UserId == userId &&
+                        s.BillingSource == BillingSources.PayPal &&
+                        s.Status == SubscriptionStatuses.ApprovalPending)
             .ToListAsync();
 
         context.Subscriptions.RemoveRange(pendingSubscriptions);
@@ -82,13 +166,20 @@ public class SubscriptionService : ISubscriptionService
         {
             UserId = userId,
             PayPalSubscriptionId = paypalSubscriptionId,
+            PayPalPlanId = NormalizeOptionalValue(paypalPlanId),
             BillingSource = BillingSources.PayPal,
             Status = SubscriptionStatuses.ApprovalPending,
             StartDate = DateTime.UtcNow,
             MonthlyPrice = monthlyPrice,
+            PayPalOfferVersion = payPalOfferVersion,
+            SubscriptionTermsAcceptedAt = DateTime.SpecifyKind(
+                subscriptionTermsAcceptedAt,
+                DateTimeKind.Utc),
             CreatedAt = DateTime.UtcNow,
             // EndDate will be set based on PayPal webhook or cancellation
         };
+
+        ApplyStorePriceInfo(subscription, null, priceCurrencyCode);
 
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
@@ -98,12 +189,21 @@ public class SubscriptionService : ISubscriptionService
         return subscription;
     }
 
-    public async Task<bool> CancelSubscriptionAsync(int userId)
+    public Task<bool> CancelSubscriptionAsync(int userId)
     {
-        using var context = await _contextFactory.CreateDbContextAsync();
+        return CancelSubscriptionAsync(userId, providerEntitlementEndDate: null);
+    }
+
+    public async Task<bool> CancelSubscriptionAsync(int userId, DateTime? providerEntitlementEndDate)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         
         var subscription = await context.Subscriptions
-            .Where(s => s.UserId == userId && (s.Status == SubscriptionStatuses.Active || s.Status == SubscriptionStatuses.ApprovalPending))
+            .Where(s => s.UserId == userId &&
+                        (s.Status == SubscriptionStatuses.Active ||
+                         s.Status == SubscriptionStatuses.ApprovalPending ||
+                         s.Status == SubscriptionStatuses.Cancelled ||
+                         s.Status == SubscriptionStatuses.Expired))
             .OrderByDescending(s => s.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -111,24 +211,171 @@ public class SubscriptionService : ISubscriptionService
             return false;
 
         subscription.Status = SubscriptionStatuses.Cancelled;
-        subscription.CancelledAt = DateTime.UtcNow;
-        
-        // Set end date to the next billing date or 30 days from now if not set
-        if (!subscription.NextBillingDate.HasValue)
-        {
-            subscription.EndDate = DateTime.UtcNow.AddDays(30);
-        }
-        else
-        {
-            subscription.EndDate = subscription.NextBillingDate.Value;
-        }
+        subscription.CancelledAt ??= DateTime.UtcNow;
+
+        // The provider-confirmed paid-through/trial end is authoritative. For legacy
+        // callers, retain only dates already confirmed and stored; never invent access.
+        subscription.EndDate = providerEntitlementEndDate ?? GetBestKnownEntitlementEnd(subscription);
 
         await context.SaveChangesAsync();
 
-        _logger.LogInformation("Cancelled subscription {SubscriptionId} for user {UserId}, valid until {EndDate}", 
+        _logger.LogInformation("Cancelled subscription {SubscriptionId} for user {UserId}, valid until {EndDate}",
             subscription.Id, userId, subscription.EndDate);
         
         return true;
+    }
+
+    public async Task<bool> CancelPayPalSubscriptionAsync(
+        string paypalSubscriptionId,
+        DateTime? providerEntitlementEndDate)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(paypalSubscriptionId);
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s =>
+                s.BillingSource == BillingSources.PayPal
+                && s.PayPalSubscriptionId == paypalSubscriptionId);
+
+        if (subscription == null)
+        {
+            return false;
+        }
+
+        subscription.Status = SubscriptionStatuses.Cancelled;
+        subscription.CancelledAt ??= DateTime.UtcNow;
+        // This exact-row path is only called after provider reconciliation. A null
+        // end means PayPal confirmed no activated entitlement (for example, an
+        // abandoned approval), so stale local dates must not manufacture access.
+        subscription.EndDate = providerEntitlementEndDate;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Cancelled PayPal subscription {SubscriptionId}, valid until {EndDate}",
+            subscription.Id,
+            subscription.EndDate);
+        return true;
+    }
+
+    public async Task<PayPalSubscriptionReconciliationResult> ReconcilePayPalSubscriptionAsync(
+        string paypalSubscriptionId,
+        PayPalSubscriptionReconciliation reconciliation)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(paypalSubscriptionId);
+        ArgumentNullException.ThrowIfNull(reconciliation);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reconciliation.Status);
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.PayPalSubscriptionId == paypalSubscriptionId);
+
+        if (subscription == null)
+        {
+            _logger.LogWarning(
+                "Subscription with PayPal ID {PayPalSubscriptionId} not found for reconciliation",
+                paypalSubscriptionId);
+            return null;
+        }
+
+        var reconciledAt = DateTime.UtcNow;
+        var previousStatus = subscription.Status;
+        var previousLastPaymentDate = subscription.LastPaymentDate;
+        var previousTrialConvertedAt = subscription.TrialConvertedAt;
+
+        var normalizedStatus = reconciliation.Status.Trim().ToUpperInvariant();
+        subscription.Status = normalizedStatus == SubscriptionStatuses.Canceled
+            ? SubscriptionStatuses.Cancelled
+            : normalizedStatus;
+
+        if (subscription.Status == SubscriptionStatuses.Active)
+        {
+            // A missed renewal webhook can temporarily normalize the local row to
+            // EXPIRED. Provider reconciliation is authoritative and reactivates it.
+            subscription.CancelledAt = null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(reconciliation.PlanId))
+        {
+            subscription.PayPalPlanId = reconciliation.PlanId.Trim();
+        }
+
+        if (reconciliation.ProviderStartDate.HasValue)
+        {
+            subscription.StartDate = reconciliation.ProviderStartDate.Value;
+        }
+
+        if (reconciliation.TrialStartDate.HasValue)
+        {
+            subscription.TrialStartDate = reconciliation.TrialStartDate.Value;
+        }
+
+        if (reconciliation.TrialEndDate.HasValue)
+        {
+            subscription.TrialEndDate = reconciliation.TrialEndDate.Value;
+        }
+
+        if (reconciliation.LastPaymentDate.HasValue &&
+            (!subscription.LastPaymentDate.HasValue ||
+             reconciliation.LastPaymentDate.Value > subscription.LastPaymentDate.Value))
+        {
+            subscription.LastPaymentDate = reconciliation.LastPaymentDate.Value;
+        }
+
+        if (reconciliation.NextBillingDate.HasValue)
+        {
+            subscription.NextBillingDate = reconciliation.NextBillingDate.Value;
+        }
+
+        if (reconciliation.MonthlyPrice.HasValue)
+        {
+            subscription.MonthlyPrice = reconciliation.MonthlyPrice.Value;
+        }
+
+        ApplyStorePriceInfo(subscription, null, reconciliation.CurrencyCode);
+
+        var hasTrial = subscription.TrialStartDate.HasValue || subscription.TrialEndDate.HasValue;
+        if (hasTrial && subscription.LastPaymentDate.HasValue && !subscription.TrialConvertedAt.HasValue)
+        {
+            subscription.TrialConvertedAt = subscription.LastPaymentDate.Value;
+        }
+
+        ApplyPayPalEntitlementEnd(subscription, reconciliation, reconciledAt);
+
+        await context.SaveChangesAsync();
+
+        var becameActive = previousStatus != SubscriptionStatuses.Active &&
+                           subscription.Status == SubscriptionStatuses.Active;
+        var becamePaid = !previousLastPaymentDate.HasValue && subscription.LastPaymentDate.HasValue;
+        var trialConverted = !previousTrialConvertedAt.HasValue && subscription.TrialConvertedAt.HasValue;
+        var activeTrial = subscription.Status == SubscriptionStatuses.Active &&
+                          !subscription.LastPaymentDate.HasValue &&
+                          subscription.TrialEndDate > reconciledAt;
+
+        _logger.LogInformation(
+            "Reconciled PayPal subscription {SubscriptionId}: Status {PreviousStatus}->{Status}, PlanId={PlanId}, TrialEndDate={TrialEndDate}, LastPaymentDate={LastPaymentDate}, NextBillingDate={NextBillingDate}, EndDate={EndDate}, TrialConverted={TrialConverted}",
+            subscription.Id,
+            previousStatus,
+            subscription.Status,
+            subscription.PayPalPlanId,
+            subscription.TrialEndDate,
+            subscription.LastPaymentDate,
+            subscription.NextBillingDate,
+            subscription.EndDate,
+            trialConverted);
+
+        return new PayPalSubscriptionReconciliationResult
+        {
+            Subscription = subscription,
+            PreviousStatus = previousStatus,
+            PreviousLastPaymentDate = previousLastPaymentDate,
+            BecameActive = becameActive,
+            BecamePaid = becamePaid,
+            TrialConverted = trialConverted,
+            ShouldSendTrialActivationEmail = activeTrial && !subscription.TrialActivationEmailSentAt.HasValue,
+            ShouldSendTrialConversionEmail = subscription.TrialConvertedAt.HasValue &&
+                                             !subscription.TrialConversionEmailSentAt.HasValue
+        };
     }
 
     public async Task<Subscription> GetSubscriptionByPayPalIdAsync(string paypalSubscriptionId)
@@ -275,7 +522,7 @@ public class SubscriptionService : ISubscriptionService
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
-        await CancelExistingActiveSubscriptionsAsync(context, userId);
+        await PrepareForStoreSubscriptionCreationAsync(context, userId, BillingSources.GooglePlay);
         var now = DateTime.UtcNow;
         var expiryTime = googlePlayInfo?.ExpiryTime?.UtcDateTime;
 
@@ -318,7 +565,7 @@ public class SubscriptionService : ISubscriptionService
     {
         using var context = await _contextFactory.CreateDbContextAsync();
 
-        await CancelExistingActiveSubscriptionsAsync(context, userId);
+        await PrepareForStoreSubscriptionCreationAsync(context, userId, BillingSources.Apple);
 
         var effectiveStartDate = startDate ?? DateTime.UtcNow;
 
@@ -369,6 +616,15 @@ public class SubscriptionService : ISubscriptionService
         {
             _logger.LogWarning("Google Play subscription with token {PurchaseToken} not found", purchaseToken[..Math.Min(20, purchaseToken.Length)]);
             return;
+        }
+
+        if (status == SubscriptionStatuses.Active)
+        {
+            await EnsureNoCurrentOtherProviderSubscriptionAsync(
+                context,
+                subscription.UserId,
+                BillingSources.GooglePlay,
+                subscription.Id);
         }
 
         var now = DateTime.UtcNow;
@@ -483,6 +739,28 @@ public class SubscriptionService : ISubscriptionService
             .FirstOrDefaultAsync(s => s.AppStoreOriginalTransactionId == originalTransactionId);
     }
 
+    public async Task UpdateAppleStorePriceAsync(
+        string originalTransactionId,
+        decimal monthlyPrice,
+        string priceCurrencyCode)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var subscription = await context.Subscriptions
+            .FirstOrDefaultAsync(s => s.AppStoreOriginalTransactionId == originalTransactionId);
+        if (subscription == null)
+        {
+            return;
+        }
+
+        if (monthlyPrice > 0)
+        {
+            subscription.MonthlyPrice = monthlyPrice;
+        }
+
+        ApplyStorePriceInfo(subscription, null, priceCurrencyCode);
+        await context.SaveChangesAsync();
+    }
+
     public async Task UpdateAppleSubscriptionStatusAsync(
         string originalTransactionId,
         string status,
@@ -527,6 +805,15 @@ public class SubscriptionService : ISubscriptionService
             }
         }
 
+        if (status == SubscriptionStatuses.Active)
+        {
+            await EnsureNoCurrentOtherProviderSubscriptionAsync(
+                context,
+                subscription.UserId,
+                BillingSources.Apple,
+                subscription.Id);
+        }
+
         subscription.Status = status;
 
         if (!string.IsNullOrWhiteSpace(latestTransactionId))
@@ -543,6 +830,11 @@ public class SubscriptionService : ISubscriptionService
         {
             subscription.EndDate = expiryTime.Value;
             subscription.NextBillingDate = expiryTime.Value;
+        }
+
+        if (monthlyPrice.HasValue && monthlyPrice.Value > 0)
+        {
+            subscription.MonthlyPrice = monthlyPrice.Value;
         }
 
         if (status == SubscriptionStatuses.Cancelled || status == SubscriptionStatuses.Suspended || status == SubscriptionStatuses.Expired)
@@ -576,10 +868,30 @@ public class SubscriptionService : ISubscriptionService
             return null;
         }
 
-        await CancelExistingActiveSubscriptionsAsync(context, userId);
+        if (!monthlyPrice.HasValue || monthlyPrice.Value <= 0)
+        {
+            _logger.LogWarning(
+                "Apple notification for original transaction {OriginalTransactionId} could not create a local subscription because Apple did not provide a price",
+                originalTransactionId);
+            return null;
+        }
+
+        try
+        {
+            await PrepareForStoreSubscriptionCreationAsync(context, userId, BillingSources.Apple);
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogWarning(
+                "Apple notification reconciliation for original transaction {OriginalTransactionId} was rejected because user {UserId} has a current {ExistingBillingSource} subscription",
+                originalTransactionId,
+                userId,
+                ex.ExistingBillingSource);
+            return null;
+        }
 
         var effectiveNow = DateTime.UtcNow;
-        var effectivePrice = monthlyPrice ?? 3.99m;
+        var effectivePrice = monthlyPrice.Value;
         var subscription = new Subscription
         {
             UserId = userId,
@@ -613,16 +925,70 @@ public class SubscriptionService : ISubscriptionService
         return subscription;
     }
 
-    private static async Task CancelExistingActiveSubscriptionsAsync(AppDbContext context, int userId)
+    private async Task PrepareForStoreSubscriptionCreationAsync(
+        AppDbContext context,
+        int userId,
+        string requestedBillingSource)
     {
-        var existingSubscriptions = await context.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatuses.Active)
+        await NormalizeExpiredSubscriptionsAsync(context, userId);
+
+        var now = DateTime.UtcNow;
+        var currentSubscriptions = await context.Subscriptions
+            .Where(s => s.UserId == userId)
+            .Where(s => ((s.Status == SubscriptionStatuses.Active ||
+                         s.Status == SubscriptionStatuses.Suspended) &&
+                        (!s.EndDate.HasValue || s.EndDate > now)) ||
+                       (s.Status == SubscriptionStatuses.Cancelled && s.EndDate > now))
             .ToListAsync();
 
-        foreach (var existing in existingSubscriptions)
+        var conflictingSubscription = currentSubscriptions.FirstOrDefault(subscription =>
+            !string.Equals(
+                subscription.BillingSource,
+                requestedBillingSource,
+                StringComparison.OrdinalIgnoreCase));
+        if (conflictingSubscription != null)
+        {
+            throw new SubscriptionProviderConflictException(
+                NormalizeOptionalValue(conflictingSubscription.BillingSource) ?? "another provider",
+                requestedBillingSource);
+        }
+
+        // A provider-verified replacement within the same store supersedes the
+        // previous local record. Cross-provider records are never changed here.
+        foreach (var existing in currentSubscriptions.Where(subscription =>
+                     subscription.Status == SubscriptionStatuses.Active ||
+                     subscription.Status == SubscriptionStatuses.Suspended))
         {
             existing.Status = SubscriptionStatuses.Cancelled;
-            existing.CancelledAt = DateTime.UtcNow;
+            existing.CancelledAt ??= now;
+        }
+    }
+
+    private static async Task EnsureNoCurrentOtherProviderSubscriptionAsync(
+        AppDbContext context,
+        int userId,
+        string requestedBillingSource,
+        int excludedSubscriptionId)
+    {
+        var now = DateTime.UtcNow;
+        var conflictingSubscription = await context.Subscriptions
+            .Where(subscription => subscription.UserId == userId
+                && subscription.Id != excludedSubscriptionId
+                && subscription.BillingSource != requestedBillingSource)
+            .Where(subscription =>
+                ((subscription.Status == SubscriptionStatuses.Active
+                  || subscription.Status == SubscriptionStatuses.Suspended)
+                 && (!subscription.EndDate.HasValue || subscription.EndDate > now))
+                || (subscription.Status == SubscriptionStatuses.Cancelled
+                    && subscription.EndDate > now))
+            .OrderByDescending(subscription => subscription.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (conflictingSubscription != null)
+        {
+            throw new SubscriptionProviderConflictException(
+                NormalizeOptionalValue(conflictingSubscription.BillingSource) ?? "another provider",
+                requestedBillingSource);
         }
     }
 
@@ -664,6 +1030,119 @@ public class SubscriptionService : ISubscriptionService
         {
             subscription.StorePriceCurrencyCode = priceCurrencyCode.Trim().ToUpperInvariant();
         }
+    }
+
+    private static void ApplyPayPalEntitlementEnd(
+        Subscription subscription,
+        PayPalSubscriptionReconciliation reconciliation,
+        DateTime reconciledAt)
+    {
+        if (subscription.Status == SubscriptionStatuses.Active)
+        {
+            if (subscription.LastPaymentDate.HasValue && subscription.NextBillingDate.HasValue)
+            {
+                subscription.EndDate = reconciliation.FailedPaymentsCount > 0
+                    ? ResolveConfirmedPaidThrough(subscription, reconciliation)
+                    : subscription.NextBillingDate.Value;
+            }
+            else if (!subscription.LastPaymentDate.HasValue && subscription.TrialEndDate.HasValue)
+            {
+                subscription.EndDate = subscription.TrialEndDate.Value;
+            }
+
+            return;
+        }
+
+        if (subscription.Status == SubscriptionStatuses.Cancelled)
+        {
+            subscription.CancelledAt ??= reconciledAt;
+
+            var isUnconvertedTrial = !subscription.LastPaymentDate.HasValue
+                && (reconciliation.TrialEndDate.HasValue || subscription.TrialEndDate.HasValue);
+            if (isUnconvertedTrial)
+            {
+                // A retry timestamp after a failed first charge must never extend a
+                // cancelled free trial beyond its provider-confirmed trial end.
+                subscription.EndDate = reconciliation.TrialEndDate
+                    ?? subscription.TrialEndDate
+                    ?? subscription.EndDate;
+            }
+            else
+            {
+                subscription.EndDate = reconciliation.FailedPaymentsCount > 0
+                    ? ResolveConfirmedPaidThrough(subscription, reconciliation)
+                    : reconciliation.NextBillingDate ?? GetBestKnownEntitlementEnd(subscription);
+            }
+
+            return;
+        }
+
+        if (subscription.Status == SubscriptionStatuses.Suspended ||
+            subscription.Status == SubscriptionStatuses.Expired)
+        {
+            subscription.CancelledAt ??= reconciledAt;
+        }
+    }
+
+    private static DateTime? ResolveConfirmedPaidThrough(
+        Subscription subscription,
+        PayPalSubscriptionReconciliation reconciliation)
+    {
+        if (subscription.EndDate.HasValue
+            && (!subscription.LastPaymentDate.HasValue
+                || subscription.EndDate.Value > subscription.LastPaymentDate.Value))
+        {
+            return subscription.EndDate;
+        }
+
+        if (!subscription.LastPaymentDate.HasValue)
+        {
+            return subscription.TrialEndDate ?? subscription.EndDate;
+        }
+
+        var intervalCount = Math.Max(reconciliation.RegularIntervalCount, 1);
+        return reconciliation.RegularIntervalUnit?.ToUpperInvariant() switch
+        {
+            PayPalBillingIntervals.Day => subscription.LastPaymentDate.Value.AddDays(intervalCount),
+            PayPalBillingIntervals.Week => subscription.LastPaymentDate.Value.AddDays(7 * intervalCount),
+            PayPalBillingIntervals.Month => subscription.LastPaymentDate.Value.AddMonths(intervalCount),
+            PayPalBillingIntervals.Year => subscription.LastPaymentDate.Value.AddYears(intervalCount),
+            _ => subscription.EndDate
+        };
+    }
+
+    private static DateTime? GetBestKnownEntitlementEnd(Subscription subscription)
+    {
+        return LatestDate(
+            subscription.TrialEndDate,
+            subscription.NextBillingDate,
+            subscription.EndDate);
+    }
+
+    private static DateTime? LatestDate(params DateTime?[] values)
+    {
+        return values
+            .Where(value => value.HasValue)
+            .Select(value => value.Value)
+            .OrderByDescending(value => value)
+            .Cast<DateTime?>()
+            .FirstOrDefault();
+    }
+
+    private static async Task<bool> HasCurrentEntitlementAsync(AppDbContext context, int userId)
+    {
+        var now = DateTime.UtcNow;
+        return await context.Subscriptions
+            .Where(s => s.UserId == userId)
+            .AnyAsync(s => (s.Status == SubscriptionStatuses.Active &&
+                            (s.LastPaymentDate.HasValue || s.TrialEndDate > now) &&
+                            (!s.EndDate.HasValue || s.EndDate > now)) ||
+                           (s.Status == SubscriptionStatuses.Cancelled && s.EndDate > now));
+    }
+
+    private static string NormalizeOptionalValue(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private async Task MarkTrialEmailSentAsync(int subscriptionId, bool isConversionEmail)

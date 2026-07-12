@@ -117,11 +117,65 @@ public class GooglePlaySubscriptionControllerTests
     }
 
     [Test]
+    public async Task VerifyAndRecordPurchase_ReturnsConflict_WhenAnotherProviderSubscriptionIsCurrent()
+    {
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("purchase-token", "streamtunes_monthly_sub"))
+            .ReturnsAsync(new GooglePlaySubscriptionInfo(
+                "SUBSCRIPTION_STATE_ACTIVE",
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow.AddDays(30),
+                "order-123",
+                true,
+                null,
+                false,
+                "base-plan",
+                null,
+                [],
+                true,
+                0.99m,
+                "USD"));
+        _mockSubscriptionService
+            .Setup(s => s.GetSubscriptionByGooglePlayTokenAsync("purchase-token"))
+            .ReturnsAsync((Subscription)null);
+        _mockSubscriptionService
+            .Setup(s => s.CreateGooglePlaySubscriptionAsync(
+                1,
+                "purchase-token",
+                "order-123",
+                0.99m,
+                It.IsAny<GooglePlaySubscriptionInfo>()))
+            .ThrowsAsync(new SubscriptionProviderConflictException(BillingSources.PayPal, BillingSources.GooglePlay));
+
+        var result = await _controller.VerifyAndRecordPurchase(
+            new GooglePlayPurchaseRequest("purchase-token", "order-123"));
+
+        var conflict = result as ConflictObjectResult;
+        Assert.That(conflict, Is.Not.Null);
+        Assert.That(System.Text.Json.JsonSerializer.Serialize(conflict!.Value), Does.Contain("current PayPal subscription"));
+        _mockSubscriptionService.Verify(s => s.UpdateGooglePlaySubscriptionStatusAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<GooglePlaySubscriptionInfo>()), Times.Never);
+        _mockVerificationService.Verify(
+            service => service.AcknowledgeSubscriptionAsync(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+        _mockSubscriptionConfirmationEmailService.Verify(
+            service => service.SendConfirmationAsync(
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<Subscription>(),
+                It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Test]
     public async Task VerifyAndRecordPurchase_ResendsConfirmationEmail_WhenSubscriptionReactivates()
     {
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
@@ -172,6 +226,7 @@ public class GooglePlaySubscriptionControllerTests
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
@@ -216,6 +271,7 @@ public class GooglePlaySubscriptionControllerTests
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
