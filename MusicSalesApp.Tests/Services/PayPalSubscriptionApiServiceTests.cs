@@ -209,6 +209,63 @@ public class PayPalSubscriptionApiServiceTests
     }
 
     [Test]
+    public async Task GetSubscriptionAsync_FirstPaymentDeclined_SeparatesTrialEndFromRetryDate()
+    {
+        var handler = new RoutingHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/v1/oauth2/token")
+            {
+                return Json(HttpStatusCode.OK, """{"access_token":"access-token"}""");
+            }
+
+            return Json(HttpStatusCode.OK, """
+                {
+                  "id": "I-FIRST-PAYMENT-FAILED",
+                  "plan_id": "P-TRIAL",
+                  "status": "ACTIVE",
+                  "start_time": "2030-01-01T12:00:00Z",
+                  "billing_info": {
+                    "next_billing_time": "2030-01-09T12:00:00Z",
+                    "failed_payments_count": 1,
+                    "cycle_executions": [
+                      { "tenure_type": "TRIAL", "sequence": 1, "cycles_completed": 1, "cycles_remaining": 0, "total_cycles": 1 },
+                      { "tenure_type": "REGULAR", "sequence": 2, "cycles_completed": 0, "cycles_remaining": 0, "total_cycles": 0 }
+                    ]
+                  },
+                  "plan": {
+                    "id": "P-TRIAL",
+                    "status": "ACTIVE",
+                    "billing_cycles": [
+                      {
+                        "frequency": { "interval_unit": "DAY", "interval_count": 3 },
+                        "tenure_type": "TRIAL", "sequence": 1, "total_cycles": 1,
+                        "pricing_scheme": { "fixed_price": { "value": "0.00", "currency_code": "USD" } }
+                      },
+                      {
+                        "frequency": { "interval_unit": "MONTH", "interval_count": 1 },
+                        "tenure_type": "REGULAR", "sequence": 2, "total_cycles": 0,
+                        "pricing_scheme": { "fixed_price": { "value": "0.99", "currency_code": "USD" } }
+                      }
+                    ]
+                  }
+                }
+                """);
+        });
+        var service = CreateService(handler);
+
+        var details = await service.GetSubscriptionAsync("I-FIRST-PAYMENT-FAILED");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(details.FailedPaymentsCount, Is.EqualTo(1));
+            Assert.That(details.LastPaymentTime, Is.Null);
+            Assert.That(details.IsInTrial, Is.False);
+            Assert.That(details.TrialEndTime, Is.EqualTo(DateTimeOffset.Parse("2030-01-04T12:00:00Z")));
+            Assert.That(details.NextBillingTime, Is.EqualTo(DateTimeOffset.Parse("2030-01-09T12:00:00Z")));
+        });
+    }
+
+    [Test]
     public async Task GetSubscriptionAsync_DoesNotInventTrialForCancelledUnactivatedCheckout()
     {
         var handler = new RoutingHandler((request, _) =>

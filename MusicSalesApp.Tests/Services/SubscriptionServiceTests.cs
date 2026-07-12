@@ -1340,6 +1340,155 @@ public class SubscriptionServiceTests
         Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
     }
 
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_FirstChargeDeclined_EndsAccessAtTrialEndNotRetryDate()
+    {
+        var trialStart = DateTime.UtcNow.AddDays(-3).AddMinutes(-5);
+        var trialEnd = DateTime.UtcNow.AddMinutes(-5);
+        var paymentRetryDate = DateTime.UtcNow.AddDays(5);
+        await _service.CreateSubscriptionAsync(1, "SUB-FIRST-CHARGE-FAILED", "P-TRIAL", 0.99m, "USD");
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-FIRST-CHARGE-FAILED",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                NextBillingDate = paymentRetryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var hasAccess = await _service.HasActiveSubscriptionAsync(1);
+        var latest = await _service.GetLatestSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.LastPaymentDate, Is.Null);
+            Assert.That(result.Subscription.NextBillingDate, Is.EqualTo(paymentRetryDate));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+            Assert.That(hasAccess, Is.False);
+            Assert.That(latest.Status, Is.EqualTo(SubscriptionStatuses.Expired));
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_DeclinedRenewalAndSuccessfulRetry_UsesOnlyConfirmedPaidTime()
+    {
+        var trialStart = DateTime.UtcNow.AddMonths(-2).AddDays(-3);
+        var trialEnd = DateTime.UtcNow.AddMonths(-2);
+        var firstPayment = trialEnd.AddSeconds(2);
+        var firstRenewal = DateTime.UtcNow.AddMonths(-1).AddMinutes(-1);
+        var renewalPayment = firstRenewal.AddSeconds(2);
+        var confirmedPaidThrough = DateTime.UtcNow.AddMinutes(-1);
+        var paymentRetryDate = DateTime.UtcNow.AddDays(5);
+        var successfulRetry = DateTime.UtcNow;
+        var nextRenewal = successfulRetry.AddMonths(1);
+        await _service.CreateSubscriptionAsync(1, "SUB-RENEWAL-RETRY", "P-TRIAL", 0.99m, "USD");
+
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                TrialStartDate = trialStart,
+                TrialEndDate = trialEnd,
+                LastPaymentDate = firstPayment,
+                NextBillingDate = firstRenewal,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = renewalPayment,
+                NextBillingDate = confirmedPaidThrough,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var declined = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = renewalPayment,
+                NextBillingDate = paymentRetryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var accessWhileDeclined = await _service.HasActiveSubscriptionAsync(1);
+
+        var recovered = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-RENEWAL-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = successfulRetry,
+                NextBillingDate = nextRenewal,
+                FailedPaymentsCount = 0,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var accessAfterRetry = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(declined.Subscription.NextBillingDate, Is.EqualTo(paymentRetryDate));
+            Assert.That(declined.Subscription.EndDate, Is.EqualTo(confirmedPaidThrough));
+            Assert.That(accessWhileDeclined, Is.False);
+            Assert.That(recovered.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(recovered.Subscription.LastPaymentDate, Is.EqualTo(successfulRetry));
+            Assert.That(recovered.Subscription.EndDate, Is.EqualTo(nextRenewal));
+            Assert.That(accessAfterRetry, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_CancelledPaidSubscription_DoesNotUseDeclinedRetryAsPaidThrough()
+    {
+        var lastPayment = DateTime.UtcNow.AddMonths(-1);
+        var paidThrough = DateTime.UtcNow.AddHours(2);
+        var retryDate = DateTime.UtcNow.AddDays(5);
+        await _service.CreateSubscriptionAsync(1, "SUB-CANCELLED-PAID-RETRY", "P-NO-TRIAL", 0.99m, "USD");
+        await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CANCELLED-PAID-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                LastPaymentDate = lastPayment,
+                NextBillingDate = paidThrough,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-CANCELLED-PAID-RETRY",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Cancelled,
+                LastPaymentDate = lastPayment,
+                NextBillingDate = retryDate,
+                FailedPaymentsCount = 1,
+                RegularIntervalUnit = PayPalBillingIntervals.Month,
+                RegularIntervalCount = 1
+            });
+        var hasAccess = await _service.HasActiveSubscriptionAsync(1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(result.Subscription.NextBillingDate, Is.EqualTo(retryDate));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(paidThrough));
+            Assert.That(hasAccess, Is.True);
+        });
+    }
+
     private static GooglePlaySubscriptionInfo CreateGooglePlayInfo(bool isFreeTrial, DateTimeOffset expiryTime, decimal? recurringPrice = null)
         => new(
             "SUBSCRIPTION_STATE_ACTIVE",

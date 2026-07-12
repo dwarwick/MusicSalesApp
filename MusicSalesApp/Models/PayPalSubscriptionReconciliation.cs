@@ -22,6 +22,10 @@ public sealed class PayPalSubscriptionReconciliation
 
     public int FailedPaymentsCount { get; init; }
 
+    public string RegularIntervalUnit { get; init; }
+
+    public int RegularIntervalCount { get; init; }
+
     public decimal? MonthlyPrice { get; init; }
 
     public string CurrencyCode { get; init; }

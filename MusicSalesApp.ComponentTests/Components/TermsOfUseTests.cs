@@ -74,8 +74,8 @@ public class TermsOfUseTests : BUnitTestBase
             Assert.That(cut.Markup, Does.Contain("Free Trial Offers"));
             Assert.That(cut.Markup, Does.Contain("eligible first-time subscribers"));
             Assert.That(cut.Markup, Does.Contain("automatically converts"));
-            Assert.That(cut.Markup, Does.Contain("will not charge the first recurring payment"));
-            Assert.That(cut.Markup, Does.Contain("full access through the confirmed trial end date"));
+            Assert.That(cut.Markup, Does.Contain("will not be charged the first recurring payment"));
+            Assert.That(cut.Markup, Does.Contain("full access through the trial end date confirmed"));
         });
     }
 

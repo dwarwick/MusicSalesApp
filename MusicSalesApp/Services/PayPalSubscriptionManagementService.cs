@@ -907,6 +907,8 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             LastPaymentDate = details.LastPaymentDate,
             NextBillingDate = hasProviderActivation ? details.NextBillingDate : null,
             FailedPaymentsCount = details.FailedPaymentsCount,
+            RegularIntervalUnit = details.Plan?.IntervalUnit,
+            RegularIntervalCount = details.Plan?.IntervalCount ?? 0,
             MonthlyPrice = details.Plan?.RegularPrice > 0 ? details.Plan.RegularPrice : null,
             CurrencyCode = details.Plan?.CurrencyCode
         };

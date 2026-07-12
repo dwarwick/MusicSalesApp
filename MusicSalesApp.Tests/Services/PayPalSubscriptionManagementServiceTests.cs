@@ -107,7 +107,7 @@ public class PayPalSubscriptionManagementServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Error, Does.Contain("offer changed"));
+            Assert.That(result.Error, Does.Contain("trial eligibility changed"));
         });
         _payPalApi.Verify(
             service => service.GetPlanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -318,6 +318,193 @@ public class PayPalSubscriptionManagementServiceTests
         _subscriptionService.Verify(
             service => service.CancelSubscriptionAsync(user.Id),
             Times.Never);
+    }
+
+    [Test]
+    public async Task CancelSubscriptionAsync_PaidSubscription_StopsRenewalAndPreservesConfirmedPaidThroughDate()
+    {
+        var lastPayment = DateTime.UtcNow.AddDays(-20);
+        var paidThrough = DateTime.UtcNow.AddDays(10).AddSeconds(19);
+        var user = new ApplicationUser
+        {
+            Id = 42,
+            Email = "listener@example.com",
+            UserName = "listener"
+        };
+        var active = new Subscription
+        {
+            Id = 8,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-PAID-CANCEL",
+            PayPalPlanId = "P-NO-TRIAL",
+            Status = SubscriptionStatuses.Active,
+            LastPaymentDate = lastPayment,
+            NextBillingDate = paidThrough,
+            EndDate = paidThrough
+        };
+        var cancelled = new Subscription
+        {
+            Id = active.Id,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = active.PayPalSubscriptionId,
+            PayPalPlanId = active.PayPalPlanId,
+            Status = SubscriptionStatuses.Cancelled,
+            LastPaymentDate = lastPayment,
+            NextBillingDate = paidThrough,
+            EndDate = paidThrough
+        };
+        var details = new PayPalSubscriptionDetails
+        {
+            Id = active.PayPalSubscriptionId,
+            PlanId = active.PayPalPlanId,
+            Status = SubscriptionStatuses.Active,
+            LastPaymentTime = new DateTimeOffset(lastPayment),
+            NextBillingTime = new DateTimeOffset(paidThrough),
+            Plan = CreateNoTrialPlan()
+        };
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync(active);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                active.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(details);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                active.PayPalSubscriptionId,
+                It.Is<PayPalSubscriptionReconciliation>(state =>
+                    state.LastPaymentDate == lastPayment
+                    && state.NextBillingDate == paidThrough)))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = active,
+                PreviousStatus = SubscriptionStatuses.Active,
+                PreviousLastPaymentDate = lastPayment
+            });
+        _payPalApi.Setup(service => service.CancelSubscriptionAsync(
+                active.PayPalSubscriptionId,
+                PayPalSubscriptionDefaults.UserCancellationReason,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _subscriptionService.Setup(service => service.CancelPayPalSubscriptionAsync(
+                active.PayPalSubscriptionId,
+                paidThrough))
+            .ReturnsAsync(true);
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(cancelled);
+        _accountEmailService.Setup(service => service.SendSubscriptionCancelledEmailAsync(
+                user.Email!,
+                user.UserName!,
+                paidThrough,
+                BillingSources.PayPal,
+                user.TimeZoneId,
+                "https://subscriptions.example"))
+            .ReturnsAsync(true);
+
+        var result = await _service.CancelSubscriptionAsync(user, "https://fallback.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.EndDate, Is.EqualTo(paidThrough));
+        });
+        _payPalApi.Verify(service => service.CancelSubscriptionAsync(
+            active.PayPalSubscriptionId,
+            PayPalSubscriptionDefaults.UserCancellationReason,
+            It.IsAny<CancellationToken>()), Times.Once);
+        _subscriptionService.Verify(service => service.CancelPayPalSubscriptionAsync(
+            active.PayPalSubscriptionId,
+            paidThrough), Times.Once);
+    }
+
+    [Test]
+    public async Task ReconcileSubscriptionAsync_FirstChargeDeclined_PassesTrialEndRetryAndFailureCountAtomically()
+    {
+        var trialStart = DateTime.UtcNow.AddDays(-3).AddMinutes(-2);
+        var trialEnd = DateTime.UtcNow.AddMinutes(-2);
+        var retryDate = DateTime.UtcNow.AddDays(5);
+        var local = new Subscription
+        {
+            Id = 9,
+            UserId = 42,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-FIRST-CHARGE-FAILED",
+            PayPalPlanId = "P-TRIAL",
+            Status = SubscriptionStatuses.Active,
+            TrialStartDate = trialStart,
+            TrialEndDate = trialEnd,
+            EndDate = trialEnd
+        };
+        var expired = new Subscription
+        {
+            Id = local.Id,
+            UserId = local.UserId,
+            BillingSource = local.BillingSource,
+            PayPalSubscriptionId = local.PayPalSubscriptionId,
+            PayPalPlanId = local.PayPalPlanId,
+            Status = SubscriptionStatuses.Expired,
+            TrialStartDate = trialStart,
+            TrialEndDate = trialEnd,
+            NextBillingDate = retryDate,
+            EndDate = trialEnd
+        };
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                local.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionDetails
+            {
+                Id = local.PayPalSubscriptionId,
+                PlanId = local.PayPalPlanId,
+                Status = SubscriptionStatuses.Active,
+                StartTime = new DateTimeOffset(trialStart),
+                TrialEndTime = new DateTimeOffset(trialEnd),
+                NextBillingTime = new DateTimeOffset(retryDate),
+                FailedPaymentsCount = 1,
+                IsInTrial = false,
+                HasBillingInfo = true,
+                Plan = CreateTrialPlan(),
+                CycleExecutions =
+                [
+                    new PayPalBillingCycleExecution
+                    {
+                        TenureType = PayPalBillingTenureTypes.Trial,
+                        Sequence = 1,
+                        CyclesCompleted = 1,
+                        CyclesRemaining = 0,
+                        TotalCycles = 1
+                    }
+                ]
+            });
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(local.PayPalSubscriptionId))
+            .ReturnsAsync(local);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                local.PayPalSubscriptionId,
+                It.Is<PayPalSubscriptionReconciliation>(state =>
+                    state.Status == SubscriptionStatuses.Active
+                    && state.TrialEndDate == trialEnd
+                    && state.NextBillingDate == retryDate
+                    && state.FailedPaymentsCount == 1
+                    && state.RegularIntervalUnit == PayPalBillingIntervals.Month
+                    && state.RegularIntervalCount == 1
+                    && !state.LastPaymentDate.HasValue)))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = expired,
+                PreviousStatus = SubscriptionStatuses.Active
+            });
+
+        var result = await _service.ReconcileSubscriptionAsync(
+            local.PayPalSubscriptionId,
+            "https://fallback.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result!.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Expired));
+            Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
+            Assert.That(result.Subscription.NextBillingDate, Is.EqualTo(retryDate));
+            Assert.That(result.Subscription.LastPaymentDate, Is.Null);
+        });
     }
 
     [Test]
@@ -1121,8 +1308,8 @@ public class PayPalSubscriptionManagementServiceTests
         {
             Assert.That(first, Is.Not.Null);
             Assert.That(duplicate, Is.Not.Null);
-            Assert.That(first.TrialConverted, Is.True);
-            Assert.That(duplicate.TrialConverted, Is.False);
+            Assert.That(first!.TrialConverted, Is.True);
+            Assert.That(duplicate!.TrialConverted, Is.False);
         });
         _confirmationEmailService.Verify(
             service => service.SendTrialConvertedAsync(
@@ -1265,6 +1452,29 @@ public class PayPalSubscriptionManagementServiceTests
                 {
                     TenureType = PayPalBillingTenureTypes.Regular,
                     Sequence = 2,
+                    TotalCycles = 0,
+                    IntervalUnit = PayPalBillingIntervals.Month,
+                    IntervalCount = 1,
+                    FixedPrice = 0.99m,
+                    CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode
+                }
+            ]
+        };
+    }
+
+    private static PayPalPlan CreateNoTrialPlan()
+    {
+        return new PayPalPlan
+        {
+            Id = "P-NO-TRIAL",
+            Name = "$0.99 per month",
+            Status = PayPalPlanStatuses.Active,
+            BillingCycles =
+            [
+                new PayPalBillingCycle
+                {
+                    TenureType = PayPalBillingTenureTypes.Regular,
+                    Sequence = 1,
                     TotalCycles = 0,
                     IntervalUnit = PayPalBillingIntervals.Month,
                     IntervalCount = 1,

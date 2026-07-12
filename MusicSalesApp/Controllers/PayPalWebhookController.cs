@@ -270,14 +270,14 @@ public class PayPalWebhookController : ControllerBase
         var reconciled = await _payPalSubscriptionManagementService.ReconcileSubscriptionAsync(
             paypalSubscriptionId,
             GetBaseUrl());
-        if (reconciled == null)
+        if (reconciled == null || !reconciled.Subscription.LastPaymentDate.HasValue)
         {
             _logger.LogWarning(
-                "Unable to reconcile completed PayPal payment for subscription {SubscriptionId}",
+                "Completed PayPal payment for subscription {SubscriptionId} is not yet visible in provider-confirmed subscription details",
                 paypalSubscriptionId);
         }
 
-        return reconciled != null;
+        return reconciled?.Subscription.LastPaymentDate.HasValue == true;
     }
 
     private static string? MapPayPalSubscriptionStatus(string? paypalStatus)

@@ -6,7 +6,9 @@ namespace MusicSalesApp.Common.Helpers;
 public static class PayPalBillingIntervals
 {
     public const string Day = "DAY";
+    public const string Week = "WEEK";
     public const string Month = "MONTH";
+    public const string Year = "YEAR";
 }
 
 /// <summary>

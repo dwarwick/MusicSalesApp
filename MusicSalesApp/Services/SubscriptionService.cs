@@ -1041,7 +1041,9 @@ public class SubscriptionService : ISubscriptionService
         {
             if (subscription.LastPaymentDate.HasValue && subscription.NextBillingDate.HasValue)
             {
-                subscription.EndDate = subscription.NextBillingDate.Value;
+                subscription.EndDate = reconciliation.FailedPaymentsCount > 0
+                    ? ResolveConfirmedPaidThrough(subscription, reconciliation)
+                    : subscription.NextBillingDate.Value;
             }
             else if (!subscription.LastPaymentDate.HasValue && subscription.TrialEndDate.HasValue)
             {
@@ -1067,8 +1069,9 @@ public class SubscriptionService : ISubscriptionService
             }
             else
             {
-                subscription.EndDate = reconciliation.NextBillingDate
-                    ?? GetBestKnownEntitlementEnd(subscription);
+                subscription.EndDate = reconciliation.FailedPaymentsCount > 0
+                    ? ResolveConfirmedPaidThrough(subscription, reconciliation)
+                    : reconciliation.NextBillingDate ?? GetBestKnownEntitlementEnd(subscription);
             }
 
             return;
@@ -1079,6 +1082,33 @@ public class SubscriptionService : ISubscriptionService
         {
             subscription.CancelledAt ??= reconciledAt;
         }
+    }
+
+    private static DateTime? ResolveConfirmedPaidThrough(
+        Subscription subscription,
+        PayPalSubscriptionReconciliation reconciliation)
+    {
+        if (subscription.EndDate.HasValue
+            && (!subscription.LastPaymentDate.HasValue
+                || subscription.EndDate.Value > subscription.LastPaymentDate.Value))
+        {
+            return subscription.EndDate;
+        }
+
+        if (!subscription.LastPaymentDate.HasValue)
+        {
+            return subscription.TrialEndDate ?? subscription.EndDate;
+        }
+
+        var intervalCount = Math.Max(reconciliation.RegularIntervalCount, 1);
+        return reconciliation.RegularIntervalUnit?.ToUpperInvariant() switch
+        {
+            PayPalBillingIntervals.Day => subscription.LastPaymentDate.Value.AddDays(intervalCount),
+            PayPalBillingIntervals.Week => subscription.LastPaymentDate.Value.AddDays(7 * intervalCount),
+            PayPalBillingIntervals.Month => subscription.LastPaymentDate.Value.AddMonths(intervalCount),
+            PayPalBillingIntervals.Year => subscription.LastPaymentDate.Value.AddYears(intervalCount),
+            _ => subscription.EndDate
+        };
     }
 
     private static DateTime? GetBestKnownEntitlementEnd(Subscription subscription)

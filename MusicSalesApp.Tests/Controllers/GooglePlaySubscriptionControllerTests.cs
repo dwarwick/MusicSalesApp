@@ -175,6 +175,7 @@ public class GooglePlaySubscriptionControllerTests
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
@@ -225,6 +226,7 @@ public class GooglePlaySubscriptionControllerTests
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
@@ -269,6 +271,7 @@ public class GooglePlaySubscriptionControllerTests
         var existingSubscription = new Subscription
         {
             Id = 12,
+            UserId = 1,
             BillingSource = BillingSources.GooglePlay,
             GooglePlayOrderId = "order-123",
             GooglePlayPurchaseToken = "purchase-token",
