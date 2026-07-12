@@ -418,9 +418,10 @@ public class AdminSettingsModel : BlazorBase
             _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must be active in PayPal.");
         }
 
-        if (!IsMonthlyPlan(plan))
+        if (!AllowsAcceleratedSandboxCadence && !IsMonthlyPlan(plan))
         {
-            _payPalOfferValidationErrors.Add("The selected first-time subscriber plan must bill once per month.");
+            _payPalOfferValidationErrors.Add(
+                "The selected first-time subscriber plan must bill once per month outside PayPal sandbox mode.");
         }
 
         if (!HasSingleRegularBillingCycle(plan))
@@ -473,9 +474,10 @@ public class AdminSettingsModel : BlazorBase
             _payPalOfferValidationErrors.Add("The returning-subscriber plan cannot include any trial billing cycle.");
         }
 
-        if (!IsMonthlyPlan(resubscriberPlan))
+        if (!AllowsAcceleratedSandboxCadence && !IsMonthlyPlan(resubscriberPlan))
         {
-            _payPalOfferValidationErrors.Add("The returning-subscriber plan must bill once per month.");
+            _payPalOfferValidationErrors.Add(
+                "The returning-subscriber plan must bill once per month outside PayPal sandbox mode.");
         }
 
         if (!HasSingleRegularBillingCycle(resubscriberPlan))
@@ -502,9 +504,15 @@ public class AdminSettingsModel : BlazorBase
                 StringComparison.OrdinalIgnoreCase))
         {
             _payPalOfferValidationErrors.Add(
-                "The returning-subscriber plan must match the primary plan's regular price, currency, and monthly cadence.");
+                "The returning-subscriber plan must match the primary plan's regular price, currency, and billing cadence.");
         }
     }
+
+    private bool AllowsAcceleratedSandboxCadence
+        => bool.TryParse(
+               Configuration[PayPalConfigurationKeys.SandboxMode],
+               out var sandboxMode)
+           && sandboxMode;
 
     private static bool IsMonthlyPlan(PayPalPlan plan)
     {

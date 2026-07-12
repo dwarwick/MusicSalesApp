@@ -1,5 +1,6 @@
 using Bunit;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using MusicSalesApp.Common.Helpers;
@@ -101,7 +102,88 @@ public class AdminSettingsPayPalOfferTests : BUnitTestBase
 
         Assert.That(
             cut.Instance.ValidationErrors,
-            Has.Some.Contains("must match the primary plan's regular price, currency, and monthly cadence"));
+            Has.Some.Contains("must match the primary plan's regular price, currency, and billing cadence"));
+        MockAppSettingsService.Verify(
+            service => service.SetPayPalWebSubscriptionOfferAsync(It.IsAny<PayPalWebSubscriptionOffer>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task SavePayPalOfferAsync_AllowsMatchingDailyPlansInSandboxMode()
+    {
+        ConfigureSandboxMode(true);
+        var dailyTrial = CreatePlan(
+            "P-DAILY-TRIAL",
+            "One-day sandbox trial",
+            0.99m,
+            PayPalBillingIntervals.Day,
+            regularIntervalCount: 1,
+            trialDays: 1);
+        var dailyNoTrial = CreatePlan(
+            "P-DAILY-NO-TRIAL",
+            "Daily sandbox renewal",
+            0.99m,
+            PayPalBillingIntervals.Day,
+            regularIntervalCount: 1);
+        ConfigureLivePlans(dailyTrial, dailyNoTrial);
+        PayPalWebSubscriptionOffer? capturedOffer = null;
+        MockAppSettingsService
+            .Setup(service => service.SetPayPalWebSubscriptionOfferAsync(It.IsAny<PayPalWebSubscriptionOffer>()))
+            .Callback((PayPalWebSubscriptionOffer offer) => capturedOffer = offer)
+            .ReturnsAsync((PayPalWebSubscriptionOffer offer) => offer with
+            {
+                Version = 5,
+                UpdatedAtUtc = DateTime.UtcNow
+            });
+
+        var cut = TestContext.Render<AdminSettingsLogicTestComponent>();
+        cut.WaitForAssertion(() => Assert.That(cut.Instance.IsLoaded, Is.True));
+        await cut.InvokeAsync(() => cut.Instance.SelectAndSaveAsync(dailyTrial.Id, dailyNoTrial.Id));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Instance.ValidationErrors, Is.Empty);
+            Assert.That(capturedOffer, Is.Not.Null);
+            Assert.That(capturedOffer!.PrimaryPlan.TrialDays, Is.EqualTo(1));
+            Assert.That(capturedOffer.PrimaryPlan.IntervalUnit, Is.EqualTo(PayPalBillingIntervals.Day));
+            Assert.That(capturedOffer.PrimaryPlan.IntervalCount, Is.EqualTo(1));
+            Assert.That(capturedOffer.ResubscriberPlan!.IntervalUnit, Is.EqualTo(PayPalBillingIntervals.Day));
+            Assert.That(capturedOffer.ResubscriberPlan.IntervalCount, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task SavePayPalOfferAsync_RejectsDailyPlansOutsideSandboxMode()
+    {
+        ConfigureSandboxMode(false);
+        var dailyTrial = CreatePlan(
+            "P-DAILY-TRIAL",
+            "One-day trial",
+            0.99m,
+            PayPalBillingIntervals.Day,
+            regularIntervalCount: 1,
+            trialDays: 1);
+        var dailyNoTrial = CreatePlan(
+            "P-DAILY-NO-TRIAL",
+            "Daily renewal",
+            0.99m,
+            PayPalBillingIntervals.Day,
+            regularIntervalCount: 1);
+        ConfigureLivePlans(dailyTrial, dailyNoTrial);
+
+        var cut = TestContext.Render<AdminSettingsLogicTestComponent>();
+        cut.WaitForAssertion(() => Assert.That(cut.Instance.IsLoaded, Is.True));
+        await cut.InvokeAsync(() => cut.Instance.SelectAndSaveAsync(dailyTrial.Id, dailyNoTrial.Id));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                cut.Instance.ValidationErrors,
+                Has.Some.Contains("first-time subscriber plan must bill once per month outside PayPal sandbox mode"));
+            Assert.That(
+                cut.Instance.ValidationErrors,
+                Has.Some.Contains("returning-subscriber plan must bill once per month outside PayPal sandbox mode"));
+        });
         MockAppSettingsService.Verify(
             service => service.SetPayPalWebSubscriptionOfferAsync(It.IsAny<PayPalWebSubscriptionOffer>()),
             Times.Never);
@@ -151,6 +233,21 @@ public class AdminSettingsPayPalOfferTests : BUnitTestBase
         string name,
         decimal price,
         int? trialDays = null)
+        => CreatePlan(
+            id,
+            name,
+            price,
+            PayPalBillingIntervals.Month,
+            regularIntervalCount: 1,
+            trialDays: trialDays);
+
+    private static PayPalPlan CreatePlan(
+        string id,
+        string name,
+        decimal price,
+        string regularIntervalUnit,
+        int regularIntervalCount,
+        int? trialDays = null)
     {
         var billingCycles = new List<PayPalBillingCycle>();
         if (trialDays.HasValue)
@@ -172,8 +269,8 @@ public class AdminSettingsPayPalOfferTests : BUnitTestBase
             TenureType = PayPalBillingTenureTypes.Regular,
             Sequence = trialDays.HasValue ? 2 : 1,
             TotalCycles = 0,
-            IntervalUnit = PayPalBillingIntervals.Month,
-            IntervalCount = 1,
+            IntervalUnit = regularIntervalUnit,
+            IntervalCount = regularIntervalCount,
             FixedPrice = price,
             CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode
         });
@@ -186,6 +283,12 @@ public class AdminSettingsPayPalOfferTests : BUnitTestBase
             Status = PayPalPlanStatuses.Active,
             BillingCycles = billingCycles
         };
+    }
+
+    private void ConfigureSandboxMode(bool sandboxMode)
+    {
+        var configuration = TestContext.Services.GetRequiredService<IConfiguration>();
+        configuration[PayPalConfigurationKeys.SandboxMode] = sandboxMode.ToString();
     }
 
     private static PayPalWebPlanSnapshot CreateSnapshot(PayPalPlan plan)
