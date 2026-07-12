@@ -6,11 +6,34 @@ public interface ISubscriptionService
 {
     Task<Subscription> GetActiveSubscriptionAsync(int userId);
     Task<Subscription> GetLatestSubscriptionAsync(int userId);
+    Task<Subscription> GetCurrentSubscriptionFromOtherProviderAsync(int userId, string billingSource);
     Task<bool> HasActiveSubscriptionAsync(int userId);
+    Task<bool> HasPriorActivatedSubscriptionAsync(int userId);
     Task<int> NormalizeExpiredSubscriptionsAsync();
     Task<Subscription> CreateSubscriptionAsync(int userId, string paypalSubscriptionId, decimal monthlyPrice);
+    Task<Subscription> CreateSubscriptionAsync(
+        int userId,
+        string paypalSubscriptionId,
+        string paypalPlanId,
+        decimal monthlyPrice,
+        string priceCurrencyCode);
+    Task<Subscription> CreateSubscriptionAsync(
+        int userId,
+        string paypalSubscriptionId,
+        string paypalPlanId,
+        decimal monthlyPrice,
+        string priceCurrencyCode,
+        int? payPalOfferVersion,
+        DateTime subscriptionTermsAcceptedAt);
     Task<bool> CancelSubscriptionAsync(int userId);
+    Task<bool> CancelSubscriptionAsync(int userId, DateTime? providerEntitlementEndDate);
+    Task<bool> CancelPayPalSubscriptionAsync(
+        string paypalSubscriptionId,
+        DateTime? providerEntitlementEndDate);
     Task<Subscription> GetSubscriptionByPayPalIdAsync(string paypalSubscriptionId);
+    Task<PayPalSubscriptionReconciliationResult> ReconcilePayPalSubscriptionAsync(
+        string paypalSubscriptionId,
+        PayPalSubscriptionReconciliation reconciliation);
     Task UpdateSubscriptionStatusAsync(string paypalSubscriptionId, string status, DateTime? nextBillingDate = null);
     Task UpdateSubscriptionDetailsAsync(string paypalSubscriptionId, DateTime? nextBillingDate, DateTime? lastPaymentDate);
     Task<bool> DeletePendingSubscriptionAsync(int userId);
@@ -37,6 +60,10 @@ public interface ISubscriptionService
         DateTime? startDate = null);
     Task<Subscription> GetSubscriptionByAppleTransactionIdAsync(string transactionId);
     Task<Subscription> GetSubscriptionByAppleOriginalTransactionIdAsync(string originalTransactionId);
+    Task UpdateAppleStorePriceAsync(
+        string originalTransactionId,
+        decimal monthlyPrice,
+        string priceCurrencyCode);
     Task UpdateAppleSubscriptionStatusAsync(
         string originalTransactionId,
         string status,

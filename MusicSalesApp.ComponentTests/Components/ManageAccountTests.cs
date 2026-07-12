@@ -19,6 +19,9 @@ public class ManageAccountTests : BUnitTestBase
     public override void BaseSetup()
     {
         base.BaseSetup();
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: false, isFirstTimeSubscriber: true));
     }
 
     [Test]
@@ -175,7 +178,6 @@ public class ManageAccountTests : BUnitTestBase
             .AddInMemoryCollection(new Dictionary<string, string>
             {
                 ["Facebook:AppId"] = "test-facebook-app-id",
-                ["PayPal:SubscriptionPrice"] = "3.99",
                 ["AppleAppStore:SubscriptionManagementUrl"] = "https://developer.apple.com/documentation/storekit/testing-disabling-auto-renew"
             })
             .Build();
@@ -240,6 +242,211 @@ public class ManageAccountTests : BUnitTestBase
     }
 
     [Test]
+    public void ManageAccount_EligibleSubscriber_ShowsAuthoritativeTrialTerms()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.Expired
+        });
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: true, isFirstTimeSubscriber: true, regularPrice: 0.99m));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Start My 3-Day Free Trial"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Try unlimited music free for 3 days"));
+            Assert.That(cut.Markup, Does.Contain("$0.99 per month"));
+            Assert.That(cut.Markup, Does.Contain("you will not be charged").IgnoreCase);
+            Assert.That(cut.Markup, Does.Contain("full streaming access will continue through the end of the trial"));
+        });
+    }
+
+    [Test]
+    public void ManageAccount_ReturningSubscriber_ShowsCompanionPlanWithoutTrialPromise()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.Expired
+        });
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: false, isFirstTimeSubscriber: false, regularPrice: 0.99m));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Resubscribe with PayPal"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Restart unlimited streaming for $0.99 per month"));
+            Assert.That(cut.Markup, Does.Contain("without another free trial"));
+            Assert.That(cut.Markup, Does.Not.Contain("Start My 3-Day Free Trial"));
+            Assert.That(cut.Markup, Does.Not.Contain("3 days free trial"));
+        });
+    }
+
+    [Test]
+    public void ManageAccount_LocallyExpiredPayPalAgreement_MustBeResolvedBeforeAnotherCheckout()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.Expired,
+            BillingSource = BillingSources.PayPal,
+            PaypalSubscriptionId = "I-PAYMENT-RETRY"
+        });
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("PayPal billing needs attention"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Stop PayPal Billing"));
+            Assert.That(cut.Markup, Does.Contain("prevent overlapping charges"));
+            Assert.That(cut.Markup, Does.Not.Contain("Subscribe with PayPal"));
+            Assert.That(cut.Markup, Does.Not.Contain("Resubscribe with PayPal"));
+        });
+        MockPayPalSubscriptionManagementService.Verify(
+            service => service.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task ManageAccount_Subscribe_BindsAcceptanceToDisplayedOfferVersion()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.Expired
+        });
+        var offer = CreateOfferQuote(hasFreeTrial: true, isFirstTimeSubscriber: true, regularPrice: 2.99m, settingsVersion: 23);
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(offer);
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.CreateSubscriptionAsync(
+                testUser,
+                true,
+                offer.SettingsVersion,
+                offer.PlanId,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PayPalCheckoutResult.Failed("Expected test failure"));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Start My 3-Day Free Trial"), TimeSpan.FromSeconds(5));
+        SetField(cut.Instance, "_agreeToTerms", true);
+
+        await InvokeNonPublicTask(cut.Instance, "Subscribe");
+
+        MockPayPalSubscriptionManagementService.Verify(x => x.CreateSubscriptionAsync(
+            testUser,
+            true,
+            23,
+            offer.PlanId,
+            "http://localhost/",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ManageAccount_CancelTrial_UsesProviderCancellationAndPromisesNoCharge()
+    {
+        var trialEnd = DateTime.UtcNow.AddDays(2);
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = true,
+            IsOnTrial = true,
+            Status = SubscriptionStatuses.Active,
+            MonthlyPrice = 0.99m,
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = trialEnd,
+            NextBillingDate = trialEnd,
+            TrialEndDate = trialEnd,
+            BillingSource = BillingSources.PayPal
+        });
+        TestContext.JSInterop
+            .Setup<bool>("confirm", _ => true)
+            .SetResult(true);
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.CancelSubscriptionAsync(testUser, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalCancellationResult(true, trialEnd));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Free Trial Active"), TimeSpan.FromSeconds(5));
+
+        await InvokeNonPublicTask(cut.Instance, "CancelSubscription");
+
+        MockPayPalSubscriptionManagementService.Verify(x => x.CancelSubscriptionAsync(
+            testUser,
+            "http://localhost/",
+            It.IsAny<CancellationToken>()), Times.Once);
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Markup, Does.Contain("You will not be charged")),
+            TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void ManageAccount_PayPalApprovalReturn_ActivatesThroughSharedManagementService()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.ApprovalPending
+        });
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.ActivateCurrentSubscriptionAsync(testUser, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalActivationResult(true, IsTrial: true));
+
+        SetupRendererInfo();
+        TestContext.Services
+            .GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .NavigateTo("/manage-account?success=true");
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Your free trial is active"), TimeSpan.FromSeconds(5));
+
+        MockPayPalSubscriptionManagementService.Verify(x => x.ActivateCurrentSubscriptionAsync(
+            testUser,
+            "http://localhost/",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public void ManageAccount_CancelledPayPalApproval_AbandonsProviderCheckout()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.ApprovalPending
+        });
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        SetupRendererInfo();
+        TestContext.Services
+            .GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .NavigateTo("/manage-account?success=false");
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Subscription setup was cancelled"), TimeSpan.FromSeconds(5));
+
+        MockPayPalSubscriptionManagementService.Verify(
+            x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<CancellationToken>()),
+            Times.Once);
+        MockSubscriptionService.Verify(
+            x => x.DeletePendingSubscriptionAsync(It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Test]
     public async Task ManageAccount_DeleteAccount_TrimsConfirmationEmail()
     {
         SetupAuthorizedUser(1, "testuser@test.com");
@@ -295,4 +502,50 @@ public class ManageAccountTests : BUnitTestBase
         Assert.That(method, Is.Not.Null, $"Expected method {methodName} to exist.");
         return (Task)method!.Invoke(instance, null)!;
     }
+
+    private ApplicationUser SetupAccountWithSubscriptionStatus(object status)
+    {
+        const int userId = 1;
+        const string email = "testuser@test.com";
+        SetupAuthorizedUser(userId, email);
+
+        var testUser = new ApplicationUser
+        {
+            Id = userId,
+            UserName = email,
+            Email = email,
+            EmailConfirmed = true,
+            TimeZoneId = "America/New_York"
+        };
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(testUser);
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(new Uri("http://localhost/api/subscription/status"), status);
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        return testUser;
+    }
+
+    private static PayPalWebOfferQuote CreateOfferQuote(
+        bool hasFreeTrial,
+        bool isFirstTimeSubscriber,
+        decimal regularPrice = 2.99m,
+        int settingsVersion = 7)
+        => new()
+        {
+            PlanId = hasFreeTrial ? "P-TRIAL" : "P-MONTHLY",
+            PlanName = hasFreeTrial ? "Trial plan" : "Monthly plan",
+            RegularPrice = regularPrice,
+            CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode,
+            IntervalUnit = PayPalBillingIntervals.Month,
+            IntervalCount = 1,
+            TrialDays = hasFreeTrial ? 3 : null,
+            SettingsVersion = settingsVersion,
+            IsFirstTimeSubscriber = isFirstTimeSubscriber,
+            IsConfigured = true
+        };
 }

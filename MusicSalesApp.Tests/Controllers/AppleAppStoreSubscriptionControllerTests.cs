@@ -93,7 +93,9 @@ public class AppleAppStoreSubscriptionControllerTests
                 "orig-123",
                 "streamtunes_monthly_sub_ios",
                 "Sandbox",
-                "account-token"));
+                "account-token",
+                0.99m,
+                "USD"));
         _mockSubscriptionService
             .SetupSequence(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
             .ReturnsAsync((Subscription)null)
@@ -108,14 +110,14 @@ public class AppleAppStoreSubscriptionControllerTests
                 EndDate = DateTime.UtcNow.AddDays(30)
             });
         _mockSubscriptionService
-            .Setup(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 3.99m, purchaseTime))
+            .Setup(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 0.99m, purchaseTime))
             .ReturnsAsync(new Subscription { Id = 17, UserId = 1, BillingSource = "Apple", Status = "ACTIVE" });
 
         var result = await _controller.VerifyAndRecordPurchase(new AppStorePurchaseRequest("tx-123", "account-token"));
 
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
-        _mockSubscriptionService.Verify(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 3.99m, purchaseTime), Times.Once);
+        _mockSubscriptionService.Verify(s => s.CreateAppleSubscriptionAsync(1, "tx-123", "orig-123", "streamtunes_monthly_sub_ios", "account-token", "Sandbox", 0.99m, purchaseTime), Times.Once);
         _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync(
             "orig-123",
             "ACTIVE",
@@ -124,11 +126,66 @@ public class AppleAppStoreSubscriptionControllerTests
             "Sandbox",
             "streamtunes_monthly_sub_ios",
             "account-token",
-            3.99m), Times.Once);
+            0.99m), Times.Once);
         _mockSubscriptionConfirmationEmailService.Verify(s => s.SendConfirmationAsync(
             It.IsAny<ApplicationUser>(),
             It.Is<Subscription>(subscription => subscription.AppStoreOriginalTransactionId == "orig-123" && subscription.NextBillingDate.HasValue),
             "https://davidtest.dev"), Times.Once);
+    }
+
+    [Test]
+    public async Task VerifyAndRecordPurchase_ReturnsConflict_WhenAnotherProviderSubscriptionIsCurrent()
+    {
+        var purchaseTime = DateTime.UtcNow.AddMinutes(-2);
+        _mockVerificationService
+            .Setup(v => v.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"))
+            .ReturnsAsync(new AppleAppStoreSubscriptionInfo(
+                SubscriptionStatuses.Active,
+                DateTime.UtcNow.AddDays(30),
+                purchaseTime,
+                "tx-123",
+                "orig-123",
+                "streamtunes_monthly_sub_ios",
+                "Production",
+                "1",
+                0.99m,
+                "USD"));
+        _mockSubscriptionService
+            .Setup(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
+            .ReturnsAsync((Subscription)null);
+        _mockSubscriptionService
+            .Setup(s => s.CreateAppleSubscriptionAsync(
+                1,
+                "tx-123",
+                "orig-123",
+                "streamtunes_monthly_sub_ios",
+                "1",
+                "Production",
+                0.99m,
+                purchaseTime))
+            .ThrowsAsync(new SubscriptionProviderConflictException(BillingSources.GooglePlay, BillingSources.Apple));
+
+        var result = await _controller.VerifyAndRecordPurchase(
+            new AppStorePurchaseRequest("tx-123", "1"));
+
+        var conflict = result as ConflictObjectResult;
+        Assert.That(conflict, Is.Not.Null);
+        Assert.That(System.Text.Json.JsonSerializer.Serialize(conflict!.Value), Does.Contain("current Google Play subscription"));
+        _mockSubscriptionService.Verify(s => s.UpdateAppleSubscriptionStatusAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<decimal?>()), Times.Never);
+        _mockSubscriptionConfirmationEmailService.Verify(
+            service => service.SendConfirmationAsync(
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<Subscription>(),
+                It.IsAny<string>()),
+            Times.Never);
     }
 
     [Test]
@@ -140,7 +197,8 @@ public class AppleAppStoreSubscriptionControllerTests
             UserId = 1,
             BillingSource = "Apple",
             Status = "CANCELLED",
-            AppStoreOriginalTransactionId = "orig-123"
+            AppStoreOriginalTransactionId = "orig-123",
+            MonthlyPrice = 3.99m
         };
 
         _mockVerificationService
@@ -192,7 +250,8 @@ public class AppleAppStoreSubscriptionControllerTests
             BillingSource = "Apple",
             Status = SubscriptionStatuses.Active,
             LastPaymentDate = DateTime.UtcNow.AddDays(-1),
-            AppStoreOriginalTransactionId = "orig-123"
+            AppStoreOriginalTransactionId = "orig-123",
+            MonthlyPrice = 3.99m
         };
 
         _mockVerificationService
@@ -235,7 +294,8 @@ public class AppleAppStoreSubscriptionControllerTests
             BillingSource = "Apple",
             Status = SubscriptionStatuses.Active,
             AppStoreOriginalTransactionId = "orig-123",
-            EndDate = DateTime.UtcNow.AddMinutes(-1)
+            EndDate = DateTime.UtcNow.AddMinutes(-1),
+            MonthlyPrice = 3.99m
         };
 
         _mockVerificationService
@@ -269,7 +329,8 @@ public class AppleAppStoreSubscriptionControllerTests
             UserId = 1,
             BillingSource = "Apple",
             Status = "ACTIVE",
-            AppStoreOriginalTransactionId = "orig-123"
+            AppStoreOriginalTransactionId = "orig-123",
+            MonthlyPrice = 3.99m
         };
 
         _mockVerificationService

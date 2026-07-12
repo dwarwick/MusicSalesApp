@@ -324,7 +324,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             new AppSettings
             {
                 Id = 1,
-                Key = "SubscriptionPrice",
+                Key = AppSettingKeys.SubscriptionPrice,
                 Value = "3.99",
                 Description = "Monthly subscription price in USD",
                 UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)

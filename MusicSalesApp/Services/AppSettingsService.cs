@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
+using System.Text.Json;
 
 #nullable enable
 
@@ -11,13 +13,17 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public class AppSettingsService : IAppSettingsService
 {
+    private const string PayPalWebOfferDescription = "Atomic snapshot of the PayPal subscription plans offered by the web app";
+    private static readonly JsonSerializerOptions PayPalWebOfferJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly SemaphoreSlim PayPalWebOfferSaveLock = new(1, 1);
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<AppSettingsService> _logger;
 
     /// <summary>
     /// The key used for storing the subscription price setting.
     /// </summary>
-    public const string SubscriptionPriceKey = "SubscriptionPrice";
+    public const string SubscriptionPriceKey = AppSettingKeys.SubscriptionPrice;
 
     /// <summary>
     /// Default subscription price if not set in the database.
@@ -409,5 +415,95 @@ public class AppSettingsService : IAppSettingsService
             AppVersionKey,
             version,
             "Application version number displayed in the navigation menu");
+    }
+
+    /// <inheritdoc />
+    public async Task<PayPalWebSubscriptionOffer?> GetPayPalWebSubscriptionOfferAsync()
+    {
+        var value = await GetSettingAsync(AppSettingKeys.PayPalWebSubscriptionOfferSnapshot);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PayPalWebSubscriptionOffer>(value, PayPalWebOfferJsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "The stored PayPal web subscription offer is invalid JSON.");
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<PayPalWebSubscriptionOffer> SetPayPalWebSubscriptionOfferAsync(
+        PayPalWebSubscriptionOffer offer)
+    {
+        ArgumentNullException.ThrowIfNull(offer);
+        ArgumentNullException.ThrowIfNull(offer.PrimaryPlan);
+
+        await PayPalWebOfferSaveLock.WaitAsync();
+        try
+        {
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var setting = await context.AppSettings
+                .FirstOrDefaultAsync(s => s.Key == AppSettingKeys.PayPalWebSubscriptionOfferSnapshot);
+
+            var previousVersion = 0;
+            if (!string.IsNullOrWhiteSpace(setting?.Value))
+            {
+                try
+                {
+                    previousVersion = JsonSerializer
+                        .Deserialize<PayPalWebSubscriptionOffer>(setting.Value, PayPalWebOfferJsonOptions)
+                        ?.Version ?? 0;
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Replacing an invalid stored PayPal web subscription offer.");
+                }
+            }
+
+            var savedOffer = offer with
+            {
+                Version = previousVersion + 1,
+                UpdatedAtUtc = DateTime.UtcNow
+            };
+            var serializedOffer = JsonSerializer.Serialize(savedOffer, PayPalWebOfferJsonOptions);
+
+            if (setting == null)
+            {
+                setting = new AppSettings
+                {
+                    Key = AppSettingKeys.PayPalWebSubscriptionOfferSnapshot,
+                    Value = serializedOffer,
+                    Description = PayPalWebOfferDescription,
+                    UpdatedAt = savedOffer.UpdatedAtUtc
+                };
+                context.AppSettings.Add(setting);
+            }
+            else
+            {
+                setting.Value = serializedOffer;
+                setting.Description = PayPalWebOfferDescription;
+                setting.UpdatedAt = savedOffer.UpdatedAtUtc;
+            }
+
+            await context.SaveChangesAsync();
+            _logger.LogInformation(
+                "Updated PayPal web subscription offer to version {Version} with primary plan {PrimaryPlanId} and re-subscriber plan {ResubscriberPlanId}.",
+                savedOffer.Version,
+                savedOffer.PrimaryPlan.Id,
+                savedOffer.ResubscriberPlan?.Id);
+
+            return savedOffer;
+        }
+        finally
+        {
+            PayPalWebOfferSaveLock.Release();
+        }
     }
 }

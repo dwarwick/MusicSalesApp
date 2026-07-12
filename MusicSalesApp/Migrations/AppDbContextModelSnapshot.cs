@@ -17,7 +17,7 @@ namespace MusicSalesApp.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.3")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -397,8 +397,8 @@ namespace MusicSalesApp.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.HasKey("Id");
 
@@ -1530,6 +1530,13 @@ namespace MusicSalesApp.Migrations
                     b.Property<DateTime?>("NextBillingDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("PayPalOfferVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PayPalPlanId")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("PayPalSubscriptionId")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -1548,6 +1555,9 @@ namespace MusicSalesApp.Migrations
                     b.Property<string>("StorePriceCurrencyCode")
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTime?>("SubscriptionTermsAcceptedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("TrialActivationEmailSentAt")
                         .HasColumnType("datetime2");

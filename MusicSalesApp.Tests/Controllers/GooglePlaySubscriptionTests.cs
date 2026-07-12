@@ -24,6 +24,7 @@ public class GooglePlaySubscriptionTests
     private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IGooglePlayVerificationService> _mockGooglePlayService;
+    private Mock<IPayPalSubscriptionManagementService> _mockPayPalSubscriptionManagementService;
     private SubscriptionController _controller;
 
     [SetUp]
@@ -37,6 +38,7 @@ public class GooglePlaySubscriptionTests
         _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockGooglePlayService = new Mock<IGooglePlayVerificationService>();
+        _mockPayPalSubscriptionManagementService = new Mock<IPayPalSubscriptionManagementService>();
 
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
@@ -51,7 +53,8 @@ public class GooglePlaySubscriptionTests
             _mockHttpClientFactory.Object,
             _mockSubscriptionConfirmationEmailService.Object,
             _mockAccountEmailService.Object,
-            _mockGooglePlayService.Object);
+            _mockGooglePlayService.Object,
+            _mockPayPalSubscriptionManagementService.Object);
 
         // Set up authenticated user context
         var user = new ApplicationUser { Id = 1, UserName = "testuser", Email = "test@test.com" };
@@ -119,7 +122,7 @@ public class GooglePlaySubscriptionTests
     }
 
     [Test]
-    public async Task GetSubscriptionStatus_ReturnsCancelledAccessDetails_WhenCancelledButStillInsideBillingPeriod()
+    public async Task GetSubscriptionStatus_ReturnsCancelledGoogleTrialAccessThroughVerifiedExpiry()
     {
         var subscription = new Subscription
         {
@@ -128,6 +131,8 @@ public class GooglePlaySubscriptionTests
             Status = SubscriptionStatuses.Cancelled,
             BillingSource = BillingSources.GooglePlay,
             EndDate = DateTime.UtcNow.AddDays(7),
+            TrialStartDate = DateTime.UtcNow.AddDays(-1),
+            TrialEndDate = DateTime.UtcNow.AddDays(2),
             MonthlyPrice = 3.99m,
             GooglePlayPurchaseToken = "gp-token-456"
         };
@@ -141,6 +146,7 @@ public class GooglePlaySubscriptionTests
         Assert.That(ok, Is.Not.Null);
         var json = System.Text.Json.JsonSerializer.Serialize(ok!.Value);
         Assert.That(json, Does.Contain("\"hasSubscription\":true"));
+        Assert.That(json, Does.Contain("\"isOnTrial\":true"));
         Assert.That(json, Does.Contain("\"status\":\"CANCELLED\""));
         Assert.That(json, Does.Contain("\"billingSource\":\"GooglePlay\""));
     }
@@ -232,6 +238,91 @@ public class GooglePlaySubscriptionTests
             It.Is<GooglePlaySubscriptionInfo>(info => info.RecurringPrice == 2.99m)), Times.Once);
     }
 
+    [Test]
+    public async Task CreateSubscription_PassesDisplayedOfferVersionToSharedPayPalManagementService()
+    {
+        _mockConfiguration.Setup(configuration => configuration["PayPal:ReturnBaseUrl"])
+            .Returns("https://subscriptions.example");
+        _mockPayPalSubscriptionManagementService.Setup(service => service.CreateSubscriptionAsync(
+                It.Is<ApplicationUser>(user => user.Id == 1),
+                true,
+                27,
+                "P-DISPLAYED",
+                "https://subscriptions.example",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalCheckoutResult(
+                true,
+                "https://paypal.example/approve/I-NEW",
+                SubscriptionId: "I-NEW"));
+
+        var result = await _controller.CreateSubscription(new CreateSubscriptionRequest
+        {
+            AgreeToTerms = true,
+            OfferVersion = 27,
+            PlanId = "P-DISPLAYED"
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockPayPalSubscriptionManagementService.Verify(service => service.CreateSubscriptionAsync(
+            It.Is<ApplicationUser>(user => user.Id == 1),
+            true,
+            27,
+            "P-DISPLAYED",
+            "https://subscriptions.example",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task ActivateSubscription_ReturnsSuccessForActiveTrialWithoutLastPayment()
+    {
+        var trialEnd = DateTime.UtcNow.AddDays(3);
+        var localSubscription = new Subscription
+        {
+            Id = 9,
+            UserId = 1,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-TRIAL",
+            Status = SubscriptionStatuses.ApprovalPending
+        };
+        var activeTrial = new Subscription
+        {
+            Id = localSubscription.Id,
+            UserId = localSubscription.UserId,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = localSubscription.PayPalSubscriptionId,
+            Status = SubscriptionStatuses.Active,
+            TrialStartDate = DateTime.UtcNow,
+            TrialEndDate = trialEnd,
+            NextBillingDate = trialEnd
+        };
+        _mockSubscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync("I-TRIAL"))
+            .ReturnsAsync(localSubscription);
+        _mockPayPalSubscriptionManagementService.Setup(service => service.ReconcileSubscriptionAsync(
+                "I-TRIAL",
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult
+            {
+                Subscription = activeTrial,
+                PreviousStatus = SubscriptionStatuses.ApprovalPending,
+                BecameActive = true
+            });
+
+        var result = await _controller.ActivateSubscription(new ActivateSubscriptionRequest
+        {
+            SubscriptionId = "I-TRIAL"
+        });
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok!.Value);
+        Assert.That(json, Does.Contain("\"isTrial\":true"));
+        _mockPayPalSubscriptionManagementService.Verify(service => service.ReconcileSubscriptionAsync(
+            "I-TRIAL",
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // --- Cancel routing ---
 
     [Test]
@@ -278,7 +369,7 @@ public class GooglePlaySubscriptionTests
     }
 
     [Test]
-    public async Task CancelSubscription_PayPal_DoesNotCallGooglePlay()
+    public async Task CancelSubscription_PayPal_RoutesThroughSharedManagementService()
     {
         var subscription = new Subscription
         {
@@ -289,13 +380,24 @@ public class GooglePlaySubscriptionTests
             PayPalSubscriptionId = "PP-123"
         };
         _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync(subscription);
-        // PayPal cancel requires HTTP calls we don't set up, so it will fail — that's fine,
-        // the important thing is that Google Play was NOT called
-        _mockSubscriptionService.Setup(s => s.CancelSubscriptionAsync(1)).ReturnsAsync(true);
+        var entitlementEnd = DateTime.UtcNow.AddDays(3);
+        _mockPayPalSubscriptionManagementService.Setup(service => service.CancelSubscriptionAsync(
+                It.Is<ApplicationUser>(user => user.Id == 1),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalCancellationResult(true, entitlementEnd));
 
-        await _controller.CancelSubscription();
+        var result = await _controller.CancelSubscription();
 
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockPayPalSubscriptionManagementService.Verify(service => service.CancelSubscriptionAsync(
+            It.Is<ApplicationUser>(user => user.Id == 1),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
         _mockGooglePlayService.Verify(g => g.CancelSubscriptionAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        _mockSubscriptionService.Verify(service => service.CancelSubscriptionAsync(
+            It.IsAny<int>(),
+            It.IsAny<DateTime?>()), Times.Never);
     }
 
     [Test]

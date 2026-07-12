@@ -12,6 +12,8 @@ public class SubscriptionStatusDto
     public DateTime? TrialEndDate { get; set; }
     public DateTime? TrialConvertedAt { get; set; }
     public decimal MonthlyPrice { get; set; }
+    public string StoreFormattedPrice { get; set; }
+    public string StorePriceCurrencyCode { get; set; }
     public string PaypalSubscriptionId { get; set; }
     public string BillingSource { get; set; }
     public bool IsSubscriptionBlocked { get; set; }

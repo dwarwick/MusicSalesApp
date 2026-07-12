@@ -60,8 +60,23 @@ public class TermsOfUseTests : BUnitTestBase
 
         // Assert - Verify subscription terms
         Assert.That(cut.Markup, Does.Contain("Cancellation"));
-        Assert.That(cut.Markup, Does.Contain("current billing period"));
+        Assert.That(cut.Markup, Does.Contain("current paid billing period or free trial"));
         Assert.That(cut.Markup, Does.Contain("subscription end date"));
+    }
+
+    [Test]
+    public void TermsOfUse_ExplainsFreeTrialConversionAndCancellation()
+    {
+        var cut = TestContext.Render<TermsOfUse>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Free Trial Offers"));
+            Assert.That(cut.Markup, Does.Contain("eligible first-time subscribers"));
+            Assert.That(cut.Markup, Does.Contain("automatically converts"));
+            Assert.That(cut.Markup, Does.Contain("will not charge the first recurring payment"));
+            Assert.That(cut.Markup, Does.Contain("full access through the confirmed trial end date"));
+        });
     }
 
     [Test]

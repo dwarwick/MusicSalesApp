@@ -5,7 +5,31 @@ namespace MusicSalesApp.Services;
 public interface IAppleAppStoreVerificationService
 {
     Task<AppleAppStoreSubscriptionInfo> VerifySubscriptionAsync(string transactionId, string productId);
+    AppleAppStoreServerNotificationInfo VerifyServerNotification(string signedPayload);
 }
+
+public sealed record AppleAppStoreServerNotificationInfo(
+    string NotificationType,
+    string Subtype,
+    AppleAppStoreServerTransactionInfo Transaction,
+    AppleAppStoreServerRenewalInfo Renewal);
+
+public sealed record AppleAppStoreServerTransactionInfo(
+    string TransactionId,
+    string OriginalTransactionId,
+    string ProductId,
+    string BundleId,
+    string Environment,
+    string AppAccountToken,
+    long? ExpiresDate,
+    long? RevocationDate,
+    long? Price,
+    string Currency);
+
+public sealed record AppleAppStoreServerRenewalInfo(
+    int? AutoRenewStatus,
+    long? RenewalPrice,
+    string Currency);
 
 public record AppleAppStoreSubscriptionInfo(
     string Status,
@@ -15,7 +39,9 @@ public record AppleAppStoreSubscriptionInfo(
     string OriginalTransactionId,
     string ProductId,
     string Environment,
-    string AppAccountToken);
+    string AppAccountToken,
+    decimal? Price = null,
+    string PriceCurrencyCode = null);
 
 public class AppleAppStoreVerificationException : Exception
 {

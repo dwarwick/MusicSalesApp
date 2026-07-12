@@ -1,5 +1,7 @@
 #nullable enable
 
+using MusicSalesApp.Models;
+
 namespace MusicSalesApp.Services;
 
 /// <summary>
@@ -151,4 +153,15 @@ public interface IAppSettingsService
     /// </summary>
     /// <param name="version">The version string.</param>
     Task SetAppVersionAsync(string version);
+
+    /// <summary>
+    /// Gets the atomic snapshot of the PayPal subscription plans offered by the web app.
+    /// Returns null until an administrator explicitly configures an offer.
+    /// </summary>
+    Task<PayPalWebSubscriptionOffer?> GetPayPalWebSubscriptionOfferAsync();
+
+    /// <summary>
+    /// Atomically replaces the PayPal web offer and assigns its next version and update time.
+    /// </summary>
+    Task<PayPalWebSubscriptionOffer> SetPayPalWebSubscriptionOfferAsync(PayPalWebSubscriptionOffer offer);
 }

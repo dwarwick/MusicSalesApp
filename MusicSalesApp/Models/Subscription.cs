@@ -18,6 +18,24 @@ public class Subscription
     [MaxLength(100)]
     public string PayPalSubscriptionId { get; set; }
 
+    /// <summary>
+    /// PayPal billing plan selected when this subscription was created.
+    /// Null for legacy and non-PayPal subscriptions.
+    /// </summary>
+    [MaxLength(50)]
+    public string PayPalPlanId { get; set; }
+
+    /// <summary>
+    /// Version of the configured PayPal web offer whose displayed terms were accepted.
+    /// Null for legacy and non-PayPal subscriptions.
+    /// </summary>
+    public int? PayPalOfferVersion { get; set; }
+
+    /// <summary>
+    /// UTC timestamp when the subscriber accepted the plan, price, cadence, and trial terms.
+    /// </summary>
+    public DateTime? SubscriptionTermsAcceptedAt { get; set; }
+
     [MaxLength(20)]
     public string Status { get; set; } = SubscriptionStatuses.ApprovalPending;
 

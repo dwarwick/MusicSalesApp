@@ -563,7 +563,6 @@ public class CreatorSettingsTests : BUnitTestBase
         var configValues = new Dictionary<string, string>
         {
             ["Facebook:AppId"] = "test-facebook-app-id",
-            ["PayPal:SubscriptionPrice"] = "3.99",
             [GoogleAdsTrackingConfigKeys.Enabled] = "true",
             [GoogleAdsTrackingConfigKeys.TagId] = "AW-18188763957",
             [GoogleAdsTrackingConfigKeys.CreatorSignupConversionLabel] = "zvw_CJ6in74cELWGiuFD"

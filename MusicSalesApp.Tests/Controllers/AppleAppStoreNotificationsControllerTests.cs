@@ -18,6 +18,7 @@ public class AppleAppStoreNotificationsControllerTests
     private Mock<ISubscriptionService> _mockSubscriptionService;
     private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<ISubscriptionConfirmationEmailService> _mockSubscriptionConfirmationEmailService;
+    private Mock<IAppleAppStoreVerificationService> _mockVerificationService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<AppleAppStoreNotificationsController>> _mockLogger;
@@ -29,6 +30,7 @@ public class AppleAppStoreNotificationsControllerTests
         _mockSubscriptionService = new Mock<ISubscriptionService>();
         _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockSubscriptionConfirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
+        _mockVerificationService = new Mock<IAppleAppStoreVerificationService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<AppleAppStoreNotificationsController>>();
         var userStore = new Mock<IUserStore<ApplicationUser>>();
@@ -42,6 +44,7 @@ public class AppleAppStoreNotificationsControllerTests
             _mockSubscriptionService.Object,
             _mockAccountEmailService.Object,
             _mockSubscriptionConfirmationEmailService.Object,
+            _mockVerificationService.Object,
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object);
@@ -50,12 +53,9 @@ public class AppleAppStoreNotificationsControllerTests
     [Test]
     public async Task HandleNotification_UpdatesSubscriptionStatus_ForRenewalNotification()
     {
-        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{transactionPayload}.signature";
-        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"DID_RENEW\",\"subtype\":\"INITIAL_BUY\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
-        var signedPayload = $"header.{notificationPayload}.signature";
+        SetupVerifiedNotification("DID_RENEW", "INITIAL_BUY", price: 990);
 
-        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest("signed-payload"));
 
         Assert.That(result, Is.InstanceOf<OkResult>());
         _mockSubscriptionService.Verify(
@@ -67,7 +67,7 @@ public class AppleAppStoreNotificationsControllerTests
                 "Sandbox",
                 "streamtunes_monthly_sub_ios",
                 It.IsAny<string>(),
-                3.99m),
+                0.99m),
             Times.Once);
         _mockAccountEmailService.Verify(
             service => service.SendSubscriptionCancelledEmailAsync(
@@ -89,12 +89,9 @@ public class AppleAppStoreNotificationsControllerTests
     [Test]
     public async Task HandleNotification_IgnoresNotification_ForDifferentProduct()
     {
-        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"other_product\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{transactionPayload}.signature";
-        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"DID_RENEW\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
-        var signedPayload = $"header.{notificationPayload}.signature";
+        SetupVerifiedNotification("DID_RENEW", productId: "other_product");
 
-        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest("signed-payload"));
 
         Assert.That(result, Is.InstanceOf<OkResult>());
         _mockSubscriptionService.Verify(
@@ -133,14 +130,12 @@ public class AppleAppStoreNotificationsControllerTests
         _mockUserManager.Setup(m => m.FindByIdAsync("42"))
             .ReturnsAsync(user);
 
-        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{transactionPayload}.signature";
-        var renewalPayload = Base64UrlEncoder.Encode("{\"autoRenewStatus\":0}");
-        var signedRenewalInfo = $"header.{renewalPayload}.signature";
-        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"DID_CHANGE_RENEWAL_STATUS\",\"subtype\":\"AUTO_RENEW_DISABLED\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\",\"signedRenewalInfo\":\"{signedRenewalInfo}\"}}}}");
-        var signedPayload = $"header.{notificationPayload}.signature";
+        SetupVerifiedNotification(
+            "DID_CHANGE_RENEWAL_STATUS",
+            "AUTO_RENEW_DISABLED",
+            renewal: new AppleAppStoreServerRenewalInfo(0, 990, "USD"));
 
-        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest("signed-payload"));
 
         Assert.That(result, Is.InstanceOf<OkResult>());
         _mockSubscriptionService.Verify(
@@ -152,7 +147,7 @@ public class AppleAppStoreNotificationsControllerTests
                 "Sandbox",
                 "streamtunes_monthly_sub_ios",
                 It.IsAny<string>(),
-                3.99m),
+                0.99m),
             Times.Once);
         _mockAccountEmailService.Verify(
             service => service.SendSubscriptionCancelledEmailAsync(
@@ -199,12 +194,9 @@ public class AppleAppStoreNotificationsControllerTests
         _mockUserManager.Setup(m => m.FindByIdAsync("42"))
             .ReturnsAsync(user);
 
-        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{transactionPayload}.signature";
-        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"SUBSCRIBED\",\"subtype\":\"INITIAL_BUY\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
-        var signedPayload = $"header.{notificationPayload}.signature";
+        SetupVerifiedNotification("SUBSCRIBED", "INITIAL_BUY");
 
-        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest("signed-payload"));
 
         Assert.That(result, Is.InstanceOf<OkResult>());
         _mockSubscriptionConfirmationEmailService.Verify(
@@ -228,12 +220,9 @@ public class AppleAppStoreNotificationsControllerTests
         _mockSubscriptionService.Setup(s => s.GetSubscriptionByAppleOriginalTransactionIdAsync("orig-123"))
             .ReturnsAsync(currentSubscription);
 
-        var transactionPayload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{transactionPayload}.signature";
-        var notificationPayload = Base64UrlEncoder.Encode($"{{\"notificationType\":\"SUBSCRIBED\",\"subtype\":\"INITIAL_BUY\",\"data\":{{\"signedTransactionInfo\":\"{signedTransactionInfo}\"}}}}");
-        var signedPayload = $"header.{notificationPayload}.signature";
+        SetupVerifiedNotification("SUBSCRIBED", "INITIAL_BUY");
 
-        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest(signedPayload));
+        var result = await _controller.HandleNotification(new AppStoreServerNotificationRequest("signed-payload"));
 
         Assert.That(result, Is.InstanceOf<OkResult>());
         _mockSubscriptionConfirmationEmailService.Verify(
@@ -242,5 +231,31 @@ public class AppleAppStoreNotificationsControllerTests
                 It.IsAny<Subscription>(),
                 It.IsAny<string>()),
             Times.Never);
+    }
+
+    private void SetupVerifiedNotification(
+        string notificationType,
+        string? subtype = null,
+        string productId = "streamtunes_monthly_sub_ios",
+        long? price = null,
+        AppleAppStoreServerRenewalInfo? renewal = null)
+    {
+        _mockVerificationService
+            .Setup(service => service.VerifyServerNotification(It.IsAny<string>()))
+            .Returns(new AppleAppStoreServerNotificationInfo(
+                notificationType,
+                subtype,
+                new AppleAppStoreServerTransactionInfo(
+                    "tx-123",
+                    "orig-123",
+                    productId,
+                    "net.streamtunes.musicsalesapp.maui",
+                    "Sandbox",
+                    null,
+                    1893456000000,
+                    null,
+                    price,
+                    price.HasValue ? "USD" : null),
+                renewal));
     }
 }

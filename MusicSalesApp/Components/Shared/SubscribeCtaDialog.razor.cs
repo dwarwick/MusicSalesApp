@@ -1,6 +1,11 @@
 using Microsoft.AspNetCore.Components;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Models;
 using Syncfusion.Blazor.Popups;
+using System.Globalization;
+
+#nullable enable
 
 namespace MusicSalesApp.Components.Shared;
 
@@ -13,14 +18,29 @@ public partial class SubscribeCtaDialogModel : BlazorBase
     private int _previewCount;
     private int _nextShowAtCount;
     private bool _initialized;
-    protected string _subscriptionPrice = "3.99";
-    private bool _priceLoaded;
+    protected PayPalWebOfferQuote? _offerQuote;
+    private bool _offerLoaded;
 
     [Parameter]
     public bool IsAuthenticated { get; set; }
 
     [Parameter]
     public bool HasActiveSubscription { get; set; }
+
+    protected bool HasFreeTrialOffer => _offerQuote?.HasFreeTrial == true;
+    protected string TrialDurationDisplay => _offerQuote?.TrialDays is int trialDays
+        ? $"{trialDays} {(trialDays == 1 ? "day" : "days")}"
+        : string.Empty;
+    protected string TrialHeadlineDisplay => _offerQuote?.TrialDays is int trialDays
+        ? $"{trialDays}-Day"
+        : string.Empty;
+    protected string OfferPriceDisplay => FormatOfferPrice(_offerQuote);
+    protected string OfferCadenceDisplay => FormatOfferCadence(_offerQuote);
+    protected string DialogTitle => HasFreeTrialOffer
+        ? $"Start Your {TrialHeadlineDisplay} Free Trial"
+        : "Unlimited Music Streaming";
+    protected string RegisterButtonLabel => HasFreeTrialOffer ? "Register for Free Trial" : "Register";
+    protected string SubscribeButtonLabel => HasFreeTrialOffer ? "Start My Free Trial" : "Subscribe";
 
     /// <summary>
     /// Called when the user finishes a restricted preview.
@@ -47,9 +67,9 @@ public partial class SubscribeCtaDialogModel : BlazorBase
             // Set next show count (2-4 previews from now)
             _nextShowAtCount = _previewCount + Random.Shared.Next(MinPreviewInterval, MaxPreviewIntervalExclusive);
 
-            if (!_priceLoaded)
+            if (!_offerLoaded)
             {
-                await LoadSubscriptionPriceAsync();
+                await LoadOfferQuoteAsync();
             }
 
             _showDialog = true;
@@ -96,17 +116,63 @@ public partial class SubscribeCtaDialogModel : BlazorBase
         NavigationManager.NavigateTo("/manage-account", forceLoad: true);
     }
 
-    private async Task LoadSubscriptionPriceAsync()
+    private async Task LoadOfferQuoteAsync()
     {
         try
         {
-            var price = await AppSettingsService.GetSubscriptionPriceAsync();
-            _subscriptionPrice = price.ToString("F2");
-            _priceLoaded = true;
+            int? userId = null;
+            if (IsAuthenticated)
+            {
+                var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+                var appUser = await UserManager.GetUserAsync(authState.User);
+                if (appUser == null)
+                {
+                    _offerLoaded = true;
+                    return;
+                }
+
+                userId = appUser.Id;
+            }
+
+            _offerQuote = await PayPalSubscriptionManagementService.GetOfferQuoteAsync(userId);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to load subscription price.");
+            Logger.LogError(ex, "Failed to load the PayPal web subscription offer.");
         }
+        finally
+        {
+            _offerLoaded = true;
+        }
+    }
+
+    private static string FormatOfferPrice(PayPalWebOfferQuote? offer)
+    {
+        if (offer == null)
+        {
+            return string.Empty;
+        }
+
+        var amount = offer.RegularPrice.ToString("0.00", CultureInfo.InvariantCulture);
+        return string.Equals(
+            offer.CurrencyCode,
+            PayPalSubscriptionDefaults.UsdCurrencyCode,
+            StringComparison.OrdinalIgnoreCase)
+            ? $"${amount}"
+            : $"{amount} {offer.CurrencyCode.ToUpperInvariant()}";
+    }
+
+    private static string FormatOfferCadence(PayPalWebOfferQuote? offer)
+    {
+        if (offer == null)
+        {
+            return string.Empty;
+        }
+
+        var intervalCount = Math.Max(offer.IntervalCount, 1);
+        var intervalUnit = offer.IntervalUnit.Trim().ToLowerInvariant();
+        return intervalCount == 1
+            ? $"per {intervalUnit}"
+            : $"every {intervalCount} {intervalUnit}s";
     }
 }

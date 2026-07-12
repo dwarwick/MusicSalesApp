@@ -328,6 +328,8 @@ try
     builder.Services.AddScoped<IThemeService, ThemeService>();
     builder.Services.AddScoped<IPlaylistService, PlaylistService>();
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+    builder.Services.AddScoped<IPayPalSubscriptionApiService, PayPalSubscriptionApiService>();
+    builder.Services.AddScoped<IPayPalSubscriptionManagementService, PayPalSubscriptionManagementService>();
     builder.Services.AddSingleton<IGooglePlayVerificationService, GooglePlayVerificationService>();
     builder.Services.AddSingleton<IAppleAppStoreVerificationService, AppleAppStoreVerificationService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();

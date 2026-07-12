@@ -36,6 +36,7 @@ public class MobileAuthController : ControllerBase
     private readonly IAdminNotificationService _adminNotificationService;
     private readonly AppDbContext _context;
     private readonly ILogger<MobileAuthController> _logger;
+    private readonly IPayPalSubscriptionManagementService _payPalSubscriptionManagementService;
 
     private const int CodeExpirationMinutes = 10;
     private const int CodeLength = 6;
@@ -53,7 +54,8 @@ public class MobileAuthController : ControllerBase
         IAccountDeletionService accountDeletionService,
         IAdminNotificationService adminNotificationService,
         AppDbContext context,
-        ILogger<MobileAuthController> logger)
+        ILogger<MobileAuthController> logger,
+        IPayPalSubscriptionManagementService payPalSubscriptionManagementService = null)
     {
         _configuration = configuration;
         _signInManager = signInManager;
@@ -67,6 +69,7 @@ public class MobileAuthController : ControllerBase
         _adminNotificationService = adminNotificationService;
         _context = context;
         _logger = logger;
+        _payPalSubscriptionManagementService = payPalSubscriptionManagementService;
     }
 
     [HttpGet("google/start")]
@@ -601,6 +604,11 @@ public class MobileAuthController : ControllerBase
         var permissions = roles.SelectMany(GetPermissionsForRole).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var token = GenerateJwtToken(user, roles, permissions);
 
+        if (_payPalSubscriptionManagementService != null)
+        {
+            await _payPalSubscriptionManagementService.RefreshIfNeededAsync(user.Id, GetSubscriptionBaseUrl());
+        }
+
         var activeSubscription = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
         var latestSubscription = activeSubscription ?? await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
         var isOnTrial = latestSubscription?.TrialEndDate is { } trialEndDate
@@ -625,6 +633,14 @@ public class MobileAuthController : ControllerBase
             IsCreator = creator != null,
             CreatorId = creator?.Id
         };
+    }
+
+    private string GetSubscriptionBaseUrl()
+    {
+        var configured = _configuration["PayPal:ReturnBaseUrl"] ?? _configuration["BaseUrl"];
+        return !string.IsNullOrWhiteSpace(configured)
+            ? configured
+            : $"{Request.Scheme}://{Request.Host}";
     }
 
     private string GenerateJwtToken(ApplicationUser user, IList<string> roles, List<string> permissions)

@@ -1,4 +1,7 @@
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.Json;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using MusicSalesApp.Common.Helpers;
@@ -40,10 +43,11 @@ public class AppleAppStoreVerificationServiceTests
     [Test]
     public void DecodeSignedTransactionInfo_ParsesPayload()
     {
-        var payload = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"appAccountToken\":\"acct-123\",\"expiresDate\":1893456000000}");
-        var signedTransactionInfo = $"header.{payload}.signature";
+        using var signed = CreateSignedPayload("{\"transactionId\":\"tx-123\",\"originalTransactionId\":\"orig-123\",\"productId\":\"streamtunes_monthly_sub_ios\",\"bundleId\":\"net.streamtunes.musicsalesapp.maui\",\"environment\":\"Sandbox\",\"appAccountToken\":\"acct-123\",\"expiresDate\":1893456000000,\"price\":990,\"currency\":\"USD\"}");
 
-        var result = AppleAppStoreVerificationService.DecodeSignedTransactionInfo(signedTransactionInfo);
+        var result = AppleAppStoreVerificationService.DecodeSignedTransactionInfo(
+            signed.Value,
+            signed.TrustedRoot);
 
         Assert.Multiple(() =>
         {
@@ -54,16 +58,19 @@ public class AppleAppStoreVerificationServiceTests
             Assert.That(result.Environment, Is.EqualTo("Sandbox"));
             Assert.That(result.AppAccountToken, Is.EqualTo("acct-123"));
             Assert.That(result.ExpiresDate, Is.EqualTo(1893456000000));
+            Assert.That(result.Price, Is.EqualTo(990));
+            Assert.That(result.Currency, Is.EqualTo("USD"));
         });
     }
 
     [Test]
     public void DecodeServerNotificationPayload_ParsesPayload()
     {
-        var payload = Base64UrlEncoder.Encode("{\"notificationType\":\"DID_RENEW\",\"subtype\":\"INITIAL_BUY\",\"data\":{\"signedTransactionInfo\":\"header.inner.signature\"}}");
-        var signedPayload = $"header.{payload}.signature";
+        using var signed = CreateSignedPayload("{\"notificationType\":\"DID_RENEW\",\"subtype\":\"INITIAL_BUY\",\"data\":{\"signedTransactionInfo\":\"header.inner.signature\"}}");
 
-        var result = AppleAppStoreVerificationService.DecodeServerNotificationPayload(signedPayload);
+        var result = AppleAppStoreVerificationService.DecodeServerNotificationPayload(
+            signed.Value,
+            signed.TrustedRoot);
 
         Assert.Multiple(() =>
         {
@@ -77,12 +84,33 @@ public class AppleAppStoreVerificationServiceTests
     [Test]
     public void DecodeSignedRenewalInfo_ParsesPayload()
     {
-        var payload = Base64UrlEncoder.Encode("{\"autoRenewStatus\":0}");
-        var signedPayload = $"header.{payload}.signature";
+        using var signed = CreateSignedPayload("{\"autoRenewStatus\":0,\"renewalPrice\":990,\"currency\":\"USD\"}");
 
-        var result = AppleAppStoreVerificationService.DecodeSignedRenewalInfo(signedPayload);
+        var result = AppleAppStoreVerificationService.DecodeSignedRenewalInfo(
+            signed.Value,
+            signed.TrustedRoot);
 
-        Assert.That(result.AutoRenewStatus, Is.EqualTo(0));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.AutoRenewStatus, Is.EqualTo(0));
+            Assert.That(result.RenewalPrice, Is.EqualTo(990));
+            Assert.That(result.Currency, Is.EqualTo("USD"));
+        });
+    }
+
+    [Test]
+    public void DecodeSignedTransactionInfo_RejectsTamperedPayload()
+    {
+        using var signed = CreateSignedPayload("{\"transactionId\":\"tx-original\"}");
+        var segments = signed.Value.Split('.');
+        segments[1] = Base64UrlEncoder.Encode("{\"transactionId\":\"tx-forged\"}");
+
+        var exception = Assert.Throws<AppleAppStoreVerificationException>(() =>
+            AppleAppStoreVerificationService.DecodeSignedTransactionInfo(
+                string.Join('.', segments),
+                signed.TrustedRoot));
+
+        Assert.That(exception!.Message, Does.Contain("signature validation failed"));
     }
 
     [Test]
@@ -248,5 +276,75 @@ public class AppleAppStoreVerificationServiceTests
 
         Assert.That(exception!.Message, Is.EqualTo("Apple App Store private key could not be loaded on the server."));
         httpClientFactory.Verify(factory => factory.CreateClient(It.IsAny<string>()), Times.Never);
+    }
+
+    private static SignedPayload CreateSignedPayload(string payloadJson)
+    {
+        using var rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var rootRequest = new CertificateRequest(
+            "CN=Test Apple Root",
+            rootKey,
+            HashAlgorithmName.SHA256);
+        rootRequest.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(true, false, 0, true));
+        rootRequest.CertificateExtensions.Add(
+            new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
+        var root = rootRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(30));
+
+        using var leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var leafRequest = new CertificateRequest(
+            "CN=Test Apple Signing",
+            leafKey,
+            HashAlgorithmName.SHA256);
+        leafRequest.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(false, false, 0, true));
+        leafRequest.CertificateExtensions.Add(
+            new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+        var serialNumber = RandomNumberGenerator.GetBytes(16);
+        using var issuedLeaf = leafRequest.Create(
+            root,
+            DateTimeOffset.UtcNow.AddHours(-1),
+            DateTimeOffset.UtcNow.AddDays(7),
+            serialNumber);
+        var leaf = issuedLeaf.CopyWithPrivateKey(leafKey);
+
+        var headerJson = JsonSerializer.Serialize(new
+        {
+            alg = "ES256",
+            x5c = new[]
+            {
+                Convert.ToBase64String(leaf.RawData),
+                Convert.ToBase64String(root.RawData)
+            }
+        });
+        var header = Base64UrlEncoder.Encode(headerJson);
+        var payload = Base64UrlEncoder.Encode(payloadJson);
+        var signedBytes = Encoding.ASCII.GetBytes($"{header}.{payload}");
+        var signature = leafKey.SignData(
+            signedBytes,
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+
+        return new SignedPayload(
+            $"{header}.{payload}.{Base64UrlEncoder.Encode(signature)}",
+            root,
+            leaf);
+    }
+
+    private sealed class SignedPayload(
+        string value,
+        X509Certificate2 trustedRoot,
+        X509Certificate2 leaf) : IDisposable
+    {
+        public string Value { get; } = value;
+        public X509Certificate2 TrustedRoot { get; } = trustedRoot;
+
+        public void Dispose()
+        {
+            leaf.Dispose();
+            TrustedRoot.Dispose();
+        }
     }
 }

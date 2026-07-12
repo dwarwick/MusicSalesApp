@@ -1,73 +1,55 @@
-using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
+
+#nullable enable
 
 namespace MusicSalesApp.Components.Pages.Public;
 
 public partial class HomeModel : BlazorBase
 {
-    protected string _subscriptionPrice = "3.99";
-    protected bool _hasActiveSubscription = false;
-    protected bool _isAuthenticated = false;
-    protected bool _isEmailVerified = false;
+    private bool _hasLoadedData;
+    protected bool _isAuthenticated;
     protected List<RecommendedPlaylist> _recommendedPlaylist = new();
-    protected Playlist _likedSongsPlaylist = null;
-    protected int _likedSongsCount = 0;
-    protected bool _loadingRecommendations = false;
+    protected Playlist _likedSongsPlaylist = null!;
+    protected int _likedSongsCount;
+    protected bool _loadingRecommendations;
     protected int _currentUserId;
 
     protected bool HasUserPlaylists => _isAuthenticated && 
         (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0));
 
     protected bool HasLikedSongsToShow => _likedSongsPlaylist != null && _likedSongsCount > 0;
-    protected string SubscriberLoginUrl => BuildReturnUrl(AppPageRoutes.Login, AppPageRoutes.ManageAccount);
-    protected string SubscriberRegisterUrl => BuildReturnUrl(AppPageRoutes.Register, AppPageRoutes.ManageAccount);
-
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadSubscriptionPriceAsync();
-
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (authState.User?.Identity?.IsAuthenticated == true)
+        if (!firstRender || _hasLoadedData)
         {
-            _isAuthenticated = true;
-            var appUser = await UserManager.GetUserAsync(authState.User);
-            if (appUser != null)
-            {
-                _currentUserId = appUser.Id;
-                _isEmailVerified = !await UserManager.IsInRoleAsync(appUser, Roles.NonValidatedUser);
-            }
-            await LoadSubscriptionStatusAsync();
-            await LoadRecommendedPlaylistAsync();
-            await LoadLikedSongsPlaylistAsync();
+            return;
         }
-    }
 
-    private async Task LoadSubscriptionStatusAsync()
-    {
+        _hasLoadedData = true;
         try
         {
-            if (_currentUserId > 0)
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User?.Identity?.IsAuthenticated == true)
             {
-                _hasActiveSubscription = await SubscriptionService.HasActiveSubscriptionAsync(_currentUserId);
+                _isAuthenticated = true;
+                var appUser = await UserManager.GetUserAsync(authState.User);
+                if (appUser != null)
+                {
+                    _currentUserId = appUser.Id;
+                }
+
+                await LoadRecommendedPlaylistAsync();
+                await LoadLikedSongsPlaylistAsync();
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to retrieve subscription status.");
+            Logger.LogError(ex, "Failed to load personalized home page content.");
         }
-    }
-
-    private async Task LoadSubscriptionPriceAsync()
-    {
-        try
+        finally
         {
-            var price = await AppSettingsService.GetSubscriptionPriceAsync();
-            _subscriptionPrice = price.ToString("F2");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load subscription price from database.");
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -106,6 +88,4 @@ public partial class HomeModel : BlazorBase
         }
     }
 
-    private static string BuildReturnUrl(string route, string returnUrl)
-        => $"{route}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
 }

@@ -18,6 +18,7 @@ public class AppleAppStoreNotificationsController : ControllerBase
     private readonly ISubscriptionService _subscriptionService;
     private readonly IAccountEmailService _accountEmailService;
     private readonly ISubscriptionConfirmationEmailService _subscriptionConfirmationEmailService;
+    private readonly IAppleAppStoreVerificationService _verificationService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AppleAppStoreNotificationsController> _logger;
@@ -26,6 +27,7 @@ public class AppleAppStoreNotificationsController : ControllerBase
         ISubscriptionService subscriptionService,
         IAccountEmailService accountEmailService,
         ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
+        IAppleAppStoreVerificationService verificationService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<AppleAppStoreNotificationsController> logger)
@@ -33,6 +35,7 @@ public class AppleAppStoreNotificationsController : ControllerBase
         _subscriptionService = subscriptionService;
         _accountEmailService = accountEmailService;
         _subscriptionConfirmationEmailService = subscriptionConfirmationEmailService;
+        _verificationService = verificationService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -49,11 +52,9 @@ public class AppleAppStoreNotificationsController : ControllerBase
 
         try
         {
-            var notification = AppleAppStoreVerificationService.DecodeServerNotificationPayload(request.SignedPayload);
-            var transactionPayload = AppleAppStoreVerificationService.DecodeSignedTransactionInfo(notification.Data?.SignedTransactionInfo);
-            var renewalInfo = !string.IsNullOrWhiteSpace(notification.Data?.SignedRenewalInfo)
-                ? AppleAppStoreVerificationService.DecodeSignedRenewalInfo(notification.Data.SignedRenewalInfo)
-                : null;
+            var notification = _verificationService.VerifyServerNotification(request.SignedPayload);
+            var transactionPayload = notification.Transaction;
+            var renewalInfo = notification.Renewal;
             var configuredProductId = _configuration["AppleAppStore:SubscriptionProductId"];
 
             if (!string.IsNullOrWhiteSpace(configuredProductId) &&
@@ -78,6 +79,11 @@ public class AppleAppStoreNotificationsController : ControllerBase
             var revocationTime = transactionPayload.RevocationDate.HasValue
                 ? DateTimeOffset.FromUnixTimeMilliseconds(transactionPayload.RevocationDate.Value).UtcDateTime
                 : (DateTime?)null;
+            var providerPrice = renewalInfo?.RenewalPrice is > 0
+                ? renewalInfo.RenewalPrice.Value / 1000m
+                : transactionPayload.Price.HasValue && transactionPayload.Price.Value > 0
+                    ? transactionPayload.Price.Value / 1000m
+                    : (decimal?)null;
 
             var status = AppleAppStoreVerificationService.DetermineNotificationStatus(
                 notification.NotificationType,
@@ -88,6 +94,8 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 renewalInfo?.AutoRenewStatus);
 
             var existingSubscription = await _subscriptionService.GetSubscriptionByAppleOriginalTransactionIdAsync(transactionPayload.OriginalTransactionId);
+            var effectivePrice = providerPrice
+                ?? (existingSubscription?.MonthlyPrice > 0 ? existingSubscription.MonthlyPrice : null);
             var shouldSendConfirmationEmail = string.Equals(status, SubscriptionStatuses.Active, StringComparison.Ordinal) &&
                                               !SubscriptionEntitlementHelper.IsCurrentlyEntitled(existingSubscription);
 
@@ -99,7 +107,14 @@ public class AppleAppStoreNotificationsController : ControllerBase
                 transactionPayload.Environment,
                 transactionPayload.ProductId,
                 transactionPayload.AppAccountToken,
-                3.99m);
+                effectivePrice);
+            if (providerPrice.HasValue)
+            {
+                await _subscriptionService.UpdateAppleStorePriceAsync(
+                    transactionPayload.OriginalTransactionId,
+                    providerPrice.Value,
+                    renewalInfo?.Currency ?? transactionPayload.Currency);
+            }
 
             if (string.Equals(status, MusicSalesApp.Common.Helpers.SubscriptionStatuses.Cancelled, StringComparison.Ordinal))
             {
@@ -120,6 +135,13 @@ public class AppleAppStoreNotificationsController : ControllerBase
         catch (AppleAppStoreVerificationException ex)
         {
             _logger.LogWarning(ex, "Apple App Store notification payload could not be parsed");
+        }
+        catch (SubscriptionProviderConflictException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Apple notification could not reactivate a subscription because a current {ExistingBillingSource} subscription exists",
+                ex.ExistingBillingSource);
         }
         catch (Exception ex)
         {

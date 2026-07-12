@@ -54,20 +54,6 @@ else
 
             <div class="row mb-4">
                 <div class="col-md-3">
-                    <label class="form-label">Subscription Price (USD) <span class="text-danger">*</span></label>
-                    <SfNumericTextBox @bind-Value="_subscriptionPrice" 
-                                     Format="C2"
-                                     Min="0.01m"
-                                     Max="999.99m"
-                                     Decimals="2"
-                                     Step="0.01m"
-                                     Placeholder="Enter subscription price"
-                                     CssClass="e-outline" />
-                    <small class="text-muted">
-                        Monthly subscription price for new subscribers. Existing subscribers will continue at their original rate.
-                    </small>
-                </div>
-                <div class="col-md-3">
                     <label class="form-label">Stream Pay Rate (per 1000 streams) <span class="text-danger">*</span></label>
                     <SfNumericTextBox @bind-Value="_streamPayRateDisplay" 
                                      Format="C2"
@@ -140,7 +126,6 @@ else
             <div class="alert alert-info">
                 <strong>Note:</strong> When you change these settings:
                 <ul class="mb-0">
-                    <li><strong>Subscription Price:</strong> Existing subscribers continue at their original rate; new subscribers get the new price.</li>
                     <li><strong>Stream Pay Rate:</strong> This is used as the default for new creators. Existing creators keep their current rate unless manually updated.</li>
                     <li><strong>Stream Qualifying Seconds:</strong> This is used as the default for new creators. Existing creators keep their current value unless manually updated.</li>
                     <li><strong>Max Audio Upload Size:</strong> Changes apply immediately to all future uploads.</li>
@@ -162,6 +147,155 @@ else
                         <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                     }
                     Save Changes
+                </SfButton>
+            </div>
+        </div>
+    </div>
+
+    <div class="card settings-card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">PayPal Web Subscription Offer</h5>
+            <SfButton OnClick="RefreshPayPalPlansAsync"
+                      Content="Refresh PayPal Plans"
+                      CssClass="e-btn e-outline"
+                      Disabled="@(_isRefreshingPayPalPlans || _isSavingPayPalOffer)" />
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Choose the PayPal plans used for future subscriptions started on the website. This does not change
+                existing subscriptions or Google Play and Apple pricing, which is supplied by those stores.
+            </p>
+
+            @if (_isRefreshingPayPalPlans)
+            {
+                <SfMessage Severity="MessageSeverity.Info">Loading active plans directly from PayPal…</SfMessage>
+            }
+
+            @if (_payPalOfferErrorMessage != null)
+            {
+                <SfMessage Severity="MessageSeverity.Error" ShowCloseIcon="true"
+                           Closed="() => _payPalOfferErrorMessage = null">
+                    @_payPalOfferErrorMessage
+                </SfMessage>
+            }
+
+            @if (_payPalOfferSuccessMessage != null)
+            {
+                <SfMessage Severity="MessageSeverity.Success" ShowCloseIcon="true"
+                           Closed="() => _payPalOfferSuccessMessage = null">
+                    @_payPalOfferSuccessMessage
+                </SfMessage>
+            }
+
+            @if (_payPalOfferValidationErrors.Any())
+            {
+                <SfMessage Severity="MessageSeverity.Error">
+                    <strong>Validation Errors:</strong>
+                    <ul class="mb-0">
+                        @foreach (var error in _payPalOfferValidationErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </SfMessage>
+            }
+
+            @if (_savedPayPalWebOffer == null)
+            {
+                <SfMessage Severity="MessageSeverity.Warning">
+                    No PayPal web offer has been selected. The legacy checkout behavior remains in effect until this
+                    section is saved.
+                </SfMessage>
+            }
+            else
+            {
+                <SfMessage Severity="MessageSeverity.Info">
+                    <strong>Current offer (version @_savedPayPalWebOffer.Version):</strong>
+                    @FormatPayPalPlanTerms(_savedPayPalWebOffer.PrimaryPlan)
+                    <span> — @_savedPayPalWebOffer.PrimaryPlan.Name (@_savedPayPalWebOffer.PrimaryPlan.Id)</span>
+                    @if (_savedPayPalWebOffer.ResubscriberPlan != null)
+                    {
+                        <br />
+                        <strong>Returning subscribers:</strong>
+                        <span>
+                            @FormatPayPalPlanTerms(_savedPayPalWebOffer.ResubscriberPlan)
+                            — @_savedPayPalWebOffer.ResubscriberPlan.Name
+                            (@_savedPayPalWebOffer.ResubscriberPlan.Id)
+                        </span>
+                    }
+                </SfMessage>
+            }
+
+            <div class="row mb-4 mt-3">
+                <div class="col-md-6">
+                    <label class="form-label">First-time Subscriber Plan <span class="text-danger">*</span></label>
+                    <SfDropDownList TValue="string" TItem="PayPalPlanOption"
+                                    @bind-Value="_selectedPrimaryPayPalPlanId"
+                                    DataSource="@_payPalPlanOptions"
+                                    Placeholder="Select an active PayPal plan"
+                                    Enabled="@(!_isRefreshingPayPalPlans && !_isSavingPayPalOffer)">
+                        <DropDownListFieldSettings Value="Id" Text="DisplayText" />
+                    </SfDropDownList>
+                    <small class="text-muted">
+                        The dropdown terms come from PayPal billing cycles, not the plan name.
+                    </small>
+
+                    @if (SelectedPrimaryPayPalPlan != null)
+                    {
+                        <div class="mt-2">
+                            <strong>@SelectedPrimaryPayPalPlan.Name</strong><br />
+                            <small>
+                                ID: @SelectedPrimaryPayPalPlan.Id · Status: @SelectedPrimaryPayPalPlan.Status ·
+                                @FormatPayPalPlanTerms(SelectedPrimaryPayPalPlan)
+                            </small>
+                        </div>
+                    }
+                </div>
+
+                @if (SelectedPrimaryRequiresCompanion)
+                {
+                    <div class="col-md-6">
+                        <label class="form-label">Returning Subscriber Plan <span class="text-danger">*</span></label>
+                        <SfDropDownList TValue="string" TItem="PayPalPlanOption"
+                                        @bind-Value="_selectedResubscriberPayPalPlanId"
+                                        DataSource="@_payPalPlanOptions"
+                                        Placeholder="Select the matching no-trial plan"
+                                        Enabled="@(!_isRefreshingPayPalPlans && !_isSavingPayPalOffer)">
+                            <DropDownListFieldSettings Value="Id" Text="DisplayText" />
+                        </SfDropDownList>
+                        <small class="text-muted">
+                            Must be active, contain no trial, and match the primary plan's regular price, currency,
+                            and monthly cadence.
+                        </small>
+
+                        @if (SelectedResubscriberPayPalPlan != null)
+                        {
+                            <div class="mt-2">
+                                <strong>@SelectedResubscriberPayPalPlan.Name</strong><br />
+                                <small>
+                                    ID: @SelectedResubscriberPayPalPlan.Id · Status: @SelectedResubscriberPayPalPlan.Status ·
+                                    @FormatPayPalPlanTerms(SelectedResubscriberPayPalPlan)
+                                </small>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <SfButton OnClick="CancelPayPalOfferChanges"
+                          Content="Cancel"
+                          CssClass="e-btn e-outline"
+                          Disabled="@(!_hasPayPalOfferChanges || _isSavingPayPalOffer)" />
+                <SfButton OnClick="SavePayPalOfferAsync"
+                          IsPrimary="true"
+                          CssClass="e-btn e-primary"
+                          Disabled="@(!_hasPayPalOfferChanges || _isSavingPayPalOffer || _isRefreshingPayPalPlans)">
+                    @if (_isSavingPayPalOffer)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                    }
+                    Save PayPal Offer
                 </SfButton>
             </div>
         </div>

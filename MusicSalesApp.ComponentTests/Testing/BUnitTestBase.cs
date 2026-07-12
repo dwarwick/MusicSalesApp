@@ -43,6 +43,8 @@ public abstract class BUnitTestBase
     protected Mock<IPlaylistService> MockPlaylistService { get; private set; } = default!;
     protected Mock<ISubscriptionService> MockSubscriptionService { get; private set; } = default!;
     protected Mock<IAppSettingsService> MockAppSettingsService { get; private set; } = default!;
+    protected Mock<IPayPalSubscriptionApiService> MockPayPalSubscriptionApiService { get; private set; } = default!;
+    protected Mock<IPayPalSubscriptionManagementService> MockPayPalSubscriptionManagementService { get; private set; } = default!;
     protected Mock<UserManager<ApplicationUser>> MockUserManager { get; private set; } = default!;
     protected Mock<IPasskeyService> MockPasskeyService { get; private set; } = default!;
     protected Mock<IOpenGraphService> MockOpenGraphService { get; private set; } = default!;
@@ -91,6 +93,8 @@ public abstract class BUnitTestBase
         MockPlaylistService = new Mock<IPlaylistService>();
         MockSubscriptionService = new Mock<ISubscriptionService>();
         MockAppSettingsService = new Mock<IAppSettingsService>();
+        MockPayPalSubscriptionApiService = new Mock<IPayPalSubscriptionApiService>();
+        MockPayPalSubscriptionManagementService = new Mock<IPayPalSubscriptionManagementService>();
         MockPasskeyService = new Mock<IPasskeyService>();
         MockOpenGraphService = new Mock<IOpenGraphService>();
         MockSongLikeService = new Mock<ISongLikeService>();
@@ -223,6 +227,17 @@ public abstract class BUnitTestBase
             .ReturnsAsync(default(string));
         MockAppSettingsService.Setup(x => x.SetAppVersionAsync(It.IsAny<string>()))
             .Returns(Task.CompletedTask);
+        MockAppSettingsService.Setup(x => x.GetPayPalWebSubscriptionOfferAsync())
+            .ReturnsAsync((PayPalWebSubscriptionOffer)null);
+        MockAppSettingsService.Setup(x => x.SetPayPalWebSubscriptionOfferAsync(It.IsAny<PayPalWebSubscriptionOffer>()))
+            .ReturnsAsync((PayPalWebSubscriptionOffer offer) => offer);
+
+        MockPayPalSubscriptionApiService
+            .Setup(x => x.GetActivePlansAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PayPalPlan>());
+        MockPayPalSubscriptionApiService
+            .Setup(x => x.GetPlanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalPlan)null);
 
         // Setup default returns for IPasskeyService methods
         MockPasskeyService.Setup(x => x.GetUserPasskeysAsync(It.IsAny<int>()))
@@ -458,6 +473,8 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IPlaylistService>(MockPlaylistService.Object);
         TestContext.Services.AddSingleton<ISubscriptionService>(MockSubscriptionService.Object);
         TestContext.Services.AddSingleton<IAppSettingsService>(MockAppSettingsService.Object);
+        TestContext.Services.AddSingleton<IPayPalSubscriptionApiService>(MockPayPalSubscriptionApiService.Object);
+        TestContext.Services.AddSingleton<IPayPalSubscriptionManagementService>(MockPayPalSubscriptionManagementService.Object);
         TestContext.Services.AddSingleton<UserManager<ApplicationUser>>(MockUserManager.Object);
         TestContext.Services.AddSingleton<IPasskeyService>(MockPasskeyService.Object);
         TestContext.Services.AddSingleton<IOpenGraphService>(MockOpenGraphService.Object);
@@ -492,8 +509,7 @@ public abstract class BUnitTestBase
         // Add IConfiguration for components that need it
         var configData = new Dictionary<string, string>
         {
-            ["Facebook:AppId"] = "test-facebook-app-id",
-            ["PayPal:SubscriptionPrice"] = "3.99"
+            ["Facebook:AppId"] = "test-facebook-app-id"
         };
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(configData!)
