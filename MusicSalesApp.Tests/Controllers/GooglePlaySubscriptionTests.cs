@@ -16,7 +16,6 @@ namespace MusicSalesApp.Tests.Controllers;
 public class GooglePlaySubscriptionTests
 {
     private Mock<ISubscriptionService> _mockSubscriptionService;
-    private Mock<IAppSettingsService> _mockAppSettingsService;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<IConfiguration> _mockConfiguration;
     private Mock<ILogger<SubscriptionController>> _mockLogger;
@@ -31,7 +30,6 @@ public class GooglePlaySubscriptionTests
     public void Setup()
     {
         _mockSubscriptionService = new Mock<ISubscriptionService>();
-        _mockAppSettingsService = new Mock<IAppSettingsService>();
         _mockConfiguration = new Mock<IConfiguration>();
         _mockLogger = new Mock<ILogger<SubscriptionController>>();
         _mockHttpClientFactory = new Mock<IHttpClientFactory>();
@@ -46,7 +44,6 @@ public class GooglePlaySubscriptionTests
 
         _controller = new SubscriptionController(
             _mockSubscriptionService.Object,
-            _mockAppSettingsService.Object,
             _mockUserManager.Object,
             _mockConfiguration.Object,
             _mockLogger.Object,
@@ -96,6 +93,7 @@ public class GooglePlaySubscriptionTests
         Assert.That(ok, Is.Not.Null);
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
         Assert.That(json, Does.Contain("\"billingSource\":\"PayPal\""));
+        Assert.That(json, Does.Not.Contain("subscriptionPrice"));
     }
 
     [Test]
@@ -138,8 +136,6 @@ public class GooglePlaySubscriptionTests
         };
 
         _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync(subscription);
-        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
-
         var result = await _controller.GetSubscriptionStatus();
         var ok = result as OkObjectResult;
 
@@ -167,8 +163,6 @@ public class GooglePlaySubscriptionTests
 
         _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
         _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync(subscription);
-        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
-
         var result = await _controller.GetSubscriptionStatus();
         var ok = result as OkObjectResult;
 
@@ -206,7 +200,6 @@ public class GooglePlaySubscriptionTests
             .ReturnsAsync((Subscription)null)
             .ReturnsAsync(refreshedSubscription);
         _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync(expiredSubscription);
-        _mockAppSettingsService.Setup(s => s.GetSubscriptionPriceAsync()).ReturnsAsync(3.99m);
         _mockConfiguration.Setup(c => c["GooglePlay:SubscriptionProductId"]).Returns("streamtunes_monthly_sub");
         _mockGooglePlayService.Setup(g => g.VerifySubscriptionAsync("renewed-token", "streamtunes_monthly_sub"))
             .ReturnsAsync(new GooglePlaySubscriptionInfo(

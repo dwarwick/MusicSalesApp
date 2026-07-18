@@ -2,6 +2,24 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "blazor-build",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/MusicSalesApp/MusicSalesApp.csproj",
+                "--configuration",
+                "Debug",
+                "--nologo"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            }
+        },
+        {
             "label": "Publish with davidTest profile",
             "type": "shell",
             "command": "pwsh",

@@ -25,18 +25,6 @@ public interface IAppSettingsService
     Task SetSettingAsync(string key, string value, string? description = null);
 
     /// <summary>
-    /// Gets the subscription price setting.
-    /// </summary>
-    /// <returns>The subscription price as a decimal, or the default value if not set.</returns>
-    Task<decimal> GetSubscriptionPriceAsync();
-
-    /// <summary>
-    /// Sets the subscription price setting.
-    /// </summary>
-    /// <param name="price">The subscription price.</param>
-    Task SetSubscriptionPriceAsync(decimal price);
-
-    /// <summary>
     /// Gets the stream pay rate for creators.
     /// </summary>
     /// <returns>The stream pay rate as a decimal (0.005 = $5 per 1000 streams), or the default value if not set.</returns>

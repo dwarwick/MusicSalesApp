@@ -21,16 +21,6 @@ public class AppSettingsService : IAppSettingsService
     private readonly ILogger<AppSettingsService> _logger;
 
     /// <summary>
-    /// The key used for storing the subscription price setting.
-    /// </summary>
-    public const string SubscriptionPriceKey = AppSettingKeys.SubscriptionPrice;
-
-    /// <summary>
-    /// Default subscription price if not set in the database.
-    /// </summary>
-    public const decimal DefaultSubscriptionPrice = 3.99m;
-
-    /// <summary>
     /// The key used for storing the stream pay rate setting.
     /// </summary>
     public const string StreamPayRateKey = "StreamPayRate";
@@ -146,34 +136,6 @@ public class AppSettingsService : IAppSettingsService
         }
 
         await context.SaveChangesAsync();
-    }
-
-    /// <inheritdoc />
-    public async Task<decimal> GetSubscriptionPriceAsync()
-    {
-        var value = await GetSettingAsync(SubscriptionPriceKey);
-        
-        if (string.IsNullOrEmpty(value))
-        {
-            return DefaultSubscriptionPrice;
-        }
-
-        if (decimal.TryParse(value, out var price))
-        {
-            return price;
-        }
-
-        _logger.LogWarning("Invalid subscription price value in database: {Value}. Using default.", value);
-        return DefaultSubscriptionPrice;
-    }
-
-    /// <inheritdoc />
-    public async Task SetSubscriptionPriceAsync(decimal price)
-    {
-        await SetSettingAsync(
-            SubscriptionPriceKey,
-            price.ToString("F2"),
-            "Monthly subscription price in USD");
     }
 
     /// <summary>

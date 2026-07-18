@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Blazor - HTTPS",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "blazor-build",
+      "program": "${workspaceFolder}/MusicSalesApp/bin/Debug/net10.0/MusicSalesApp.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/MusicSalesApp",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "launchSettingsProfile": "https",
+      "launchSettingsFilePath": "${workspaceFolder}/MusicSalesApp/Properties/launchSettings.json",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    }
+  ]
+}

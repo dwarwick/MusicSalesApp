@@ -112,6 +112,8 @@ try
     {
         options.LoginPath = "/login";
         options.LogoutPath = "/logout";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue<int>("Auth:ExpireMinutes", 300));
         options.SlidingExpiration = true;
     });
@@ -330,6 +332,7 @@ try
     builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
     builder.Services.AddScoped<IPayPalSubscriptionApiService, PayPalSubscriptionApiService>();
     builder.Services.AddScoped<IPayPalSubscriptionManagementService, PayPalSubscriptionManagementService>();
+    builder.Services.AddScoped<IPayPalSubscriptionAnomalyService, PayPalSubscriptionAnomalyService>();
     builder.Services.AddSingleton<IGooglePlayVerificationService, GooglePlayVerificationService>();
     builder.Services.AddSingleton<IAppleAppStoreVerificationService, AppleAppStoreVerificationService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();
@@ -458,6 +461,7 @@ try
     forwardedHeadersOptions.KnownIPNetworks.Clear();
     forwardedHeadersOptions.KnownProxies.Clear();
     app.UseForwardedHeaders(forwardedHeadersOptions);
+    app.UseMiddleware<DevelopmentPayPalReturnRedirectMiddleware>();
 
     if (!app.Environment.IsDevelopment())
     {

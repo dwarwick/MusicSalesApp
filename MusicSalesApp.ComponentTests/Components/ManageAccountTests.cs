@@ -79,7 +79,6 @@ public class ManageAccountTests : BUnitTestBase
             {
                 HasSubscription = false,
                 Status = SubscriptionStatuses.Expired,
-                SubscriptionPrice = "3.99"
             });
         TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
 
@@ -127,7 +126,6 @@ public class ManageAccountTests : BUnitTestBase
                 EndDate = DateTime.UtcNow.AddDays(25),
                 NextBillingDate = DateTime.UtcNow.AddDays(25),
                 BillingSource = BillingSources.Apple,
-                SubscriptionPrice = "3.99"
             });
         TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
 
@@ -170,7 +168,6 @@ public class ManageAccountTests : BUnitTestBase
                 Status = SubscriptionStatuses.Active,
                 MonthlyPrice = 3.99m,
                 BillingSource = BillingSources.Apple,
-                SubscriptionPrice = "3.99"
             });
         TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
 
@@ -224,7 +221,6 @@ public class ManageAccountTests : BUnitTestBase
                 EndDate = DateTime.UtcNow.AddDays(25),
                 NextBillingDate = DateTime.UtcNow.AddDays(25),
                 BillingSource = BillingSources.PayPal,
-                SubscriptionPrice = "3.99"
             });
         TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
 
@@ -285,14 +281,91 @@ public class ManageAccountTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Markup, Does.Contain("Restart unlimited streaming for $0.99 per month"));
-            Assert.That(cut.Markup, Does.Contain("without another free trial"));
+            Assert.That(cut.Markup, Does.Contain("you will receive the current subscription price"));
             Assert.That(cut.Markup, Does.Not.Contain("Start My 3-Day Free Trial"));
             Assert.That(cut.Markup, Does.Not.Contain("3 days free trial"));
         });
     }
 
+    [TestCase(SubscriptionStatuses.Active)]
+    [TestCase(SubscriptionStatuses.Suspended)]
+    public void ManageAccount_PotentiallyBillablePayPalAgreement_MustBeResolvedBeforeAnotherCheckout(string status)
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = status,
+            BillingSource = BillingSources.PayPal,
+            PaypalSubscriptionId = "I-PAYMENT-RETRY"
+        });
+        MockPayPalSubscriptionManagementService
+            .Setup(service => service.GetOpenMismatchCorrelationIdAsync(
+                testUser.Id,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("5bf0b8bb-b63f-4781-8c21-a767e8beb8ba");
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("PayPal billing needs attention"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Refresh Subscription"));
+            Assert.That(cut.Markup, Does.Contain("Open PayPal"));
+            Assert.That(cut.Markup, Does.Contain("Contact Support"));
+            Assert.That(cut.Markup, Does.Contain("Stop PayPal Billing"));
+            Assert.That(cut.Markup, Does.Contain("prevent overlapping charges"));
+            Assert.That(cut.Markup, Does.Contain("Creator tips and other one-time payments are not affected"));
+            Assert.That(cut.Markup, Does.Contain("5bf0b8bb-b63f-4781-8c21-a767e8beb8ba"));
+            Assert.That(cut.Markup, Does.Not.Contain("Subscribe with PayPal"));
+            Assert.That(cut.Markup, Does.Not.Contain("Resubscribe with PayPal"));
+        });
+        MockPayPalSubscriptionManagementService.Verify(
+            service => service.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     [Test]
-    public void ManageAccount_LocallyExpiredPayPalAgreement_MustBeResolvedBeforeAnotherCheckout()
+    public async Task ManageAccount_RefreshSubscription_ShowsSupportCorrelation_WhenActiveMismatchRemains()
+    {
+        var testUser = SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = SubscriptionStatuses.Active,
+            BillingSource = BillingSources.PayPal,
+            PaypalSubscriptionId = "I-PAYMENT-RETRY"
+        });
+        var correlationId = "4bd2260b-2a3f-49dd-a216-c581bf6ca868";
+        MockPayPalSubscriptionManagementService
+            .Setup(service => service.ResolveCurrentMismatchAsync(
+                testUser,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.ActiveWithoutEntitlement,
+                SubscriptionStatuses.Active,
+                correlationId));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Refresh Subscription"), TimeSpan.FromSeconds(5));
+
+        await cut.InvokeAsync(() => InvokeNonPublicTask(cut.Instance, "RefreshSubscription"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain(correlationId)));
+
+        Assert.That(
+            cut.Markup,
+            Does.Contain("did not provide enough payment or trial evidence"));
+        MockPayPalSubscriptionManagementService.Verify(
+            service => service.ResolveCurrentMismatchAsync(
+                testUser,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public void ManageAccount_ExpiredPayPalAgreement_AllowsAnotherCheckout()
     {
         var testUser = SetupAccountWithSubscriptionStatus(new
         {
@@ -301,21 +374,24 @@ public class ManageAccountTests : BUnitTestBase
             BillingSource = BillingSources.PayPal,
             PaypalSubscriptionId = "I-PAYMENT-RETRY"
         });
+        MockPayPalSubscriptionManagementService
+            .Setup(x => x.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateOfferQuote(hasFreeTrial: false, isFirstTimeSubscriber: false, regularPrice: 0.99m));
 
         SetupRendererInfo();
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("PayPal billing needs attention"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Resubscribe with PayPal"), TimeSpan.FromSeconds(5));
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("Stop PayPal Billing"));
-            Assert.That(cut.Markup, Does.Contain("prevent overlapping charges"));
-            Assert.That(cut.Markup, Does.Not.Contain("Subscribe with PayPal"));
-            Assert.That(cut.Markup, Does.Not.Contain("Resubscribe with PayPal"));
+            Assert.That(cut.Markup, Does.Not.Contain("PayPal billing needs attention"));
+            Assert.That(cut.Markup, Does.Not.Contain("Stop PayPal Billing"));
+            Assert.That(cut.Markup, Does.Not.Contain("prevent overlapping charges"));
+            Assert.That(cut.Markup, Does.Contain("Resubscribe with PayPal"));
         });
         MockPayPalSubscriptionManagementService.Verify(
             service => service.GetOfferQuoteAsync(testUser.Id, It.IsAny<CancellationToken>()),
-            Times.Never);
+            Times.Once);
     }
 
     [Test]
@@ -474,7 +550,6 @@ public class ManageAccountTests : BUnitTestBase
             {
                 HasSubscription = false,
                 Status = SubscriptionStatuses.Expired,
-                SubscriptionPrice = "3.99"
             });
         TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
 
@@ -545,7 +620,6 @@ public class ManageAccountTests : BUnitTestBase
             IntervalCount = 1,
             TrialDays = hasFreeTrial ? 3 : null,
             SettingsVersion = settingsVersion,
-            IsFirstTimeSubscriber = isFirstTimeSubscriber,
-            IsConfigured = true
+            IsFirstTimeSubscriber = isFirstTimeSubscriber
         };
 }

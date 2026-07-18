@@ -38,6 +38,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<AdminMessageRole> AdminMessageRoles { get; set; }
     public DbSet<AdminMessageRecipient> AdminMessageRecipients { get; set; }
     public DbSet<ContactRequestSubmission> ContactRequestSubmissions { get; set; }
+    public DbSet<PayPalSubscriptionAnomaly> PayPalSubscriptionAnomalies { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -263,6 +264,24 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<AdminMessageRecipient>()
             .HasIndex(amr => amr.CanceledAtUtc);
 
+        builder.Entity<PayPalSubscriptionAnomaly>()
+            .HasOne(anomaly => anomaly.Subscription)
+            .WithMany()
+            .HasForeignKey(anomaly => anomaly.SubscriptionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<PayPalSubscriptionAnomaly>()
+            .HasIndex(anomaly => anomaly.SubscriptionId)
+            .HasFilter("[ResolvedAtUtc] IS NULL")
+            .IsUnique();
+
+        builder.Entity<PayPalSubscriptionAnomaly>()
+            .HasIndex(anomaly => anomaly.CorrelationId)
+            .IsUnique();
+
+        builder.Entity<PayPalSubscriptionAnomaly>()
+            .HasIndex(anomaly => anomaly.UserId);
+
         builder.Entity<Passkey>()
             .HasIndex(p => p.CredentialId)
             .IsUnique();
@@ -319,16 +338,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasIndex(s => s.Key)
             .IsUnique();
 
-        // Seed default subscription price setting
+        // Seed application settings
         builder.Entity<AppSettings>().HasData(
-            new AppSettings
-            {
-                Id = 1,
-                Key = AppSettingKeys.SubscriptionPrice,
-                Value = "3.99",
-                Description = "Monthly subscription price in USD",
-                UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            },
             new AppSettings
             {
                 Id = 2,

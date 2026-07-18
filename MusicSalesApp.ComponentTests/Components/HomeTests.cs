@@ -445,7 +445,6 @@ public class HomeTests : BUnitTestBase
             IntervalCount = 1,
             TrialDays = hasFreeTrial ? 3 : null,
             SettingsVersion = 7,
-            IsFirstTimeSubscriber = isFirstTimeSubscriber,
-            IsConfigured = true
+            IsFirstTimeSubscriber = isFirstTimeSubscriber
         };
 }

@@ -80,18 +80,29 @@
                 {
                     <div class="subscription-details">
                         <p><strong>PayPal billing needs attention.</strong></p>
-                        <p>
-                            StreamTunes cannot start another subscription until the existing PayPal agreement is confirmed ended.
-                            Stop its billing first to prevent overlapping charges.
-                        </p>
-                        @if (!_cancelling)
+                        <p>@PayPalMismatchGuidance</p>
+                        <p>Starting another recurring StreamTunes subscription is temporarily blocked to prevent overlapping charges. Creator tips and other one-time payments are not affected.</p>
+                        @if (!string.IsNullOrWhiteSpace(_mismatchCorrelationId))
                         {
-                            <SfButton OnClick="@CancelSubscription" CssClass="e-danger mt-2">Stop PayPal Billing</SfButton>
+                            <p><small>Support reference: @_mismatchCorrelationId</small></p>
                         }
-                        else
-                        {
-                            <p>Processing...</p>
-                        }
+                        <div class="mt-2">
+                            <SfButton OnClick="@RefreshSubscription"
+                                      Disabled="@(_refreshingSubscription || _cancelling)"
+                                      CssClass="cta-secondary hero-secondary-cta">
+                                @(_refreshingSubscription ? "Refreshing..." : "Refresh Subscription")
+                            </SfButton>
+                            @if (CanOpenPayPal)
+                            {
+                                <SfButton OnClick="@OpenPayPal" Disabled="@_refreshingSubscription" CssClass="mt-2">Open PayPal</SfButton>
+                            }
+                            <SfButton OnClick="@ContactSupport" Disabled="@_refreshingSubscription" CssClass="mt-2">Contact Support</SfButton>
+                            <SfButton OnClick="@CancelSubscription"
+                                      Disabled="@(_refreshingSubscription || _cancelling)"
+                                      CssClass="e-danger mt-2">
+                                @(_cancelling ? "Stopping..." : "Stop PayPal Billing")
+                            </SfButton>
+                        </div>
                     </div>
                 }
 
@@ -106,7 +117,7 @@
                         else if (_payPalOfferQuote?.IsFirstTimeSubscriber == false)
                         {
                             <h3>Restart unlimited streaming for @OfferRegularTermsDisplay.</h3>
-                            <p>As a returning subscriber, you will receive the current subscription price without another free trial.</p>
+                            <p>As a returning subscriber, you will receive the current subscription price.</p>
                         }
                         else
                         {

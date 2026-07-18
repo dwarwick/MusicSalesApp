@@ -139,7 +139,7 @@ public class SubscribeCtaDialogTests : BUnitTestBase
     }
 
     [Test]
-    public async Task SubscribeCtaDialog_ShowsSubscriptionPrice()
+    public async Task SubscribeCtaDialog_ShowsConfiguredOfferPrice()
     {
         // Arrange
         var cut = TestContext.Render<SubscribeCtaDialog>(parameters => parameters
@@ -254,7 +254,6 @@ public class SubscribeCtaDialogTests : BUnitTestBase
             IntervalCount = 1,
             TrialDays = hasFreeTrial ? 3 : null,
             SettingsVersion = 7,
-            IsFirstTimeSubscriber = isFirstTimeSubscriber,
-            IsConfigured = true
+            IsFirstTimeSubscriber = isFirstTimeSubscriber
         };
 }

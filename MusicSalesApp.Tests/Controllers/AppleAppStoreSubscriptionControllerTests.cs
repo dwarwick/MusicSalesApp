@@ -58,7 +58,6 @@ public class AppleAppStoreSubscriptionControllerTests
         _mockUserManager.Setup(m => m.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(user);
         _mockUserManager.Setup(m => m.UpdateAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(IdentityResult.Success);
         _mockConfiguration.Setup(c => c["AppleAppStore:SubscriptionProductId"]).Returns("streamtunes_monthly_sub_ios");
-        _mockConfiguration.Setup(c => c["AppSettings:SubscriptionPrice"]).Returns("3.99");
         _mockConfiguration.Setup(c => c["BaseUrl"]).Returns("https://davidtest.dev");
     }
 

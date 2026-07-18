@@ -16,7 +16,6 @@ public sealed record PayPalWebOfferQuote
     public int? TrialDays { get; init; }
     public int? SettingsVersion { get; init; }
     public bool IsFirstTimeSubscriber { get; init; }
-    public bool IsConfigured { get; init; }
 
     public bool HasFreeTrial => TrialDays > 0;
 }
@@ -33,3 +32,10 @@ public sealed record PayPalCheckoutResult(
 public sealed record PayPalActivationResult(bool Success, string? Error = null, bool IsTrial = false);
 
 public sealed record PayPalCancellationResult(bool Success, DateTime? EndDate = null, string? Error = null);
+
+public sealed record PayPalMismatchResolutionResult(
+    string Status,
+    string? ProviderStatus = null,
+    string? CorrelationId = null,
+    DateTime? EntitlementEndDate = null,
+    string? Error = null);

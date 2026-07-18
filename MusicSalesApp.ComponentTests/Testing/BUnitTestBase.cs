@@ -21,6 +21,7 @@ using System.Net.Http;
 using System.Security.Claims;
 using System.Text.Json;
 using MusicSalesApp.Common;
+using MusicSalesApp.Common.Helpers;
 using Syncfusion.Blazor;
 
 namespace MusicSalesApp.ComponentTests.Testing;
@@ -205,12 +206,8 @@ public abstract class BUnitTestBase
             .ReturnsAsync((Subscription)null);
 
         // Setup default returns for IAppSettingsService methods
-        MockAppSettingsService.Setup(x => x.GetSubscriptionPriceAsync())
-            .ReturnsAsync(3.99m);
         MockAppSettingsService.Setup(x => x.GetSettingAsync(It.IsAny<string>()))
             .ReturnsAsync((string)null);
-        MockAppSettingsService.Setup(x => x.SetSubscriptionPriceAsync(It.IsAny<decimal>()))
-            .Returns(Task.CompletedTask);
         MockAppSettingsService.Setup(x => x.SetSettingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Returns(Task.CompletedTask);
         MockAppSettingsService.Setup(x => x.GetStreamPayRateAsync())
@@ -509,7 +506,9 @@ public abstract class BUnitTestBase
         // Add IConfiguration for components that need it
         var configData = new Dictionary<string, string>
         {
-            ["Facebook:AppId"] = "test-facebook-app-id"
+            ["Facebook:AppId"] = "test-facebook-app-id",
+            [AppSettingKeys.EmailCustomerServiceEmail] = "customerservice.test@streamtunes.net",
+            [AppSettingKeys.PayPalAccountManagementUrl] = "https://www.sandbox.paypal.com/myaccount/autopay/"
         };
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(configData!)

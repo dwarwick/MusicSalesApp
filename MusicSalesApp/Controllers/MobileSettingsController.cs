@@ -22,12 +22,10 @@ public class MobileSettingsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetMobileSettings()
     {
-        var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
         var streamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
 
         return Ok(new
         {
-            subscriptionPrice = subscriptionPrice.ToString("F2"),
             streamQualifyingSeconds
         });
     }

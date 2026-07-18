@@ -5,8 +5,8 @@ namespace MusicSalesApp.Common.Helpers;
 /// </summary>
 public static class PayPalSubscriptionDefaults
 {
-    public const string LegacyPlanNamePrefix = "Music Streaming Monthly Subscription - $";
     public const string UsdCurrencyCode = "USD";
     public const string UserCancellationReason = "User requested cancellation";
     public const int RefreshBoundaryMinutes = 5;
+    public const int AnomalyNotificationClaimMinutes = 15;
 }

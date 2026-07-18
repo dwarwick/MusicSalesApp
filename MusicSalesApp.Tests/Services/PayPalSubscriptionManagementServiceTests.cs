@@ -18,6 +18,7 @@ public class PayPalSubscriptionManagementServiceTests
     private Mock<IAppSettingsService> _appSettingsService = null!;
     private Mock<ISubscriptionConfirmationEmailService> _confirmationEmailService = null!;
     private Mock<IAccountEmailService> _accountEmailService = null!;
+    private Mock<IPayPalSubscriptionAnomalyService> _anomalyService = null!;
     private Mock<UserManager<ApplicationUser>> _userManager = null!;
     private PayPalSubscriptionManagementService _service = null!;
 
@@ -29,6 +30,7 @@ public class PayPalSubscriptionManagementServiceTests
         _appSettingsService = new Mock<IAppSettingsService>();
         _confirmationEmailService = new Mock<ISubscriptionConfirmationEmailService>();
         _accountEmailService = new Mock<IAccountEmailService>();
+        _anomalyService = new Mock<IPayPalSubscriptionAnomalyService>();
 
         var userStore = new Mock<IUserStore<ApplicationUser>>();
         _userManager = new Mock<UserManager<ApplicationUser>>(
@@ -55,6 +57,7 @@ public class PayPalSubscriptionManagementServiceTests
             _appSettingsService.Object,
             _confirmationEmailService.Object,
             _accountEmailService.Object,
+            _anomalyService.Object,
             _userManager.Object,
             configuration,
             Mock.Of<ILogger<PayPalSubscriptionManagementService>>());
@@ -83,6 +86,21 @@ public class PayPalSubscriptionManagementServiceTests
             Assert.That(returningSubscription.IsFirstTimeSubscriber, Is.False);
             Assert.That(returningSubscription.RegularPrice, Is.EqualTo(firstSubscription.RegularPrice));
         });
+    }
+
+    [Test]
+    public void GetOfferQuoteAsync_Throws_WhenPayPalWebOfferIsNotConfigured()
+    {
+        _appSettingsService.Setup(service => service.GetPayPalWebSubscriptionOfferAsync())
+            .ReturnsAsync((PayPalWebSubscriptionOffer?)null);
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _service.GetOfferQuoteAsync(42));
+
+        Assert.That(exception!.Message, Does.Contain("has not been configured"));
+        _payPalApi.Verify(
+            service => service.GetActivePlansAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Test]
@@ -1458,6 +1476,165 @@ public class PayPalSubscriptionManagementServiceTests
             Assert.That(result.Subscription.TrialEndDate, Is.EqualTo(trialEnd));
             Assert.That(result.Subscription.TrialConvertedAt, Is.EqualTo(paymentTime));
         });
+    }
+
+    [Test]
+    public async Task ResolveCurrentMismatchAsync_RestoresEntitlement_WhenPayPalProvidesPaymentEvidence()
+    {
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        var subscription = new Subscription
+        {
+            Id = 19,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-RESTORE",
+            PayPalPlanId = "P-NO-TRIAL",
+            Status = SubscriptionStatuses.Active,
+            LastPaymentDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(29)
+        };
+        var details = new PayPalSubscriptionDetails
+        {
+            Id = subscription.PayPalSubscriptionId,
+            PlanId = subscription.PayPalPlanId,
+            Status = SubscriptionStatuses.Active,
+            LastPaymentTime = new DateTimeOffset(subscription.LastPaymentDate.Value),
+            NextBillingTime = new DateTimeOffset(subscription.EndDate.Value),
+            Plan = CreateNoTrialPlan()
+        };
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<PayPalSubscriptionReconciliation>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult { Subscription = subscription });
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync(subscription);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(details);
+
+        var result = await _service.ResolveCurrentMismatchAsync(user, "https://streamtunes.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Status, Is.EqualTo(PayPalMismatchResolutionStatuses.EntitlementRestored));
+            Assert.That(result.EntitlementEndDate, Is.EqualTo(subscription.EndDate));
+        });
+        _anomalyService.Verify(
+            service => service.ResolveOpenEpisodeAsync(subscription.Id, It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce());
+    }
+
+    [TestCase(SubscriptionStatuses.Active, PayPalMismatchResolutionStatuses.ActiveWithoutEntitlement)]
+    [TestCase(SubscriptionStatuses.Suspended, PayPalMismatchResolutionStatuses.Suspended)]
+    public async Task ResolveCurrentMismatchAsync_KeepsSubscriptionSignupBlocked_WhenMismatchRemains(
+        string providerStatus,
+        string expectedStatus)
+    {
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        var subscription = new Subscription
+        {
+            Id = 20,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-UNRESOLVED",
+            PayPalPlanId = "P-NO-TRIAL",
+            Status = providerStatus
+        };
+        var episode = new PayPalSubscriptionAnomaly
+        {
+            Id = 3,
+            SubscriptionId = subscription.Id,
+            CorrelationId = "d7339bcf-80aa-4770-97e2-d8f6c657d11b"
+        };
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<PayPalSubscriptionReconciliation>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult { Subscription = subscription });
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription?)null);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionDetails
+            {
+                Id = subscription.PayPalSubscriptionId,
+                PlanId = subscription.PayPalPlanId,
+                Status = providerStatus,
+                FailedPaymentsCount = providerStatus == SubscriptionStatuses.Suspended ? 1 : 0,
+                Plan = CreateNoTrialPlan()
+            });
+        _userManager.Setup(manager => manager.FindByIdAsync(user.Id.ToString()))
+            .ReturnsAsync(user);
+        _anomalyService.Setup(service => service.RecordMismatchAsync(
+                subscription,
+                user,
+                It.IsAny<PayPalSubscriptionDetails>(),
+                null,
+                "https://streamtunes.example",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(episode);
+        _anomalyService.Setup(service => service.GetOpenEpisodeAsync(
+                subscription.Id,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(episode);
+
+        var result = await _service.ResolveCurrentMismatchAsync(user, "https://streamtunes.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Status, Is.EqualTo(expectedStatus));
+            Assert.That(result.CorrelationId, Is.EqualTo(episode.CorrelationId));
+        });
+    }
+
+    [Test]
+    public async Task ResolveCurrentMismatchAsync_ReturnsAgreementEnded_AndResolvesEpisode()
+    {
+        var user = new ApplicationUser { Id = 42 };
+        var subscription = new Subscription
+        {
+            Id = 21,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-ENDED",
+            PayPalPlanId = "P-NO-TRIAL",
+            Status = SubscriptionStatuses.Expired,
+            EndDate = DateTime.UtcNow.AddDays(-1)
+        };
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<PayPalSubscriptionReconciliation>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult { Subscription = subscription });
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionDetails
+            {
+                Id = subscription.PayPalSubscriptionId,
+                PlanId = subscription.PayPalPlanId,
+                Status = SubscriptionStatuses.Expired,
+                Plan = CreateNoTrialPlan()
+            });
+
+        var result = await _service.ResolveCurrentMismatchAsync(user, "https://streamtunes.example");
+
+        Assert.That(result.Status, Is.EqualTo(PayPalMismatchResolutionStatuses.AgreementEnded));
+        _anomalyService.Verify(
+            service => service.ResolveOpenEpisodeAsync(subscription.Id, It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce());
     }
 
     private static PayPalWebSubscriptionOffer CreateOffer(int version = 8)

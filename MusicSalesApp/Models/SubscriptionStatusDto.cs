@@ -17,5 +17,4 @@ public class SubscriptionStatusDto
     public string PaypalSubscriptionId { get; set; }
     public string BillingSource { get; set; }
     public bool IsSubscriptionBlocked { get; set; }
-    public string SubscriptionPrice { get; set; }
 }

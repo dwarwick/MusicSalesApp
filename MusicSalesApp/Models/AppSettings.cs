@@ -14,7 +14,7 @@ public class AppSettings
     public int Id { get; set; }
 
     /// <summary>
-    /// Unique key identifying the setting (e.g., "SubscriptionPrice").
+    /// Unique key identifying the setting (e.g., "StreamQualifyingSeconds").
     /// </summary>
     [Required]
     [MaxLength(100)]

@@ -43,4 +43,13 @@ public interface IPayPalSubscriptionManagementService
         int userId,
         string baseUrl,
         CancellationToken cancellationToken = default);
+
+    Task<PayPalMismatchResolutionResult> ResolveCurrentMismatchAsync(
+        ApplicationUser user,
+        string baseUrl,
+        CancellationToken cancellationToken = default);
+
+    Task<string?> GetOpenMismatchCorrelationIdAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
 }

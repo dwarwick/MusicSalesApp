@@ -85,66 +85,6 @@ public class AppSettingsServiceTests
         Assert.That(result, Is.EqualTo(updatedValue));
     }
 
-    [Test]
-    public async Task GetSubscriptionPriceAsync_ReturnsDefaultPrice_WhenNotSet()
-    {
-        // Act
-        var result = await _service.GetSubscriptionPriceAsync();
-
-        // Assert
-        Assert.That(result, Is.EqualTo(AppSettingsService.DefaultSubscriptionPrice));
-    }
-
-    [Test]
-    public async Task GetSubscriptionPriceAsync_ReturnsConfiguredPrice()
-    {
-        // Arrange
-        var expectedPrice = 5.99m;
-        await _service.SetSubscriptionPriceAsync(expectedPrice);
-
-        // Act
-        var result = await _service.GetSubscriptionPriceAsync();
-
-        // Assert
-        Assert.That(result, Is.EqualTo(expectedPrice));
-    }
-
-    [Test]
-    public async Task SetSubscriptionPriceAsync_SavesCorrectFormat()
-    {
-        // Arrange
-        var price = 9.99m;
-
-        // Act
-        await _service.SetSubscriptionPriceAsync(price);
-
-        // Assert
-        var rawValue = await _service.GetSettingAsync(AppSettingsService.SubscriptionPriceKey);
-        Assert.That(rawValue, Is.EqualTo("9.99"));
-    }
-
-    [Test]
-    public async Task GetSubscriptionPriceAsync_ReturnsDefault_WhenInvalidValueStored()
-    {
-        // Arrange - Store an invalid value directly
-        using (var context = new AppDbContext(_dbOptions))
-        {
-            context.AppSettings.Add(new AppSettings
-            {
-                Key = AppSettingsService.SubscriptionPriceKey,
-                Value = "invalid",
-                UpdatedAt = DateTime.UtcNow
-            });
-            await context.SaveChangesAsync();
-        }
-
-        // Act
-        var result = await _service.GetSubscriptionPriceAsync();
-
-        // Assert
-        Assert.That(result, Is.EqualTo(AppSettingsService.DefaultSubscriptionPrice));
-    }
-
     // ===== PayPal web subscription offer =====
 
     [Test]
@@ -181,9 +121,8 @@ public class AppSettingsServiceTests
     }
 
     [Test]
-    public async Task SetPayPalWebSubscriptionOfferAsync_IncrementsVersionWithoutChangingGlobalPrice()
+    public async Task SetPayPalWebSubscriptionOfferAsync_IncrementsVersionAndUpdatesSnapshot()
     {
-        await _service.SetSubscriptionPriceAsync(2.99m);
         var first = await _service.SetPayPalWebSubscriptionOfferAsync(CreatePayPalWebOffer());
         var second = await _service.SetPayPalWebSubscriptionOfferAsync(
             CreatePayPalWebOffer() with
@@ -191,14 +130,11 @@ public class AppSettingsServiceTests
                 PrimaryPlan = CreatePayPalWebOffer().PrimaryPlan with { Name = "Updated trial plan" }
             });
 
-        var globalPrice = await _service.GetSubscriptionPriceAsync();
-
         Assert.Multiple(() =>
         {
             Assert.That(first.Version, Is.EqualTo(1));
             Assert.That(second.Version, Is.EqualTo(2));
             Assert.That(second.PrimaryPlan.Name, Is.EqualTo("Updated trial plan"));
-            Assert.That(globalPrice, Is.EqualTo(2.99m));
         });
     }
 

@@ -60,6 +60,8 @@ public partial class ManageAccountModel : BlazorBase
     protected bool _agreeToTerms = false;
     protected bool _subscribing = false;
     protected bool _cancelling = false;
+    protected bool _refreshingSubscription = false;
+    protected string _mismatchCorrelationId = string.Empty;
     
     // Account closure
     protected bool _hasPurchasedMusic = false;
@@ -83,7 +85,7 @@ public partial class ManageAccountModel : BlazorBase
     [Inject]
     private IAccountDeletionService AccountDeletionService { get; set; }
 
-    [SupplyParameterFromQuery(Name = "success")]
+    [SupplyParameterFromQuery(Name = PayPalReturnQueryKeys.Success)]
     public bool? Success { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -432,8 +434,7 @@ public partial class ManageAccountModel : BlazorBase
         && string.Equals(_billingSource, BillingSources.PayPal, StringComparison.Ordinal)
         && !string.IsNullOrWhiteSpace(_paypalSubscriptionId)
         && (_subscriptionStatus == SubscriptionStatuses.Active
-            || _subscriptionStatus == SubscriptionStatuses.Suspended
-            || _subscriptionStatus == SubscriptionStatuses.Expired);
+            || _subscriptionStatus == SubscriptionStatuses.Suspended);
     protected bool NeedsSubscriptionOffer => !_hasSubscription && !HasUnresolvedPayPalAgreement;
     protected bool CanCreateNewSubscription => NeedsSubscriptionOffer && _payPalOfferQuote != null;
     protected bool HasFreeTrialOffer => _payPalOfferQuote?.HasFreeTrial == true;
@@ -459,6 +460,18 @@ public partial class ManageAccountModel : BlazorBase
         string.Equals(_billingSource, BillingSources.Apple, StringComparison.Ordinal) ||
         string.Equals(_billingSource, BillingSources.GooglePlay, StringComparison.Ordinal);
     protected bool ShowCancelSubscriptionButton => HasActiveSubscription && !IsNonRenewingSubscription;
+    protected string PayPalMismatchGuidance => string.Equals(
+        _subscriptionStatus,
+        SubscriptionStatuses.Suspended,
+        StringComparison.OrdinalIgnoreCase)
+        ? "PayPal reports that this billing agreement is suspended. Review the payment issue in PayPal, refresh the subscription, or stop the agreement."
+        : "PayPal reports that this billing agreement is active, but StreamTunes cannot confirm a current paid period or free trial. Refresh the subscription so StreamTunes can check it again.";
+    protected string PayPalAccountManagementUrl =>
+        Configuration[AppSettingKeys.PayPalAccountManagementUrl] ?? string.Empty;
+    protected bool CanOpenPayPal => Uri.TryCreate(
+        PayPalAccountManagementUrl,
+        UriKind.Absolute,
+        out _);
     protected string DisplaySubscriptionStatus => IsNonRenewingSubscription
         ? "Renews Off"
         : _isOnTrial
@@ -659,6 +672,10 @@ public partial class ManageAccountModel : BlazorBase
                 _trialEndDate = response.TrialEndDate;
                 _paypalSubscriptionId = response.PaypalSubscriptionId;
                 _billingSource = response.BillingSource;
+                _mismatchCorrelationId = HasUnresolvedPayPalAgreement && _currentUser != null
+                    ? await PayPalSubscriptionManagementService.GetOpenMismatchCorrelationIdAsync(_currentUser.Id)
+                        ?? string.Empty
+                    : string.Empty;
             }
         }
         catch (Exception ex)
@@ -803,6 +820,99 @@ public partial class ManageAccountModel : BlazorBase
             await InvokeAsync(StateHasChanged);
         }
     }
+
+    protected async Task RefreshSubscription()
+    {
+        if (_currentUser == null || _refreshingSubscription)
+        {
+            return;
+        }
+
+        _refreshingSubscription = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var result = await PayPalSubscriptionManagementService.ResolveCurrentMismatchAsync(
+                _currentUser,
+                NavigationManager.BaseUri);
+
+            await LoadSubscriptionStatus();
+            _mismatchCorrelationId = result.CorrelationId ?? _mismatchCorrelationId;
+            if (NeedsSubscriptionOffer)
+            {
+                await LoadPayPalOfferQuoteAsync();
+            }
+
+            switch (result.Status)
+            {
+                case PayPalMismatchResolutionStatuses.EntitlementRestored:
+                    _successMessage = result.EntitlementEndDate.HasValue
+                        ? $"Your PayPal subscription was refreshed and full streaming access is restored through {FormatUserDateTimeWithTimeZone(result.EntitlementEndDate)}."
+                        : "Your PayPal subscription was refreshed and full streaming access is restored.";
+                    break;
+                case PayPalMismatchResolutionStatuses.Suspended:
+                    _errorMessage = BuildMismatchMessage(
+                        "PayPal still reports this billing agreement as suspended. Resolve the payment issue in PayPal, stop the agreement, or contact customer service.");
+                    break;
+                case PayPalMismatchResolutionStatuses.ActiveWithoutEntitlement:
+                    _errorMessage = BuildMismatchMessage(
+                        "PayPal reports this billing agreement as active, but it did not provide enough payment or trial evidence to restore streaming access. Please contact customer service.");
+                    break;
+                case PayPalMismatchResolutionStatuses.AgreementEnded:
+                    _successMessage = "PayPal confirmed that the previous billing agreement has ended. You may now start a new subscription.";
+                    break;
+                case PayPalMismatchResolutionStatuses.NoAgreement:
+                    _errorMessage = "No PayPal billing agreement was found for this account.";
+                    break;
+                default:
+                    _errorMessage = BuildMismatchMessage(
+                        result.Error ?? "PayPal could not be refreshed right now. Please try again.");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error refreshing PayPal subscription mismatch");
+            _errorMessage = "PayPal could not be refreshed right now. Please try again.";
+        }
+        finally
+        {
+            _refreshingSubscription = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected void OpenPayPal()
+    {
+        if (CanOpenPayPal)
+        {
+            NavigationManager.NavigateTo(PayPalAccountManagementUrl, forceLoad: true);
+        }
+    }
+
+    protected void ContactSupport()
+    {
+        var customerServiceEmail = Configuration[AppSettingKeys.EmailCustomerServiceEmail];
+        if (string.IsNullOrWhiteSpace(customerServiceEmail))
+        {
+            _errorMessage = "Customer service contact information is temporarily unavailable.";
+            return;
+        }
+
+        var reference = !string.IsNullOrWhiteSpace(_mismatchCorrelationId)
+            ? _mismatchCorrelationId
+            : _paypalSubscriptionId;
+        var subject = Uri.EscapeDataString("StreamTunes PayPal subscription help");
+        var body = Uri.EscapeDataString($"Please help with my PayPal subscription. Reference: {reference}");
+        NavigationManager.NavigateTo($"mailto:{customerServiceEmail}?subject={subject}&body={body}", forceLoad: true);
+    }
+
+    private string BuildMismatchMessage(string message) =>
+        string.IsNullOrWhiteSpace(_mismatchCorrelationId)
+            ? message
+            : $"{message} Reference: {_mismatchCorrelationId}";
 
     private static string FormatOfferPrice(PayPalWebOfferQuote offer)
     {

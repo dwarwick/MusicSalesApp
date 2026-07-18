@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using System.Collections.Concurrent;
+using System.Globalization;
 
 #nullable enable
 
@@ -16,6 +17,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
     private readonly IAppSettingsService _appSettingsService;
     private readonly ISubscriptionConfirmationEmailService _confirmationEmailService;
     private readonly IAccountEmailService _accountEmailService;
+    private readonly IPayPalSubscriptionAnomalyService _anomalyService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<PayPalSubscriptionManagementService> _logger;
@@ -26,6 +28,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         IAppSettingsService appSettingsService,
         ISubscriptionConfirmationEmailService confirmationEmailService,
         IAccountEmailService accountEmailService,
+        IPayPalSubscriptionAnomalyService anomalyService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<PayPalSubscriptionManagementService> logger)
@@ -35,6 +38,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         _appSettingsService = appSettingsService;
         _confirmationEmailService = confirmationEmailService;
         _accountEmailService = accountEmailService;
+        _anomalyService = anomalyService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -44,24 +48,16 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         int? userId,
         CancellationToken cancellationToken = default)
     {
-        var isFirstTimeSubscriber = !userId.HasValue
-            || !await _subscriptionService.HasPriorActivatedSubscriptionAsync(userId.Value);
         var configuredOffer = await _appSettingsService.GetPayPalWebSubscriptionOfferAsync();
 
         if (configuredOffer == null)
         {
-            var legacyPrice = await _appSettingsService.GetSubscriptionPriceAsync();
-            return new PayPalWebOfferQuote
-            {
-                PlanName = $"{PayPalSubscriptionDefaults.LegacyPlanNamePrefix}{legacyPrice:F2}",
-                RegularPrice = legacyPrice,
-                CurrencyCode = PayPalSubscriptionDefaults.UsdCurrencyCode,
-                IntervalUnit = PayPalBillingIntervals.Month,
-                IntervalCount = 1,
-                IsFirstTimeSubscriber = isFirstTimeSubscriber,
-                IsConfigured = false
-            };
+            throw new InvalidOperationException(
+                "A PayPal web subscription offer has not been configured.");
         }
+
+        var isFirstTimeSubscriber = !userId.HasValue
+            || !await _subscriptionService.HasPriorActivatedSubscriptionAsync(userId.Value);
 
         var selectedPlan = configuredOffer.PrimaryPlan;
         if (!isFirstTimeSubscriber && configuredOffer.PrimaryPlan.HasFreeTrial)
@@ -81,8 +77,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             IntervalCount = selectedPlan.IntervalCount,
             TrialDays = isFirstTimeSubscriber ? selectedPlan.TrialDays : null,
             SettingsVersion = configuredOffer.Version,
-            IsFirstTimeSubscriber = isFirstTimeSubscriber,
-            IsConfigured = true
+            IsFirstTimeSubscriber = isFirstTimeSubscriber
         };
     }
 
@@ -182,9 +177,8 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         }
 
         var quote = await GetOfferQuoteAsync(user.Id, cancellationToken);
-        if (quote.IsConfigured
-            && (displayedOfferVersion != quote.SettingsVersion
-                || !string.Equals(displayedPlanId, quote.PlanId, StringComparison.Ordinal)))
+        if (displayedOfferVersion != quote.SettingsVersion
+            || !string.Equals(displayedPlanId, quote.PlanId, StringComparison.Ordinal))
         {
             return PayPalCheckoutResult.Failed(
                 "The subscription offer or your trial eligibility changed. Refresh the page and review the current terms before subscribing.");
@@ -193,9 +187,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         PayPalPlan livePlan;
         try
         {
-            livePlan = quote.IsConfigured
-                ? await _payPalApi.GetPlanAsync(quote.PlanId!, cancellationToken)
-                : await ResolveLegacyPlanAsync(quote, cancellationToken);
+            livePlan = await _payPalApi.GetPlanAsync(quote.PlanId!, cancellationToken);
         }
         catch (PayPalSubscriptionApiException ex)
         {
@@ -385,7 +377,15 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             }
         }
 
-        return await ReconcileRetrievedSubscriptionAsync(details, baseUrl);
+        var reconciliation = await ReconcileRetrievedSubscriptionAsync(details, baseUrl);
+        await SynchronizeAnomalyEpisodeAsync(
+            localSubscription,
+            details,
+            reconciliation,
+            reconciliation == null ? "The local subscription could not be reconciled with PayPal." : null,
+            baseUrl,
+            cancellationToken);
+        return reconciliation;
     }
 
     private async Task<PayPalSubscriptionReconciliationResult> ReconcileRetrievedSubscriptionAsync(
@@ -697,6 +697,139 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         return await ReconcileSubscriptionAsync(latest.PayPalSubscriptionId, baseUrl, cancellationToken) != null;
     }
 
+    public async Task<PayPalMismatchResolutionResult> ResolveCurrentMismatchAsync(
+        ApplicationUser user,
+        string baseUrl,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        var latest = await _subscriptionService.GetLatestSubscriptionAsync(user.Id);
+        if (latest == null
+            || !string.Equals(latest.BillingSource, BillingSources.PayPal, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(latest.PayPalSubscriptionId))
+        {
+            return new PayPalMismatchResolutionResult(PayPalMismatchResolutionStatuses.NoAgreement);
+        }
+
+        var reconciliation = await ReconcileSubscriptionAsync(
+            latest.PayPalSubscriptionId,
+            baseUrl,
+            cancellationToken);
+        if (reconciliation == null)
+        {
+            var unavailableEpisode = await _anomalyService.GetOpenEpisodeAsync(latest.Id, cancellationToken);
+            return new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.TemporarilyUnavailable,
+                CorrelationId: unavailableEpisode?.CorrelationId,
+                Error: "PayPal could not be reconciled right now. Please try again.");
+        }
+
+        var refreshed = reconciliation.Subscription;
+        var active = await _subscriptionService.GetActiveSubscriptionAsync(user.Id);
+        if (active?.Id == refreshed.Id)
+        {
+            await _anomalyService.ResolveOpenEpisodeAsync(refreshed.Id, cancellationToken);
+            return new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.EntitlementRestored,
+                refreshed.Status,
+                EntitlementEndDate: refreshed.EndDate ?? refreshed.TrialEndDate);
+        }
+
+        if (IsProviderEndedStatus(refreshed.Status))
+        {
+            await _anomalyService.ResolveOpenEpisodeAsync(refreshed.Id, cancellationToken);
+            return new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.AgreementEnded,
+                refreshed.Status);
+        }
+
+        var episode = await _anomalyService.GetOpenEpisodeAsync(refreshed.Id, cancellationToken);
+        if (string.Equals(refreshed.Status, SubscriptionStatuses.Suspended, StringComparison.OrdinalIgnoreCase))
+        {
+            return new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.Suspended,
+                refreshed.Status,
+                episode?.CorrelationId);
+        }
+
+        if (string.Equals(refreshed.Status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            return new PayPalMismatchResolutionResult(
+                PayPalMismatchResolutionStatuses.ActiveWithoutEntitlement,
+                refreshed.Status,
+                episode?.CorrelationId);
+        }
+
+        return new PayPalMismatchResolutionResult(
+            PayPalMismatchResolutionStatuses.TemporarilyUnavailable,
+            refreshed.Status,
+            episode?.CorrelationId,
+            Error: "PayPal returned a subscription state that cannot restore access yet.");
+    }
+
+    public async Task<string?> GetOpenMismatchCorrelationIdAsync(
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        var latest = await _subscriptionService.GetLatestSubscriptionAsync(userId);
+        if (latest == null
+            || !string.Equals(latest.BillingSource, BillingSources.PayPal, StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(latest.PayPalSubscriptionId))
+        {
+            return null;
+        }
+
+        var episode = await _anomalyService.GetOpenEpisodeAsync(latest.Id, cancellationToken);
+        return episode?.CorrelationId;
+    }
+
+    private async Task SynchronizeAnomalyEpisodeAsync(
+        Subscription? localSubscription,
+        PayPalSubscriptionDetails details,
+        PayPalSubscriptionReconciliationResult? reconciliation,
+        string? reconciliationError,
+        string baseUrl,
+        CancellationToken cancellationToken)
+    {
+        var subscription = reconciliation?.Subscription ?? localSubscription;
+        if (subscription == null)
+        {
+            return;
+        }
+
+        var active = await _subscriptionService.GetActiveSubscriptionAsync(subscription.UserId);
+        if (active?.Id == subscription.Id || IsProviderEndedStatus(details.Status))
+        {
+            await _anomalyService.ResolveOpenEpisodeAsync(subscription.Id, cancellationToken);
+            return;
+        }
+
+        if (!IsPotentiallyBillableStatus(details.Status))
+        {
+            return;
+        }
+
+        var user = await _userManager.FindByIdAsync(subscription.UserId.ToString(CultureInfo.InvariantCulture));
+        if (user == null)
+        {
+            _logger.LogError(
+                "Cannot record PayPal subscription anomaly for subscription {SubscriptionId} because user {UserId} was not found",
+                subscription.Id,
+                subscription.UserId);
+            return;
+        }
+
+        await _anomalyService.RecordMismatchAsync(
+            subscription,
+            user,
+            details,
+            reconciliationError ??
+                $"PayPal reported {details.Status}, but StreamTunes could not establish current streaming entitlement.",
+            baseUrl,
+            cancellationToken);
+    }
+
     private async Task<bool> StopOverlappingPayPalSubscriptionAsync(
         Subscription pendingSubscription,
         string baseUrl,
@@ -799,27 +932,6 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         return await _subscriptionService.CancelPayPalSubscriptionAsync(
             pendingSubscription.PayPalSubscriptionId,
             entitlementEnd);
-    }
-
-    private async Task<PayPalPlan> ResolveLegacyPlanAsync(
-        PayPalWebOfferQuote quote,
-        CancellationToken cancellationToken)
-    {
-        var plans = await _payPalApi.GetActivePlansAsync(cancellationToken);
-        var exactName = $"{PayPalSubscriptionDefaults.LegacyPlanNamePrefix}{quote.RegularPrice:F2}";
-        var plan = plans.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, exactName, StringComparison.Ordinal)
-            && !candidate.HasTrial);
-
-        plan ??= plans.FirstOrDefault(candidate =>
-            !candidate.HasTrial
-            && candidate.RegularPrice == quote.RegularPrice
-            && string.Equals(candidate.CurrencyCode, quote.CurrencyCode, StringComparison.Ordinal)
-            && string.Equals(candidate.IntervalUnit, quote.IntervalUnit, StringComparison.Ordinal)
-            && candidate.IntervalCount == quote.IntervalCount);
-
-        return plan ?? throw new PayPalSubscriptionApiException(
-            $"No active legacy PayPal plan exists for {quote.CurrencyCode} {quote.RegularPrice:F2}.");
     }
 
     private async Task<string?> ClearAbandonedPendingCheckoutAsync(

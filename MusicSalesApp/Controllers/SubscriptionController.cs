@@ -19,7 +19,6 @@ namespace MusicSalesApp.Controllers;
 public class SubscriptionController : ControllerBase
 {
     private readonly ISubscriptionService _subscriptionService;
-    private readonly IAppSettingsService _appSettingsService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SubscriptionController> _logger;
@@ -36,7 +35,6 @@ public class SubscriptionController : ControllerBase
     /// Initializes a new instance of the SubscriptionController.
     /// </summary>
     /// <param name="subscriptionService">Service for managing subscription business logic.</param>
-    /// <param name="appSettingsService">Service for accessing application settings.</param>
     /// <param name="userManager">ASP.NET Identity user manager.</param>
     /// <param name="configuration">Application configuration for accessing PayPal settings.</param>
     /// <param name="logger">Logger for tracking subscription operations.</param>
@@ -46,7 +44,6 @@ public class SubscriptionController : ControllerBase
     /// <param name="googlePlayVerificationService">Service for Google Play billing operations.</param>
     public SubscriptionController(
         ISubscriptionService subscriptionService,
-        IAppSettingsService appSettingsService,
         UserManager<ApplicationUser> userManager,
         IConfiguration configuration,
         ILogger<SubscriptionController> logger,
@@ -57,7 +54,6 @@ public class SubscriptionController : ControllerBase
         IPayPalSubscriptionManagementService payPalSubscriptionManagementService)
     {
         _subscriptionService = subscriptionService;
-        _appSettingsService = appSettingsService;
         _userManager = userManager;
         _configuration = configuration;
         _logger = logger;
@@ -106,15 +102,12 @@ public class SubscriptionController : ControllerBase
                 latestSubscription?.TrialEndDate);
         }
 
-        var subscriptionPrice = await _appSettingsService.GetSubscriptionPriceAsync();
-        
         if (latestSubscription == null)
         {
             return Ok(new
             {
                 hasSubscription = false,
                 isOnTrial = false,
-                subscriptionPrice = subscriptionPrice.ToString("F2"),
                 isSubscriptionBlocked = user.IsSubscriptionBlocked
             });
         }
@@ -139,8 +132,7 @@ public class SubscriptionController : ControllerBase
             storePriceCurrencyCode = latestSubscription.StorePriceCurrencyCode,
             paypalSubscriptionId = latestSubscription.PayPalSubscriptionId,
             billingSource = latestSubscription.BillingSource,
-            isSubscriptionBlocked = user.IsSubscriptionBlocked,
-            subscriptionPrice = subscriptionPrice.ToString("F2")
+            isSubscriptionBlocked = user.IsSubscriptionBlocked
         });
     }
 
@@ -466,217 +458,6 @@ public class SubscriptionController : ControllerBase
         }
         
         return Ok(new { success = false, message = "No pending subscription found" });
-    }
-
-
-    private async Task<string> GetOrCreateSubscriptionPlanAsync()
-    {
-        try
-        {
-            var token = await GetPayPalAccessTokenAsync();
-            if (string.IsNullOrEmpty(token))
-            {
-                _logger.LogError("Unable to retrieve PayPal access token");
-                return null;
-            }
-
-            var baseUrl = _configuration["PayPal:ApiBaseUrl"] ?? "https://api-m.sandbox.paypal.com/";
-            
-            // Get subscription price from database
-            var monthlyPrice = await _appSettingsService.GetSubscriptionPriceAsync();
-            var monthlyPriceStr = monthlyPrice.ToString("F2");
-
-            // First, try to find an existing plan with matching price
-            var existingPlan = await FindExistingPlanAsync(token, baseUrl, monthlyPriceStr);
-            if (!string.IsNullOrEmpty(existingPlan))
-            {
-                _logger.LogInformation("Using existing PayPal plan: {PlanId}", existingPlan);
-                return existingPlan;
-            }
-
-            // If no plan exists, create product first, then plan
-            var productId = await GetOrCreateProductAsync(token, baseUrl);
-            if (string.IsNullOrEmpty(productId))
-            {
-                _logger.LogError("Failed to create or find product");
-                return null;
-            }
-
-            // Now create the plan with the product ID - include price in plan name
-            var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(baseUrl);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
-
-            var planName = $"Music Streaming Monthly Subscription - ${monthlyPriceStr}";
-
-            var planData = new
-            {
-                product_id = productId,
-                name = planName,
-                description = $"Unlimited music streaming for ${monthlyPriceStr} per month",
-                status = "ACTIVE",
-                billing_cycles = new[]
-                {
-                    new
-                    {
-                        frequency = new
-                        {
-                            interval_unit = "MONTH",
-                            interval_count = 1
-                        },
-                        tenure_type = "REGULAR",
-                        sequence = 1,
-                        total_cycles = 0,
-                        pricing_scheme = new
-                        {
-                            fixed_price = new
-                            {
-                                value = monthlyPriceStr,
-                                currency_code = "USD"
-                            }
-                        }
-                    }
-                },
-                payment_preferences = new
-                {
-                    auto_bill_outstanding = true,
-                    setup_fee_failure_action = "CONTINUE",
-                    payment_failure_threshold = 3
-                }
-            };
-
-            var content = new StringContent(JsonSerializer.Serialize(planData), Encoding.UTF8, "application/json");
-            var response = await client.PostAsync("v1/billing/plans", content);
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (response.IsSuccessStatusCode)
-            {
-                using var doc = JsonDocument.Parse(body);
-                var planId = doc.RootElement.GetProperty("id").GetString();
-                _logger.LogInformation("Created new PayPal plan: {PlanId} with price ${Price}", planId, monthlyPriceStr);
-                return planId;
-            }
-            else
-            {
-                _logger.LogError("Failed to create subscription plan: {Status} {Body}", response.StatusCode, body);
-                return null;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating subscription plan");
-            return null;
-        }
-    }
-
-    private async Task<string> GetOrCreateProductAsync(string token, string baseUrl)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(baseUrl);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            client.DefaultRequestHeaders.Add("Prefer", "return=representation");
-
-            // Try to find existing product first
-            var response = await client.GetAsync("v1/catalogs/products?page_size=20");
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (response.IsSuccessStatusCode)
-            {
-                using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.TryGetProperty("products", out var products))
-                {
-                    foreach (var product in products.EnumerateArray())
-                    {
-                        if (product.TryGetProperty("name", out var name) && 
-                            name.GetString().Contains("Music Streaming"))
-                        {
-                            var productId = product.GetProperty("id").GetString();
-                            _logger.LogInformation("Found existing PayPal product: {ProductId}", productId);
-                            return productId;
-                        }
-                    }
-                }
-            }
-
-            // Create new product if not found
-            var productData = new
-            {
-                name = "Music Streaming Subscription",
-                description = "Unlimited music streaming subscription service",
-                type = "SERVICE",
-                category = "SOFTWARE"
-            };
-
-            var productContent = new StringContent(JsonSerializer.Serialize(productData), Encoding.UTF8, "application/json");
-            var createResponse = await client.PostAsync("v1/catalogs/products", productContent);
-            var createBody = await createResponse.Content.ReadAsStringAsync();
-
-            if (createResponse.IsSuccessStatusCode)
-            {
-                using var doc = JsonDocument.Parse(createBody);
-                var productId = doc.RootElement.GetProperty("id").GetString();
-                _logger.LogInformation("Created new PayPal product: {ProductId}", productId);
-                return productId;
-            }
-            else
-            {
-                _logger.LogError("Failed to create product: {Status} {Body}", createResponse.StatusCode, createBody);
-                return null;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting or creating product");
-            return null;
-        }
-    }
-
-    private async Task<string> FindExistingPlanAsync(string token, string baseUrl, string monthlyPrice)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(baseUrl);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            var response = await client.GetAsync("v1/billing/plans?page_size=20");
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (response.IsSuccessStatusCode)
-            {
-                using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.TryGetProperty("plans", out var plans))
-                {
-                    // Build the expected plan name including price
-                    var expectedPlanName = $"Music Streaming Monthly Subscription - ${monthlyPrice}";
-                    
-                    foreach (var plan in plans.EnumerateArray())
-                    {
-                        if (plan.TryGetProperty("name", out var name))
-                        {
-                            var planName = name.GetString();
-                            // Match exact plan name including price
-                            if (planName == expectedPlanName)
-                            {
-                                _logger.LogInformation("Found existing plan with matching price: {PlanName}", planName);
-                                return plan.GetProperty("id").GetString();
-                            }
-                        }
-                    }
-                    
-                    _logger.LogInformation("No existing plan found for price ${Price}", monthlyPrice);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error finding existing plan");
-        }
-
-        return null;
     }
 
     private async Task<string> CreatePayPalSubscriptionAsync(string planId)

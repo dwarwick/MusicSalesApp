@@ -55,10 +55,6 @@ public class AdminSettingsPayPalOfferTests : BUnitTestBase
             Assert.That(cut.Markup, Does.Contain("P-NO-TRIAL"));
             Assert.That(cut.Markup, Does.Not.Contain("Subscription Price (USD)"));
         });
-
-        MockAppSettingsService.Verify(
-            service => service.GetSubscriptionPriceAsync(),
-            Times.Never);
     }
 
     [Test]

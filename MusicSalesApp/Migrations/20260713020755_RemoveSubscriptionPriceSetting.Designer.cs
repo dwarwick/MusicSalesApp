@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MusicSalesApp.Data;
 
@@ -11,9 +12,11 @@ using MusicSalesApp.Data;
 namespace MusicSalesApp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260713020755_RemoveSubscriptionPriceSetting")]
+    partial class RemoveSubscriptionPriceSetting
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1084,107 +1087,6 @@ namespace MusicSalesApp.Migrations
                     b.ToTable("Passkeys");
                 });
 
-            modelBuilder.Entity("MusicSalesApp.Models.PayPalSubscriptionAnomaly", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("AdminEmailSentAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CorrelationId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("nvarchar(36)");
-
-                    b.Property<DateTime>("DetectedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("FailedPaymentsCount")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("LastObservedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("LocalEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("LocalLastPaymentDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("LocalNextBillingDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("LocalStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime?>("LocalTrialEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("NotificationClaimId")
-                        .HasMaxLength(36)
-                        .HasColumnType("nvarchar(36)");
-
-                    b.Property<DateTime?>("NotificationClaimedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("PayPalSubscriptionId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("ProviderLastPaymentDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ProviderNextBillingDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ProviderStartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ProviderStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime?>("ProviderTrialEndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ReconciliationError")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime?>("ResolvedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("SubscriptionId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UserEmailSentAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CorrelationId")
-                        .IsUnique();
-
-                    b.HasIndex("SubscriptionId")
-                        .IsUnique()
-                        .HasFilter("[ResolvedAtUtc] IS NULL");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PayPalSubscriptionAnomalies");
-                });
-
             modelBuilder.Entity("MusicSalesApp.Models.Playlist", b =>
                 {
                     b.Property<int>("Id")
@@ -2074,17 +1976,6 @@ namespace MusicSalesApp.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("MusicSalesApp.Models.PayPalSubscriptionAnomaly", b =>
-                {
-                    b.HasOne("MusicSalesApp.Models.Subscription", "Subscription")
-                        .WithMany()
-                        .HasForeignKey("SubscriptionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Subscription");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Playlist", b =>
