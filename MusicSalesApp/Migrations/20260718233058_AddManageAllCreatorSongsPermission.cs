@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using MusicSalesApp.Common.Helpers;
 
 #nullable disable
 
@@ -10,25 +11,36 @@ namespace MusicSalesApp.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Scaffolding also emitted UpdateData ops renumbering every other seeded
-            // AspNetRoleClaims row, because inserting this permission alphabetically
-            // ahead of the existing admin claims shifts their diff-generated surrogate
-            // Ids. Those rows' ClaimType/ClaimValue/RoleId don't actually change, so
-            // only the genuinely new row below is kept (see AddSellerTableAndSongMetadataChanges
-            // and AddHangfirePermission for the same precedent).
-            migrationBuilder.InsertData(
-                table: "AspNetRoleClaims",
-                columns: new[] { "Id", "ClaimType", "ClaimValue", "RoleId" },
-                values: new object[] { 10, "Permission", "ManageAllCreatorSongs", 1 });
+            // AspNetRoleClaims.Id is an identity surrogate and production databases can
+            // legitimately have different numeric IDs. Match the permission by its
+            // logical identity and let SQL Server allocate an unused primary key.
+            migrationBuilder.Sql(
+                $"""
+                IF NOT EXISTS
+                (
+                    SELECT 1
+                    FROM [AspNetRoleClaims]
+                    WHERE [RoleId] = 1
+                      AND [ClaimType] = N'{CustomClaimTypes.Permission}'
+                      AND [ClaimValue] = N'{Permissions.ManageAllCreatorSongs}'
+                )
+                BEGIN
+                    INSERT INTO [AspNetRoleClaims] ([RoleId], [ClaimType], [ClaimValue])
+                    VALUES (1, N'{CustomClaimTypes.Permission}', N'{Permissions.ManageAllCreatorSongs}');
+                END;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DeleteData(
-                table: "AspNetRoleClaims",
-                keyColumn: "Id",
-                keyValue: 10);
+            migrationBuilder.Sql(
+                $"""
+                DELETE FROM [AspNetRoleClaims]
+                WHERE [RoleId] = 1
+                  AND [ClaimType] = N'{CustomClaimTypes.Permission}'
+                  AND [ClaimValue] = N'{Permissions.ManageAllCreatorSongs}';
+                """);
         }
     }
 }
