@@ -254,14 +254,14 @@ namespace MusicSalesApp.Services
                 var blobClient = _containerClient.GetBlobClient(fileName);
                 if (!(await blobClient.ExistsAsync())) return null;
                 var props = await blobClient.GetPropertiesAsync();
-                var tags = await blobClient.GetTagsAsync();
                 return new StorageFileInfo
                 {
                     Name = fileName,
                     Length = props.Value.ContentLength,
                     ContentType = props.Value.ContentType ?? "application/octet-stream",
                     LastModified = props.Value.LastModified,
-                    Tags = tags.Value.Tags != null ? new Dictionary<string, string>(tags.Value.Tags) : new Dictionary<string, string>()
+                    ETag = props.Value.ETag.ToString(),
+                    Tags = new Dictionary<string, string>()
                 };
             }
             catch (RequestFailedException ex)

@@ -1,6 +1,7 @@
 #nullable enable
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Grids;
 
@@ -43,7 +44,12 @@ public partial class AdminReportedSongsModel : BlazorBase
         _reports = reports.Select(r => new ReportedSongViewModel
         {
             Id = r.Id,
-            SongTitle = r.SongMetadata?.SongTitle ?? "Unknown",
+            SongTitle = r.SongMetadata == null
+                ? "Unknown"
+                : SongTitleHelper.GetEffectiveTitle(
+                    r.SongMetadata.SongTitle,
+                    r.SongMetadata.Mp3BlobPath,
+                    r.SongMetadata.BlobPath),
             CreatorEmail = GetCreatorEmail(r),
             ReporterEmail = r.ReportingUser?.Email ?? "Unknown",
             Reason = r.Reason,

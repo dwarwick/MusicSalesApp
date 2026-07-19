@@ -341,9 +341,17 @@ else
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label class="e-label">Song Title</label>
-                            <SfTextBox Value="@_editingSong.SongTitle" Enabled="false" CssClass="e-outline" />
+                            <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" MaxLength="200" />
                         </div>
                     </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_editingSong.OriginalAudioFileName))
+                    {
+                        <div class="alert alert-secondary py-2">
+                            <strong>Retained original:</strong> @_editingSong.OriginalAudioFileName
+                            (@_editingSong.OriginalAudioContentType, @_editingSong.OriginalAudioFileSize bytes)
+                        </div>
+                    }
 
                     <div class="row mb-3">
                         <div class="col-md-4">

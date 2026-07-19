@@ -110,6 +110,8 @@ public class SongMetadataServiceTests
         {
             BlobPath = "mysong/mysong.mp3",
             Mp3BlobPath = "mysong/mysong.mp3",
+            SongTitle = "Mysong",
+            TrackLength = 10,
             Genre = "Pop",
             IsActive = false,
             IsEnabled = true,
@@ -123,10 +125,12 @@ public class SongMetadataServiceTests
         {
             BlobPath = "mysong/mysong.mp3",
             Mp3BlobPath = "mysong/mysong.mp3",
+            SongTitle = "Mysong",
+            TrackLength = 10,
             Genre = "Pop",
             CreatorId = 1
         };
-        var result = await _service.UpsertAsync(newMetadata);
+        var result = await _service.UpsertValidatedUploadAsync(newMetadata);
 
         // Assert — song should be reactivated
         Assert.That(result.IsActive, Is.True, "UpsertAsync should restore IsActive to true when updating an inactive song");
@@ -146,6 +150,8 @@ public class SongMetadataServiceTests
         {
             BlobPath = "disabled/disabled.mp3",
             Mp3BlobPath = "disabled/disabled.mp3",
+            SongTitle = "Disabled",
+            TrackLength = 10,
             Genre = "Jazz",
             IsActive = false,
             IsEnabled = false,
@@ -159,10 +165,12 @@ public class SongMetadataServiceTests
         {
             BlobPath = "disabled/disabled.mp3",
             Mp3BlobPath = "disabled/disabled.mp3",
+            SongTitle = "Disabled",
+            TrackLength = 10,
             Genre = "Jazz",
             CreatorId = 2
         };
-        var result = await _service.UpsertAsync(newMetadata);
+        var result = await _service.UpsertValidatedUploadAsync(newMetadata);
 
         // Assert
         Assert.That(result.IsActive, Is.True, "Re-upload should restore IsActive");
@@ -202,6 +210,58 @@ public class SongMetadataServiceTests
         Assert.That(result.IsEnabled, Is.True);
         Assert.That(result.Genre, Is.EqualTo("Country"));
         Assert.That(result.AlbumName, Is.EqualTo("New Album"));
+    }
+
+    [Test]
+    public async Task UpsertAsync_ExistingSongWithBlankTitle_GainsMp3BlobPath_DerivesTitleFromPath()
+    {
+        // Arrange — a stub record created before it ever had audio or a title
+        var existingSong = new SongMetadata
+        {
+            BlobPath = "stub/stub.mp3",
+            SongTitle = string.Empty,
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        };
+        _context.SongMetadata.Add(existingSong);
+        await _context.SaveChangesAsync();
+
+        // Act — a generic edit attaches Mp3BlobPath without ever supplying a title
+        var updatedMetadata = new SongMetadata
+        {
+            BlobPath = "stub/stub.mp3",
+            Mp3BlobPath = "stub/stub.mp3",
+            SongTitle = string.Empty,
+            CreatorId = 1
+        };
+        var result = await _service.UpsertAsync(updatedMetadata);
+
+        // Assert — the Mp3BlobPath-requires-title invariant is upheld: a title is
+        // derived from the blob path rather than persisting a blank title alongside
+        // a non-blank Mp3BlobPath (which the SQL Server check constraint forbids).
+        Assert.That(result.Mp3BlobPath, Is.EqualTo("stub/stub.mp3"));
+        Assert.That(result.SongTitle, Is.Not.Null.And.Not.Empty);
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var saved = await verifyContext.SongMetadata.FindAsync(existingSong.Id);
+        Assert.That(saved!.SongTitle, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void UpsertAsync_Mp3BlobPathWithNoDerivableTitle_ThrowsInsteadOfPersistingBlankTitle()
+    {
+        // Arrange — a path with no usable filename component and no title, so no
+        // fallback title can be derived
+        var metadata = new SongMetadata
+        {
+            Mp3BlobPath = "folder/",
+            SongTitle = string.Empty,
+            CreatorId = 1
+        };
+
+        // Act & Assert
+        Assert.ThrowsAsync<InvalidOperationException>(() => _service.UpsertAsync(metadata));
     }
 
     [Test]
@@ -318,6 +378,8 @@ public class SongMetadataServiceTests
         {
             BlobPath = "old-path",
             Mp3BlobPath = "shared/track.mp3",
+            SongTitle = "Track",
+            TrackLength = 10,
             Genre = "Electronic",
             IsActive = false,
             IsEnabled = true,
@@ -331,13 +393,119 @@ public class SongMetadataServiceTests
         {
             BlobPath = "shared/track.mp3",
             Mp3BlobPath = "shared/track.mp3",
+            SongTitle = "Track",
+            TrackLength = 10,
             Genre = "Electronic",
             CreatorId = 3
         };
-        var result = await _service.UpsertAsync(newMetadata);
+        var result = await _service.UpsertValidatedUploadAsync(newMetadata);
 
         // Assert
         Assert.That(result.IsActive, Is.True, "Should match on Mp3BlobPath and reactivate");
+    }
+
+    [Test]
+    public async Task ValidateUploadTargetAsync_PathOwnedByAnotherCreator_Throws()
+    {
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "shared/shared.mp3",
+            Mp3BlobPath = "shared/shared.mp3",
+            SongTitle = "Shared",
+            IsActive = false,
+            IsEnabled = false,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        var exception = Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _service.ValidateUploadTargetAsync(
+                "shared/shared.mp3", "shared/shared.wav", null, creatorId: 2));
+
+        Assert.That(exception!.Message, Does.Contain("another creator"));
+    }
+
+    [Test]
+    public async Task ValidateUploadTargetAsync_ActiveSongOwnedByCreator_RejectsOverwrite()
+    {
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "active/active.mp3",
+            Mp3BlobPath = "active/active.mp3",
+            SongTitle = "Active",
+            IsActive = true,
+            IsEnabled = true,
+            CreatorId = 1
+        });
+        await _context.SaveChangesAsync();
+
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ValidateUploadTargetAsync(
+                "active/active.mp3", "active/active.wav", null, creatorId: 1));
+
+        Assert.That(exception!.Message, Does.Contain("active song"));
+    }
+
+    [Test]
+    public async Task ValidatedReplacement_PreservesUnrelatedCatalogMetadata()
+    {
+        _context.SongMetadata.Add(new SongMetadata
+        {
+            BlobPath = "song/song.mp3",
+            Mp3BlobPath = "song/song.mp3",
+            ImageBlobPath = "song/old.png",
+            OriginalAudioBlobPath = "song/old.wav",
+            SongTitle = "Old Song",
+            TrackLength = 9,
+            AlbumName = "Legacy Album",
+            Genre = "Jazz",
+            ArtistName = "Catalog Artist",
+            PersonaId = 42,
+            IsAiGenerated = true,
+            IsAiLyrics = true,
+            IsAiVocals = true,
+            DisplayOrder = 17,
+            IsActive = true,
+            IsEnabled = false,
+            CreatorId = 1,
+            StatusReason = "Unreadable playback audio"
+        });
+        await _context.SaveChangesAsync();
+
+        await _service.UpsertValidatedUploadAsync(new SongMetadata
+        {
+            BlobPath = "song/song.mp3",
+            Mp3BlobPath = "song/song.mp3",
+            ImageBlobPath = null,
+            OriginalAudioBlobPath = "song/song.wav",
+            OriginalAudioFileName = "song.wav",
+            OriginalAudioFileSize = 1234,
+            OriginalAudioContentType = "audio/wav",
+            SongTitle = "Song",
+            TrackLength = 30,
+            CreatorId = 1
+        });
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.SongMetadata.SingleAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.SongTitle, Is.EqualTo("Song"));
+            Assert.That(saved.TrackLength, Is.EqualTo(30));
+            Assert.That(saved.OriginalAudioBlobPath, Is.EqualTo("song/song.wav"));
+            Assert.That(saved.ImageBlobPath, Is.EqualTo("song/old.png"));
+            Assert.That(saved.AlbumName, Is.EqualTo("Legacy Album"));
+            Assert.That(saved.Genre, Is.EqualTo("Jazz"));
+            Assert.That(saved.ArtistName, Is.EqualTo("Catalog Artist"));
+            Assert.That(saved.PersonaId, Is.EqualTo(42));
+            Assert.That(saved.IsAiGenerated, Is.True);
+            Assert.That(saved.IsAiLyrics, Is.True);
+            Assert.That(saved.IsAiVocals, Is.True);
+            Assert.That(saved.DisplayOrder, Is.EqualTo(17));
+            Assert.That(saved.IsActive, Is.True);
+            Assert.That(saved.IsEnabled, Is.True);
+            Assert.That(saved.StatusReason, Is.Null);
+        });
     }
 
     [Test]
@@ -367,7 +535,7 @@ public class SongMetadataServiceTests
         var result = await _service.UpsertAsync(newMetadata);
 
         // Assert
-        Assert.That(result.IsActive, Is.True, "Should match on ImageBlobPath and reactivate");
+        Assert.That(result.IsActive, Is.False, "Generic metadata edits must not reactivate songs");
     }
 
     #endregion
@@ -772,10 +940,12 @@ public class SongMetadataServiceTests
         {
             BlobPath = "returning/song.mp3",
             Mp3BlobPath = "returning/song.mp3",
+            SongTitle = "Song",
+            TrackLength = 10,
             Genre = "Rock",
             CreatorId = creator.Id
         };
-        await _service.UpsertAsync(reUploadMetadata);
+        await _service.UpsertValidatedUploadAsync(reUploadMetadata);
 
         // Assert — the song should now be visible in GetAllAsync (the full pipeline)
         var allSongs = await _service.GetAllAsync();

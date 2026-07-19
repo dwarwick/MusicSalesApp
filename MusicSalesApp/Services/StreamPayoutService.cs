@@ -412,7 +412,10 @@ public class StreamPayoutService : IStreamPayoutService
             _logger.LogInformation("--- Per-Song Breakdown ---");
             foreach (var record in payoutRecords.OrderByDescending(p => p.GrossAmount))
             {
-                var songTitle = creatorSongs.FirstOrDefault(s => s.Id == record.SongMetadataId)?.SongTitle ?? "Unknown";
+                var song = creatorSongs.FirstOrDefault(s => s.Id == record.SongMetadataId);
+                var songTitle = song == null
+                    ? "Unknown"
+                    : SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath);
                 _logger.LogInformation("  Song: {Title} | Streams: {Streams:N0} | Gross: ${Gross:F2} | Withheld: ${Withheld:F2} | Net: ${Net:F2}",
                     songTitle, record.NumberOfStreams, record.GrossAmount, record.WithheldAmount, record.NetAmount);
             }
@@ -962,7 +965,8 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 if (songs.TryGetValue(payout.SongMetadataId, out var song))
                 {
-                    var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                    var songTitle = SongTitleHelper.GetEffectiveTitle(
+                        song.SongTitle, song.Mp3BlobPath, song.BlobPath);
                     var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
                     
                     body.Append($@"
@@ -1011,7 +1015,8 @@ public class StreamPayoutService : IStreamPayoutService
             {
                 if (songs.TryGetValue(payout.SongMetadataId, out var song))
                 {
-                    var songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                    var songTitle = SongTitleHelper.GetEffectiveTitle(
+                        song.SongTitle, song.Mp3BlobPath, song.BlobPath);
                     var encodedSongTitle = HtmlEncoder.Default.Encode(songTitle);
                     
                     body.Append($@"

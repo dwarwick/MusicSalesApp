@@ -218,6 +218,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // when OpenReadStream is later called on an audio-only upload.
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
+        var invalidFileNames = files
+            .Where(file => !MediaFileNameRules.IsValidAudioFileName(file.Name)
+                && !MediaFileNameRules.IsValidImageFileName(file.Name))
+            .Select(file => MediaFileNameRules.GetFileNameValidationMessage(file.Name))
+            .ToList();
+        if (invalidFileNames.Count > 0)
+        {
+            _validationErrorMessage =
+                "No files were uploaded. Fix these invalid filenames:"
+                + System.Environment.NewLine
+                + string.Join(System.Environment.NewLine, invalidFileNames.Select(message => $"• {message}"));
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         // Separate files into audio and cover art by original filename
         var audioFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
         var coverArtFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
@@ -252,20 +269,138 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // JS-side file list, invalidating all IBrowserFile references from the current
         // selection. After buffering to disk, re-renders are safe.
 
-        foreach (var kvp in audioFilesByName)
+        try
         {
-            var tempPath = Path.GetTempFileName();
-            audioTempPaths[kvp.Key] = tempPath;
-            initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
-            await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxAudioFileSize, initialUploadItem, initialUploadProgress);
+            foreach (var kvp in audioFilesByName)
+            {
+                var tempPath = Path.GetTempFileName();
+                audioTempPaths[kvp.Key] = tempPath;
+                initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
+                await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxAudioFileSize, initialUploadItem, initialUploadProgress);
+            }
+
+            foreach (var kvp in coverArtFilesByName)
+            {
+                var tempPath = Path.GetTempFileName();
+                coverArtTempPaths[kvp.Key] = tempPath;
+                initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
+                await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxImageFileSize, initialUploadItem, initialUploadProgress);
+            }
+        }
+        catch (InvalidDataException ex)
+        {
+            Logger.LogWarning(ex, "UploadFiles: File transfer was incomplete.");
+            _validationErrorMessage = "No files were uploaded. The upload was interrupted before it finished — please try again.";
+            _isUploading = false;
+            _initialUploadItems.Clear();
+            _initialUploadStatusMessage = string.Empty;
+            _initialUploadBatchProgress = 0;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
         }
 
-        foreach (var kvp in coverArtFilesByName)
+
+        // Preflight the complete batch before any upload task is started.
+        var invalidContentFiles = new List<string>();
+        var decoderInfrastructureFailures = new List<string>();
+        foreach (var file in audioFilesByName)
         {
-            var tempPath = Path.GetTempFileName();
-            coverArtTempPaths[kvp.Key] = tempPath;
-            initialUploadItemsByName.TryGetValue(kvp.Key, out var initialUploadItem);
-            await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxImageFileSize, initialUploadItem, initialUploadProgress);
+            await using var stream = File.OpenRead(audioTempPaths[file.Key]);
+            if (!MediaFileContentValidator.AudioContentMatchesExtension(stream, file.Key, out _))
+            {
+                invalidContentFiles.Add(file.Key);
+                continue;
+            }
+
+            stream.Position = 0;
+            var decode = await MusicService.ValidateAudioDecodeAsync(
+                stream,
+                file.Key,
+                _uploadCts.Token);
+            if (decode.Status == AudioDecodeStatus.Inconclusive)
+            {
+                decoderInfrastructureFailures.Add($"{file.Key} ({decode.FailureCode})");
+                continue;
+            }
+            if (decode.Status != AudioDecodeStatus.Playable)
+            {
+                invalidContentFiles.Add(file.Key);
+                continue;
+            }
+
+            // Prove that every non-MP3 source can be converted before any task is
+            // allowed to write this batch to Azure.
+            if (!MusicService.IsMp3File(file.Key))
+            {
+                try
+                {
+                    stream.Position = 0;
+                    await using var converted = await MusicService.ConvertToMp3Async(stream, file.Key);
+                    if (!MediaFileContentValidator.AudioContentMatchesExtension(converted, "preflight.mp3", out _))
+                    {
+                        invalidContentFiles.Add(file.Key);
+                        continue;
+                    }
+
+                    converted.Position = 0;
+                    var convertedDecode = await MusicService.ValidateAudioDecodeAsync(
+                        converted,
+                        "preflight.mp3",
+                        _uploadCts.Token);
+                    if (convertedDecode.Status == AudioDecodeStatus.Inconclusive)
+                    {
+                        decoderInfrastructureFailures.Add($"{file.Key} ({convertedDecode.FailureCode})");
+                    }
+                    else if (convertedDecode.Status != AudioDecodeStatus.Playable)
+                    {
+                        invalidContentFiles.Add(file.Key);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Upload preflight conversion failed for {FileName}", file.Key);
+                    invalidContentFiles.Add(file.Key);
+                }
+            }
+        }
+        foreach (var file in coverArtFilesByName)
+        {
+            await using var stream = File.OpenRead(coverArtTempPaths[file.Key]);
+            if (!MediaFileContentValidator.ImageContentMatchesExtension(stream, file.Key, out _))
+            {
+                invalidContentFiles.Add(file.Key);
+            }
+        }
+        if (decoderInfrastructureFailures.Count > 0)
+        {
+            _validationErrorMessage =
+                "No files were uploaded because the media decoder could not complete validation. "
+                + "Please retry after the server issue is resolved: "
+                + string.Join(", ", decoderInfrastructureFailures);
+            _isUploading = false;
+            _initialUploadItems.Clear();
+            _initialUploadStatusMessage = string.Empty;
+            _initialUploadBatchProgress = 0;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        if (invalidContentFiles.Count > 0)
+        {
+            _validationErrorMessage =
+                "No files were uploaded. These files are corrupt or do not match their extensions: "
+                + string.Join(", ", invalidContentFiles);
+            _isUploading = false;
+            _initialUploadItems.Clear();
+            _initialUploadStatusMessage = string.Empty;
+            _initialUploadBatchProgress = 0;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
         }
 
         _initialUploadStatusMessage = "Files received. Matching cover art...";
@@ -317,9 +452,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 }
             }
 
-            var normalizedName = string.IsNullOrWhiteSpace(pair.NormalizedName)
-                ? MusicUploadService.GetNormalizedBaseName(pair.AudioFileName)
-                : pair.NormalizedName;
+            // The validated audio basename is authoritative for title and storage.
+            // Matching may identify cover art, but it must not rewrite the creator's basename.
+            var normalizedName = MusicUploadService.GetNormalizedBaseName(pair.AudioFileName);
 
             var uploadItem = new UploadPairItem
             {
@@ -343,7 +478,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _initialUploadStatusMessage = "Files received. Checking for duplicate song titles...";
         _initialUploadBatchProgress = 100;
         await InvokeAsync(StateHasChanged);
-        var candidateTitles = uploadItemsWithFiles.Select(x => x.NormalizedName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var candidateTitles = uploadItemsWithFiles
+            .Select(x => MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         HashSet<string> existingTitles;
         try
         {
@@ -352,14 +490,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
-            existingTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _validationErrorMessage =
+                "No files were uploaded because existing song titles could not be checked. Please try again.";
+            _isUploading = false;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
         }
 
         if (existingTitles.Any())
         {
             // Remove duplicates from upload list and track them for display
             var duplicateItems = uploadItemsWithFiles
-                .Where(x => existingTitles.Contains(x.NormalizedName))
+                .Where(x => existingTitles.Contains(
+                    MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName)))
                 .ToList();
 
             foreach (var dup in duplicateItems)
@@ -369,7 +514,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
 
             uploadItemsWithFiles = uploadItemsWithFiles
-                .Where(x => !existingTitles.Contains(x.NormalizedName))
+                .Where(x => !existingTitles.Contains(
+                    MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName)))
                 .ToList();
         }
 
@@ -539,6 +685,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
         await ReportInitialUploadProgressAsync(progressItem, fileBytesReceived, browserFile.Size, progressState, "Received", force: true);
+        MediaTransferValidator.RequireComplete(browserFile.Name, browserFile.Size, fileBytesReceived);
     }
 
     private async Task ReportInitialUploadProgressAsync(
@@ -683,31 +830,30 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Upload without cover art - use the normalized name as the filename so storage uses clean names
-            var audioExtension = Path.GetExtension(uploadItem.AudioFileName).ToLowerInvariant();
-            var audioFileNameForStorage = normalizedName + audioExtension;
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
-            var folderPath = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
+            var uploadResult = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
                 audioFileStream,
-                audioFileNameForStorage,
+                uploadItem.AudioFileName,
                 null, // No album name
                 _currentCreatorId,
+                normalizedName,
                 _uploadCts.Token);
 
             // Track the uploaded blob path for cleanup if user leaves
-            var mp3Path = $"{normalizedName}/{normalizedName}.mp3";
             lock (_blobPathsLock)
             {
-                _uploadedBlobPaths.Add(mp3Path);
+                _uploadedBlobPaths.Add(uploadResult.Mp3BlobPath);
+                _uploadedBlobPaths.Add(uploadResult.OriginalAudioBlobPath);
             }
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded to {folderPath}";
+            uploadItem.StatusMessage = $"Uploaded to {uploadResult.FolderPath}";
             uploadItem.ErrorMessage = null;
         }
         catch (InvalidDataException ex)
         {
+            Logger.LogWarning(ex, "Upload validation rejected audio file {AudioFileName}", uploadItem.AudioFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Invalid file";
@@ -715,6 +861,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         catch (InvalidOperationException ex)
         {
+            Logger.LogError(ex, "Upload validation failed for audio file {AudioFileName}", uploadItem.AudioFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Validation failed";
@@ -722,6 +869,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Upload failed for audio file {AudioFileName}", uploadItem.AudioFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Upload failed";
@@ -757,44 +905,44 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            // Use normalized name for both files so they are stored under the same
-            // clean base name regardless of original filenames
-            var audioExtension = Path.GetExtension(uploadItem.AudioFileName).ToLowerInvariant();
             var coverArtExtension = coverArtContentType switch
             {
                 "image/png" => ".png",
                 "image/jpeg" => ".jpg",
                 _ => Path.GetExtension(uploadItem.CoverArtFileName).ToLowerInvariant() is { Length: > 0 } ext ? ext : ".jpg"
             };
-            var audioFileNameForStorage = normalizedName + audioExtension;
-            var coverArtFileNameForStorage = normalizedName + coverArtExtension;
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             await using var coverArtFileStream = new FileStream(coverArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
-            var folderPath = await MusicUploadService.UploadMusicWithAlbumArtAsync(
+            var uploadResult = await MusicUploadService.UploadMusicWithAlbumArtAsync(
                 audioFileStream,
-                audioFileNameForStorage,
+                uploadItem.AudioFileName,
                 coverArtFileStream,
-                coverArtFileNameForStorage,
+                uploadItem.CoverArtFileName,
                 null, // No album name
                 _currentCreatorId,
+                normalizedName,
                 _uploadCts.Token);
 
             // Track the uploaded blob paths for cleanup if user leaves
-            var mp3Path = $"{normalizedName}/{normalizedName}.mp3";
-            var imagePath = $"{normalizedName}/{normalizedName}{coverArtExtension}";
             lock (_blobPathsLock)
             {
-                _uploadedBlobPaths.Add(mp3Path);
-                _uploadedBlobPaths.Add(imagePath);
+                _uploadedBlobPaths.Add(uploadResult.Mp3BlobPath);
+                _uploadedBlobPaths.Add(uploadResult.OriginalAudioBlobPath);
+                _uploadedBlobPaths.Add(uploadResult.ImageBlobPath);
             }
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded to {folderPath}";
+            uploadItem.StatusMessage = $"Uploaded to {uploadResult.FolderPath}";
             uploadItem.ErrorMessage = null;
         }
         catch (InvalidDataException ex)
         {
+            Logger.LogWarning(
+                ex,
+                "Upload validation rejected audio file {AudioFileName} with cover art {CoverArtFileName}",
+                uploadItem.AudioFileName,
+                uploadItem.CoverArtFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Invalid file";
@@ -802,6 +950,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         catch (InvalidOperationException ex)
         {
+            Logger.LogError(
+                ex,
+                "Upload validation failed for audio file {AudioFileName} with cover art {CoverArtFileName}",
+                uploadItem.AudioFileName,
+                uploadItem.CoverArtFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Validation failed";
@@ -809,6 +962,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            Logger.LogError(
+                ex,
+                "Upload failed for audio file {AudioFileName} with cover art {CoverArtFileName}",
+                uploadItem.AudioFileName,
+                uploadItem.CoverArtFileName);
             uploadItem.Status = UploadStatus.Failed;
             uploadItem.Progress = 0;
             uploadItem.StatusMessage = "Upload failed";
@@ -1049,7 +1207,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         List<string> pathsToCleanup;
         lock (_blobPathsLock)
         {
-            pathsToCleanup = new List<string>(_uploadedBlobPaths);
+            pathsToCleanup = _uploadedBlobPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             _uploadedBlobPaths.Clear();
         }
 

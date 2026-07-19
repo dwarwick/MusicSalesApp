@@ -1377,13 +1377,14 @@ namespace MusicSalesApp.Components.Players
             
             // Check for stored SongTitle in metadata
             var track = _playlistInfo.Tracks[index];
-            if (_metadataLookup.TryGetValue(track.Name, out var metadata) && !string.IsNullOrEmpty(metadata.SongTitle))
+            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
             {
-                return metadata.SongTitle;
+                return SongTitleHelper.GetEffectiveTitle(
+                    metadata.SongTitle, metadata.Mp3BlobPath, metadata.BlobPath);
             }
             
             // Fall back to extracting from file name
-            return Path.GetFileNameWithoutExtension(Path.GetFileName(track.Name));
+            return SongTitleHelper.GetEffectiveTitle(null, track.Name);
         }
 
         protected string GetTrackNumber(int index)

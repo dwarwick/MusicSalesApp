@@ -1,4 +1,5 @@
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Grids;
 
@@ -111,10 +112,8 @@ public class AdminPayoutsModel : BlazorBase
     private static string? GetSongTitle(SongMetadata? metadata)
     {
         if (metadata == null) return null;
-        return metadata.SongTitle
-            ?? (metadata.Mp3BlobPath != null
-                ? Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath)
-                : null);
+        return SongTitleHelper.GetEffectiveTitle(
+            metadata.SongTitle, metadata.Mp3BlobPath, metadata.BlobPath);
     }
 
     internal static string GetArtistName(MusicSalesApp.Models.Creator? creator, SongMetadata? songMetadata, int creatorId)

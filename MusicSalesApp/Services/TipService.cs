@@ -427,7 +427,8 @@ public class TipService : ITipService
             {
                 var song = await context.SongMetadata.FindAsync(songMetadataId.Value);
                 if (song != null)
-                    songTitle = song.SongTitle ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                    songTitle = SongTitleHelper.GetEffectiveTitle(
+                        song.SongTitle, song.Mp3BlobPath, song.BlobPath);
             }
 
             var logoUrl = _emailService.GetLogoUrl();

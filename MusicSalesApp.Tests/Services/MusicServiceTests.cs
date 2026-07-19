@@ -22,7 +22,7 @@ public class MusicServiceTests
     public async Task IsValidAudioFileAsync_WithValidMp3Extension_ReturnsTrue()
     {
         // Arrange
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+        var stream = new MemoryStream([(byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0]);
         var fileName = "test.mp3";
 
         // Act
@@ -36,7 +36,7 @@ public class MusicServiceTests
     public async Task IsValidAudioFileAsync_WithValidWavExtension_ReturnsTrue()
     {
         // Arrange
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+        var stream = new MemoryStream([(byte)'R', (byte)'I', (byte)'F', (byte)'F', 4, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E']);
         var fileName = "test.wav";
 
         // Act
@@ -50,7 +50,7 @@ public class MusicServiceTests
     public async Task IsValidAudioFileAsync_WithValidFlacExtension_ReturnsTrue()
     {
         // Arrange
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test"));
+        var stream = new MemoryStream([(byte)'f', (byte)'L', (byte)'a', (byte)'C']);
         var fileName = "test.flac";
 
         // Act
@@ -71,6 +71,26 @@ public class MusicServiceTests
         var result = await _service.IsValidAudioFileAsync(stream, fileName);
 
         // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsValidAudioFileAsync_WithMismatchedContainer_ReturnsFalse()
+    {
+        var wav = new MemoryStream([(byte)'R', (byte)'I', (byte)'F', (byte)'F', 4, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E']);
+
+        var result = await _service.IsValidAudioFileAsync(wav, "Song.mp3");
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task IsValidAudioFileAsync_WithCorruptContent_ReturnsFalse()
+    {
+        var corrupt = new MemoryStream(Encoding.UTF8.GetBytes("not audio"));
+
+        var result = await _service.IsValidAudioFileAsync(corrupt, "Song.flac");
+
         Assert.That(result, Is.False);
     }
 

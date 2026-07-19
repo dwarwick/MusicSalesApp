@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Data;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -213,7 +214,8 @@ public class NewSongNotificationService : INewSongNotificationService
 
                     foreach (var track in tracks)
                     {
-                        var trackTitle = Path.GetFileNameWithoutExtension(track.Mp3BlobPath);
+                        var trackTitle = SongTitleHelper.GetEffectiveTitle(
+                            track.SongTitle, track.Mp3BlobPath, track.BlobPath);
                         body.Append($@"
                         <tr>
                             <td style='padding: 10px; border-bottom: 1px solid #eee; color: #666; width: 40px;'>{track.TrackNumber ?? 0}</td>
@@ -243,9 +245,8 @@ public class NewSongNotificationService : INewSongNotificationService
 
             foreach (var song in standaloneSongs)
             {
-                var songTitle = !string.IsNullOrEmpty(song.SongTitle)
-                    ? song.SongTitle
-                    : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "Unknown");
+                var songTitle = SongTitleHelper.GetEffectiveTitle(
+                    song.SongTitle, song.Mp3BlobPath, song.BlobPath);
                 var songImageUrl = GetImageUrl(song.ImageBlobPath);
 
                 body.Append($@"

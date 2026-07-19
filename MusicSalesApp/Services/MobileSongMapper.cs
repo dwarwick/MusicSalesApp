@@ -80,9 +80,7 @@ public class MobileSongMapper : IMobileSongMapper
     }
 
     private static string ResolveTitle(SongMetadata m) =>
-        !string.IsNullOrEmpty(m.SongTitle)
-            ? m.SongTitle
-            : Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? string.Empty);
+        Common.Helpers.SongTitleHelper.GetEffectiveTitle(m.SongTitle, m.Mp3BlobPath, m.BlobPath);
 
     private string? ResolveAlbumArtUrl(SongMetadata m, TimeSpan sasLifetime) =>
         !string.IsNullOrEmpty(m.ImageBlobPath)

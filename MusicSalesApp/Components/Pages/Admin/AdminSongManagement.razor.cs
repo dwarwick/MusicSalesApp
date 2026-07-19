@@ -46,6 +46,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     protected bool _showEditModal = false;
     protected SongAdminViewModel _editingSong = null;
     protected string _editGenre = string.Empty;
+    protected string _editSongTitle = string.Empty;
     protected string _editArtistName = string.Empty;
     protected bool _editDisplayOnHomePage = false;
     protected bool _editIsAiGenerated = false;
@@ -146,9 +147,13 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 return new SongAdminViewModel
                 {
                     Id = m.Id.ToString(),
-                    SongTitle = !string.IsNullOrEmpty(m.SongTitle) ? m.SongTitle : System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+                    SongTitle = SongTitleHelper.GetEffectiveTitle(
+                        m.SongTitle, m.Mp3BlobPath, m.ImageBlobPath, m.BlobPath),
                     Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
                     JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
+                    OriginalAudioFileName = m.OriginalAudioFileName ?? string.Empty,
+                    OriginalAudioFileSize = m.OriginalAudioFileSize,
+                    OriginalAudioContentType = m.OriginalAudioContentType ?? string.Empty,
                     Genre = m.Genre ?? string.Empty,
                     ArtistName = m.GetEffectiveArtistNameFull(),
                     RawArtistName = m.ArtistName ?? string.Empty,
@@ -185,6 +190,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     {
         _editingSong = song;
         _editGenre = song.Genre;
+        _editSongTitle = song.SongTitle;
         // If RawArtistName is empty, default to the effective artist name shown in the grid
         _editArtistName = string.IsNullOrWhiteSpace(song.RawArtistName) ? song.ArtistName : song.RawArtistName;
         _editDisplayOnHomePage = song.DisplayOnHomePage;
@@ -229,6 +235,41 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
         {
             // All songs are now standalone songs - validate accordingly
             var hasMP3 = !string.IsNullOrEmpty(_editingSong.Mp3FileName);
+
+            _editSongTitle = _editSongTitle?.Trim() ?? string.Empty;
+            var previousSongTitle = _editingSong.SongTitle?.Trim() ?? string.Empty;
+            var songTitleChanged = !string.Equals(
+                _editSongTitle,
+                previousSongTitle,
+                StringComparison.Ordinal);
+            if (!MediaFileNameRules.IsValidTitle(_editSongTitle))
+            {
+                _validationErrors.Add(MediaFileNameRules.GetTitleValidationMessage(
+                    _editSongTitle,
+                    wasAcceptedUnderPreviousRules: !songTitleChanged));
+            }
+            else if (songTitleChanged
+                     && int.TryParse(_editingSong.Id, out var titleSongId)
+                     && await MetadataService.IsSongTitleDuplicateAsync(_editSongTitle, titleSongId))
+            {
+                _validationErrors.Add($"A song with the title '{_editSongTitle}' already exists.");
+            }
+
+            if (_songImageFile != null)
+            {
+                if (!MediaFileNameRules.IsValidImageFileName(_songImageFile.Name))
+                {
+                    _validationErrors.Add($"'{_songImageFile.Name}' is not a valid image filename.");
+                }
+                else
+                {
+                    await using var validationStream = _songImageFile.OpenReadStream(_maxImageFileSize);
+                    if (!MediaFileContentValidator.ImageContentMatchesExtension(validationStream, _songImageFile.Name, out _))
+                    {
+                        _validationErrors.Add("The selected cover art is corrupt or does not match its extension.");
+                    }
+                }
+            }
 
             // Genre is optional on admin page
 
@@ -470,6 +511,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     // Update MP3 metadata
                     if (isMP3)
                     {
+                        metadata.SongTitle = _editSongTitle;
                         // Set genre for all MP3s
                         if (!string.IsNullOrEmpty(_editGenre))
                         {
@@ -492,6 +534,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
             // Update local model
             _editingSong.Genre = _editGenre;
+            _editingSong.SongTitle = _editSongTitle;
             _editingSong.DisplayOnHomePage = _editDisplayOnHomePage;
             _editingSong.IsAiGenerated = _editIsAiGenerated;
             _editingSong.IsAiVocals = _editIsAiVocals;
@@ -519,7 +562,11 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
     protected void HandleSongImageUpload(InputFileChangeEventArgs e)
     {
-        _songImageFile = e.File;
+        _songImageFile = MediaFileNameRules.IsValidImageFileName(e.File.Name) ? e.File : null;
+        if (_songImageFile == null)
+        {
+            _validationErrors.Add($"'{e.File.Name}' is not a valid image filename.");
+        }
     }
 
     private static string GetImageContentType(string extension)

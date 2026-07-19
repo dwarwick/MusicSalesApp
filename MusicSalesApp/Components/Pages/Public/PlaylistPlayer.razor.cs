@@ -122,7 +122,7 @@ namespace MusicSalesApp.Components.Pages.Public
                 .Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath))
                 .Select(s => new SeoTrackInfo
                 {
-                    Title = s.SongTitle ?? Path.GetFileNameWithoutExtension(Path.GetFileName(s.Mp3BlobPath)),
+                    Title = SongTitleHelper.GetEffectiveTitle(s.SongTitle, s.Mp3BlobPath, s.BlobPath),
                     ArtistName = GetArtistName(s),
                     Genre = s.Genre
                 })

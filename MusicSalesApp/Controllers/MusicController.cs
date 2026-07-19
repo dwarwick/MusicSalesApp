@@ -79,6 +79,9 @@ namespace MusicSalesApp.Controllers
             if (string.IsNullOrWhiteSpace(fileName))
                 return BadRequest();
 
+            if (!await IsRegisteredPublicMediaPathAsync(fileName))
+                return NotFound();
+
             var stream = await _storageService.OpenReadAsync(fileName);
             if (stream == null || stream.Length == 0)
                 return NotFound();
@@ -101,6 +104,9 @@ namespace MusicSalesApp.Controllers
             if (string.IsNullOrWhiteSpace(fileName))
                 return BadRequest();
 
+            if (!await IsRegisteredPublicMediaPathAsync(fileName))
+                return NotFound();
+
             // Check if user is authenticated and has active subscription
             var user = await _userManager.GetUserAsync(User);
             bool hasAccess = false;
@@ -116,6 +122,14 @@ namespace MusicSalesApp.Controllers
             var uri = _storageService.GetReadSasUri(fileName, lifetime);
 
             return Ok(new { url = uri.ToString() });
+        }
+
+        private async Task<bool> IsRegisteredPublicMediaPathAsync(string fileName)
+        {
+            var metadata = await _songMetadataService.GetByBlobPathAsync(fileName);
+            return metadata is { IsActive: true, IsEnabled: true }
+                && (string.Equals(metadata.Mp3BlobPath, fileName, StringComparison.Ordinal)
+                    || string.Equals(metadata.ImageBlobPath, fileName, StringComparison.Ordinal));
         }
 
         /// <summary>
@@ -299,7 +313,10 @@ namespace MusicSalesApp.Controllers
             var allSongs = await _songMetadataService.GetAllAsync();
             var song = allSongs.FirstOrDefault(s =>
                 s.Mp3BlobPath != null &&
-                string.Equals(s.SongTitle, decodedTitle, StringComparison.OrdinalIgnoreCase));
+                string.Equals(
+                    SongTitleHelper.GetEffectiveTitle(s.SongTitle, s.Mp3BlobPath, s.BlobPath),
+                    decodedTitle,
+                    StringComparison.OrdinalIgnoreCase));
 
             if (song == null)
                 return NotFound(new { error = "Song not found" });

@@ -1,0 +1,115 @@
+@page "/admin/media-integrity"
+@rendermode InteractiveServer
+@inherits MediaIntegrityModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@using Syncfusion.Blazor.DropDowns
+@using Syncfusion.Blazor.Grids
+@attribute [Authorize(Policy = Permissions.ManageAllCreatorSongs)]
+
+<PageTitle>Media Integrity Audit</PageTitle>
+
+<h3>Media Integrity Audit</h3>
+
+<div class="alert alert-info">
+    Choose the behavior here; you do not edit configuration or pass arguments in Hangfire.
+    Start with <strong>ReportOnly</strong>. Hangfire remains the place to monitor execution, retries, and failures.
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_isError ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label">Audit mode</label>
+                <SfDropDownList TValue="MediaAuditMode" TItem="AuditModeOption"
+                                @bind-Value="_selectedMode" DataSource="@_modeOptions">
+                    <DropDownListFieldSettings Value="Mode" Text="Name"></DropDownListFieldSettings>
+                </SfDropDownList>
+            </div>
+            @if (_selectedMode == MediaAuditMode.QuarantineConfirmedFailures)
+            {
+                <div class="col-md-5">
+                    <label class="form-label">Completed source run</label>
+                    <SfDropDownList TValue="int?" TItem="AuditSourceOption"
+                                    @bind-Value="_sourceRunId" DataSource="@_sourceOptions"
+                                    Placeholder="Select reviewed results">
+                        <DropDownListFieldSettings Value="Id" Text="Label"></DropDownListFieldSettings>
+                    </SfDropDownList>
+                </div>
+            }
+            <div class="col-md-2">
+                <SfButton CssClass="cta-primary" Disabled="@_starting" OnClick="ShowConfirmation">Run Audit</SfButton>
+            </div>
+        </div>
+        <div class="mt-3 p-3 border rounded">@ModeExplanation</div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h4 class="mb-0">Run history</h4>
+    <SfButton CssClass="e-outline" OnClick="LoadAsync">Refresh</SfButton>
+</div>
+
+<SfGrid DataSource="@_runs" AllowPaging="true" AllowSorting="true">
+    <GridPageSettings PageSize="10"></GridPageSettings>
+    <GridColumns>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.Id)" HeaderText="Run" Width="80"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.Mode)" HeaderText="Mode" Width="190"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.Status)" HeaderText="Status" Width="110"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.CreatedAt)" HeaderText="Created" Format="g" Width="170"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.ProcessedCount)" HeaderText="Processed" Width="100"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.ConfirmedUnplayableCount)" HeaderText="Failures" Width="90"></GridColumn>
+        <GridColumn Field="@nameof(MediaIntegrityAuditRun.QuarantinedCount)" HeaderText="Quarantined" Width="110"></GridColumn>
+        <GridColumn HeaderText="Results" Width="100">
+            <Template Context="row">
+                @{ var run = (MediaIntegrityAuditRun)row; }
+                <SfButton CssClass="e-small e-outline" OnClick="@(() => SelectRun(run.Id))">View</SfButton>
+            </Template>
+        </GridColumn>
+    </GridColumns>
+</SfGrid>
+
+@if (_selectedRun != null)
+{
+    <h4 class="mt-4">Run @_selectedRun.Id results</h4>
+    <p>
+        Healthy @_selectedRun.HealthyCount; repairable @_selectedRun.RepairableCount;
+        naming warnings @_selectedRun.NamingWarningCount; missing originals @_selectedRun.OriginalSourceMissingCount;
+        confirmed failures @_selectedRun.ConfirmedUnplayableCount; inconclusive @_selectedRun.InconclusiveCount.
+    </p>
+    <SfGrid DataSource="@_selectedRun.Items" AllowPaging="true" AllowSorting="true">
+        <GridPageSettings PageSize="25"></GridPageSettings>
+        <GridColumns>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.SongMetadataId)" HeaderText="Song ID" Width="90"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.EffectiveTitle)" HeaderText="Title" Width="180"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.PlaybackBlobPath)" HeaderText="Playback path" Width="240"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.Outcome)" HeaderText="Outcome" Width="160"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.FailureCode)" HeaderText="Code" Width="150"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.Attempts)" HeaderText="Attempts" Width="90"></GridColumn>
+            <GridColumn Field="@nameof(MediaIntegrityAuditItem.Diagnostic)" HeaderText="Diagnostic" Width="300"></GridColumn>
+        </GridColumns>
+    </SfGrid>
+}
+
+<SfDialog @bind-Visible="_showConfirmation" Width="520px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Confirm media-integrity audit</Header>
+        <Content>
+            <p>You are about to run <strong>@_selectedMode</strong>.</p>
+            @if (_selectedMode == MediaAuditMode.QuarantineConfirmedFailures)
+            {
+                <p>This fresh revalidation can disable confirmed unplayable songs. It will not delete blobs or relationships.</p>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-outline" OnClick="@(() => _showConfirmation = false)">Cancel</SfButton>
+            <SfButton CssClass="cta-primary" OnClick="StartAsync">Confirm and Queue</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

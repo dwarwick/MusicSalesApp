@@ -78,10 +78,8 @@ public class AdminSongStatusHistoryModel : ComponentBase
         if (metadata == null)
             return "Unknown Song";
             
-        if (!string.IsNullOrEmpty(metadata.SongTitle))
-            return metadata.SongTitle;
-            
-        return Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath ?? metadata.BlobPath ?? "Unknown");
+        return SongTitleHelper.GetEffectiveTitle(
+            metadata.SongTitle, metadata.Mp3BlobPath, metadata.BlobPath);
     }
 
     private static string GetCreatorName(SongMetadata metadata)

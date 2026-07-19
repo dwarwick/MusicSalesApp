@@ -55,6 +55,18 @@ namespace MusicSalesApp.Services
         Task<SongMetadata> UpsertAsync(SongMetadata metadata);
 
         /// <summary>
+        /// Persists a fully validated upload and is the only upsert path allowed to
+        /// reactivate a previously quarantined song.
+        /// </summary>
+        Task<SongMetadata> UpsertValidatedUploadAsync(SongMetadata metadata);
+
+        Task<SongMetadata> ValidateUploadTargetAsync(
+            string mp3BlobPath,
+            string originalAudioBlobPath,
+            string imageBlobPath,
+            int creatorId);
+
+        /// <summary>
         /// Delete metadata by blob path
         /// </summary>
         Task<bool> DeleteAsync(string blobPath);

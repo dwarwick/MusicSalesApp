@@ -401,9 +401,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     }
                     _songDisplayOrders[audioFile.Name] = songMeta.DisplayOrder;
                     // Store the song title if available
-                    if (!string.IsNullOrEmpty(songMeta.SongTitle))
+                    var effectiveTitle = SongTitleHelper.GetEffectiveTitle(
+                        songMeta.SongTitle, songMeta.Mp3BlobPath, songMeta.BlobPath);
+                    if (!string.IsNullOrEmpty(effectiveTitle))
                     {
-                        _songTitles[audioFile.Name] = songMeta.SongTitle;
+                        _songTitles[audioFile.Name] = effectiveTitle;
                     }
                     _aiGeneratedMap[audioFile.Name] = songMeta.IsAiGenerated;
                     _aiVocalsMap[audioFile.Name] = songMeta.IsAiVocals;
@@ -913,7 +915,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         }
         
         // Fall back to extracting from file name
-        return Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+        return SongTitleHelper.GetEffectiveTitle(null, fileName);
     }
     
     protected string GetStoredSongTitle(string fileName)
@@ -959,7 +961,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     protected void GetSongPlayerUrl(string fileName)
     {
-        var songTitle = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+        var songTitle = GetDisplayTitle(fileName);
 
         NavigationManager.NavigateTo($"/song/{Uri.EscapeDataString(songTitle)}");        
     }

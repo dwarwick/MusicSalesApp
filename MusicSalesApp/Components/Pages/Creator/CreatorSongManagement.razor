@@ -309,8 +309,16 @@
 
                     <div class="mb-3">
                         <label class="form-label">Song Title <span class="text-danger">*</span></label>
-                        <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" />
+                        <SfTextBox @bind-Value="_editSongTitle" CssClass="e-outline" Placeholder="Enter song title" MaxLength="200" />
                     </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_editingSong.OriginalAudioFileName))
+                    {
+                        <div class="alert alert-secondary py-2">
+                            <strong>Retained original:</strong> @_editingSong.OriginalAudioFileName
+                            (@_editingSong.OriginalAudioContentType, @_editingSong.OriginalAudioFileSize bytes)
+                        </div>
+                    }
 
                     <div class="mb-3">
                         <label class="form-label">Artist Persona</label>

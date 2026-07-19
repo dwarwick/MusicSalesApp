@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using MusicSalesApp.Data;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -205,9 +206,8 @@ public class SongStatusService : ISongStatusService
                 return;
             }
 
-            var songTitle = !string.IsNullOrEmpty(song.SongTitle) 
-                ? song.SongTitle 
-                : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? song.BlobPath);
+            var songTitle = SongTitleHelper.GetEffectiveTitle(
+                song.SongTitle, song.Mp3BlobPath, song.BlobPath);
 
             var logoUrl = _emailService.GetLogoUrl();
             
@@ -272,9 +272,8 @@ public class SongStatusService : ISongStatusService
                 return;
             }
 
-            var songTitle = !string.IsNullOrEmpty(song.SongTitle) 
-                ? song.SongTitle 
-                : Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? song.BlobPath);
+            var songTitle = SongTitleHelper.GetEffectiveTitle(
+                song.SongTitle, song.Mp3BlobPath, song.BlobPath);
 
             var logoUrl = _emailService.GetLogoUrl();
             

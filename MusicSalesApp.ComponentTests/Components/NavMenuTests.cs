@@ -131,6 +131,32 @@ public class NavMenuTests : BUnitTestBase
     }
 
     [Test]
+    public void NavMenu_PlacesMediaIntegrityAuditInsideAdminSectionAfterSongManagement()
+    {
+        var authContext = SetupAuthorizedUser(1, "admin@test.com");
+        authContext.SetPolicies(Permissions.ManageUsers);
+
+        var cut = TestContext.Render<NavMenu>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var songManagement = cut.Markup.IndexOf("Song Management", StringComparison.Ordinal);
+            var mediaIntegrity = cut.Markup.IndexOf("Media Integrity Audit", StringComparison.Ordinal);
+            var songHistory = cut.Markup.IndexOf("Song Status History", StringComparison.Ordinal);
+            var logout = cut.Markup.IndexOf("Logout", StringComparison.Ordinal);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(songManagement, Is.GreaterThanOrEqualTo(0));
+                Assert.That(mediaIntegrity, Is.GreaterThan(songManagement));
+                Assert.That(songHistory, Is.GreaterThan(mediaIntegrity));
+                Assert.That(logout, Is.GreaterThan(mediaIntegrity));
+                Assert.That(cut.FindAll("a[href='/admin/media-integrity']"), Has.Count.EqualTo(1));
+            });
+        });
+    }
+
+    [Test]
     public void NavMenu_ShowsTestingServerBanner_WhenRunningInTestEnvironment()
     {
         // Arrange

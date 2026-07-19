@@ -25,6 +25,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StreamPayout> StreamPayouts { get; set; }
     public DbSet<W9Request> W9Requests { get; set; }
     public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
+    public DbSet<MediaIntegrityAuditRun> MediaIntegrityAuditRuns { get; set; }
+    public DbSet<MediaIntegrityAuditItem> MediaIntegrityAuditItems { get; set; }
+    public DbSet<MediaIntegrityAuditNotification> MediaIntegrityAuditNotifications { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
     public DbSet<UserHistory> UserHistories { get; set; }
@@ -404,6 +407,51 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         // Index on ChangedAt for efficient querying of recent changes
         builder.Entity<SongStatusHistory>()
             .HasIndex(ssh => ssh.ChangedAt);
+
+        // Production uses SQL Server. Keep this provider-specific model constraint out
+        // of SQLite test models; the SQL Server migration below still creates it.
+        if (Database.IsSqlServer())
+        {
+            builder.Entity<SongMetadata>()
+                .ToTable(table => table.HasCheckConstraint(
+                    "CK_SongMetadata_AudioRequiresTitle",
+                    "[Mp3BlobPath] IS NULL OR ([SongTitle] IS NOT NULL AND LTRIM(RTRIM([SongTitle])) <> '')"));
+        }
+
+        builder.Entity<MediaIntegrityAuditRun>()
+            .HasMany(run => run.Items)
+            .WithOne(item => item.AuditRun)
+            .HasForeignKey(item => item.AuditRunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<MediaIntegrityAuditItem>()
+            .HasOne(item => item.SongMetadata)
+            .WithMany()
+            .HasForeignKey(item => item.SongMetadataId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<MediaIntegrityAuditItem>()
+            .HasIndex(item => new { item.AuditRunId, item.SongMetadataId });
+
+        builder.Entity<MediaIntegrityAuditRun>()
+            .HasIndex(run => run.ActiveLockKey)
+            .IsUnique()
+            .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+        builder.Entity<MediaIntegrityAuditNotification>()
+            .HasOne(notification => notification.AuditRun)
+            .WithMany(run => run.Notifications)
+            .HasForeignKey(notification => notification.AuditRunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<MediaIntegrityAuditNotification>()
+            .HasIndex(notification => new
+            {
+                notification.AuditRunId,
+                notification.NotificationType,
+                notification.Recipient
+            })
+            .IsUnique();
 
         // Configure SongStream entity
         builder.Entity<SongStream>()

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Web;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Middleware;
@@ -47,9 +48,8 @@ public partial class ShareRedirectMiddleware
             }
 
             var ogTags = await openGraphService.GenerateSongMetaTagsByIdAsync(songId);
-            var songTitle = song.SongTitle
-                ?? Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? "")
-                ?? "Unknown";
+            var songTitle = SongTitleHelper.GetEffectiveTitle(
+                song.SongTitle, song.Mp3BlobPath, song.BlobPath);
             var encodedTitle = Uri.EscapeDataString(songTitle);
             var redirectUrl = $"/song/{encodedTitle}";
 

@@ -37,6 +37,9 @@ public abstract class BlazorBase : ComponentBase
     protected IMusicUploadService MusicUploadService { get; set; } = default!;    
 
     [Inject]
+    protected IMusicService MusicService { get; set; } = default!;
+
+    [Inject]
     protected IJSRuntime JS { get; set; } = default!;
 
     [Inject]

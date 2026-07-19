@@ -680,27 +680,20 @@ public class CreatorService : ICreatorService
     {
         try
         {
-            // Delete MP3 file if exists
-            if (!string.IsNullOrWhiteSpace(song.Mp3BlobPath))
+            var paths = new[]
             {
-                await _storageService.DeleteAsync(song.Mp3BlobPath);
-                _logger.LogInformation("Deleted MP3 file: {Path}", song.Mp3BlobPath);
+                song.OriginalAudioBlobPath,
+                song.Mp3BlobPath,
+                song.ImageBlobPath,
+                song.BlobPath
             }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
-            // Delete image file if exists
-            if (!string.IsNullOrWhiteSpace(song.ImageBlobPath))
+            foreach (var path in paths)
             {
-                await _storageService.DeleteAsync(song.ImageBlobPath);
-                _logger.LogInformation("Deleted image file: {Path}", song.ImageBlobPath);
-            }
-
-            // Also try deleting from deprecated BlobPath
-            if (!string.IsNullOrWhiteSpace(song.BlobPath) && 
-                !string.Equals(song.BlobPath, song.Mp3BlobPath, StringComparison.Ordinal) && 
-                !string.Equals(song.BlobPath, song.ImageBlobPath, StringComparison.Ordinal))
-            {
-                await _storageService.DeleteAsync(song.BlobPath);
-                _logger.LogInformation("Deleted blob file: {Path}", song.BlobPath);
+                await _storageService.DeleteAsync(path!);
+                _logger.LogInformation("Deleted song blob: {Path}", path);
             }
         }
         catch (Exception ex)

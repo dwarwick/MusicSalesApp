@@ -10,6 +10,9 @@ public class SongAdminViewModel
     public string SongTitle { get; set; } = string.Empty;
     public string Mp3FileName { get; set; } = string.Empty;
     public string JpegFileName { get; set; } = string.Empty;
+    public string OriginalAudioFileName { get; set; } = string.Empty;
+    public long? OriginalAudioFileSize { get; set; }
+    public string OriginalAudioContentType { get; set; } = string.Empty;
     public string Genre { get; set; } = string.Empty;
     public double? TrackLength { get; set; }
     public bool DisplayOnHomePage { get; set; }

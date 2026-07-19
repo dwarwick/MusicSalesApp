@@ -581,21 +581,12 @@ public class PurchaseEmailService : IPurchaseEmailService
             || price.Contains("per month", StringComparison.OrdinalIgnoreCase);
 
     private string GetSongTitle(CartItemWithMetadata item)
-    {
-        // Prefer stored SongTitle from metadata
-        if (!string.IsNullOrEmpty(item.SongMetadata?.SongTitle))
-        {
-            return item.SongMetadata.SongTitle;
-        }
-        
-        // Fall back to extracting from Mp3BlobPath
-        if (item.SongMetadata?.Mp3BlobPath != null)
-        {
-            return Path.GetFileNameWithoutExtension(item.SongMetadata.Mp3BlobPath);
-        }
-
-        return Path.GetFileNameWithoutExtension(item.SongFileName);
-    }
+        => item.SongMetadata == null
+            ? SongTitleHelper.GetEffectiveTitle(null, item.SongFileName)
+            : SongTitleHelper.GetEffectiveTitle(
+                item.SongMetadata.SongTitle,
+                item.SongMetadata.Mp3BlobPath,
+                item.SongMetadata.BlobPath);
 
     private string? GetImageUrl(CartItemWithMetadata item, string baseUrl)
     {

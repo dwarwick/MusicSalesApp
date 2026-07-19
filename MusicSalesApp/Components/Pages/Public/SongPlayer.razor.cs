@@ -40,13 +40,16 @@ public partial class SongPlayerModel : ComponentBase
             var metadata = allMetadata.FirstOrDefault(m =>
                 !string.IsNullOrEmpty(m.Mp3BlobPath) &&
                 MusicFileExtensions.IsAudioFile(m.Mp3BlobPath) &&
-                (Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                (SongTitleHelper.GetEffectiveTitle(m.SongTitle, m.Mp3BlobPath, m.BlobPath)
+                    .Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                 Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  (!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase))));
 
             if (metadata != null)
             {
-                _displayTitle = metadata.SongTitle ?? decodedTitle;
+                _displayTitle = SongTitleHelper.GetEffectiveTitle(
+                    metadata.SongTitle, metadata.Mp3BlobPath, metadata.BlobPath);
                 _genre = metadata.Genre;
 
                 if (!string.IsNullOrWhiteSpace(metadata.ArtistName))

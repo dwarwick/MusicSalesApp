@@ -34,6 +34,7 @@ namespace MusicSalesApp.Services
         public long Length { get; set; }
         public string ContentType { get; set; } = "application/octet-stream";
         public DateTimeOffset? LastModified { get; set; }
+        public string ETag { get; set; } = string.Empty;
         /// <summary>
         /// The blob index tags associated with this file.
         /// </summary>

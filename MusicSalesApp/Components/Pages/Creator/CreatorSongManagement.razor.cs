@@ -146,6 +146,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             SongTitle = GetSongTitleFromMetadata(m),
             Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
             JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
+            OriginalAudioFileName = m.OriginalAudioFileName ?? string.Empty,
+            OriginalAudioFileSize = m.OriginalAudioFileSize,
+            OriginalAudioContentType = m.OriginalAudioContentType ?? string.Empty,
             Genre = m.Genre ?? string.Empty,
             ArtistName = m.GetEffectiveArtistNameFull(),
             RawArtistName = m.ArtistName ?? string.Empty,
@@ -198,33 +201,11 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     /// Priority: SongTitle > Mp3BlobPath > ImageBlobPath > BlobPath (deprecated)
     /// </summary>
     private static string GetSongTitleFromMetadata(SongMetadata metadata)
-    {
-        // Prefer the stored SongTitle if set
-        if (!string.IsNullOrEmpty(metadata.SongTitle))
-        {
-            return metadata.SongTitle;
-        }
-
-        // Try MP3 path first (most common for songs)
-        if (!string.IsNullOrEmpty(metadata.Mp3BlobPath))
-        {
-            return System.IO.Path.GetFileNameWithoutExtension(metadata.Mp3BlobPath);
-        }
-        
-        // Then try image path (for album covers)
-        if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
-        {
-            return System.IO.Path.GetFileNameWithoutExtension(metadata.ImageBlobPath);
-        }
-        
-        // Fall back to deprecated BlobPath
-        if (!string.IsNullOrEmpty(metadata.BlobPath))
-        {
-            return System.IO.Path.GetFileNameWithoutExtension(metadata.BlobPath);
-        }
-
-        return "Unknown";
-    }
+        => SongTitleHelper.GetEffectiveTitle(
+            metadata.SongTitle,
+            metadata.Mp3BlobPath,
+            metadata.ImageBlobPath,
+            metadata.BlobPath);
 
     protected void NavigateToUpload()
     {
@@ -389,8 +370,10 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _cropTargetBlobPath = null;
 
         var fileExtension = System.IO.Path.GetExtension(e.File.Name).ToLowerInvariant();
-        if (fileExtension != ".jpg" && fileExtension != ".jpeg" && fileExtension != ".png")
+        if (!MediaFileNameRules.IsValidImageFileName(e.File.Name))
         {
+            _validationErrors.Add($"'{e.File.Name}' is not a valid image filename.");
+            _songImageFile = null;
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -416,7 +399,22 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             {
                 await stream.CopyToAsync(tempFs, bufferSize);
             }
+            MediaTransferValidator.RequireComplete(
+                e.File.Name,
+                e.File.Size,
+                new System.IO.FileInfo(tempPath).Length);
             _songImageTempPath = tempPath;
+
+            await using (var validationStream = System.IO.File.OpenRead(tempPath))
+            {
+                if (!MediaFileContentValidator.ImageContentMatchesExtension(validationStream, e.File.Name, out _))
+                {
+                    _validationErrors.Add("The selected cover art is corrupt or does not match its extension.");
+                    _songImageFile = null;
+                    CleanupSongImageTempFile();
+                    return;
+                }
+            }
 
             // Generate a data-URL for immediate inline preview by reading the temp file back
             var imageBytes = await System.IO.File.ReadAllBytesAsync(tempPath);
@@ -467,9 +465,15 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         try
         {
             // Validate song title
-            if (string.IsNullOrWhiteSpace(_editSongTitle))
+            _editSongTitle = (_editSongTitle ?? string.Empty).Trim();
+            var previousSongTitle = (_editingSong.SongTitle ?? string.Empty).Trim();
+            var songTitleChanged = !string.Equals(_editSongTitle, previousSongTitle, StringComparison.Ordinal);
+
+            if (!MediaFileNameRules.IsValidTitle(_editSongTitle))
             {
-                _validationErrors.Add("Song title is required.");
+                _validationErrors.Add(MediaFileNameRules.GetTitleValidationMessage(
+                    _editSongTitle,
+                    wasAcceptedUnderPreviousRules: !songTitleChanged));
             }
 
             // Validate genre
@@ -484,12 +488,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             }
 
             // Check for duplicate song title (exclude the current song being edited)
-            if (int.TryParse(_editingSong.Id, out var editId))
+            if (songTitleChanged && int.TryParse(_editingSong.Id, out var editId))
             {
-                var isDuplicateTitle = await SongMetadataService.IsSongTitleDuplicateAsync(_editSongTitle.Trim(), editId);
+                var isDuplicateTitle = await SongMetadataService.IsSongTitleDuplicateAsync(_editSongTitle, editId);
                 if (isDuplicateTitle)
                 {
-                    _validationErrors.Add($"A song with the title '{_editSongTitle.Trim()}' already exists.");
+                    _validationErrors.Add($"A song with the title '{_editSongTitle}' already exists.");
                     return;
                 }
             }

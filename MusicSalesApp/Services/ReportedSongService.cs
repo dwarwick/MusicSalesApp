@@ -89,13 +89,15 @@ public class ReportedSongService : IReportedSongService
 
     private async Task SendReportNotificationEmailsAsync(SongMetadata song, ApplicationUser reportingUser, string reason)
     {
-        var songTitle = System.Web.HttpUtility.HtmlEncode(song.SongTitle ?? "Unknown Song");
+        var effectiveTitle = SongTitleHelper.GetEffectiveTitle(
+            song.SongTitle, song.Mp3BlobPath, song.BlobPath);
+        var songTitle = System.Web.HttpUtility.HtmlEncode(effectiveTitle);
         var encodedReason = System.Web.HttpUtility.HtmlEncode(reason);
 
         // 1. Send email to admin
         await SendEmailSafeAsync(
             AdminNotificationService.AdminEmail,
-            $"StreamTunes Admin - Song Reported: {song.SongTitle}",
+            $"StreamTunes Admin - Song Reported: {effectiveTitle}",
             BuildEmailBody("Song Reported — Admin Notice",
                 $"A song has been reported by a user for review.",
                 songTitle, encodedReason, reportingUser.Email ?? "Unknown"));

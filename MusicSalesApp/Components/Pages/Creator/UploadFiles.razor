@@ -17,7 +17,10 @@
 </div>
 
 <SfMessage Severity="MessageSeverity.Info" CssClass="mb-3">
-    Audio files uploaded in formats other than MP3 will be converted to MP3 before storage. This conversion can add processing time, so larger files may take longer to finish uploading.
+    Supported audio: MP3, WAV, FLAC, OGG, M4A, AAC, WMA. Cover art: JPG, JPEG, PNG.
+    Use letters/numbers with single spaces, hyphens, or underscores and an optional final suffix such as (Remix); exactly one dot must precede the extension.
+    Filename underscores become spaces in the song title.
+    Files are decoded before upload, and the validated original audio is retained alongside the playback MP3.
 </SfMessage>
 
 <div class="container-fluid">
@@ -51,7 +54,7 @@
         <div class="row mt-3">
             <div class="col-12">
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <strong>Validation Error:</strong> @_validationErrorMessage
+                    <strong>Validation Error:</strong> <span style="white-space: pre-line">@_validationErrorMessage</span>
                     <button type="button" class="btn-close" @onclick="ClearValidationError" aria-label="Close"></button>
                 </div>
             </div>

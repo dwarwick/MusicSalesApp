@@ -1,691 +1,695 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Models;
+using System.Collections.Concurrent;
 
-namespace MusicSalesApp.Services
+namespace MusicSalesApp.Services;
+
+public class MusicUploadService : IMusicUploadService
 {
-    public class MusicUploadService : IMusicUploadService
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> UploadPathLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly IAzureStorageService _storageService;
+    private readonly IMusicService _musicService;
+    private readonly ISongMetadataService _metadataService;
+    private readonly IOpenGraphService _openGraphService;
+    private readonly ILogger<MusicUploadService> _logger;
+
+    public MusicUploadService(
+        IAzureStorageService storageService,
+        IMusicService musicService,
+        ISongMetadataService metadataService,
+        IOpenGraphService openGraphService,
+        ILogger<MusicUploadService> logger)
     {
-        private readonly IAzureStorageService _storageService;
-        private readonly IMusicService _musicService;
-        private readonly ISongMetadataService _metadataService;
-        private readonly IOpenGraphService _openGraphService;
-        private readonly ILogger<MusicUploadService> _logger;
+        _storageService = storageService;
+        _musicService = musicService;
+        _metadataService = metadataService;
+        _openGraphService = openGraphService;
+        _logger = logger;
+    }
 
-        private const string MasteredSuffix = "_mastered";
-
-        public MusicUploadService(
-            IAzureStorageService storageService,
-            IMusicService musicService,
-            ISongMetadataService metadataService,
-            IOpenGraphService openGraphService,
-            ILogger<MusicUploadService> logger)
+    public async Task<string> UploadAudioAsync(
+        IFormFile file,
+        string destinationFolder,
+        CancellationToken cancellationToken = default)
+    {
+        if (file == null || file.Length <= 0)
         {
-            _storageService = storageService;
-            _musicService = musicService;
-            _metadataService = metadataService;
-            _openGraphService = openGraphService;
-            _logger = logger;
+            throw new ArgumentException("No file uploaded.", nameof(file));
         }
 
-        /// <summary>
-        /// Entry point for MVC controllers: wrap IFormFile and delegate to the stream API.
-        /// </summary>
-        public async Task<string> UploadAudioAsync(
-            IFormFile file,
-            string destinationFolder,
-            CancellationToken cancellationToken = default)
+        await using var stream = file.OpenReadStream();
+        return await UploadAudioAsync(stream, file.FileName, destinationFolder, cancellationToken);
+    }
+
+    public async Task<string> UploadAudioAsync(
+        Stream fileStream,
+        string originalFileName,
+        string destinationFolder,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fileStream);
+        ValidateAudioFileName(originalFileName);
+
+        await using var buffered = await BufferUploadFileAsync(fileStream, cancellationToken);
+        BufferedUploadFile convertedPlayback = null;
+        try
         {
-            if (file == null || file.Length == 0)
+            await using (var validationStream = buffered.OpenRead())
             {
-                throw new ArgumentException("No file uploaded", nameof(file));
+                await ValidateAudioContentAsync(validationStream, originalFileName);
             }
 
-            await using var fileStream = file.OpenReadStream();
-            return await UploadAudioAsync(
-                fileStream,
-                file.FileName,
-                destinationFolder,
-                cancellationToken);
-        }
-
-        /// <summary>
-        /// Core implementation used by both MVC and Blazor.
-        /// </summary>
-        public async Task<string> UploadAudioAsync(
-    Stream fileStream,
-    string originalFileName,
-    string destinationFolder,
-    CancellationToken cancellationToken = default)
-        {
-            if (fileStream == null)
-                throw new ArgumentNullException(nameof(fileStream));
-
-            if (string.IsNullOrWhiteSpace(originalFileName))
-                throw new ArgumentException("File name is required.", nameof(originalFileName));
-
-            destinationFolder ??= string.Empty;
-
-            // If the incoming stream is not seekable (e.g., BrowserFileStream),
-            // buffer it into a temp file so we can rewind / reuse it without
-            // holding the entire file in memory.
-            string tempFilePath = null;
-            if (!fileStream.CanSeek)
-            {
-                tempFilePath = Path.GetTempFileName();
-                await using (var tempFs = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-                {
-                    await fileStream.CopyToAsync(tempFs, cancellationToken);
-                }
-                fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            }
-
-            try
-            {
-            // Ensure container exists
-            await _storageService.EnsureContainerExistsAsync();
-
-            // Validate audio file (this will read from the stream)
-            if (!await _musicService.IsValidAudioFileAsync(fileStream, originalFileName))
-            {
-                throw new InvalidDataException($"File {originalFileName} is not a valid audio file.");
-            }
-
-            // Reset stream after validation
-            fileStream.Position = 0; // now safe: we know it's seekable
-
-            Stream uploadStream = fileStream;
-            string uploadFileName = originalFileName;
-
-            // Convert to MP3 if needed
+            var playbackFile = buffered;
             if (!_musicService.IsMp3File(originalFileName))
             {
-                _logger.LogInformation("Converting {FileName} to MP3", originalFileName);
-
-                uploadStream = await _musicService.ConvertToMp3Async(fileStream, originalFileName);
-                uploadFileName = Path.ChangeExtension(originalFileName, ".mp3");
+                await using var conversionInput = buffered.OpenRead();
+                await using var convertedStream = await _musicService.ConvertToMp3Async(
+                    conversionInput,
+                    originalFileName);
+                convertedPlayback = await BufferUploadFileAsync(convertedStream, cancellationToken);
+                playbackFile = convertedPlayback;
             }
 
-            var fullPath = string.IsNullOrWhiteSpace(destinationFolder)
-                ? uploadFileName
-                : $"{destinationFolder.TrimEnd('/')}/{uploadFileName}";
-
-            try
+            var mp3Name = Path.ChangeExtension(Path.GetFileName(originalFileName), ".mp3");
+            double duration;
+            await using (var durationStream = playbackFile.OpenRead())
             {
-                await _storageService.UploadAsync(fullPath, uploadStream, "audio/mpeg");
-            }
-            finally
-            {
-                // Dispose only the converted stream; caller owns the original.
-                if (!ReferenceEquals(uploadStream, fileStream))
-                {
-                    await uploadStream.DisposeAsync();
-                }
+                duration = await RequirePositiveDurationAsync(
+                    durationStream,
+                    mp3Name,
+                    cancellationToken);
             }
 
-            return fullPath;
-            }
-            finally
+            var path = string.IsNullOrWhiteSpace(destinationFolder)
+                ? mp3Name
+                : $"{destinationFolder.TrimEnd('/')}/{mp3Name}";
+
+            await _storageService.EnsureContainerExistsAsync();
+            await using (var uploadStream = playbackFile.OpenRead())
             {
-                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
-                if (tempFilePath != null)
-                {
-                    await fileStream.DisposeAsync();
-                    TempFileHelper.TryDelete(tempFilePath, _logger);
-                }
+                await _storageService.UploadAsync(path, uploadStream, "audio/mpeg");
+            }
+
+            _logger.LogInformation("Uploaded validated audio {Path} with duration {Duration}", path, duration);
+            return path;
+        }
+        finally
+        {
+            if (convertedPlayback != null)
+            {
+                await convertedPlayback.DisposeAsync();
             }
         }
+    }
 
-        /// <inheritdoc />
-        public async Task<string> UploadMusicWithAlbumArtAsync(
-            Stream audioStream,
-            string audioFileName,
-            Stream albumArtStream,
-            string albumArtFileName,
-            string albumName = null,
-            int? creatorId = null,
-            CancellationToken cancellationToken = default)
+    public Task<MusicUploadResult> UploadMusicWithAlbumArtAsync(
+        Stream audioStream,
+        string audioFileName,
+        Stream albumArtStream,
+        string albumArtFileName,
+        string albumName = null,
+        int? creatorId = null,
+        string storageBaseName = null,
+        CancellationToken cancellationToken = default)
+        => UploadMusicAsync(
+            audioStream,
+            audioFileName,
+            albumArtStream,
+            albumArtFileName,
+            albumName,
+            creatorId,
+            storageBaseName,
+            cancellationToken);
+
+    public Task<MusicUploadResult> UploadMusicWithoutAlbumArtAsync(
+        Stream audioStream,
+        string audioFileName,
+        string albumName = null,
+        int? creatorId = null,
+        string storageBaseName = null,
+        CancellationToken cancellationToken = default)
+        => UploadMusicAsync(
+            audioStream,
+            audioFileName,
+            null,
+            null,
+            albumName,
+            creatorId,
+            storageBaseName,
+            cancellationToken);
+
+    private async Task<MusicUploadResult> UploadMusicAsync(
+        Stream audioStream,
+        string audioFileName,
+        Stream albumArtStream,
+        string albumArtFileName,
+        string albumName,
+        int? creatorId,
+        string storageBaseName,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(audioStream);
+        if (creatorId == null)
         {
-            if (audioStream == null)
-                throw new ArgumentNullException(nameof(audioStream));
-            if (albumArtStream == null)
-                throw new ArgumentNullException(nameof(albumArtStream));
-            if (string.IsNullOrWhiteSpace(audioFileName))
-                throw new ArgumentException("Audio file name is required.", nameof(audioFileName));
-            if (string.IsNullOrWhiteSpace(albumArtFileName))
-                throw new ArgumentException("Album art file name is required.", nameof(albumArtFileName));
-            if (creatorId == null)
+            throw new InvalidOperationException("Cannot upload music without a creator ID.");
+        }
+
+        ValidateAudioFileName(audioFileName);
+        if (albumArtStream != null)
+        {
+            ValidateImageFileName(albumArtFileName);
+        }
+
+        var baseName = string.IsNullOrWhiteSpace(storageBaseName)
+            ? GetNormalizedBaseName(audioFileName)
+            : storageBaseName.Trim();
+        if (!MediaFileNameRules.IsValidFileNameBase(baseName))
+        {
+            throw new InvalidDataException($"'{baseName}' is not a valid media filename base.");
+        }
+        var songTitle = MediaFileNameRules.ToSongTitleFromBaseName(baseName);
+
+        await using var bufferedAudio = await BufferUploadFileAsync(audioStream, cancellationToken);
+        var bufferedImage = albumArtStream == null
+            ? null
+            : await BufferUploadFileAsync(albumArtStream, cancellationToken);
+
+        BufferedUploadFile convertedPlayback = null;
+        SemaphoreSlim uploadPathLock = null;
+        var uploadPathLockAcquired = false;
+        var blobMutations = new List<BlobMutation>();
+        var rollbackRequired = true;
+        try
+        {
+            // All decoding and format checks happen before the first Azure operation.
+            await using (var audioValidationStream = bufferedAudio.OpenRead())
             {
-                _logger.LogError("MusicUploadService: CreatorId is null for upload of {AudioFileName} + {AlbumArtFileName}. Songs must have a creator.", audioFileName, albumArtFileName);
-                throw new InvalidOperationException("Cannot upload music without a creator ID. Please ensure you are logged in as a creator.");
+                await ValidateAudioContentAsync(audioValidationStream, audioFileName);
             }
 
-            // Validate file pairing
-            if (!ValidateFilePairing(audioFileName, albumArtFileName))
+            if (bufferedImage != null)
             {
-                throw new InvalidOperationException(
-                    $"Filenames do not match: '{audioFileName}' and '{albumArtFileName}'. " +
-                    "MP3 and album art files must have the same base name.");
+                await using var imageValidationStream = bufferedImage.OpenRead();
+                ValidateImageContent(imageValidationStream, albumArtFileName);
             }
 
-            // Get the normalized base name for folder and file naming
-            var baseName = GetNormalizedBaseName(audioFileName);
+            var originalExtension = Path.GetExtension(audioFileName).ToLowerInvariant();
+            var imageExtension = albumArtFileName == null
+                ? null
+                : Path.GetExtension(albumArtFileName).ToLowerInvariant();
+            var folderPath = baseName;
+            var originalPath = $"{folderPath}/{baseName}{originalExtension}";
+            var mp3Path = $"{folderPath}/{baseName}.mp3";
+            var imagePath = imageExtension == null ? null : $"{folderPath}/{baseName}{imageExtension}";
+            uploadPathLock = UploadPathLocks.GetOrAdd(mp3Path, _ => new SemaphoreSlim(1, 1));
+            await uploadPathLock.WaitAsync(cancellationToken);
+            uploadPathLockAcquired = true;
+            var previousMetadata = await _metadataService.ValidateUploadTargetAsync(
+                mp3Path,
+                originalPath,
+                imagePath,
+                creatorId.Value);
+            var previousOriginalPath = previousMetadata?.OriginalAudioBlobPath;
+            var previousImagePath = previousMetadata?.ImageBlobPath;
 
-            // Buffer non-seekable streams into temp files so we can rewind / reuse them
-            // without holding entire files in memory.
-            string audioTempPath = null;
-            if (!audioStream.CanSeek)
-            {
-                audioTempPath = Path.GetTempFileName();
-                await using (var tempFs = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-                {
-                    await audioStream.CopyToAsync(tempFs, cancellationToken);
-                }
-                audioStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            }
-
-            string albumArtTempPath = null;
-            if (!albumArtStream.CanSeek)
-            {
-                albumArtTempPath = Path.GetTempFileName();
-                await using (var tempFs = new FileStream(albumArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-                {
-                    await albumArtStream.CopyToAsync(tempFs, cancellationToken);
-                }
-                albumArtStream = new FileStream(albumArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            }
-
-            try
-            {
-
-            // Ensure container exists
-            await _storageService.EnsureContainerExistsAsync();
-
-            // Validate audio file
-            if (!await _musicService.IsValidAudioFileAsync(audioStream, audioFileName))
-            {
-                throw new InvalidDataException($"File {audioFileName} is not a valid audio file.");
-            }
-
-            audioStream.Position = 0;
-
-            Stream uploadAudioStream = audioStream;
-            string mp3FileName = baseName + ".mp3";
-
-            // Convert to MP3 if needed
+            var playbackFile = bufferedAudio;
             if (!_musicService.IsMp3File(audioFileName))
             {
-                _logger.LogInformation("Converting {FileName} to MP3", audioFileName);
-                uploadAudioStream = await _musicService.ConvertToMp3Async(audioStream, audioFileName);
-            }
+                await using var conversionInput = bufferedAudio.OpenRead();
+                await using var convertedStream = await _musicService.ConvertToMp3Async(
+                    conversionInput,
+                    audioFileName);
+                convertedPlayback = await BufferUploadFileAsync(convertedStream, cancellationToken);
+                playbackFile = convertedPlayback;
 
-            // Create folder path and file paths
-            string folderPath = baseName;
-            string mp3Path = $"{folderPath}/{mp3FileName}";
-
-            // Preserve original image file extension
-            var albumArtExtension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
-            string albumArtPath = $"{folderPath}/{baseName}{albumArtExtension}";
-
-            // Determine content type based on extension
-            string imageContentType = GetImageContentType(albumArtExtension);
-
-            // Get track duration from the MP3 file (after conversion if needed)
-            double? trackDuration = null;
-            try
-            {
-                uploadAudioStream.Position = 0;
-                trackDuration = await _musicService.GetAudioDurationAsync(uploadAudioStream, mp3FileName);
-                uploadAudioStream.Position = 0;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
-            }
-
-            try
-            {
-                // Upload MP3 file (no tags)
-                _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg");
-
-                // Upload album art (no tags)
-                _logger.LogInformation("Uploading album art to {Path}", albumArtPath);
-                albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumArtPath, albumArtStream, imageContentType);
-
-                // Pre-generate Facebook-optimized image so it's ready for social sharing
-                await _openGraphService.PreGenerateFacebookImageAsync(albumArtPath);
-
-                // Save metadata to database - single record with both MP3 and image paths
-                await _metadataService.UpsertAsync(new Models.SongMetadata
+                await using var convertedValidationStream = playbackFile.OpenRead();
+                if (!MediaFileContentValidator.AudioContentMatchesExtension(
+                        convertedValidationStream,
+                        ".mp3",
+                        out _))
                 {
-                    BlobPath = mp3Path, // Kept for backward compatibility
-                    Mp3BlobPath = mp3Path,
-                    ImageBlobPath = albumArtPath,
-                    FileExtension = ".mp3",
-                    AlbumName = albumName ?? string.Empty,
-                    IsAlbumCover = false,
-                    TrackLength = trackDuration,
-                    CreatorId = creatorId
-                });
-
-                _logger.LogInformation("Successfully uploaded music and album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
-            }
-            finally
-            {
-                // Dispose only the converted stream; caller owns the original.
-                if (!ReferenceEquals(uploadAudioStream, audioStream))
-                {
-                    await uploadAudioStream.DisposeAsync();
+                    throw new InvalidDataException("FFmpeg did not produce a valid MP3 container.");
                 }
             }
 
-            return folderPath;
-
-            }
-            finally
+            double duration;
+            await using (var durationStream = playbackFile.OpenRead())
             {
-                // If we created temp-file-backed FileStreams, dispose them and delete the temp files.
-                if (audioTempPath != null)
-                {
-                    await audioStream.DisposeAsync();
-                    TempFileHelper.TryDelete(audioTempPath, _logger);
-                }
-                if (albumArtTempPath != null)
-                {
-                    await albumArtStream.DisposeAsync();
-                    TempFileHelper.TryDelete(albumArtTempPath, _logger);
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public async Task<string> UploadMusicWithoutAlbumArtAsync(
-            Stream audioStream,
-            string audioFileName,
-            string albumName = null,
-            int? creatorId = null,
-            CancellationToken cancellationToken = default)
-        {
-            if (audioStream == null)
-                throw new ArgumentNullException(nameof(audioStream));
-            if (string.IsNullOrWhiteSpace(audioFileName))
-                throw new ArgumentException("Audio file name is required.", nameof(audioFileName));
-            if (creatorId == null)
-            {
-                _logger.LogError("MusicUploadService: CreatorId is null for upload of {AudioFileName}. Songs must have a creator.", audioFileName);
-                throw new InvalidOperationException("Cannot upload music without a creator ID. Please ensure you are logged in as a creator.");
+                duration = await RequirePositiveDurationAsync(
+                    durationStream,
+                    $"{baseName}.mp3",
+                    cancellationToken);
             }
 
-            // Get the normalized base name for folder and file naming
-            var baseName = GetNormalizedBaseName(audioFileName);
+            var originalContentType = MusicFileExtensions.GetAudioContentType(originalExtension)
+                ?? throw new InvalidDataException("Unsupported original audio type.");
 
-            // Buffer non-seekable stream into a temp file so we can rewind / reuse it
-            // without holding the entire file in memory.
-            string audioTempPath = null;
-            if (!audioStream.CanSeek)
-            {
-                audioTempPath = Path.GetTempFileName();
-                await using (var tempFs = new FileStream(audioTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-                {
-                    await audioStream.CopyToAsync(tempFs, cancellationToken);
-                }
-                audioStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            }
-
-            try
-            {
-
-            // Ensure container exists
             await _storageService.EnsureContainerExistsAsync();
 
-            // Validate audio file
-            if (!await _musicService.IsValidAudioFileAsync(audioStream, audioFileName))
+            if (string.Equals(originalPath, mp3Path, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidDataException($"File {audioFileName} is not a valid audio file.");
+                await using var originalUploadStream = bufferedAudio.OpenRead();
+                await UploadTrackedAsync(
+                    mp3Path,
+                    originalUploadStream,
+                    "audio/mpeg",
+                    blobMutations,
+                    cancellationToken);
             }
-
-            audioStream.Position = 0;
-
-            Stream uploadAudioStream = audioStream;
-            string mp3FileName = baseName + ".mp3";
-
-            // Convert to MP3 if needed
-            if (!_musicService.IsMp3File(audioFileName))
+            else
             {
-                _logger.LogInformation("Converting {FileName} to MP3", audioFileName);
-                uploadAudioStream = await _musicService.ConvertToMp3Async(audioStream, audioFileName);
-            }
-
-            // Create folder path and file paths
-            string folderPath = baseName;
-            string mp3Path = $"{folderPath}/{mp3FileName}";
-
-            // Get track duration from the MP3 file (after conversion if needed)
-            double? trackDuration = null;
-            try
-            {
-                uploadAudioStream.Position = 0;
-                trackDuration = await _musicService.GetAudioDurationAsync(uploadAudioStream, mp3FileName);
-                uploadAudioStream.Position = 0;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to extract track duration for {FileName}", mp3FileName);
-            }
-
-            try
-            {
-                // Upload MP3 file (no tags)
-                _logger.LogInformation("Uploading MP3 file to {Path}", mp3Path);
-                await _storageService.UploadAsync(mp3Path, uploadAudioStream, "audio/mpeg");
-
-                // Save metadata to database - single record with MP3 path only, no image path
-                await _metadataService.UpsertAsync(new Models.SongMetadata
+                await using (var originalUploadStream = bufferedAudio.OpenRead())
                 {
-                    BlobPath = mp3Path, // Kept for backward compatibility
-                    Mp3BlobPath = mp3Path,
-                    ImageBlobPath = null, // No cover art
-                    FileExtension = ".mp3",
-                    AlbumName = albumName ?? string.Empty,
-                    IsAlbumCover = false,
-                    TrackLength = trackDuration,
-                    CreatorId = creatorId
-                });
+                    await UploadTrackedAsync(
+                        originalPath,
+                        originalUploadStream,
+                        originalContentType,
+                        blobMutations,
+                        cancellationToken);
+                }
 
-                _logger.LogInformation("Successfully uploaded music without album art to folder {Folder} with CreatorId={CreatorId}", folderPath, creatorId);
+                await using var playbackUploadStream = playbackFile.OpenRead();
+                await UploadTrackedAsync(
+                    mp3Path,
+                    playbackUploadStream,
+                    "audio/mpeg",
+                    blobMutations,
+                    cancellationToken);
             }
-            finally
+
+            if (imagePath != null)
             {
-                // Dispose only the converted stream; caller owns the original.
-                if (!ReferenceEquals(uploadAudioStream, audioStream))
+                var imageContentType = MusicFileExtensions.GetCoverArtContentType(imageExtension)
+                    ?? throw new InvalidDataException("Unsupported cover-art type.");
+                await using var imageUploadStream = bufferedImage.OpenRead();
+                await UploadTrackedAsync(
+                    imagePath,
+                    imageUploadStream,
+                    imageContentType,
+                    blobMutations,
+                    cancellationToken);
+            }
+
+            await _metadataService.UpsertValidatedUploadAsync(new SongMetadata
+            {
+                BlobPath = mp3Path,
+                Mp3BlobPath = mp3Path,
+                ImageBlobPath = imagePath,
+                OriginalAudioBlobPath = originalPath,
+                OriginalAudioFileName = Path.GetFileName(audioFileName),
+                OriginalAudioFileSize = bufferedAudio.Length,
+                OriginalAudioContentType = originalContentType,
+                FileExtension = ".mp3",
+                SongTitle = songTitle,
+                AlbumName = albumName ?? string.Empty,
+                IsAlbumCover = false,
+                TrackLength = duration,
+                CreatorId = creatorId
+            });
+
+            // The metadata commit succeeded, so the newly uploaded blobs are now
+            // live and referenced by the database. Nothing below this point should
+            // trigger the catch block's restoration of blob snapshots.
+            rollbackRequired = false;
+
+            if (!string.IsNullOrWhiteSpace(previousOriginalPath)
+                && !string.Equals(previousOriginalPath, originalPath, StringComparison.OrdinalIgnoreCase))
+            {
+                try
                 {
-                    await uploadAudioStream.DisposeAsync();
+                    await _storageService.DeleteAsync(previousOriginalPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Unable to delete previous original audio blob {Path}", previousOriginalPath);
                 }
             }
 
-            return folderPath;
-
-            }
-            finally
+            if (imagePath != null
+                && !string.IsNullOrWhiteSpace(previousImagePath)
+                && !string.Equals(previousImagePath, imagePath, StringComparison.OrdinalIgnoreCase))
             {
-                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
-                if (audioTempPath != null)
+                try
                 {
-                    await audioStream.DisposeAsync();
-                    TempFileHelper.TryDelete(audioTempPath, _logger);
+                    await _storageService.DeleteAsync(previousImagePath);
                 }
-            }
-        }
-
-        /// <inheritdoc />
-        public async Task<string> UploadAlbumCoverAsync(
-            Stream albumArtStream,
-            string albumArtFileName,
-            string albumName,
-            int? creatorId = null,
-            CancellationToken cancellationToken = default)
-        {
-            if (albumArtStream == null)
-                throw new ArgumentNullException(nameof(albumArtStream));
-            if (string.IsNullOrWhiteSpace(albumArtFileName))
-                throw new ArgumentException("Album art file name is required.", nameof(albumArtFileName));
-            if (string.IsNullOrWhiteSpace(albumName))
-                throw new ArgumentException("Album name is required.", nameof(albumName));
-
-            // Validate file extension
-            if (!IsAlbumArtFile(albumArtFileName))
-            {
-                throw new InvalidDataException($"File {albumArtFileName} is not a valid album art file. Accepted formats: JPEG, JPG, PNG.");
-            }
-
-            // Buffer non-seekable stream into a temp file so we can rewind / reuse it
-            // without holding the entire file in memory.
-            string albumArtTempPath = null;
-            if (!albumArtStream.CanSeek)
-            {
-                albumArtTempPath = Path.GetTempFileName();
-                await using (var tempFs = new FileStream(albumArtTempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                catch (Exception ex)
                 {
-                    await albumArtStream.CopyToAsync(tempFs, cancellationToken);
-                }
-                albumArtStream = new FileStream(albumArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            }
-
-            // Ensure container exists
-            await _storageService.EnsureContainerExistsAsync();
-
-            // Create a sanitized album name for the folder/file path
-            var sanitizedAlbumName = SanitizeForPath(albumName);
-            var baseName = GetNormalizedBaseName(albumArtFileName);
-            
-            // Preserve original image file extension
-            var albumArtExtension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
-            string albumCoverPath = $"{sanitizedAlbumName}/{baseName}_cover{albumArtExtension}";
-            
-            // Determine content type based on extension
-            string imageContentType = GetImageContentType(albumArtExtension);
-
-            // Upload album cover (no tags)
-            _logger.LogInformation("Uploading album cover to {Path}", albumCoverPath);
-            try
-            {
-                albumArtStream.Position = 0;
-                await _storageService.UploadAsync(albumCoverPath, albumArtStream, imageContentType);
-
-                // Pre-generate Facebook-optimized image so it's ready for social sharing
-                await _openGraphService.PreGenerateFacebookImageAsync(albumCoverPath);
-
-                // Save metadata to database
-                await _metadataService.UpsertAsync(new Models.SongMetadata
-                {
-                    BlobPath = albumCoverPath, // Kept for backward compatibility
-                    Mp3BlobPath = null, // No MP3 for album cover
-                    ImageBlobPath = albumCoverPath,
-                    FileExtension = albumArtExtension,
-                    AlbumName = albumName,
-                    IsAlbumCover = true,
-                    CreatorId = creatorId
-                });
-
-                _logger.LogInformation("Successfully uploaded album cover for album {AlbumName}", albumName);
-            }
-            finally
-            {
-                // If we created a temp-file-backed FileStream, dispose it and delete the temp file.
-                if (albumArtTempPath != null)
-                {
-                    await albumArtStream.DisposeAsync();
-                    TempFileHelper.TryDelete(albumArtTempPath, _logger);
+                    _logger.LogWarning(ex, "Unable to delete previous cover art blob {Path}", previousImagePath);
                 }
             }
 
-            return albumCoverPath;
-        }
-
-        /// <summary>
-        /// Sanitizes a string to be used in a file path by removing invalid characters.
-        /// </summary>
-        private static string SanitizeForPath(string input)
-        {
-            if (string.IsNullOrWhiteSpace(input))
-                return string.Empty;
-
-            var invalidChars = Path.GetInvalidFileNameChars();
-            var sanitized = new string(input.Where(c => !invalidChars.Contains(c)).ToArray());
-            return sanitized.Trim();
-        }
-
-        /// <inheritdoc />
-        public bool ValidateFilePairing(string audioFileName, string albumArtFileName)
-        {
-            if (string.IsNullOrWhiteSpace(audioFileName) || string.IsNullOrWhiteSpace(albumArtFileName))
-                return false;
-
-            var audioBaseName = GetNormalizedBaseName(audioFileName);
-            var albumArtBaseName = GetNormalizedBaseName(albumArtFileName);
-
-            return string.Equals(audioBaseName, albumArtBaseName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <inheritdoc />
-        public string GetNormalizedBaseName(string fileName)
-        {
-            if (string.IsNullOrWhiteSpace(fileName))
-                return string.Empty;
-
-            // Get filename without extension
-            var baseName = Path.GetFileNameWithoutExtension(fileName);
-
-            // Remove "_mastered" suffix if present (case-insensitive)
-            if (baseName.EndsWith(MasteredSuffix, StringComparison.OrdinalIgnoreCase))
+            if (imagePath != null)
             {
-                baseName = baseName.Substring(0, baseName.Length - MasteredSuffix.Length);
-            }
-
-            return baseName;
-        }
-
-        /// <inheritdoc />
-        public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames)
-        {
-            return ValidateAllFilePairings(fileNames, requireAudioFile: true, requireCoverArt: false);
-        }
-
-        /// <inheritdoc />
-        public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile = true)
-        {
-            return ValidateAllFilePairings(fileNames, requireAudioFile, requireCoverArt: false);
-        }
-
-        /// <summary>
-        /// Validates file pairings with configurable requirements.
-        /// </summary>
-        /// <param name="fileNames">List of filenames to validate.</param>
-        /// <param name="requireAudioFile">If true, requires at least one audio file.</param>
-        /// <param name="requireCoverArt">If true, requires each audio file to have matching cover art.</param>
-        /// <returns>A result containing unmatched files if validation fails.</returns>
-        public FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile, bool requireCoverArt)
-        {
-            var result = new FilePairingValidationResult { IsValid = true };
-
-            if (fileNames == null || !fileNames.Any())
-            {
-                result.IsValid = false;
-                return result;
-            }
-
-            var fileList = fileNames.ToList();
-
-            // Separate audio files from album art files
-            var audioFiles = fileList.Where(f => IsAudioFile(f)).ToList();
-            var albumArtFiles = fileList.Where(f => IsAlbumArtFile(f)).ToList();
-
-            // For album cover upload, we only need album art files (no audio required)
-            if (!requireAudioFile)
-            {
-                // Valid if we have at least one album art file
-                if (!albumArtFiles.Any())
+                try
                 {
-                    result.IsValid = false;
-                    // No album art files found - nothing to add to unmatched since list is empty
-                    return result;
+                    await _openGraphService.PreGenerateFacebookImageAsync(imagePath);
                 }
-
-                // All album art files are valid for album cover upload
-                return result;
-            }
-
-            // Audio files are required
-            if (!audioFiles.Any())
-            {
-                result.IsValid = false;
-                result.UnmatchedAlbumArtFiles.AddRange(albumArtFiles);
-                return result;
-            }
-
-            // If cover art is not required, audio-only uploads are valid
-            if (!requireCoverArt)
-            {
-                // Get normalized base names for each type
-                var audioBaseNames = audioFiles
-                    .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
-                var albumArtBaseNames = albumArtFiles
-                    .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
-
-                // Find unmatched album art files (album art without audio is invalid)
-                foreach (var art in albumArtBaseNames)
+                catch (Exception ex)
                 {
-                    if (!audioBaseNames.ContainsKey(art.Key))
+                    _logger.LogWarning(ex, "Unable to pre-generate sharing image for {Path}", imagePath);
+                }
+            }
+
+            return new MusicUploadResult
+            {
+                FolderPath = folderPath,
+                OriginalAudioBlobPath = originalPath,
+                OriginalAudioFileName = Path.GetFileName(audioFileName),
+                OriginalAudioFileSize = bufferedAudio.Length,
+                OriginalAudioContentType = originalContentType,
+                Mp3BlobPath = mp3Path,
+                ImageBlobPath = imagePath,
+                TrackDuration = duration
+            };
+        }
+        catch
+        {
+            if (rollbackRequired)
+            {
+                foreach (var mutation in blobMutations.AsEnumerable().Reverse())
+                {
+                    try
                     {
-                        result.UnmatchedAlbumArtFiles.Add(art.Value);
+                        if (mutation.Existed)
+                        {
+                            await using var restoreStream = mutation.Backup!.OpenRead();
+                            await _storageService.UploadAsync(
+                                mutation.Path,
+                                restoreStream,
+                                mutation.PreviousContentType);
+                        }
+                        else
+                        {
+                            await _storageService.DeleteAsync(mutation.Path);
+                        }
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        _logger.LogCritical(
+                            cleanupException,
+                            "Failed to restore blob {Path} after upload rollback",
+                            mutation.Path);
                     }
                 }
-
-                // Audio files without cover art are valid - don't add to unmatched
-                result.IsValid = !result.UnmatchedAlbumArtFiles.Any();
-                return result;
             }
 
-            // Cover art is required - check if there are album art files
-            if (!albumArtFiles.Any())
+            throw;
+        }
+        finally
+        {
+            if (convertedPlayback != null)
             {
-                result.IsValid = false;
-                result.UnmatchedMp3Files.AddRange(audioFiles);
-                return result;
+                await convertedPlayback.DisposeAsync();
             }
 
-            // Get normalized base names for each type
-            var audioBaseNamesMap = audioFiles
-                .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
-            var albumArtBaseNamesMap = albumArtFiles
-                .ToDictionary(f => GetNormalizedBaseName(f).ToLowerInvariant(), f => f);
-
-            // Find unmatched audio files
-            foreach (var audio in audioBaseNamesMap)
+            if (bufferedImage != null)
             {
-                if (!albumArtBaseNamesMap.ContainsKey(audio.Key))
+                await bufferedImage.DisposeAsync();
+            }
+
+            foreach (var mutation in blobMutations)
+            {
+                if (mutation.Backup != null)
                 {
-                    result.UnmatchedMp3Files.Add(audio.Value);
+                    await mutation.Backup.DisposeAsync();
                 }
             }
 
-            // Find unmatched album art files
-            foreach (var art in albumArtBaseNamesMap)
+            if (uploadPathLockAcquired)
             {
-                if (!audioBaseNamesMap.ContainsKey(art.Key))
-                {
-                    result.UnmatchedAlbumArtFiles.Add(art.Value);
-                }
+                uploadPathLock.Release();
+            }
+        }
+    }
+
+    private async Task UploadTrackedAsync(
+        string path,
+        Stream stream,
+        string contentType,
+        ICollection<BlobMutation> mutations,
+        CancellationToken cancellationToken)
+    {
+        var existed = await _storageService.ExistsAsync(path);
+        BufferedUploadFile backup = null;
+        var previousContentType = "application/octet-stream";
+        if (existed)
+        {
+            var properties = await _storageService.GetFileInfoAsync(path)
+                ?? throw new IOException($"Blob '{path}' disappeared before it could be backed up.");
+            await using var previousStream = await _storageService.OpenReadAsync(path)
+                ?? throw new IOException($"Blob '{path}' could not be opened for rollback backup.");
+            backup = await BufferUploadFileAsync(previousStream, cancellationToken);
+            MediaTransferValidator.RequireComplete(path, properties.Length, backup.Length);
+            previousContentType = properties.ContentType;
+        }
+
+        mutations.Add(new BlobMutation(path, existed, backup, previousContentType));
+        stream.Position = 0;
+        await _storageService.UploadAsync(path, stream, contentType);
+    }
+
+    public async Task<string> UploadAlbumCoverAsync(
+        Stream albumArtStream,
+        string albumArtFileName,
+        string albumName,
+        int? creatorId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(albumArtStream);
+        ValidateImageFileName(albumArtFileName);
+        if (string.IsNullOrWhiteSpace(albumName))
+        {
+            throw new ArgumentException("Album name is required.", nameof(albumName));
+        }
+
+        await using var buffered = await BufferUploadFileAsync(albumArtStream, cancellationToken);
+        await using (var validationStream = buffered.OpenRead())
+        {
+            ValidateImageContent(validationStream, albumArtFileName);
+        }
+
+        var safeAlbumName = SanitizeForPath(albumName);
+        var baseName = GetNormalizedBaseName(albumArtFileName);
+        var extension = Path.GetExtension(albumArtFileName).ToLowerInvariant();
+        var path = $"{safeAlbumName}/{baseName}_cover{extension}";
+        await _storageService.EnsureContainerExistsAsync();
+        await using (var uploadStream = buffered.OpenRead())
+        {
+            await _storageService.UploadAsync(
+                path,
+                uploadStream,
+                MusicFileExtensions.GetCoverArtContentType(extension)!);
+        }
+
+        await _metadataService.UpsertAsync(new SongMetadata
+        {
+            BlobPath = path,
+            ImageBlobPath = path,
+            FileExtension = extension,
+            AlbumName = albumName,
+            IsAlbumCover = true,
+            CreatorId = creatorId
+        });
+        return path;
+    }
+
+    private async Task ValidateAudioContentAsync(Stream stream, string fileName)
+    {
+        stream.Position = 0;
+        if (!await _musicService.IsValidAudioFileAsync(stream, fileName))
+        {
+            throw new InvalidDataException($"'{fileName}' does not contain audio matching its extension.");
+        }
+    }
+
+    private static void ValidateImageContent(Stream stream, string fileName)
+    {
+        stream.Position = 0;
+        if (!MediaFileContentValidator.ImageContentMatchesExtension(stream, fileName, out _))
+        {
+            throw new InvalidDataException($"'{fileName}' does not contain a decodable image matching its extension.");
+        }
+    }
+
+    private async Task<double> RequirePositiveDurationAsync(
+        Stream stream,
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        stream.Position = 0;
+        var result = await _musicService.ValidateAudioDecodeAsync(stream, fileName, cancellationToken);
+        if (result.Status == AudioDecodeStatus.Inconclusive)
+        {
+            throw new InvalidOperationException(
+                $"'{fileName}' could not be validated because the media decoder was unavailable: {result.FailureCode}.");
+        }
+
+        if (result.Status != AudioDecodeStatus.Playable
+            || !result.Duration.HasValue
+            || result.Duration.Value <= 0)
+        {
+            throw new InvalidDataException($"'{fileName}' could not be decoded as playable audio.");
+        }
+
+        return result.Duration.Value;
+    }
+
+    private static void ValidateAudioFileName(string fileName)
+    {
+        if (!MediaFileNameRules.IsValidAudioFileName(Path.GetFileName(fileName)))
+        {
+            throw new InvalidDataException($"'{fileName}' is not a valid audio filename.");
+        }
+    }
+
+    private static void ValidateImageFileName(string fileName)
+    {
+        if (!MediaFileNameRules.IsValidImageFileName(Path.GetFileName(fileName)))
+        {
+            throw new InvalidDataException($"'{fileName}' is not a valid image filename.");
+        }
+    }
+
+    private async Task<BufferedUploadFile> BufferUploadFileAsync(
+        Stream stream,
+        CancellationToken cancellationToken)
+    {
+        var tempPath = Path.GetTempFileName();
+        try
+        {
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
             }
 
-            result.IsValid = !result.UnmatchedMp3Files.Any() && !result.UnmatchedAlbumArtFiles.Any();
+            await using (var output = new FileStream(
+                tempPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await stream.CopyToAsync(output, cancellationToken);
+            }
 
+            return new BufferedUploadFile(tempPath, new FileInfo(tempPath).Length, _logger);
+        }
+        catch
+        {
+            TempFileHelper.TryDelete(tempPath, _logger);
+            throw;
+        }
+    }
+
+    private sealed class BufferedUploadFile(
+        string tempPath,
+        long length,
+        ILogger logger) : IAsyncDisposable
+    {
+        public long Length { get; } = length;
+
+        public FileStream OpenRead() => new(
+            tempPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        public ValueTask DisposeAsync()
+        {
+            TempFileHelper.TryDelete(tempPath, logger);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed record BlobMutation(
+        string Path,
+        bool Existed,
+        BufferedUploadFile Backup,
+        string PreviousContentType);
+
+    public bool ValidateFilePairing(string audioFileName, string albumArtFileName)
+        => !string.IsNullOrWhiteSpace(audioFileName)
+           && !string.IsNullOrWhiteSpace(albumArtFileName)
+           && string.Equals(
+               GetNormalizedBaseName(audioFileName),
+               GetNormalizedBaseName(albumArtFileName),
+               StringComparison.OrdinalIgnoreCase);
+
+    public string GetNormalizedBaseName(string fileName)
+        => string.IsNullOrWhiteSpace(fileName)
+            ? string.Empty
+            : Path.GetFileNameWithoutExtension(Path.GetFileName(fileName));
+
+    public FilePairingValidationResult ValidateAllFilePairings(
+        IEnumerable<string> fileNames,
+        bool requireAudioFile = true)
+        => ValidateAllFilePairings(fileNames, requireAudioFile, requireCoverArt: false);
+
+    public FilePairingValidationResult ValidateAllFilePairings(
+        IEnumerable<string> fileNames,
+        bool requireAudioFile,
+        bool requireCoverArt)
+    {
+        var result = new FilePairingValidationResult { IsValid = true };
+        var files = fileNames?.ToList() ?? [];
+        if (files.Count == 0)
+        {
+            result.IsValid = false;
             return result;
         }
 
-        private static bool IsAudioFile(string fileName)
-            => MusicFileExtensions.IsAudioFile(fileName);
-
-        private static bool IsAlbumArtFile(string fileName)
-            => MusicFileExtensions.IsCoverArtFile(fileName);
-
-        private static string GetImageContentType(string extension)
+        var invalid = files.Where(file =>
+            !MediaFileNameRules.IsValidAudioFileName(file)
+            && !MediaFileNameRules.IsValidImageFileName(file)).ToList();
+        if (invalid.Count > 0)
         {
-            return extension.ToLowerInvariant() switch
-            {
-                ".jpg" => "image/jpeg",
-                ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                _ => "image/jpeg" // Default fallback
-            };
+            result.IsValid = false;
+            result.UnmatchedMp3Files.AddRange(invalid);
+            return result;
         }
+
+        var audio = files.Where(MediaFileNameRules.IsValidAudioFileName).ToList();
+        var images = files.Where(MediaFileNameRules.IsValidImageFileName).ToList();
+        if (!requireAudioFile)
+        {
+            result.IsValid = images.Count > 0;
+            return result;
+        }
+
+        if (requireAudioFile && audio.Count == 0)
+        {
+            result.IsValid = false;
+            result.UnmatchedAlbumArtFiles.AddRange(images);
+            return result;
+        }
+
+        if (requireCoverArt)
+        {
+            var imageNames = images.Select(GetNormalizedBaseName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            result.UnmatchedMp3Files.AddRange(audio.Where(item =>
+                !imageNames.Contains(GetNormalizedBaseName(item))));
+        }
+
+        var audioNames = audio.Select(GetNormalizedBaseName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        result.UnmatchedAlbumArtFiles.AddRange(images.Where(image =>
+            !audioNames.Contains(GetNormalizedBaseName(image))));
+        result.IsValid = result.UnmatchedAlbumArtFiles.Count == 0
+            && result.UnmatchedMp3Files.Count == 0;
+        return result;
+    }
+
+    private static string SanitizeForPath(string input)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return new string(input.Where(character => !invalid.Contains(character)).ToArray()).Trim();
     }
 }

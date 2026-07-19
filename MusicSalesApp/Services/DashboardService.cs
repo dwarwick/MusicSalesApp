@@ -113,12 +113,11 @@ public class DashboardService : IDashboardService
     /// Priority: SongTitle > filename derived from Mp3BlobPath
     /// </summary>
     internal static string GetEffectiveSongTitle(SongMetadata sm)
-    {
-        if (!string.IsNullOrEmpty(sm.SongTitle))
-            return sm.SongTitle;
-
-        return Path.GetFileNameWithoutExtension(sm.Mp3BlobPath ?? sm.ImageBlobPath ?? sm.BlobPath ?? "Unknown");
-    }
+        => Common.Helpers.SongTitleHelper.GetEffectiveTitle(
+            sm.SongTitle,
+            sm.Mp3BlobPath,
+            sm.ImageBlobPath,
+            sm.BlobPath);
 
     /// <inheritdoc />
     public async Task<StreamFilterOptions> GetStreamFilterOptionsAsync(int creatorId, DateTime startUtc, DateTime endUtc,

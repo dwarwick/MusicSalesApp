@@ -28,9 +28,9 @@ namespace MusicSalesApp.Services
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Uploads a paired MP3 and album art file to storage.
-        /// Files are stored in a folder named after the base filename.
-        /// If the MP3 filename contains "_mastered", it is removed before storage.
+        /// Uploads validated audio and paired album art to storage.
+        /// The validated original audio is retained and a playback MP3 is created when needed.
+        /// Files are stored in a folder named after the validated base filename.
         /// </summary>
         /// <param name="audioStream">The MP3 audio file stream.</param>
         /// <param name="audioFileName">Original filename of the MP3 file.</param>
@@ -40,19 +40,20 @@ namespace MusicSalesApp.Services
         /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The folder path where files were stored.</returns>
-        Task<string> UploadMusicWithAlbumArtAsync(
+        Task<MusicUploadResult> UploadMusicWithAlbumArtAsync(
             Stream audioStream,
             string audioFileName,
             Stream albumArtStream,
             string albumArtFileName,
             string albumName = null,
             int? creatorId = null,
+            string storageBaseName = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Uploads an MP3 audio file without cover art.
-        /// File is stored in a folder named after the base filename.
-        /// If the filename contains "_mastered", it is removed before storage.
+        /// Uploads validated audio without cover art, retaining the original source and
+        /// creating a playback MP3 when needed. Files are stored in a folder named after
+        /// the validated base filename.
         /// </summary>
         /// <param name="audioStream">The audio file stream.</param>
         /// <param name="audioFileName">Original filename of the audio file.</param>
@@ -60,11 +61,12 @@ namespace MusicSalesApp.Services
         /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The folder path where the file was stored.</returns>
-        Task<string> UploadMusicWithoutAlbumArtAsync(
+        Task<MusicUploadResult> UploadMusicWithoutAlbumArtAsync(
             Stream audioStream,
             string audioFileName,
             string albumName = null,
             int? creatorId = null,
+            string storageBaseName = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -84,8 +86,7 @@ namespace MusicSalesApp.Services
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Validates that the given MP3 and album art filenames match.
-        /// Filenames match if they have the same base name (ignoring "_mastered" suffix in MP3).
+        /// Validates that the given audio and album art filenames have the same base name.
         /// </summary>
         /// <param name="audioFileName">The MP3 filename.</param>
         /// <param name="albumArtFileName">The album art filename.</param>
@@ -93,8 +94,7 @@ namespace MusicSalesApp.Services
         bool ValidateFilePairing(string audioFileName, string albumArtFileName);
 
         /// <summary>
-        /// Gets the normalized base name from a filename.
-        /// Removes "_mastered" suffix and file extension.
+        /// Gets the validated base name from a filename by removing its extension.
         /// </summary>
         /// <param name="fileName">The filename to normalize.</param>
         /// <returns>The normalized base name.</returns>
@@ -107,6 +107,23 @@ namespace MusicSalesApp.Services
         /// <param name="requireAudioFile">If true, requires at least one audio file. Defaults to true.</param>
         /// <returns>A result containing unmatched files if validation fails.</returns>
         FilePairingValidationResult ValidateAllFilePairings(IEnumerable<string> fileNames, bool requireAudioFile = true);
+
+        FilePairingValidationResult ValidateAllFilePairings(
+            IEnumerable<string> fileNames,
+            bool requireAudioFile,
+            bool requireCoverArt);
+    }
+
+    public sealed class MusicUploadResult
+    {
+        public string FolderPath { get; init; } = string.Empty;
+        public string OriginalAudioBlobPath { get; init; } = string.Empty;
+        public string OriginalAudioFileName { get; init; } = string.Empty;
+        public long OriginalAudioFileSize { get; init; }
+        public string OriginalAudioContentType { get; init; } = string.Empty;
+        public string Mp3BlobPath { get; init; } = string.Empty;
+        public string ImageBlobPath { get; init; }
+        public double TrackDuration { get; init; }
     }
 
     /// <summary>

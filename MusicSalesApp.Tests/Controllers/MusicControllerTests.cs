@@ -40,6 +40,13 @@ public class MusicControllerTests
         _songMapper = new MobileSongMapper(_mockStorageService.Object, _mockCreatorPersonaService.Object);
         _mockLogger = new Mock<ILogger<MusicController>>();
         _mockAppSettingsService.Setup(s => s.GetStreamQualifyingSecondsAsync()).ReturnsAsync(45);
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(It.IsAny<string>()))
+            .ReturnsAsync((string path) => new SongMetadata
+            {
+                Mp3BlobPath = path,
+                IsActive = true,
+                IsEnabled = true
+            });
         
         // Mock UserManager with required dependencies
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
@@ -151,6 +158,37 @@ public class MusicControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestResult>());
+    }
+
+    [Test]
+    public async Task Stream_WithRetainedOriginalPath_ReturnsNotFound()
+    {
+        const string path = "Boof/Boof.wav";
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(path)).ReturnsAsync(new SongMetadata
+        {
+            Mp3BlobPath = "Boof/Boof.mp3",
+            OriginalAudioBlobPath = path,
+            IsActive = true,
+            IsEnabled = true
+        });
+
+        var result = await _controller.Stream(path);
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _mockStorageService.Verify(s => s.OpenReadAsync(path), Times.Never);
+    }
+
+    [Test]
+    public async Task GetStreamUrl_WithArbitraryPath_ReturnsNotFound()
+    {
+        const string path = "private/arbitrary.flac";
+        _mockSongMetadataService.Setup(s => s.GetByBlobPathAsync(path))
+            .ReturnsAsync((SongMetadata)null);
+
+        var result = await _controller.GetStreamUrl(path);
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        _mockStorageService.Verify(s => s.GetReadSasUri(path, It.IsAny<TimeSpan>()), Times.Never);
     }
 
     [Test]

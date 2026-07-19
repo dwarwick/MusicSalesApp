@@ -24,6 +24,24 @@ public class SongMetadata
     public string Mp3BlobPath { get; set; }
 
     /// <summary>
+    /// Full path to the exact validated audio file supplied by the creator.
+    /// For original MP3 uploads this is the same path as <see cref="Mp3BlobPath"/>.
+    /// </summary>
+    [MaxLength(500)]
+    public string OriginalAudioBlobPath { get; set; }
+
+    /// <summary>
+    /// Browser-supplied filename for the retained original audio.
+    /// </summary>
+    [MaxLength(255)]
+    public string OriginalAudioFileName { get; set; }
+
+    public long? OriginalAudioFileSize { get; set; }
+
+    [MaxLength(100)]
+    public string OriginalAudioContentType { get; set; }
+
+    /// <summary>
     /// Full path to the image blob file (folder/filename)
     /// </summary>
     [MaxLength(500)]

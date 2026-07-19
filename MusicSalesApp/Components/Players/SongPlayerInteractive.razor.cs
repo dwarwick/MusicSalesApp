@@ -235,7 +235,9 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             _songMetadata = allMetadata.FirstOrDefault(m =>
                 !string.IsNullOrEmpty(m.Mp3BlobPath) &&
                 MusicFileExtensions.IsAudioFile(m.Mp3BlobPath) &&
-                (Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                (SongTitleHelper.GetEffectiveTitle(m.SongTitle, m.Mp3BlobPath, m.BlobPath)
+                    .Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
+                 Path.GetFileNameWithoutExtension(Path.GetFileName(m.Mp3BlobPath)).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  Path.GetFileName(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  (!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase))));
 
@@ -425,9 +427,12 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
     protected string GetDisplayTitle()
     {
-        if (_songMetadata != null && !string.IsNullOrEmpty(_songMetadata.SongTitle))
+        if (_songMetadata != null)
         {
-            return _songMetadata.SongTitle;
+            return SongTitleHelper.GetEffectiveTitle(
+                _songMetadata.SongTitle,
+                _songMetadata.Mp3BlobPath,
+                _songMetadata.BlobPath);
         }
         
         if (_songInfo == null) return SongTitle ?? "Unknown Song";

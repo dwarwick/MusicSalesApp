@@ -180,24 +180,7 @@ public class SitemapService : ISitemapService
     /// Prefers stored SongTitle, falls back to extracting from blob path.
     /// </summary>
     private string GetSongTitle(Models.SongMetadata song)
-    {
-        // Prefer stored SongTitle
-        if (!string.IsNullOrEmpty(song.SongTitle))
-        {
-            return song.SongTitle;
-        }
-        
-        if (string.IsNullOrEmpty(song.Mp3BlobPath))
-        {
-            return string.Empty;
-        }
-
-        // Extract filename from path (e.g., "songs/My Song.mp3" -> "My Song.mp3")
-        var fileName = Path.GetFileName(song.Mp3BlobPath);
-
-        // Remove extension (e.g., "My Song.mp3" -> "My Song")
-        return Path.GetFileNameWithoutExtension(fileName);
-    }
+        => SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath);
 
     /// <summary>
     /// A StringWriter that reports UTF-8 encoding instead of UTF-16.

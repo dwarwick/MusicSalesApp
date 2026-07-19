@@ -292,6 +292,54 @@ public class CreatorServiceTests
 
     #endregion
 
+    #region DeactivateCreatorAsync Tests
+
+    [Test]
+    public async Task DeactivateCreatorAsync_SetsIsActiveFalse_WithoutDeletingSongsOrStorage()
+    {
+        // Arrange — active creator with a published song
+        var user = new ApplicationUser { UserName = "deactivate@test.com", Email = "deactivate@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            OnboardingStatus = CreatorOnboardingStatus.Completed,
+            IsActive = true
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            CreatorId = creator.Id,
+            SongTitle = "Still Standing",
+            Mp3BlobPath = "Still Standing/Still Standing.mp3",
+            IsActive = true
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        // Act — admin suspends the creator (must remain reversible, unlike leaving/consent-revocation)
+        var result = await _service.DeactivateCreatorAsync(creator.Id);
+
+        // Assert
+        Assert.That(result.IsActive, Is.False);
+        Assert.That(result.OnboardingStatus, Is.EqualTo(CreatorOnboardingStatus.Suspended));
+
+        await using var verifyContext = await _contextFactory.CreateDbContextAsync();
+        var savedSong = await verifyContext.SongMetadata.FindAsync(song.Id);
+        Assert.That(savedSong!.IsActive, Is.True, "Deactivating a creator must not deactivate their songs.");
+
+        _mockStorageService.Verify(
+            s => s.DeleteAsync(It.IsAny<string>()),
+            Times.Never,
+            "Deactivating a creator (a reversible suspension) must not delete their media from storage.");
+    }
+
+    #endregion
+
     #region UpdateCreatorPayoutEmailAsync Tests
 
     [Test]

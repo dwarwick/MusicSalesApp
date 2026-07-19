@@ -746,7 +746,12 @@ public class PayPalWebhookController : ControllerBase
                 {
                     var creatorEmail = tip.Creator?.User?.Email;
                     var creatorName = tip.Creator?.DisplayName ?? "Creator";
-                    var songTitle = tip.SongMetadata?.SongTitle ?? "Unknown Song";
+                    var songTitle = tip.SongMetadata == null
+                        ? "Unknown Song"
+                        : SongTitleHelper.GetEffectiveTitle(
+                            tip.SongMetadata.SongTitle,
+                            tip.SongMetadata.Mp3BlobPath,
+                            tip.SongMetadata.BlobPath);
 
                     await SendChargebackPayoutReversalEmailAsync(
                         creatorEmail, creatorName, songTitle, tip.Amount,

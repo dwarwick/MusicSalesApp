@@ -160,7 +160,43 @@ namespace MusicSalesApp.Services
                 .ToListAsync();
         }
 
-        public async Task<SongMetadata> UpsertAsync(SongMetadata metadata)
+        public Task<SongMetadata> UpsertAsync(SongMetadata metadata)
+            => UpsertInternalAsync(metadata, isValidatedUpload: false);
+
+        public Task<SongMetadata> UpsertValidatedUploadAsync(SongMetadata metadata)
+        {
+            if (string.IsNullOrWhiteSpace(metadata.Mp3BlobPath)
+                || !metadata.TrackLength.HasValue
+                || metadata.TrackLength.Value <= 0
+                || !Common.Helpers.MediaFileNameRules.IsValidTitle(metadata.SongTitle))
+            {
+                throw new InvalidOperationException(
+                    "A validated upload requires a valid title, playback path, and positive duration.");
+            }
+
+            return UpsertInternalAsync(metadata, isValidatedUpload: true);
+        }
+
+        public async Task<SongMetadata> ValidateUploadTargetAsync(
+            string mp3BlobPath,
+            string originalAudioBlobPath,
+            string imageBlobPath,
+            int creatorId)
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var matches = await FindUploadTargetMatches(
+                    context,
+                    mp3BlobPath,
+                    originalAudioBlobPath,
+                    imageBlobPath)
+                .AsNoTracking()
+                .ToListAsync();
+            return ValidateReplacementOwnership(matches, creatorId, mp3BlobPath);
+        }
+
+        private async Task<SongMetadata> UpsertInternalAsync(
+            SongMetadata metadata,
+            bool isValidatedUpload)
         {
             await using var context = await _contextFactory.CreateDbContextAsync();
             
@@ -168,12 +204,21 @@ namespace MusicSalesApp.Services
             var blobPath = metadata.BlobPath;
             var mp3BlobPath = metadata.Mp3BlobPath;
             var imageBlobPath = metadata.ImageBlobPath;
+            var originalAudioBlobPath = metadata.OriginalAudioBlobPath;
             
-            var existing = await context.SongMetadata
-                .FirstOrDefaultAsync(s => 
-                    (!string.IsNullOrEmpty(blobPath) && (s.BlobPath == blobPath || s.Mp3BlobPath == blobPath || s.ImageBlobPath == blobPath)) ||
-                    (!string.IsNullOrEmpty(mp3BlobPath) && (s.BlobPath == mp3BlobPath || s.Mp3BlobPath == mp3BlobPath)) ||
-                    (!string.IsNullOrEmpty(imageBlobPath) && (s.BlobPath == imageBlobPath || s.ImageBlobPath == imageBlobPath)));
+            var matches = await FindUploadTargetMatches(
+                    context,
+                    string.IsNullOrWhiteSpace(mp3BlobPath) ? blobPath : mp3BlobPath,
+                    originalAudioBlobPath,
+                    imageBlobPath)
+                .ToListAsync();
+            var existing = isValidatedUpload
+                ? ValidateReplacementOwnership(
+                    matches,
+                    metadata.CreatorId
+                        ?? throw new InvalidOperationException("A validated upload requires a creator."),
+                    mp3BlobPath)
+                : matches.FirstOrDefault();
             
             if (existing != null)
             {
@@ -181,42 +226,148 @@ namespace MusicSalesApp.Services
                     existing.Id, existing.CreatorId, metadata.CreatorId ?? existing.CreatorId);
                 
                 // Update existing
-                existing.AlbumName = metadata.AlbumName;
-                existing.IsAlbumCover = metadata.IsAlbumCover;
-                existing.Genre = metadata.Genre;
-                existing.SongTitle = metadata.SongTitle;
-                existing.TrackNumber = metadata.TrackNumber;
-                existing.TrackLength = metadata.TrackLength;
-                existing.Mp3BlobPath = metadata.Mp3BlobPath;
-                existing.ImageBlobPath = metadata.ImageBlobPath;
-                existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
-                existing.IsAiGenerated = metadata.IsAiGenerated;
-                existing.IsAiVocals = metadata.IsAiVocals;
-                existing.IsAiLyrics = metadata.IsAiLyrics;
-                existing.CreatorId = metadata.CreatorId ?? existing.CreatorId; // Only update if provided
-                existing.ArtistName = metadata.ArtistName;
-                existing.PersonaId = metadata.PersonaId;
+                if (isValidatedUpload)
+                {
+                    existing.SongTitle = metadata.SongTitle.Trim();
+                    existing.BlobPath = metadata.Mp3BlobPath;
+                    existing.Mp3BlobPath = metadata.Mp3BlobPath;
+                    existing.TrackLength = metadata.TrackLength;
+                    existing.FileExtension = ".mp3";
+                    existing.OriginalAudioBlobPath = metadata.OriginalAudioBlobPath;
+                    existing.OriginalAudioFileName = metadata.OriginalAudioFileName;
+                    existing.OriginalAudioFileSize = metadata.OriginalAudioFileSize;
+                    existing.OriginalAudioContentType = metadata.OriginalAudioContentType;
+                    if (!string.IsNullOrWhiteSpace(metadata.ImageBlobPath))
+                    {
+                        existing.ImageBlobPath = metadata.ImageBlobPath;
+                    }
+                }
+                else
+                {
+                    existing.AlbumName = metadata.AlbumName;
+                    existing.IsAlbumCover = metadata.IsAlbumCover;
+                    existing.Genre = metadata.Genre;
+                    if (!string.IsNullOrWhiteSpace(metadata.SongTitle))
+                    {
+                        existing.SongTitle = metadata.SongTitle.Trim();
+                    }
+                    existing.TrackNumber = metadata.TrackNumber;
+                    existing.TrackLength = metadata.TrackLength;
+                    existing.Mp3BlobPath = metadata.Mp3BlobPath;
+                    existing.ImageBlobPath = metadata.ImageBlobPath;
+                    existing.DisplayOnHomePage = metadata.DisplayOnHomePage;
+                    existing.IsAiGenerated = metadata.IsAiGenerated;
+                    existing.IsAiVocals = metadata.IsAiVocals;
+                    existing.IsAiLyrics = metadata.IsAiLyrics;
+                    existing.CreatorId = metadata.CreatorId ?? existing.CreatorId;
+                    existing.ArtistName = metadata.ArtistName;
+                    existing.PersonaId = metadata.PersonaId;
+                }
                 existing.UpdatedAt = DateTime.UtcNow;
 
-                // Re-uploading to a previously used path should always reactivate the song.
-                // This is critical when a creator re-signs up and re-uploads songs whose
-                // SongMetadata rows were marked inactive (IsActive=false) during deactivation.
-                existing.IsActive = true;
-                existing.IsEnabled = true;
+                if (isValidatedUpload)
+                {
+                    var wasDisabled = !existing.IsEnabled;
+                    existing.IsActive = true;
+                    existing.IsEnabled = true;
+                    existing.StatusReason = null;
+                    if (wasDisabled)
+                    {
+                        context.SongStatusHistories.Add(new SongStatusHistory
+                        {
+                            SongMetadataId = existing.Id,
+                            IsEnabled = true,
+                            Reason = Common.Helpers.MediaIntegrityConstants.RecoveryReason,
+                            ChangedByUserId = null,
+                            ChangedAt = DateTime.UtcNow
+                        });
+                    }
+                }
                 
                 context.SongMetadata.Update(existing);
             }
             else
             {
                 // Create new - ensure IsActive is true by default
-                _logger.LogInformation("SongMetadataService.UpsertAsync: Creating new record with BlobPath={BlobPath}, Mp3BlobPath={Mp3BlobPath}, CreatorId={CreatorId}", 
+                _logger.LogInformation("SongMetadataService.UpsertAsync: Creating new record with BlobPath={BlobPath}, Mp3BlobPath={Mp3BlobPath}, CreatorId={CreatorId}",
                     metadata.BlobPath, metadata.Mp3BlobPath, metadata.CreatorId);
                 metadata.IsActive = true;
+                metadata.IsEnabled = isValidatedUpload || metadata.IsEnabled;
                 context.SongMetadata.Add(metadata);
+            }
+
+            // Enforce the same "Mp3BlobPath implies a non-blank title" invariant the
+            // SQL Server check constraint applies in production, on every upsert path
+            // (create and update), so it's caught here — testably, on every provider —
+            // instead of only ever surfacing as an opaque SqlException.
+            var target = existing ?? metadata;
+            if (!string.IsNullOrWhiteSpace(target.Mp3BlobPath) && string.IsNullOrWhiteSpace(target.SongTitle))
+            {
+                target.SongTitle = Common.Helpers.SongTitleHelper.GetEffectiveTitle(
+                    target.SongTitle,
+                    target.Mp3BlobPath,
+                    target.BlobPath);
+            }
+
+            if (!string.IsNullOrWhiteSpace(target.Mp3BlobPath) && string.IsNullOrWhiteSpace(target.SongTitle))
+            {
+                throw new InvalidOperationException(
+                    $"Cannot save song metadata with Mp3BlobPath '{target.Mp3BlobPath}' and a blank title.");
             }
 
             await context.SaveChangesAsync();
             return existing ?? metadata;
+        }
+
+        private static IQueryable<SongMetadata> FindUploadTargetMatches(
+            AppDbContext context,
+            string mp3BlobPath,
+            string originalAudioBlobPath,
+            string imageBlobPath)
+            => context.SongMetadata.Where(song =>
+                (!string.IsNullOrEmpty(mp3BlobPath)
+                    && (song.BlobPath == mp3BlobPath
+                        || song.Mp3BlobPath == mp3BlobPath
+                        || song.ImageBlobPath == mp3BlobPath
+                        || song.OriginalAudioBlobPath == mp3BlobPath))
+                || (!string.IsNullOrEmpty(originalAudioBlobPath)
+                    && (song.BlobPath == originalAudioBlobPath
+                        || song.Mp3BlobPath == originalAudioBlobPath
+                        || song.ImageBlobPath == originalAudioBlobPath
+                        || song.OriginalAudioBlobPath == originalAudioBlobPath))
+                || (!string.IsNullOrEmpty(imageBlobPath)
+                    && (song.BlobPath == imageBlobPath
+                        || song.Mp3BlobPath == imageBlobPath
+                        || song.ImageBlobPath == imageBlobPath
+                        || song.OriginalAudioBlobPath == imageBlobPath)));
+
+        private static SongMetadata ValidateReplacementOwnership(
+            IReadOnlyCollection<SongMetadata> matches,
+            int creatorId,
+            string mp3BlobPath)
+        {
+            if (matches.Count == 0)
+                return null;
+            if (matches.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "The requested media paths are already associated with multiple catalog records.");
+            }
+
+            var existing = matches.Single();
+            if (existing.CreatorId != creatorId)
+            {
+                throw new UnauthorizedAccessException(
+                    "That filename belongs to another creator and cannot be replaced.");
+            }
+
+            if (existing.IsActive && existing.IsEnabled)
+            {
+                throw new InvalidOperationException(
+                    $"An active song already uses playback path '{mp3BlobPath}'. Edit that song instead of uploading over it.");
+            }
+
+            return existing;
         }
 
         public async Task<bool> DeleteAsync(string blobPath)
@@ -358,7 +509,8 @@ namespace MusicSalesApp.Services
                 .Select(m => new SongAdminViewModel
             {
                 Id = m.Id.ToString(),
-                SongTitle = System.IO.Path.GetFileNameWithoutExtension(m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath),
+                SongTitle = Common.Helpers.SongTitleHelper.GetEffectiveTitle(
+                    m.SongTitle, m.Mp3BlobPath, m.ImageBlobPath, m.BlobPath),
                 Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
                 JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
                 Genre = m.Genre ?? string.Empty,
@@ -393,9 +545,8 @@ namespace MusicSalesApp.Services
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var song in activeSongs)
             {
-                var effectiveTitle = !string.IsNullOrEmpty(song.SongTitle)
-                    ? song.SongTitle
-                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? string.Empty);
+                var effectiveTitle = Common.Helpers.SongTitleHelper.GetEffectiveTitle(
+                    song.SongTitle, song.Mp3BlobPath);
 
                 if (!string.IsNullOrEmpty(effectiveTitle) && titleSet.Contains(effectiveTitle))
                     result.Add(effectiveTitle);
@@ -420,9 +571,8 @@ namespace MusicSalesApp.Services
 
             foreach (var song in activeSongs)
             {
-                var effectiveTitle = !string.IsNullOrEmpty(song.SongTitle)
-                    ? song.SongTitle
-                    : System.IO.Path.GetFileNameWithoutExtension(song.Mp3BlobPath ?? string.Empty);
+                var effectiveTitle = Common.Helpers.SongTitleHelper.GetEffectiveTitle(
+                    song.SongTitle, song.Mp3BlobPath);
 
                 if (string.Equals(effectiveTitle, title, StringComparison.OrdinalIgnoreCase))
                     return true;

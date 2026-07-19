@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using SkiaSharp;
 using System.Text;
@@ -57,7 +58,8 @@ public class OpenGraphService : IOpenGraphService
             var songMetadata = allMetadata.FirstOrDefault(m => 
                 !string.IsNullOrEmpty(m.Mp3BlobPath) && 
                 string.IsNullOrEmpty(m.AlbumName) && // Standalone song only
-                ((!string.IsNullOrEmpty(m.SongTitle) && m.SongTitle.Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)) ||
+                (SongTitleHelper.GetEffectiveTitle(m.SongTitle, m.Mp3BlobPath, m.BlobPath)
+                    .Equals(decodedTitle, StringComparison.OrdinalIgnoreCase) ||
                  Path.GetFileNameWithoutExtension(m.Mp3BlobPath).Equals(decodedTitle, StringComparison.OrdinalIgnoreCase)));
 
             if (songMetadata == null)
@@ -99,7 +101,8 @@ public class OpenGraphService : IOpenGraphService
     /// </summary>
     private async Task<string> BuildSongMetaTagsAsync(SongMetadata songMetadata, List<SongMetadata> allMetadata)
     {
-            var decodedTitle = songMetadata.SongTitle ?? Path.GetFileNameWithoutExtension(songMetadata.Mp3BlobPath ?? "");
+            var decodedTitle = SongTitleHelper.GetEffectiveTitle(
+                songMetadata.SongTitle, songMetadata.Mp3BlobPath, songMetadata.BlobPath);
 
             // Find the associated image for this song using BlobPath or ImageBlobPath
             // First try using the image from the song metadata record itself
@@ -137,7 +140,7 @@ public class OpenGraphService : IOpenGraphService
                 imageUrl = GetAbsoluteUrl("/favicon.ico");
             }
 
-            var displayTitle = !string.IsNullOrEmpty(songMetadata.SongTitle) ? songMetadata.SongTitle : decodedTitle;
+            var displayTitle = decodedTitle;
 
             // og:url should point to the canonical song page URL
             var canonicalUrl = GetAbsoluteUrl($"/song/{Uri.EscapeDataString(displayTitle)}");

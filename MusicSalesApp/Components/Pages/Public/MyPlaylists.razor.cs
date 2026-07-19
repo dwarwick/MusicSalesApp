@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Components.Pages.Public;
@@ -295,21 +296,10 @@ public partial class MyPlaylistsModel : BlazorBase
     }
 
     protected string GetSongTitle(SongMetadata songMetadata)
-    {
-        if (!string.IsNullOrEmpty(songMetadata?.SongTitle))
-        {
-            return songMetadata.SongTitle;
-        }
-        if (!string.IsNullOrEmpty(songMetadata?.Mp3BlobPath))
-        {
-            return Path.GetFileNameWithoutExtension(songMetadata.Mp3BlobPath);
-        }
-        if (!string.IsNullOrEmpty(songMetadata?.BlobPath))
-        {
-            return Path.GetFileNameWithoutExtension(songMetadata.BlobPath);
-        }
-        return "Unknown Song";
-    }
+        => songMetadata == null
+            ? "Unknown Song"
+            : SongTitleHelper.GetEffectiveTitle(
+                songMetadata.SongTitle, songMetadata.Mp3BlobPath, songMetadata.BlobPath);
 
     protected void PlayPlaylist(Playlist playlist)
     {

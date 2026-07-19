@@ -1,4 +1,5 @@
 using MusicSalesApp.Components.Base;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using Syncfusion.Blazor.Grids;
 
@@ -80,8 +81,12 @@ public class AdminTipFraudModel : BlazorBase
             TipperEmail = t.TipperUser?.Email ?? $"User #{t.TipperUserId}",
             ArtistName = GetCreatorName(t.Creator, t.CreatorId),
             ArtistEmail = t.Creator?.User?.Email ?? string.Empty,
-            SongTitle = t.SongMetadata?.SongTitle
-                ?? (t.SongMetadata?.Mp3BlobPath != null ? Path.GetFileNameWithoutExtension(t.SongMetadata.Mp3BlobPath) : null),
+            SongTitle = t.SongMetadata == null
+                ? null
+                : SongTitleHelper.GetEffectiveTitle(
+                    t.SongMetadata.SongTitle,
+                    t.SongMetadata.Mp3BlobPath,
+                    t.SongMetadata.BlobPath),
             Amount = t.Amount,
             Status = t.Status.ToString(),
             PayPalTransactionId = !string.IsNullOrEmpty(t.PayPalPayoutTransactionId)

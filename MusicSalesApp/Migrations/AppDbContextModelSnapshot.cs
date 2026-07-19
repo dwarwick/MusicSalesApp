@@ -103,35 +103,35 @@ namespace MusicSalesApp.Migrations
                         {
                             Id = 1,
                             ClaimType = "Permission",
-                            ClaimValue = "ManageSongs",
+                            ClaimValue = "ManageAllCreatorSongs",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 2,
                             ClaimType = "Permission",
-                            ClaimValue = "ManageUsers",
+                            ClaimValue = "ManageSongs",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 3,
                             ClaimType = "Permission",
-                            ClaimValue = "UploadFiles",
+                            ClaimValue = "ManageUsers",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 4,
                             ClaimType = "Permission",
-                            ClaimValue = "UseHangfire",
+                            ClaimValue = "UploadFiles",
                             RoleId = 1
                         },
                         new
                         {
                             Id = 5,
                             ClaimType = "Permission",
-                            ClaimValue = "ValidatedUser",
+                            ClaimValue = "UseHangfire",
                             RoleId = 1
                         },
                         new
@@ -139,25 +139,32 @@ namespace MusicSalesApp.Migrations
                             Id = 6,
                             ClaimType = "Permission",
                             ClaimValue = "ValidatedUser",
-                            RoleId = 2
+                            RoleId = 1
                         },
                         new
                         {
                             Id = 7,
                             ClaimType = "Permission",
                             ClaimValue = "ValidatedUser",
-                            RoleId = 4
+                            RoleId = 2
                         },
                         new
                         {
                             Id = 8,
+                            ClaimType = "Permission",
+                            ClaimValue = "ValidatedUser",
+                            RoleId = 4
+                        },
+                        new
+                        {
+                            Id = 9,
                             ClaimType = "Permission",
                             ClaimValue = "UploadFiles",
                             RoleId = 4
                         },
                         new
                         {
-                            Id = 9,
+                            Id = 10,
                             ClaimType = "Permission",
                             ClaimValue = "ManageOwnSongs",
                             RoleId = 4
@@ -999,6 +1006,224 @@ namespace MusicSalesApp.Migrations
                         });
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AuditRunId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("BlobLastModified")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long?>("BlobLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CheckedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("CreatorNotificationSent")
+                        .HasColumnType("bit");
+
+                    b.Property<double?>("DecodedDuration")
+                        .HasColumnType("float");
+
+                    b.Property<string>("DetectedFormat")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Diagnostic")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ETag")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("EffectiveTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsOriginalSourceCheckInconclusive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsOriginalSourceMissing")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("MetadataRepaired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("OriginalAudioBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PlaybackBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("Quarantined")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SongMetadataId");
+
+                    b.HasIndex("AuditRunId", "SongMetadataId");
+
+                    b.ToTable("MediaIntegrityAuditItems");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AuditRunId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("NotificationType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Recipient")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("Sent")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuditRunId", "NotificationType", "Recipient")
+                        .IsUnique()
+                        .HasFilter("[NotificationType] IS NOT NULL AND [Recipient] IS NOT NULL");
+
+                    b.ToTable("MediaIntegrityAuditNotifications");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ActiveLockKey")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("AdminNotificationSent")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CandidateCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ConfirmedUnplayableCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("HangfireJobId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("HealthyCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InconclusiveCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("InitiatedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int?>("InitiatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NamingWarningCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NotificationFailureCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OriginalSourceMissingCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProcessedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuarantinedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RepairableCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RepairedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceRunId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveLockKey")
+                        .IsUnique()
+                        .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+                    b.ToTable("MediaIntegrityAuditRuns");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.MobileVerificationCode", b =>
                 {
                     b.Property<int>("Id")
@@ -1399,6 +1624,21 @@ namespace MusicSalesApp.Migrations
                     b.Property<int>("NumberOfStreams")
                         .HasColumnType("int");
 
+                    b.Property<string>("OriginalAudioBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("OriginalAudioContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("OriginalAudioFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<long?>("OriginalAudioFileSize")
+                        .HasColumnType("bigint");
+
                     b.Property<int?>("PersonaId")
                         .HasColumnType("int");
 
@@ -1428,7 +1668,10 @@ namespace MusicSalesApp.Migrations
 
                     b.HasIndex("PersonaId");
 
-                    b.ToTable("SongMetadata");
+                    b.ToTable("SongMetadata", t =>
+                        {
+                            t.HasCheckConstraint("CK_SongMetadata_AudioRequiresTitle", "[Mp3BlobPath] IS NULL OR ([SongTitle] IS NOT NULL AND LTRIM(RTRIM([SongTitle])) <> '')");
+                        });
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongStatusHistory", b =>
@@ -2065,6 +2308,35 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Creator");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.MediaIntegrityAuditRun", "AuditRun")
+                        .WithMany("Items")
+                        .HasForeignKey("AuditRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SongMetadataId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AuditRun");
+
+                    b.Navigation("SongMetadata");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditNotification", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.MediaIntegrityAuditRun", "AuditRun")
+                        .WithMany("Notifications")
+                        .HasForeignKey("AuditRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AuditRun");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.Passkey", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.ApplicationUser", "User")
@@ -2325,6 +2597,13 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Recipients");
 
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditRun", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Notifications");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.Playlist", b =>
