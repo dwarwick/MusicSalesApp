@@ -16,12 +16,14 @@ public interface IStreamCountService
     /// <summary>
     /// Increments the stream count for a song atomically.
     /// Also creates a SongStream record for auditing.
-    /// When the streamer is the song's creator or an admin, the stream is recorded
-    /// but the count is not incremented (creators and admins do not generate paid stream counts).
+    /// When the streamer is the song's creator, neither the count nor a SongStream record is
+    /// written (creators do not generate paid stream counts for their own songs).
+    /// Admin streams count like any other listener's; admins are exempt from the featured-song
+    /// free-stream cap because they get full playback without a subscription.
     /// </summary>
     /// <param name="songMetadataId">The ID of the song metadata record.</param>
     /// <param name="streamerUserId">The ID of the user who streamed the song, or null if unauthenticated.</param>
-    /// <param name="isAdmin">Whether the streamer is an admin.</param>
+    /// <param name="isAdmin">Whether the streamer is an admin (treated as fully entitled to playback).</param>
     /// <returns>The new stream count after processing.</returns>
     Task<int> IncrementStreamCountAsync(int songMetadataId, int? streamerUserId = null, bool isAdmin = false);
 

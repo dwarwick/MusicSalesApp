@@ -134,11 +134,21 @@ namespace MusicSalesApp.Controllers
 
         /// <summary>
         /// Records a stream for a song. Called when a song has been played for at least the creator's configured continuous seconds.
-        /// Creators streaming their own songs and admins do not generate paid stream counts.
+        /// Creators streaming their own songs do not generate paid stream counts; admin streams do count.
         /// </summary>
+        /// <remarks>
+        /// Anonymous listeners may record streams for featured songs, so the endpoint stays
+        /// [AllowAnonymous]. The explicit [Authorize] schemes are what make the MAUI app's Bearer
+        /// token authenticate here - the app's default authenticate scheme is the Identity cookie,
+        /// so without this the JWT is ignored and every mobile stream is recorded with no user.
+        /// AuthorizationMiddleware authenticates the listed schemes and populates HttpContext.User
+        /// before it honours [AllowAnonymous] and skips the requirement.
+        /// </remarks>
         /// <param name="songMetadataId">The ID of the song metadata record.</param>
         /// <returns>The updated stream count.</returns>
         [HttpPost("stream/{songMetadataId:int}")]
+        [Authorize(AuthenticationSchemes = "Identity.Application,Bearer")]
+        [AllowAnonymous]
         public async Task<IActionResult> RecordStream(int songMetadataId)
         {
             if (songMetadataId <= 0)
