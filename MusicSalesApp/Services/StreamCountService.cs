@@ -71,14 +71,18 @@ public class StreamCountService : IStreamCountService
         }
 
         var hasActiveSubscription = await HasActiveSubscriptionAsync(context, streamerUserId);
+
+        // Admins stream everything in full without a subscription, so they are treated as fully
+        // entitled here - their plays count, and the featured-song free-stream cap does not apply.
+        var hasFullPlaybackAccess = hasActiveSubscription || isAdmin;
         var hasReachedFeaturedFreeStreamCap = song.DisplayOnHomePage &&
                                               streamerUserId.HasValue &&
-                                              !hasActiveSubscription &&
+                                              !hasFullPlaybackAccess &&
                                               await HasExistingStreamRecordAsync(context, songMetadataId, streamerUserId.Value);
 
-        // Creators streaming their own songs and admins do not generate stream counts or records.
+        // Creators streaming their own songs do not generate stream counts or records.
         // Featured songs are full-length for everyone, but non-subscribed listeners only count once per song.
-        bool isCountableStream = !isAdmin && !isCreatorOfSong && !hasReachedFeaturedFreeStreamCap;
+        bool isCountableStream = !isCreatorOfSong && !hasReachedFeaturedFreeStreamCap;
 
         int newCount;
 

@@ -298,7 +298,7 @@ public class StreamCountServiceTests
     }
 
     [Test]
-    public async Task IncrementStreamCountAsync_AdminStreams_DoesNotIncrementCount()
+    public async Task IncrementStreamCountAsync_AdminStreams_IncrementsCount()
     {
         // Arrange
         var metadata = await CreateTestSongMetadata(numberOfStreams: 10);
@@ -307,26 +307,75 @@ public class StreamCountServiceTests
         // Act - Admin streams a song
         var result = await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
 
-        // Assert - Count should NOT be incremented
-        Assert.That(result, Is.EqualTo(10));
+        // Assert - Admin streams count like any other listener's
+        Assert.That(result, Is.EqualTo(11));
 
-        // Verify the database was NOT updated
         using var verifyContext = new AppDbContext(_contextOptions);
         var updatedMetadata = await verifyContext.SongMetadata.FindAsync(metadata.Id);
-        Assert.That(updatedMetadata?.NumberOfStreams, Is.EqualTo(10));
+        Assert.That(updatedMetadata?.NumberOfStreams, Is.EqualTo(11));
     }
 
     [Test]
-    public async Task IncrementStreamCountAsync_AdminStreams_DoesNotCreateStreamRecord()
+    public async Task IncrementStreamCountAsync_AdminStreams_CreatesStreamRecord()
     {
         // Arrange
         var metadata = await CreateTestSongMetadata(numberOfStreams: 10);
         var adminUserId = 1;
 
         // Act
+        await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
+
+        // Assert
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecord = await verifyContext.SongStreams
+            .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
+        Assert.That(streamRecord, Is.Not.Null);
+        Assert.That(streamRecord.StreamerUserId, Is.EqualTo(adminUserId));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_FeaturedAdminWithExistingStream_IncrementsCountAndCreatesRecord()
+    {
+        // Arrange - admins play everything in full without a subscription, so the featured-song
+        // "one free stream per non-subscriber" cap must not apply to them.
+        var metadata = await CreateTestSongMetadata(numberOfStreams: 7, displayOnHomePage: true);
+        var adminUserId = 1;
+        using (var setupContext = new AppDbContext(_contextOptions))
+        {
+            setupContext.SongStreams.Add(new SongStream
+            {
+                SongMetadataId = metadata.Id,
+                StreamerUserId = adminUserId,
+                CreatedDate = DateTime.UtcNow.AddMinutes(-5)
+            });
+            await setupContext.SaveChangesAsync();
+        }
+
+        // Act
         var result = await _service.IncrementStreamCountAsync(metadata.Id, adminUserId, isAdmin: true);
 
-        // Assert - SongStream record should NOT be created for admin
+        // Assert
+        Assert.That(result, Is.EqualTo(8));
+
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var streamRecords = await verifyContext.SongStreams
+            .Where(s => s.SongMetadataId == metadata.Id && s.StreamerUserId == adminUserId)
+            .ToListAsync();
+        Assert.That(streamRecords, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task IncrementStreamCountAsync_AdminStreamsOwnSong_DoesNotIncrementCount()
+    {
+        // Arrange - the creator's-own-song rule still wins over the admin role.
+        var (metadata, creator, user) = await CreateTestSongWithCreator(numberOfStreams: 5);
+
+        // Act
+        var result = await _service.IncrementStreamCountAsync(metadata.Id, user.Id, isAdmin: true);
+
+        // Assert
+        Assert.That(result, Is.EqualTo(5));
+
         using var verifyContext = new AppDbContext(_contextOptions);
         var streamRecord = await verifyContext.SongStreams
             .FirstOrDefaultAsync(s => s.SongMetadataId == metadata.Id);
