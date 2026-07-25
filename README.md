@@ -80,21 +80,15 @@ The application uses a custom permissions system:
 ### Music Library and Playback
 
 - Browse music library with albums and individual songs
-- 60-second preview for non-subscribers and non-owners
-- Full playback for purchased music and active subscribers
-- Create and manage playlists
+- 60-second preview for non-subscribers
+- Full playback for active subscribers
+- Create and manage playlists (requires an active subscription — see below)
 
-### Shopping and Purchases
+### Subscription-Only Access
 
-- Add songs and albums to cart
-- Purchase music through **PayPal Expanded Checkout** with:
-  - Multiple payment options (PayPal, Venmo, Pay Later)
-  - **3D Secure authentication** for enhanced security
-  - Enhanced error handling and user experience
-  - Compliance with PayPal merchant requirements
-- Owned music accessible indefinitely
+Individual song and album purchases have been removed — there is no cart and no permanent per-song ownership. All full-length streaming and playlist access is gated behind the monthly subscription described below. `CartController` still exists but its mutating endpoints are intentionally disabled (they return an error directing users to subscribe).
 
-For detailed information about the PayPal Expanded Checkout integration, see [PAYPAL_EXPANDED_CHECKOUT.md](PAYPAL_EXPANDED_CHECKOUT.md).
+The subscription checkout flow uses **PayPal Expanded Checkout** (multiple payment options, 3D Secure authentication) as well as in-app purchase via Google Play Billing / Apple StoreKit on the mobile app. For detailed information about the PayPal Expanded Checkout integration, see [PAYPAL_EXPANDED_CHECKOUT.md](PAYPAL_EXPANDED_CHECKOUT.md).
 
 ### Monthly Subscription
 

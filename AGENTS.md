@@ -695,36 +695,35 @@ All of these can be called directly from component code-behind without HTTP:
 
 When querying entities with optional foreign keys, the navigation property may be null even with `.Include()`. Always handle this case gracefully.
 
-### Example: OwnedSong with optional SongMetadataId
+### Example: SongMetadata with an optional Creator
 
 **❌ WRONG - Assuming navigation property is always populated:**
 ```csharp
-var songs = await context.OwnedSongs
-    .Include(os => os.SongMetadata)
-    .Where(os => os.SongMetadata != null && !os.SongMetadata.IsAlbumCover)
+var songs = await context.SongMetadata
+    .Include(sm => sm.Creator)
+    .Where(sm => sm.Creator != null && sm.Creator.IsActive)
     .ToListAsync();
-// This filters out songs where SongMetadataId is null
+// This silently filters out songs whose CreatorId is null
 ```
 
 **✅ CORRECT - Handling null navigation property with fallback:**
 ```csharp
-var ownedSongs = await context.OwnedSongs
-    .Include(os => os.SongMetadata)
-    .Where(os => os.UserId == userId)
+var allSongs = await context.SongMetadata
+    .Include(sm => sm.Creator)
+    .Where(sm => sm.IsActive && sm.IsEnabled)
     .ToListAsync();
 
-var filteredSongs = ownedSongs
-    .Where(os => 
+var filteredSongs = allSongs
+    .Where(sm =>
     {
-        // If we have metadata, use it
-        if (os.SongMetadata != null)
+        // If we have a creator, only include active creators
+        if (sm.Creator != null)
         {
-            return !os.SongMetadata.IsAlbumCover;
+            return sm.Creator.IsActive;
         }
-        
-        // Fallback: check filename extension
-        var fileName = os.SongFileName.ToLowerInvariant();
-        return fileName.EndsWith(".mp3");
+
+        // Fallback: no creator on record (e.g. legacy import) — include by default
+        return true;
     })
     .ToList();
 ```
@@ -733,73 +732,34 @@ var filteredSongs = ownedSongs
 
 1. **Load all data first**, then filter in memory when navigation properties might be null
 2. **Always provide a fallback** when navigation property is null
-3. **Use filename patterns** as fallback for file type detection
-4. **Document the fallback logic** so it's clear why it exists
+3. **Document the fallback logic** so it's clear why it exists
 
 ## Playlists and Subscription Logic
 
+**Access model: subscription-only.** There is no per-song ownership anymore — the `OwnedSong`/`CartItem` tables and the `PayPalOrderId`-based ownership tiers described in earlier versions of this doc were removed by migration `Migrations/20260108000000_RemoveCartAndOwnedSongsTables.cs`. `UserPlaylist` now references `SongMetadataId` directly.
+
 ### Playlist Access Rules
 
-Users can create and manage playlists under these conditions:
-- **With Active Subscription**: Can add ANY song from the catalog to playlists
-- **Without Subscription**: Can only add songs they own (purchased) to playlists
-- **Requirement to Create Playlists**: Must have either an active subscription OR own at least one song
+- **With an active subscription**: can add any active/enabled, non-album-cover song from the catalog to a playlist.
+- **Without an active subscription**: `PlaylistService.GetAvailableSongsForPlaylistAsync` returns an empty list — no songs can be added, full stop. There is no "own at least one song" fallback.
 
-### Song Ownership Types
-
-The application distinguishes between two types of song ownership using the `PayPalOrderId` field in the `OwnedSong` table:
-
-1. **Purchased Songs** (`PayPalOrderId` is set):
-   - User paid for the song via PayPal
-   - Permanent ownership - remains available even after subscription ends
-   - Can be added to playlists at any time
-   - Example: `PayPalOrderId = "ORDER-XYZ123"`
-
-2. **Subscription-Based Songs** (`PayPalOrderId` is null):
-   - "Virtual" ownership granted during active subscription
-   - Temporary access - removed when subscription lapses
-   - Created automatically when subscriber adds non-owned song to playlist
-   - Example: `PayPalOrderId = null`
+See `Services/PlaylistService.cs` (`GetAvailableSongsForPlaylistAsync`) for the current implementation.
 
 ### Playlist Cleanup Service
 
-The `PlaylistCleanupService` runs as a background job to clean up subscription-based access:
+`Services/PlaylistCleanupService.cs` (`RemoveNonOwnedSongsFromLapsedSubscriptionsAsync`) runs as a background job to clean up access once a subscription lapses:
 
-**What it does:**
-1. Finds users with lapsed subscriptions (CANCELLED or EXPIRED status, 48-hour grace period)
-2. Identifies subscription-based songs (where `PayPalOrderId` is null)
-3. Removes these songs from user's playlists (`UserPlaylists` table)
-4. **Deletes the `OwnedSong` records** where `PayPalOrderId` is null (subscription-only access)
-5. Preserves purchased songs (with PayPal order ID) in playlists
+**What it does, per user with a lapsed subscription (`CANCELLED`/`EXPIRED`, 48-hour grace period, and no other currently-active subscription):**
+1. Removes **every** `UserPlaylists` row for that user (not just some — since there's no owned/purchased tier to preserve).
+2. Deletes all of that user's **custom** (`IsSystemGenerated == false`) playlists outright.
+3. **Preserves** the system-generated "Liked Songs" playlist — it isn't deleted, and re-populates from the user's actual likes on next sync.
 
-**Grace Period:** 48 hours after subscription end date to account for job execution delays
-
-**Example:**
-```csharp
-// Find subscription-based songs to clean up
-var nonOwnedSongs = userPlaylistSongs
-    .Where(up => string.IsNullOrEmpty(up.OwnedSong.PayPalOrderId))
-    .ToList();
-
-// Remove from playlists
-context.UserPlaylists.RemoveRange(nonOwnedSongs);
-
-// Delete OwnedSong records (subscription-only)
-var ownedSongsToDelete = await context.OwnedSongs
-    .Where(os => ownedSongIdsToDelete.Contains(os.Id) && 
-                os.UserId == userId &&
-                string.IsNullOrEmpty(os.PayPalOrderId))
-    .ToListAsync();
-context.OwnedSongs.RemoveRange(ownedSongsToDelete);
-```
+**Grace Period:** 48 hours after subscription end date, to account for job execution delays.
 
 ### Implementation Notes
 
-- `PlaylistService.GetAvailableSongsForPlaylistAsync` checks subscription status
-- For subscribers: returns all non-album-cover songs from catalog
-- Creates `OwnedSong` records on-demand with `PayPalOrderId = null`
-- These records enable playlist functionality without schema changes
-- Cleanup is automatic via `PlaylistCleanupService` background job
+- `PlaylistService.GetAvailableSongsForPlaylistAsync` checks `ISubscriptionService.HasActiveSubscriptionAsync` — no subscription means no available songs.
+- Cleanup is automatic via the `PlaylistCleanupService` background job (Hangfire-scheduled).
 
 ## Passkey Authentication
 
