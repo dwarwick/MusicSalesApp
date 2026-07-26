@@ -24,25 +24,21 @@
             The app will automatically separate them and try to pair each image with the right audio file.
         </p>
 
-        <div class="alert alert-warning">
-            <strong>Filename requirement:</strong> A filename must begin with a letter or number and contain only
-            Unicode letters, numbers, single spaces, single hyphens, and single underscores. Spaces, hyphens, and
-            underscores must be between letters or numbers. You may add one final, spaced parenthetical suffix containing text, such as
-            <code>Night Drive (Remix).wav</code>. Exactly one dot is allowed, immediately before the supported extension.
-            Underscores in an uploaded filename become spaces in the song title. Titles edited later do not allow
-            underscores and are limited to 200 characters.
+        <div class="alert alert-info">
+            <strong>Filenames:</strong> Name your files however you like &mdash; apostrophes, ampersands, extra dots,
+            any language. Only the extension has to be one of the supported formats listed above. StreamTunes stores
+            your files under its own internal names, so nothing about your filename reaches the website.
         </div>
         <p>
-            Valid: <code>Boof.wav</code>, <code>song_name.wav</code>, <code>Song 2.flac</code>,
-            <code>Night-Drive (Remix).mp3</code>, <code>Été.png</code>. Invalid: <code>song__name.wav</code>,
-            <code>_Song.mp3</code>, <code>Song..mp3</code>, <code>Song.mp3.tmp</code>,
-            <code>Song--Mix.mp3</code>, <code>Song(Remix).mp3</code>,
-            <code>Artist&apos;s Song.mp3</code>, and <code>Song@@.jpg</code>.
+            Each song title is filled in from its filename (with underscores turned into spaces) and shown to you
+            for review before anything is uploaded. Edit any title there, or later on Manage My Songs.
+            Titles are limited to 200 characters and every song needs one.
         </p>
         <p>
-            StreamTunes rejects the entire selection if any filename, byte count, or media format is invalid.
+            StreamTunes rejects the entire selection if any byte count or media format is invalid.
             Audio must fully decode with a positive duration, and JPEG/PNG cover art must decode successfully.
-            After a successful upload, the exact validated original audio is retained privately alongside the playback MP3.
+            After a successful upload, the exact original audio and cover art you supplied are retained privately
+            alongside the playback MP3.
         </p>
 
         <h5 class="mt-3 mb-2"><i class="fas fa-wand-magic-sparkles me-1"></i> How Smart Matching Works</h5>
@@ -50,8 +46,7 @@
         <ol>
             <li>
                 <strong>Filename similarity</strong> — The app compares filenames intelligently.
-                Differences in permitted spacing, hyphens, underscores, and casing can be handled automatically.
-                Every filename must still satisfy the rules above.
+                Differences in spacing, hyphens, underscores, and casing can be handled automatically.
             </li>
             <li>
                 <strong>Image text extraction</strong> — If filename matching doesn't find a pair,

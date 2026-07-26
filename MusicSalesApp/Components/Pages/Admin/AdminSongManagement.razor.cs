@@ -35,6 +35,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected IEmailService EmailService { get; set; }
     [Inject] protected IConfiguration Configuration { get; set; }
     [Inject] protected IAppSettingsService AppSettingsService { get; set; }
+    [Inject] protected IOpenGraphService OpenGraphService { get; set; }
+    [Inject] protected ILogger<AdminSongManagementModel> Logger { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -152,6 +154,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     Mp3FileName = m.Mp3BlobPath ?? (m.FileExtension == ".mp3" ? m.BlobPath : string.Empty),
                     JpegFileName = m.ImageBlobPath ?? ((m.FileExtension == ".jpg" || m.FileExtension == ".jpeg" || m.FileExtension == ".png") ? m.BlobPath : string.Empty),
                     OriginalAudioFileName = m.OriginalAudioFileName ?? string.Empty,
+                    MediaGuid = m.MediaGuid,
                     OriginalAudioFileSize = m.OriginalAudioFileSize,
                     OriginalAudioContentType = m.OriginalAudioContentType ?? string.Empty,
                     Genre = m.Genre ?? string.Empty,
@@ -242,11 +245,10 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 _editSongTitle,
                 previousSongTitle,
                 StringComparison.Ordinal);
-            if (!MediaFileNameRules.IsValidTitle(_editSongTitle))
+            var titleErrors = SongTitleHelper.GetTitleValidationErrors(_editSongTitle);
+            if (titleErrors.Count > 0)
             {
-                _validationErrors.Add(MediaFileNameRules.GetTitleValidationMessage(
-                    _editSongTitle,
-                    wasAcceptedUnderPreviousRules: !songTitleChanged));
+                _validationErrors.AddRange(titleErrors);
             }
             else if (songTitleChanged
                      && int.TryParse(_editingSong.Id, out var titleSongId)
@@ -257,9 +259,11 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
             if (_songImageFile != null)
             {
-                if (!MediaFileNameRules.IsValidImageFileName(_songImageFile.Name))
+                if (!MusicFileExtensions.IsCoverArtFile(_songImageFile.Name))
                 {
-                    _validationErrors.Add($"'{_songImageFile.Name}' is not a valid image filename.");
+                    _validationErrors.Add(
+                        $"'{_songImageFile.Name}' does not have a supported cover-art extension "
+                        + $"({string.Join(", ", MusicFileExtensions.ValidCoverArtExtensions)}).");
                 }
                 else
                 {
@@ -350,6 +354,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     await StorageService.DeleteAsync(oldFileName);
                 }
 
+                await OpenGraphService.RefreshSharingImageAsync(oldFileName, newFileName);
+
                 _editingSong.JpegFileName = newFileName;
 
                 // Update metadata
@@ -396,29 +402,33 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 var contentType = GetImageContentType(fileExtension);
                 
                 var oldFileName = _editingSong.JpegFileName;
-                var newFileName = oldFileName;
-                if (string.IsNullOrEmpty(newFileName))
+
+                // Resolve the metadata first: the target path depends on whether this song is on
+                // the GUID naming scheme.
+                SongMetadata existingMetadata = null;
+                if (int.TryParse(_editingSong.Id, out var songId))
                 {
-                    // No existing image - construct path in same folder as MP3
-                    if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
-                    {
-                        var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
-                        var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
-                        newFileName = string.IsNullOrEmpty(mp3Dir) 
-                            ? $"{baseName}{fileExtension}" 
-                            : $"{mp3Dir}/{baseName}{fileExtension}";
-                    }
-                    else
-                    {
-                        // Fallback to song title if no MP3
-                        newFileName = $"{_editingSong.SongTitle}{fileExtension}";
-                    }
+                    existingMetadata = await MetadataService.GetByIdAsync(songId);
                 }
-                else
+
+                if (existingMetadata == null && !string.IsNullOrEmpty(oldFileName))
                 {
-                    // Replace the old extension with the new one
-                    newFileName = Path.ChangeExtension(newFileName, fileExtension);
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(oldFileName);
                 }
+
+                // If no existing metadata found by old image path, try to find it by MP3 path
+                if (existingMetadata == null && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
+                {
+                    existingMetadata = await MetadataService.GetByBlobPathAsync(_editingSong.Mp3FileName);
+                }
+
+                var mediaGuid = _editingSong.MediaGuid ?? existingMetadata?.MediaGuid;
+                var newFileName = SongMediaPaths.ResolveCoverArtTarget(
+                    mediaGuid,
+                    oldFileName,
+                    _editingSong.Mp3FileName,
+                    _editingSong.SongTitle,
+                    fileExtension);
 
                 // Delete old blob before uploading new one (always delete when replacing)
                 if (!string.IsNullOrEmpty(oldFileName))
@@ -426,32 +436,43 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     await StorageService.DeleteAsync(oldFileName);
                 }
 
-                await StorageService.UploadAsync(newFileName, stream, contentType);
+                // Buffer once: the served copy and the retained original are the same bytes, and
+                // IBrowserFile streams are forward-only.
+                using var imageBuffer = new MemoryStream();
+                await stream.CopyToAsync(imageBuffer);
+
+                imageBuffer.Position = 0;
+                await StorageService.UploadAsync(newFileName, imageBuffer, contentType);
+
+                // Retain the creator's upload separately so it survives later crops, matching the
+                // creator-facing replace flow.
+                string newOriginalCoverArtPath = null;
+                if (mediaGuid.HasValue)
+                {
+                    newOriginalCoverArtPath = SongMediaPaths.OriginalCoverArt(mediaGuid.Value, fileExtension);
+                    var previousOriginal = existingMetadata?.OriginalCoverArtBlobPath;
+                    if (!string.IsNullOrEmpty(previousOriginal)
+                        && !string.Equals(previousOriginal, newOriginalCoverArtPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await StorageService.DeleteAsync(previousOriginal);
+                    }
+
+                    imageBuffer.Position = 0;
+                    await StorageService.UploadAsync(newOriginalCoverArtPath, imageBuffer, contentType);
+                }
+
+                await OpenGraphService.RefreshSharingImageAsync(oldFileName, newFileName);
                 _editingSong.JpegFileName = newFileName;
-
-                // Get existing metadata by old filename and update it, or by the associated MP3 file
-                SongMetadata existingMetadata = null;
-                if (!string.IsNullOrEmpty(oldFileName))
-                {
-                    existingMetadata = await MetadataService.GetByBlobPathAsync(oldFileName);
-                }
-                
-                // If no existing metadata found by old image path, try to find it by MP3 path
-                if (existingMetadata == null && !string.IsNullOrEmpty(_editingSong.Mp3FileName))
-                {
-                    existingMetadata = await MetadataService.GetByBlobPathAsync(_editingSong.Mp3FileName);
-                }
-
-                // Also try by song metadata ID
-                if (existingMetadata == null && int.TryParse(_editingSong.Id, out var songId))
-                {
-                    existingMetadata = await MetadataService.GetByIdAsync(songId);
-                }
 
                 if (existingMetadata != null)
                 {
                     // Update existing record with new image path
                     existingMetadata.ImageBlobPath = newFileName;
+                    if (newOriginalCoverArtPath != null)
+                    {
+                        existingMetadata.OriginalCoverArtBlobPath = newOriginalCoverArtPath;
+                        existingMetadata.OriginalCoverArtFileName = _songImageFile.Name;
+                    }
                     existingMetadata.FileExtension = fileExtension;
                     existingMetadata.IsAlbumCover = false;
                     existingMetadata.Genre = _editGenre;
@@ -562,10 +583,12 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 
     protected void HandleSongImageUpload(InputFileChangeEventArgs e)
     {
-        _songImageFile = MediaFileNameRules.IsValidImageFileName(e.File.Name) ? e.File : null;
+        _songImageFile = MusicFileExtensions.IsCoverArtFile(e.File.Name) ? e.File : null;
         if (_songImageFile == null)
         {
-            _validationErrors.Add($"'{e.File.Name}' is not a valid image filename.");
+            _validationErrors.Add(
+                $"'{e.File.Name}' does not have a supported cover-art extension "
+                + $"({string.Join(", ", MusicFileExtensions.ValidCoverArtExtensions)}).");
         }
     }
 
@@ -608,30 +631,23 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     {
         if (_cropModule == null || _editingSong == null) return;
 
-        // Compute the target blob path for the cropped image
-        var targetPath = _editingSong.JpegFileName;
-        if (string.IsNullOrEmpty(targetPath))
+        if (!int.TryParse(_editingSong.Id, out var cropSongId))
         {
-            if (!string.IsNullOrEmpty(_editingSong.Mp3FileName))
-            {
-                var mp3Dir = Path.GetDirectoryName(_editingSong.Mp3FileName)?.Replace("\\", "/");
-                var baseName = Path.GetFileNameWithoutExtension(_editingSong.Mp3FileName);
-                targetPath = string.IsNullOrEmpty(mp3Dir)
-                    ? $"{baseName}.png"
-                    : $"{mp3Dir}/{baseName}.png";
-            }
-            else
-            {
-                targetPath = $"{SanitizeFileName(_editingSong.SongTitle)}.png";
-            }
-        }
-        else
-        {
-            targetPath = Path.ChangeExtension(targetPath, ".png");
+            _validationErrors.Add("Failed to upload cropped image. Please try again.");
+            return;
         }
 
+        // The same helper runs server-side against the song's own record, so the two agree
+        // without the browser being trusted to name the destination.
+        var targetPath = SongMediaPaths.ResolveCoverArtTarget(
+            _editingSong.MediaGuid,
+            _editingSong.JpegFileName,
+            _editingSong.Mp3FileName,
+            SanitizeFileName(_editingSong.SongTitle),
+            ".png");
+
         // Build the upload URL for the JS fetch call
-        var uploadUrl = $"api/music/upload-cropped-image?blobPath={Uri.EscapeDataString(targetPath)}";
+        var uploadUrl = $"api/music/upload-cropped-image?songMetadataId={cropSongId}";
 
         var success = await _cropModule.InvokeAsync<bool>("getCroppedImageAndUpload", uploadUrl);
         if (success)

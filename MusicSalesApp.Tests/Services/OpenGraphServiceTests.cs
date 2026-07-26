@@ -366,6 +366,60 @@ public class OpenGraphServiceTests
     }
 
     [Test]
+    public void GetFacebookImagePath_GuidSchemeCoverArt_ReturnsTheSongsFixedSharingImage()
+    {
+        var mediaGuid = Guid.NewGuid();
+
+        var result = OpenGraphService.GetFacebookImagePath(
+            Common.Helpers.SongMediaPaths.CoverArt(mediaGuid, ".jpg"));
+
+        Assert.That(result, Is.EqualTo(Common.Helpers.SongMediaPaths.FacebookImage(mediaGuid)));
+    }
+
+    [Test]
+    public async Task InvalidateFacebookImageAsync_GuidSchemeCoverArt_DeletesTheFixedSharingImage()
+    {
+        // The sharing image name does not change when the art is replaced, so the stale blob has
+        // to be removed or GetOrCreate's "already exists" short-circuit serves it forever.
+        var mediaGuid = Guid.NewGuid();
+
+        await _service.InvalidateFacebookImageAsync(Common.Helpers.SongMediaPaths.CoverArt(mediaGuid, ".png"));
+
+        _mockStorageService.Verify(
+            service => service.DeleteAsync(Common.Helpers.SongMediaPaths.FacebookImage(mediaGuid)),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task InvalidateFacebookImageAsync_LegacyCoverArt_DeletesTheUnderscoreSuffixedImage()
+    {
+        await _service.InvalidateFacebookImageAsync("Night Drive/Night Drive.jpg");
+
+        _mockStorageService.Verify(
+            service => service.DeleteAsync("Night Drive/Night Drive_fb.png"),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task InvalidateFacebookImageAsync_WhenDeleteFails_DoesNotThrow()
+    {
+        _mockStorageService.Setup(service => service.DeleteAsync(It.IsAny<string>()))
+            .ThrowsAsync(new InvalidOperationException("blob under lease"));
+
+        Assert.DoesNotThrowAsync(() => _service.InvalidateFacebookImageAsync("folder/cover.jpg"));
+        await Task.CompletedTask;
+    }
+
+    [TestCase("")]
+    [TestCase(null)]
+    public async Task InvalidateFacebookImageAsync_BlankPath_DeletesNothing(string coverArtPath)
+    {
+        await _service.InvalidateFacebookImageAsync(coverArtPath);
+
+        _mockStorageService.Verify(service => service.DeleteAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
     public async Task GetOrCreateFacebookImageAsync_WhenFbImageExists_ReturnsFbPath()
     {
         // Arrange

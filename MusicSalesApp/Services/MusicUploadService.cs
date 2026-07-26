@@ -2,14 +2,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
-using System.Collections.Concurrent;
 
 namespace MusicSalesApp.Services;
 
 public class MusicUploadService : IMusicUploadService
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> UploadPathLocks =
-        new(StringComparer.OrdinalIgnoreCase);
     private readonly IAzureStorageService _storageService;
     private readonly IMusicService _musicService;
     private readonly ISongMetadataService _metadataService;
@@ -51,7 +48,7 @@ public class MusicUploadService : IMusicUploadService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fileStream);
-        ValidateAudioFileName(originalFileName);
+        RequireSupportedAudioExtension(originalFileName);
 
         await using var buffered = await BufferUploadFileAsync(fileStream, cancellationToken);
         BufferedUploadFile convertedPlayback = null;
@@ -110,35 +107,35 @@ public class MusicUploadService : IMusicUploadService
         string audioFileName,
         Stream albumArtStream,
         string albumArtFileName,
+        string songTitle,
         string albumName = null,
         int? creatorId = null,
-        string storageBaseName = null,
         CancellationToken cancellationToken = default)
         => UploadMusicAsync(
             audioStream,
             audioFileName,
             albumArtStream,
             albumArtFileName,
+            songTitle,
             albumName,
             creatorId,
-            storageBaseName,
             cancellationToken);
 
     public Task<MusicUploadResult> UploadMusicWithoutAlbumArtAsync(
         Stream audioStream,
         string audioFileName,
+        string songTitle,
         string albumName = null,
         int? creatorId = null,
-        string storageBaseName = null,
         CancellationToken cancellationToken = default)
         => UploadMusicAsync(
             audioStream,
             audioFileName,
             null,
             null,
+            songTitle,
             albumName,
             creatorId,
-            storageBaseName,
             cancellationToken);
 
     private async Task<MusicUploadResult> UploadMusicAsync(
@@ -146,9 +143,9 @@ public class MusicUploadService : IMusicUploadService
         string audioFileName,
         Stream albumArtStream,
         string albumArtFileName,
+        string songTitle,
         string albumName,
         int? creatorId,
-        string storageBaseName,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audioStream);
@@ -157,20 +154,20 @@ public class MusicUploadService : IMusicUploadService
             throw new InvalidOperationException("Cannot upload music without a creator ID.");
         }
 
-        ValidateAudioFileName(audioFileName);
+        RequireSupportedAudioExtension(audioFileName);
         if (albumArtStream != null)
         {
-            ValidateImageFileName(albumArtFileName);
+            RequireSupportedImageExtension(albumArtFileName);
         }
 
-        var baseName = string.IsNullOrWhiteSpace(storageBaseName)
-            ? GetNormalizedBaseName(audioFileName)
-            : storageBaseName.Trim();
-        if (!MediaFileNameRules.IsValidFileNameBase(baseName))
+        // The creator's filename no longer determines anything about storage, so the title has to
+        // be supplied explicitly rather than derived from it.
+        songTitle = (songTitle ?? string.Empty).Trim();
+        var titleErrors = SongTitleHelper.GetTitleValidationErrors(songTitle);
+        if (titleErrors.Count > 0)
         {
-            throw new InvalidDataException($"'{baseName}' is not a valid media filename base.");
+            throw new InvalidDataException(string.Join(" ", titleErrors));
         }
-        var songTitle = MediaFileNameRules.ToSongTitleFromBaseName(baseName);
 
         await using var bufferedAudio = await BufferUploadFileAsync(audioStream, cancellationToken);
         var bufferedImage = albumArtStream == null
@@ -178,8 +175,6 @@ public class MusicUploadService : IMusicUploadService
             : await BufferUploadFileAsync(albumArtStream, cancellationToken);
 
         BufferedUploadFile convertedPlayback = null;
-        SemaphoreSlim uploadPathLock = null;
-        var uploadPathLockAcquired = false;
         var blobMutations = new List<BlobMutation>();
         var rollbackRequired = true;
         try
@@ -200,13 +195,17 @@ public class MusicUploadService : IMusicUploadService
             var imageExtension = albumArtFileName == null
                 ? null
                 : Path.GetExtension(albumArtFileName).ToLowerInvariant();
-            var folderPath = baseName;
-            var originalPath = $"{folderPath}/{baseName}{originalExtension}";
-            var mp3Path = $"{folderPath}/{baseName}.mp3";
-            var imagePath = imageExtension == null ? null : $"{folderPath}/{baseName}{imageExtension}";
-            uploadPathLock = UploadPathLocks.GetOrAdd(mp3Path, _ => new SemaphoreSlim(1, 1));
-            await uploadPathLock.WaitAsync(cancellationToken);
-            uploadPathLockAcquired = true;
+            // A freshly minted GUID cannot collide with an existing song, which is why there is no
+            // longer a per-path upload lock: nothing else can be writing to this folder.
+            var mediaGuid = Guid.NewGuid();
+            var mp3Path = SongMediaPaths.Playback(mediaGuid);
+            var originalPath = SongMediaPaths.OriginalAudio(mediaGuid, originalExtension);
+            var imagePath = imageExtension == null
+                ? null
+                : SongMediaPaths.CoverArt(mediaGuid, imageExtension);
+            var originalImagePath = imageExtension == null
+                ? null
+                : SongMediaPaths.OriginalCoverArt(mediaGuid, imageExtension);
             var previousMetadata = await _metadataService.ValidateUploadTargetAsync(
                 mp3Path,
                 originalPath,
@@ -238,9 +237,11 @@ public class MusicUploadService : IMusicUploadService
             double duration;
             await using (var durationStream = playbackFile.OpenRead())
             {
+                // Report the creator's own filename rather than the GUID blob name: this string
+                // only feeds the extension check and the diagnostics the creator ends up reading.
                 duration = await RequirePositiveDurationAsync(
                     durationStream,
-                    $"{baseName}.mp3",
+                    Path.ChangeExtension(Path.GetFileName(audioFileName), ".mp3"),
                     cancellationToken);
             }
 
@@ -284,10 +285,22 @@ public class MusicUploadService : IMusicUploadService
             {
                 var imageContentType = MusicFileExtensions.GetCoverArtContentType(imageExtension)
                     ?? throw new InvalidDataException("Unsupported cover-art type.");
-                await using var imageUploadStream = bufferedImage.OpenRead();
+                await using (var imageUploadStream = bufferedImage.OpenRead())
+                {
+                    await UploadTrackedAsync(
+                        imagePath,
+                        imageUploadStream,
+                        imageContentType,
+                        blobMutations,
+                        cancellationToken);
+                }
+
+                // The served copy and the retained original start out identical; they diverge the
+                // first time the cover art is cropped or replaced, which only rewrites the served copy.
+                await using var originalImageUploadStream = bufferedImage.OpenRead();
                 await UploadTrackedAsync(
-                    imagePath,
-                    imageUploadStream,
+                    originalImagePath,
+                    originalImageUploadStream,
                     imageContentType,
                     blobMutations,
                     cancellationToken);
@@ -295,6 +308,7 @@ public class MusicUploadService : IMusicUploadService
 
             await _metadataService.UpsertValidatedUploadAsync(new SongMetadata
             {
+                MediaGuid = mediaGuid,
                 BlobPath = mp3Path,
                 Mp3BlobPath = mp3Path,
                 ImageBlobPath = imagePath,
@@ -302,6 +316,10 @@ public class MusicUploadService : IMusicUploadService
                 OriginalAudioFileName = Path.GetFileName(audioFileName),
                 OriginalAudioFileSize = bufferedAudio.Length,
                 OriginalAudioContentType = originalContentType,
+                OriginalCoverArtBlobPath = originalImagePath,
+                OriginalCoverArtFileName = albumArtFileName == null
+                    ? null
+                    : Path.GetFileName(albumArtFileName),
                 FileExtension = ".mp3",
                 SongTitle = songTitle,
                 AlbumName = albumName ?? string.Empty,
@@ -346,6 +364,8 @@ public class MusicUploadService : IMusicUploadService
             {
                 try
                 {
+                    // Nothing to invalidate: the GUID folder was created moments ago, so no
+                    // sharing image can already exist for it.
                     await _openGraphService.PreGenerateFacebookImageAsync(imagePath);
                 }
                 catch (Exception ex)
@@ -356,11 +376,13 @@ public class MusicUploadService : IMusicUploadService
 
             return new MusicUploadResult
             {
-                FolderPath = folderPath,
+                MediaGuid = mediaGuid,
+                SongTitle = songTitle,
                 OriginalAudioBlobPath = originalPath,
                 OriginalAudioFileName = Path.GetFileName(audioFileName),
                 OriginalAudioFileSize = bufferedAudio.Length,
                 OriginalAudioContentType = originalContentType,
+                OriginalCoverArtBlobPath = originalImagePath,
                 Mp3BlobPath = mp3Path,
                 ImageBlobPath = imagePath,
                 TrackDuration = duration
@@ -418,11 +440,6 @@ public class MusicUploadService : IMusicUploadService
                     await mutation.Backup.DisposeAsync();
                 }
             }
-
-            if (uploadPathLockAcquired)
-            {
-                uploadPathLock.Release();
-            }
         }
     }
 
@@ -460,7 +477,7 @@ public class MusicUploadService : IMusicUploadService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(albumArtStream);
-        ValidateImageFileName(albumArtFileName);
+        RequireSupportedImageExtension(albumArtFileName);
         if (string.IsNullOrWhiteSpace(albumName))
         {
             throw new ArgumentException("Album name is required.", nameof(albumName));
@@ -538,19 +555,19 @@ public class MusicUploadService : IMusicUploadService
         return result.Duration.Value;
     }
 
-    private static void ValidateAudioFileName(string fileName)
+    private static void RequireSupportedAudioExtension(string fileName)
     {
-        if (!MediaFileNameRules.IsValidAudioFileName(Path.GetFileName(fileName)))
+        if (!MusicFileExtensions.IsAudioFile(fileName))
         {
-            throw new InvalidDataException($"'{fileName}' is not a valid audio filename.");
+            throw new InvalidDataException($"'{fileName}' does not have a supported audio extension.");
         }
     }
 
-    private static void ValidateImageFileName(string fileName)
+    private static void RequireSupportedImageExtension(string fileName)
     {
-        if (!MediaFileNameRules.IsValidImageFileName(Path.GetFileName(fileName)))
+        if (!MusicFileExtensions.IsCoverArtFile(fileName))
         {
-            throw new InvalidDataException($"'{fileName}' is not a valid image filename.");
+            throw new InvalidDataException($"'{fileName}' does not have a supported cover-art extension.");
         }
     }
 
@@ -646,8 +663,8 @@ public class MusicUploadService : IMusicUploadService
         }
 
         var invalid = files.Where(file =>
-            !MediaFileNameRules.IsValidAudioFileName(file)
-            && !MediaFileNameRules.IsValidImageFileName(file)).ToList();
+            !MusicFileExtensions.IsAudioFile(file)
+            && !MusicFileExtensions.IsCoverArtFile(file)).ToList();
         if (invalid.Count > 0)
         {
             result.IsValid = false;
@@ -655,8 +672,8 @@ public class MusicUploadService : IMusicUploadService
             return result;
         }
 
-        var audio = files.Where(MediaFileNameRules.IsValidAudioFileName).ToList();
-        var images = files.Where(MediaFileNameRules.IsValidImageFileName).ToList();
+        var audio = files.Where(MusicFileExtensions.IsAudioFile).ToList();
+        var images = files.Where(MusicFileExtensions.IsCoverArtFile).ToList();
         if (!requireAudioFile)
         {
             result.IsValid = images.Count > 0;

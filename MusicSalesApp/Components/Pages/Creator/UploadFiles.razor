@@ -8,7 +8,7 @@
 
 <PageTitle>Upload Music Files</PageTitle>
 
-<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="@(_isUploading || _isProcessingFiles)" />
+<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigation" ConfirmExternalNavigation="@(_isUploading || _isProcessingFiles || _awaitingTitleConfirmation)" />
 
 <div class="d-flex flex-row align-items-center mb-2">
     <h3 class="me-2 mb-0">Upload Music Files</h3>
@@ -18,9 +18,8 @@
 
 <SfMessage Severity="MessageSeverity.Info" CssClass="mb-3">
     Supported audio: MP3, WAV, FLAC, OGG, M4A, AAC, WMA. Cover art: JPG, JPEG, PNG.
-    Use letters/numbers with single spaces, hyphens, or underscores and an optional final suffix such as (Remix); exactly one dot must precede the extension.
-    Filename underscores become spaces in the song title.
-    Files are decoded before upload, and the validated original audio is retained alongside the playback MP3.
+    Name your files however you like. Each song title is filled in from its filename and you can edit it before uploading.
+    Files are decoded before upload, and the validated originals you uploaded are retained alongside the playback MP3.
 </SfMessage>
 
 <div class="container-fluid">
@@ -126,12 +125,19 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>Upload Progress</h5>
+                <h5>@(_awaitingTitleConfirmation ? "Review Song Titles" : "Upload Progress")</h5>
+                @if (_awaitingTitleConfirmation)
+                {
+                    <p class="text-muted">
+                        Each title was filled in from its filename. Edit any of them, then upload.
+                        Nothing has been uploaded yet.
+                    </p>
+                }
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Song Name</th>
+                                <th>Song Title</th>
                                 <th>Audio File</th>
                                 <th>Cover Art</th>
                                 <th>Status</th>
@@ -142,21 +148,24 @@
                             @foreach (var item in _uploadItems)
                             {
                                 <tr>
-                                    <td>@item.BaseName</td>
-                                    <td>
-                                        @item.UploadedAudioFileName
-                                        @if (!string.Equals(item.AudioFileName, item.UploadedAudioFileName, StringComparison.OrdinalIgnoreCase))
+                                    <td style="min-width: 16rem;">
+                                        @if (_awaitingTitleConfirmation)
                                         {
-                                            <br />
-
-                                            <small class="text-muted">Converted from @item.AudioFileName (@FormatFileSize(item.AudioFileSize))</small>
+                                            <SfTextBox @bind-Value="item.SongTitle"
+                                                       MaxLength="200"
+                                                       Placeholder="Song title"
+                                                       aria-label="@($"Song title for {item.AudioFileName}")" />
                                         }
                                         else
                                         {
-                                            <br />
-
-                                            <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
+                                            @item.SongTitle
                                         }
+                                    </td>
+                                    <td>
+                                        @item.AudioFileName
+                                        <br />
+
+                                        <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
                                     </td>
                                     <td>
                                         @if (item.HasCoverArt)
@@ -210,6 +219,16 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if (_awaitingTitleConfirmation)
+                {
+                    <div class="d-flex gap-2 mt-2">
+                        <SfButton CssClass="cta-primary" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                            Upload @_uploadItems.Count @(_uploadItems.Count == 1 ? "Song" : "Songs")
+                        </SfButton>
+                        <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
+                    </div>
+                }
             </div>
         </div>
 
@@ -229,12 +248,29 @@
         }
     }
 
+    @if (_skippedFiles.Any())
+    {
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-warning" role="alert">
+                    <strong>Skipped files:</strong> These files were not one of the supported audio or cover art formats, so they were left out of this batch.
+                    <ul class="mb-0 mt-2">
+                        @foreach (var file in _skippedFiles)
+                        {
+                            <li>@file</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (_duplicateSongFiles.Any())
     {
         <div class="row mt-3">
             <div class="col-12">
                 <div class="alert alert-warning" role="alert">
-                    <strong>Duplicate songs detected:</strong> The following files were not uploaded because a song with the same title already exists. Please rename these files if you intended to upload different songs.
+                    <strong>Duplicate songs detected:</strong> The following files were not uploaded because a song with the same title already exists. Please give them different titles if you intended to upload different songs.
                     <ul class="mb-0 mt-2">
                         @foreach (var file in _duplicateSongFiles)
                         {

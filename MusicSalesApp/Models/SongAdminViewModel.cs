@@ -11,6 +11,13 @@ public class SongAdminViewModel
     public string Mp3FileName { get; set; } = string.Empty;
     public string JpegFileName { get; set; } = string.Empty;
     public string OriginalAudioFileName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Identifies this song's media in blob storage; null for songs that predate the GUID naming
+    /// scheme. Carried here so the crop and cover-art-replace flows can derive their target path
+    /// without a second database round trip.
+    /// </summary>
+    public Guid? MediaGuid { get; set; }
     public long? OriginalAudioFileSize { get; set; }
     public string OriginalAudioContentType { get; set; } = string.Empty;
     public string Genre { get; set; } = string.Empty;

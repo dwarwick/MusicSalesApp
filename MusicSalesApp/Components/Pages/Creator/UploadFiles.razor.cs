@@ -53,7 +53,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     protected List<string> _unmatchedMp3Files = new List<string>();
     protected List<string> _unmatchedCoverArtFiles = new List<string>();
     protected List<string> _duplicateSongFiles = new List<string>();
-    
+
+    /// <summary>Selected files whose extension is not a supported audio or cover-art type.</summary>
+    protected List<string> _skippedFiles = new List<string>();
+
+    // Titles are no longer derived from filenames, so the batch pauses after matching to let the
+    // creator review and edit each title. The buffered temp files have to outlive that pause,
+    // which is why they are held here rather than in a local `finally`.
+    protected bool _awaitingTitleConfirmation = false;
+    private readonly List<PendingUpload> _pendingUploads = new();
+    private readonly List<string> _pendingTempFiles = new();
+
+    private sealed record PendingUpload(
+        UploadPairItem Item,
+        string AudioTempPath,
+        string CoverArtTempPath,
+        string CoverArtContentType);
+
+
     // Creator ID - will be populated if the current user is a creator
     private int? _currentCreatorId = null;
     private string _currentUserEmail = null;
@@ -171,6 +188,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         try
         {
+        // A batch still awaiting title review is abandoned by this new selection, so release the
+        // files it was holding rather than leaking them on the server.
+        _awaitingTitleConfirmation = false;
+        CleanupPendingTempFiles();
+
         // Clear previous validation errors
         ClearValidationError();
         _uploadItems.Clear();
@@ -179,6 +201,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _initialUploadBatchProgress = 0;
         _unmatchedCoverArtFiles.Clear();
         _duplicateSongFiles.Clear();
+        _skippedFiles.Clear();
 
         // Ensure CreatorId is loaded
         if (_currentCreatorId == null)
@@ -218,22 +241,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // when OpenReadStream is later called on an audio-only upload.
         var files = e.GetMultipleFiles(MaxFilesAllowed); // Allow up to 50 files
 
-        var invalidFileNames = files
-            .Where(file => !MediaFileNameRules.IsValidAudioFileName(file.Name)
-                && !MediaFileNameRules.IsValidImageFileName(file.Name))
-            .Select(file => MediaFileNameRules.GetFileNameValidationMessage(file.Name))
-            .ToList();
-        if (invalidFileNames.Count > 0)
-        {
-            _validationErrorMessage =
-                "No files were uploaded. Fix these invalid filenames:"
-                + System.Environment.NewLine
-                + string.Join(System.Environment.NewLine, invalidFileNames.Select(message => $"• {message}"));
-            await DisableBeforeUnloadAsync();
-            beforeUnloadEnabled = false;
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
+        // Filenames themselves are unconstrained now that storage paths come from a GUID, so a file
+        // with an unsupported extension is simply skipped rather than failing the whole batch.
+        _skippedFiles.AddRange(files
+            .Where(file => !MusicFileExtensions.IsAudioFile(file.Name)
+                && !MusicFileExtensions.IsCoverArtFile(file.Name))
+            .Select(file => file.Name));
 
         // Separate files into audio and cover art by original filename
         var audioFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
@@ -420,7 +433,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         // Build the upload item list. All files are already on disk as temp files,
         // so we just pass temp paths through to the upload methods.
-        var uploadItemsWithFiles = new List<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)>();
+        var uploadItemsWithFiles = new List<PendingUpload>();
 
         foreach (var pair in matchingResult.Pairs)
         {
@@ -452,15 +465,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 }
             }
 
-            // The validated audio basename is authoritative for title and storage.
-            // Matching may identify cover art, but it must not rewrite the creator's basename.
-            var normalizedName = MusicUploadService.GetNormalizedBaseName(pair.AudioFileName);
-
+            // The filename no longer determines storage. It only seeds the title, which the
+            // creator can edit in the review step before anything is uploaded.
             var uploadItem = new UploadPairItem
             {
-                BaseName = normalizedName,
+                SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName),
                 AudioFileName = audioFileMeta.Name,
-                UploadedAudioFileName = normalizedName + ".mp3",
                 AudioFileSize = audioFileMeta.Size,
                 CoverArtFileName = coverArtFileName,
                 CoverArtFileSize = coverArtFileSize,
@@ -471,60 +481,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             };
 
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add((uploadItem, audioTempPath, coverArtTempPath, coverArtContentType, normalizedName));
-        }
-
-        // Check for duplicate song titles before uploading
-        _initialUploadStatusMessage = "Files received. Checking for duplicate song titles...";
-        _initialUploadBatchProgress = 100;
-        await InvokeAsync(StateHasChanged);
-        var candidateTitles = uploadItemsWithFiles
-            .Select(x => MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        HashSet<string> existingTitles;
-        try
-        {
-            existingTitles = await SongMetadataService.FindExistingSongTitlesAsync(candidateTitles);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
-            _validationErrorMessage =
-                "No files were uploaded because existing song titles could not be checked. Please try again.";
-            _isUploading = false;
-            await DisableBeforeUnloadAsync();
-            beforeUnloadEnabled = false;
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
-
-        if (existingTitles.Any())
-        {
-            // Remove duplicates from upload list and track them for display
-            var duplicateItems = uploadItemsWithFiles
-                .Where(x => existingTitles.Contains(
-                    MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName)))
-                .ToList();
-
-            foreach (var dup in duplicateItems)
-            {
-                _duplicateSongFiles.Add(dup.Item.AudioFileName);
-                _uploadItems.Remove(dup.Item);
-            }
-
-            uploadItemsWithFiles = uploadItemsWithFiles
-                .Where(x => !existingTitles.Contains(
-                    MediaFileNameRules.ToSongTitleFromBaseName(x.NormalizedName)))
-                .ToList();
+            uploadItemsWithFiles.Add(new PendingUpload(uploadItem, audioTempPath, coverArtTempPath, coverArtContentType));
         }
 
         _initialUploadItems.Clear();
         _initialUploadStatusMessage = string.Empty;
         _initialUploadBatchProgress = 0;
-        await InvokeAsync(StateHasChanged);
 
-        // If all files were duplicates, no need to proceed with upload
         if (!uploadItemsWithFiles.Any())
         {
             _isUploading = false;
@@ -532,41 +495,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        try
-        {
-            // Process uploads in chunks
-            await ProcessUploadsInChunksAsync(uploadItemsWithFiles);
+        // Hand the buffered batch to the review step. Nothing is written to Azure until the
+        // creator confirms the titles, so ownership of the temp files transfers to the fields
+        // below and this method's `finally` must no longer delete them.
+        _pendingUploads.AddRange(uploadItemsWithFiles);
+        _pendingTempFiles.AddRange(audioTempPaths.Values);
+        _pendingTempFiles.AddRange(coverArtTempPaths.Values);
+        audioTempPaths.Clear();
+        coverArtTempPaths.Clear();
 
-            // Send batch upload notification after all uploads complete
-            try
-            {
-                // Use the actual MP3 blob paths tracked during upload for reliable matching
-                List<string> uploadedMp3Paths;
-                lock (_blobPathsLock)
-                {
-                    uploadedMp3Paths = _uploadedBlobPaths
-                        .Where(p => p.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                }
-                if (uploadedMp3Paths.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
-                {
-                    await AdminNotificationService.NotifyUploadBatchCompletedAsync(
-                        _currentUserEmail, _currentCreatorId.Value, uploadedMp3Paths);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to send batch upload notification");
-            }
-        }
-        finally
-        {
-            // Uploads finished (completed or failed) — hide spinner, re-show upload box, disable warnings
-            _isUploading = false;
-            await DisableBeforeUnloadAsync();
-            beforeUnloadEnabled = false;
-            await InvokeAsync(StateHasChanged);
-        }
+        _awaitingTitleConfirmation = true;
+        _isUploading = false;
+        await DisableBeforeUnloadAsync();
+        beforeUnloadEnabled = false;
+        await InvokeAsync(StateHasChanged);
         }
         catch (JSException ex) when (
             ex.Message.Contains("There is no file with ID", StringComparison.OrdinalIgnoreCase) &&
@@ -607,12 +549,176 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 _initialUploadBatchProgress = 0;
             }
 
-            // Clean up ALL temp files (safe to call even if already deleted)
+            // Clean up ALL temp files (safe to call even if already deleted).
+            // On the success path these dictionaries were emptied when ownership of the buffered
+            // files transferred to the review step, so nothing is deleted out from under it.
             foreach (var path in audioTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
             foreach (var path in coverArtTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
         }
+    }
+
+    /// <summary>
+    /// Uploads the reviewed batch. Titles are validated here rather than at file-selection time
+    /// because the creator can edit them after the files are buffered.
+    /// </summary>
+    protected async Task StartUploadAsync()
+    {
+        if (!_awaitingTitleConfirmation || _isUploading)
+            return;
+
+        ClearValidationError();
+        _duplicateSongFiles.Clear();
+
+        foreach (var pending in _pendingUploads)
+        {
+            pending.Item.SongTitle = (pending.Item.SongTitle ?? string.Empty).Trim();
+        }
+
+        var titleErrors = _pendingUploads
+            .SelectMany(pending => SongTitleHelper
+                .GetTitleValidationErrors(pending.Item.SongTitle)
+                .Select(error => $"{pending.Item.AudioFileName}: {error}"))
+            .ToList();
+
+        var duplicateWithinBatch = _pendingUploads
+            .GroupBy(pending => pending.Item.SongTitle, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => $"More than one file in this batch is titled '{group.Key}'.")
+            .ToList();
+
+        if (titleErrors.Count > 0 || duplicateWithinBatch.Count > 0)
+        {
+            _validationErrorMessage =
+                "No files were uploaded. Fix these song titles:"
+                + System.Environment.NewLine
+                + string.Join(
+                    System.Environment.NewLine,
+                    titleErrors.Concat(duplicateWithinBatch).Select(message => $"• {message}"));
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        _isUploading = true;
+        _awaitingTitleConfirmation = false;
+        _uploadCts = new CancellationTokenSource();
+        lock (_blobPathsLock)
+        {
+            _uploadedBlobPaths.Clear();
+        }
+
+        var beforeUnloadEnabled = false;
+        try
+        {
+            try
+            {
+                await EnableBeforeUnloadAsync();
+                beforeUnloadEnabled = true;
+            }
+            catch (JSDisconnectedException) { }
+
+            var uploads = _pendingUploads.ToList();
+
+            HashSet<string> existingTitles;
+            try
+            {
+                existingTitles = await SongMetadataService.FindExistingSongTitlesAsync(
+                    uploads.Select(pending => pending.Item.SongTitle)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList());
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
+                _validationErrorMessage =
+                    "No files were uploaded because existing song titles could not be checked. Please try again.";
+                _awaitingTitleConfirmation = true;
+                return;
+            }
+
+            if (existingTitles.Any())
+            {
+                foreach (var duplicate in uploads
+                    .Where(pending => existingTitles.Contains(pending.Item.SongTitle))
+                    .ToList())
+                {
+                    _duplicateSongFiles.Add(duplicate.Item.AudioFileName);
+                    _uploadItems.Remove(duplicate.Item);
+                    uploads.Remove(duplicate);
+                }
+            }
+
+            if (!uploads.Any())
+                return;
+
+            await ProcessUploadsInChunksAsync(uploads);
+
+            // Send batch upload notification after all uploads complete
+            try
+            {
+                // Use the actual MP3 blob paths tracked during upload for reliable matching
+                List<string> uploadedMp3Paths;
+                lock (_blobPathsLock)
+                {
+                    uploadedMp3Paths = _uploadedBlobPaths
+                        .Where(p => p.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+                if (uploadedMp3Paths.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
+                {
+                    await AdminNotificationService.NotifyUploadBatchCompletedAsync(
+                        _currentUserEmail, _currentCreatorId.Value, uploadedMp3Paths);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send batch upload notification");
+            }
+        }
+        finally
+        {
+            _isUploading = false;
+            if (!_awaitingTitleConfirmation)
+            {
+                CleanupPendingTempFiles();
+            }
+
+            if (beforeUnloadEnabled)
+            {
+                await DisableBeforeUnloadAsync();
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Discards a reviewed-but-not-yet-uploaded batch.</summary>
+    protected async Task CancelPendingBatchAsync()
+    {
+        if (!_awaitingTitleConfirmation)
+            return;
+
+        _awaitingTitleConfirmation = false;
+        CleanupPendingTempFiles();
+        _uploadItems.Clear();
+        _unmatchedCoverArtFiles.Clear();
+        _skippedFiles.Clear();
+        ClearValidationError();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Deletes the buffered files held for the review step. Safe to call repeatedly, and reached
+    /// from every exit: upload completion, cancel, navigation away, and disposal.
+    /// </summary>
+    private void CleanupPendingTempFiles()
+    {
+        foreach (var path in _pendingTempFiles)
+            TempFileHelper.TryDelete(path, Logger);
+
+        _pendingTempFiles.Clear();
+        _pendingUploads.Clear();
     }
 
     private List<InitialUploadProgressItem> BuildInitialUploadProgressFiles(
@@ -758,7 +864,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// Audio/cover art pairs are kept together within their chunks.
     /// ChunkSize represents the maximum number of files (not pairs) to process concurrently.
     /// </summary>
-    private async Task ProcessUploadsInChunksAsync(IEnumerable<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)> uploadItemsWithFiles)
+    private async Task ProcessUploadsInChunksAsync(IEnumerable<PendingUpload> uploadItemsWithFiles)
     {
         var itemsList = uploadItemsWithFiles.ToList();
         var currentIndex = 0;
@@ -766,7 +872,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         while (currentIndex < itemsList.Count)
         {
             // Build a chunk that respects the max file count
-            var chunk = new List<(UploadPairItem Item, string AudioTempPath, string CoverArtTempPath, string CoverArtContentType, string NormalizedName)>();
+            var chunk = new List<PendingUpload>();
             var currentFileCount = 0;
 
             while (currentIndex < itemsList.Count && currentFileCount < ChunkSize)
@@ -789,15 +895,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
-            foreach (var (item, audioTempPath, coverArtTempPath, coverArtContentType, normalizedName) in chunk)
+            foreach (var (item, audioTempPath, coverArtTempPath, coverArtContentType) in chunk)
             {
                 if (coverArtTempPath != null)
                 {
-                    chunkTasks.Add(UploadFilePairAsync(audioTempPath, coverArtTempPath, coverArtContentType, item, normalizedName));
+                    chunkTasks.Add(UploadFilePairAsync(audioTempPath, coverArtTempPath, coverArtContentType, item));
                 }
                 else
                 {
-                    chunkTasks.Add(UploadAudioOnlyAsync(audioTempPath, item, normalizedName));
+                    chunkTasks.Add(UploadAudioOnlyAsync(audioTempPath, item));
                 }
             }
 
@@ -806,7 +912,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadAudioOnlyAsync(string audioTempPath, UploadPairItem uploadItem, string normalizedName)
+    private async Task UploadAudioOnlyAsync(string audioTempPath, UploadPairItem uploadItem)
     {
         const int bufferSize = 81920;
 
@@ -834,9 +940,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             var uploadResult = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
                 audioFileStream,
                 uploadItem.AudioFileName,
+                uploadItem.SongTitle,
                 null, // No album name
                 _currentCreatorId,
-                normalizedName,
                 _uploadCts.Token);
 
             // Track the uploaded blob path for cleanup if user leaves
@@ -848,7 +954,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded to {uploadResult.FolderPath}";
+            uploadItem.StatusMessage = $"Uploaded '{uploadResult.SongTitle}'";
             uploadItem.ErrorMessage = null;
         }
         catch (InvalidDataException ex)
@@ -881,7 +987,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadFilePairAsync(string audioTempPath, string coverArtTempPath, string coverArtContentType, UploadPairItem uploadItem, string normalizedName)
+    private async Task UploadFilePairAsync(string audioTempPath, string coverArtTempPath, string coverArtContentType, UploadPairItem uploadItem)
     {
         const int bufferSize = 81920;
 
@@ -918,9 +1024,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 uploadItem.AudioFileName,
                 coverArtFileStream,
                 uploadItem.CoverArtFileName,
+                uploadItem.SongTitle,
                 null, // No album name
                 _currentCreatorId,
-                normalizedName,
                 _uploadCts.Token);
 
             // Track the uploaded blob paths for cleanup if user leaves
@@ -929,11 +1035,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 _uploadedBlobPaths.Add(uploadResult.Mp3BlobPath);
                 _uploadedBlobPaths.Add(uploadResult.OriginalAudioBlobPath);
                 _uploadedBlobPaths.Add(uploadResult.ImageBlobPath);
+                _uploadedBlobPaths.Add(uploadResult.OriginalCoverArtBlobPath);
+                _uploadedBlobPaths.Add(SongMediaPaths.FacebookImageFor(uploadResult.ImageBlobPath));
             }
 
             uploadItem.Progress = 100;
             uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded to {uploadResult.FolderPath}";
+            uploadItem.StatusMessage = $"Uploaded '{uploadResult.SongTitle}'";
             uploadItem.ErrorMessage = null;
         }
         catch (InvalidDataException ex)
@@ -1150,9 +1258,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     protected class UploadPairItem
     {
-        public string BaseName { get; set; } = string.Empty;
+        /// <summary>
+        /// The title to store. Seeded from the filename and editable in the review step before
+        /// anything is uploaded.
+        /// </summary>
+        public string SongTitle { get; set; } = string.Empty;
+
         public string AudioFileName { get; set; } = string.Empty;
-        public string UploadedAudioFileName { get; set; } = string.Empty;
         public long AudioFileSize { get; set; }
         public string CoverArtFileName { get; set; } = string.Empty;
         public long CoverArtFileSize { get; set; }
@@ -1179,17 +1291,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
     {
-        if (!_isUploading && !_isProcessingFiles)
+        if (!_isUploading && !_isProcessingFiles && !_awaitingTitleConfirmation)
             return;
 
         var isConfirmed = await JS.InvokeAsync<bool>("confirm",
-            "Uploads are in progress. If you leave now, all uploads will be cancelled and any files already uploaded in this session will be removed. Are you sure you want to leave?");
+            _awaitingTitleConfirmation && !_isUploading
+                ? "Your files are ready to upload but have not been uploaded yet. If you leave now they will be discarded. Are you sure you want to leave?"
+                : "Uploads are in progress. If you leave now, all uploads will be cancelled and any files already uploaded in this session will be removed. Are you sure you want to leave?");
 
         if (isConfirmed)
         {
             // User chose to leave — cancel pending uploads and clean up
             _uploadCts.Cancel();
             await CleanupUploadedFilesAsync();
+            _awaitingTitleConfirmation = false;
+            CleanupPendingTempFiles();
         }
         else
         {
@@ -1252,6 +1368,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _uploadCts.Cancel();
             await CleanupUploadedFilesAsync();
         }
+
+        // Backstop for a batch buffered for review that was never uploaded or cancelled,
+        // e.g. the circuit dropped while the creator was still editing titles.
+        CleanupPendingTempFiles();
 
         _uploadCts.Dispose();
     }

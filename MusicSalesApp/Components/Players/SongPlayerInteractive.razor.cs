@@ -261,24 +261,16 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
             await LoadStreamUrl();
 
-            var songBaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(_songInfo.Name));
-            var songFolder = Path.GetDirectoryName(_songInfo.Name)?.Replace("\\", "/") ?? "";
-            
-            var artMetadata = allMetadata.FirstOrDefault(m =>
-                !string.IsNullOrEmpty(m.ImageBlobPath) &&
-                IsImageFile(m.ImageBlobPath) &&
-                Path.GetFileNameWithoutExtension(Path.GetFileName(m.ImageBlobPath)).Equals(songBaseName, StringComparison.OrdinalIgnoreCase) &&
-                (Path.GetDirectoryName(m.ImageBlobPath)?.Replace("\\", "/") ?? "").Equals(songFolder, StringComparison.OrdinalIgnoreCase));
+            // Take the cover art from this song's own row rather than hunting for an image whose
+            // filename matches the audio: the two no longer share a base name under the GUID
+            // scheme, and name matching could pick up a different song's art.
+            var hasCoverArt = !string.IsNullOrEmpty(_songMetadata.ImageBlobPath)
+                && IsImageFile(_songMetadata.ImageBlobPath)
+                && (_songMetadata.IsImageSquare ?? true);
 
-            if (artMetadata != null)
-            {
-                var isSquare = artMetadata.IsImageSquare ?? true;
-                _albumArtUrl = isSquare ? $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}" : null;
-            }
-            else
-            {
-                _albumArtUrl = null;
-            }
+            _albumArtUrl = hasCoverArt
+                ? $"api/music/{SafeEncodePath(_songMetadata.ImageBlobPath)}"
+                : null;
 
             if (_isAuthenticated)
             {

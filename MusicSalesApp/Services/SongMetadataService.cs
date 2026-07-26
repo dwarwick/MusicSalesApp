@@ -168,7 +168,7 @@ namespace MusicSalesApp.Services
             if (string.IsNullOrWhiteSpace(metadata.Mp3BlobPath)
                 || !metadata.TrackLength.HasValue
                 || metadata.TrackLength.Value <= 0
-                || !Common.Helpers.MediaFileNameRules.IsValidTitle(metadata.SongTitle))
+                || !Common.Helpers.SongTitleHelper.IsValidTitle(metadata.SongTitle))
             {
                 throw new InvalidOperationException(
                     "A validated upload requires a valid title, playback path, and positive duration.");
@@ -358,7 +358,7 @@ namespace MusicSalesApp.Services
             if (existing.CreatorId != creatorId)
             {
                 throw new UnauthorizedAccessException(
-                    "That filename belongs to another creator and cannot be replaced.");
+                    "That media storage location belongs to another creator and cannot be replaced.");
             }
 
             if (existing.IsActive && existing.IsEnabled)

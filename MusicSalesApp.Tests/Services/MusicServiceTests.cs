@@ -18,6 +18,20 @@ public class MusicServiceTests
         _service = new MusicService(_mockLogger.Object);
     }
 
+    [TestCase("my song's @ mix v1.2 (remix)!.mp3")]
+    [TestCase("song__name.mp3")]
+    [TestCase("_leading underscore.mp3")]
+    [TestCase("Été – Hiver.mp3")]
+    public async Task IsValidAudioFileAsync_UnconventionalFileNameWithValidContent_ReturnsTrue(string fileName)
+    {
+        // Validation is about the bytes and the extension now, not the characters in the name.
+        var stream = new MemoryStream([(byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0]);
+
+        var result = await _service.IsValidAudioFileAsync(stream, fileName);
+
+        Assert.That(result, Is.True);
+    }
+
     [Test]
     public async Task IsValidAudioFileAsync_WithValidMp3Extension_ReturnsTrue()
     {

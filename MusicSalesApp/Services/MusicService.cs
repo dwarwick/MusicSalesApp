@@ -35,9 +35,9 @@ namespace MusicSalesApp.Services
                 return Task.FromResult(false);
             }
 
-            if (!MediaFileNameRules.IsValidAudioFileName(Path.GetFileName(fileName)))
+            if (!MusicFileExtensions.IsAudioFile(fileName))
             {
-                _logger.LogWarning("File {FileName} has an invalid filename or extension", fileName);
+                _logger.LogWarning("File {FileName} does not have a supported audio extension", fileName);
                 return Task.FromResult(false);
             }
 

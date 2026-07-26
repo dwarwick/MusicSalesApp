@@ -31,4 +31,23 @@ public interface IOpenGraphService
     /// </summary>
     /// <param name="imageBlobPath">The blob path of the original image</param>
     Task PreGenerateFacebookImageAsync(string imageBlobPath);
+
+    /// <summary>
+    /// Deletes the cached Facebook-optimized image for a cover art path.
+    /// Call this whenever the cover art changes: a song's sharing image has a fixed name, so the
+    /// stale copy would otherwise keep being served.
+    /// </summary>
+    /// <param name="imageBlobPath">The blob path of the cover art whose sharing image is stale</param>
+    Task InvalidateFacebookImageAsync(string imageBlobPath);
+
+    /// <summary>
+    /// Brings the sharing image back in step after a song's cover art changes: drops the cached
+    /// image for both the old and new art, then regenerates it for the new art.
+    ///
+    /// This is the single entry point every cover-art writer should call. Failures are logged and
+    /// swallowed - a stale share image must never fail the edit that caused it.
+    /// </summary>
+    /// <param name="previousCoverArtPath">The cover art being replaced, if any.</param>
+    /// <param name="newCoverArtPath">The cover art now in use.</param>
+    Task RefreshSharingImageAsync(string previousCoverArtPath, string newCoverArtPath);
 }

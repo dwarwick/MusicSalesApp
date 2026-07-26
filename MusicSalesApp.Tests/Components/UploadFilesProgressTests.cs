@@ -22,15 +22,54 @@ public class UploadFilesProgressTests
     }
 
     [Test]
-    public void UploadFiles_PhaseTwoDisplaysUploadedMp3FileName()
+    public void UploadFiles_ReviewStepOffersAnEditableTitlePrefilledFromTheFileName()
     {
         var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
         var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
 
-        Assert.That(markup, Does.Contain("@item.UploadedAudioFileName"));
-        Assert.That(markup, Does.Contain("Converted from @item.AudioFileName"));
-        Assert.That(codeBehind, Does.Contain("UploadedAudioFileName = normalizedName + \".mp3\""));
+        Assert.That(markup, Does.Contain("_awaitingTitleConfirmation"));
+        Assert.That(markup, Does.Contain("@bind-Value=\"item.SongTitle\""));
+        Assert.That(markup, Does.Contain("StartUploadAsync"));
+        Assert.That(markup, Does.Contain("CancelPendingBatchAsync"));
+
+        Assert.That(codeBehind, Does.Contain("SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName)"));
         Assert.That(codeBehind, Does.Contain("AudioFileName = audioFileMeta.Name"));
+
+        // The storage path no longer comes from the creator's filename.
+        Assert.That(codeBehind, Does.Not.Contain("UploadedAudioFileName"));
+    }
+
+    [Test]
+    public void UploadFiles_BufferedBatchIsCleanedUpOnEveryExitPath()
+    {
+        // Splitting HandleFileSelected around the review step removed the single `finally` that
+        // used to guarantee temp-file cleanup, so every exit has to reach the replacement.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.That(codeBehind, Does.Contain("private void CleanupPendingTempFiles()"));
+        Assert.That(
+            System.Text.RegularExpressions.Regex.Matches(codeBehind, @"CleanupPendingTempFiles\(\);").Count,
+            Is.GreaterThanOrEqualTo(4),
+            "Expected cleanup from upload completion, cancel, navigation away, and disposal.");
+    }
+
+    [Test]
+    public void UploadFiles_NoLongerRejectsABatchForItsFileNames()
+    {
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.That(codeBehind, Does.Not.Contain("MediaFileNameRules"));
+        Assert.That(codeBehind, Does.Not.Contain("Fix these invalid filenames"));
+        Assert.That(markup, Does.Not.Contain("exactly one dot"));
+
+        // Unsupported extensions are skipped with a notice instead of failing the whole batch.
+        Assert.That(codeBehind, Does.Contain("_skippedFiles"));
+
+        // The playability preflight is untouched.
+        Assert.That(codeBehind, Does.Contain("ValidateAudioDecodeAsync"));
+        Assert.That(codeBehind, Does.Contain("AudioContentMatchesExtension"));
+        Assert.That(codeBehind, Does.Contain("MediaTransferValidator.RequireComplete"));
     }
 
     [Test]

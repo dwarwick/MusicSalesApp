@@ -236,7 +236,7 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
                     trackedSong.BlobPath);
                 trackedSong.SongTitle = string.IsNullOrWhiteSpace(repairedTitle)
                     ? $"Song {trackedSong.Id}"
-                    : repairedTitle[..Math.Min(repairedTitle.Length, MediaFileNameRules.MaxTitleLength)];
+                    : repairedTitle[..Math.Min(repairedTitle.Length, SongTitleHelper.MaxTitleLength)];
                 if (string.IsNullOrWhiteSpace(repairedTitle))
                 {
                     trackedSong.StatusReason = "Media integrity repair: title requires manual correction.";
@@ -359,13 +359,14 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
 
             var metadataMissing = string.IsNullOrWhiteSpace(song.SongTitle)
                 || !song.TrackLength.HasValue || song.TrackLength <= 0;
-            var namingWarning = !MediaFileNameRules.IsValidAudioFileName(
-                    Path.GetFileName(song.Mp3BlobPath))
-                || !string.Equals(detected, ".mp3", StringComparison.OrdinalIgnoreCase)
+            // Filenames are no longer constrained, so only the container and content type are
+            // worth warning about here.
+            var containerWarning =
+                !string.Equals(detected, ".mp3", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(properties.ContentType, "audio/mpeg", StringComparison.OrdinalIgnoreCase);
             item.Outcome = metadataMissing
                 ? MediaAuditOutcome.MetadataRepairable
-                : namingWarning
+                : containerWarning
                     ? MediaAuditOutcome.NamingWarning
                     : item.IsOriginalSourceMissing
                         ? MediaAuditOutcome.OriginalSourceMissing

@@ -29,13 +29,15 @@ namespace MusicSalesApp.Services
 
         /// <summary>
         /// Uploads validated audio and paired album art to storage.
-        /// The validated original audio is retained and a playback MP3 is created when needed.
-        /// Files are stored in a folder named after the validated base filename.
+        /// The validated original audio and cover art are both retained, and a playback MP3 is
+        /// created when needed. Files are stored in a folder named for a newly minted media GUID,
+        /// so the creator's filenames never reach storage.
         /// </summary>
         /// <param name="audioStream">The MP3 audio file stream.</param>
-        /// <param name="audioFileName">Original filename of the MP3 file.</param>
+        /// <param name="audioFileName">Original filename of the MP3 file. Retained as metadata only.</param>
         /// <param name="albumArtStream">The album art file stream (JPEG or PNG).</param>
-        /// <param name="albumArtFileName">Original filename of the album art file.</param>
+        /// <param name="albumArtFileName">Original filename of the album art file. Retained as metadata only.</param>
+        /// <param name="songTitle">The song title to store. Required; no longer derived from the filename.</param>
         /// <param name="albumName">Optional album name to store as metadata.</param>
         /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -45,18 +47,19 @@ namespace MusicSalesApp.Services
             string audioFileName,
             Stream albumArtStream,
             string albumArtFileName,
+            string songTitle,
             string albumName = null,
             int? creatorId = null,
-            string storageBaseName = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Uploads validated audio without cover art, retaining the original source and
-        /// creating a playback MP3 when needed. Files are stored in a folder named after
-        /// the validated base filename.
+        /// creating a playback MP3 when needed. Files are stored in a folder named for a newly
+        /// minted media GUID.
         /// </summary>
         /// <param name="audioStream">The audio file stream.</param>
-        /// <param name="audioFileName">Original filename of the audio file.</param>
+        /// <param name="audioFileName">Original filename of the audio file. Retained as metadata only.</param>
+        /// <param name="songTitle">The song title to store. Required; no longer derived from the filename.</param>
         /// <param name="albumName">Optional album name to store as metadata.</param>
         /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
@@ -64,9 +67,9 @@ namespace MusicSalesApp.Services
         Task<MusicUploadResult> UploadMusicWithoutAlbumArtAsync(
             Stream audioStream,
             string audioFileName,
+            string songTitle,
             string albumName = null,
             int? creatorId = null,
-            string storageBaseName = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -116,11 +119,13 @@ namespace MusicSalesApp.Services
 
     public sealed class MusicUploadResult
     {
-        public string FolderPath { get; init; } = string.Empty;
+        public Guid MediaGuid { get; init; }
+        public string SongTitle { get; init; } = string.Empty;
         public string OriginalAudioBlobPath { get; init; } = string.Empty;
         public string OriginalAudioFileName { get; init; } = string.Empty;
         public long OriginalAudioFileSize { get; init; }
         public string OriginalAudioContentType { get; init; } = string.Empty;
+        public string OriginalCoverArtBlobPath { get; init; }
         public string Mp3BlobPath { get; init; } = string.Empty;
         public string ImageBlobPath { get; init; }
         public double TrackDuration { get; init; }

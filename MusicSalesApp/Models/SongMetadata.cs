@@ -12,6 +12,16 @@ public class SongMetadata
     public int Id { get; set; }
 
     /// <summary>
+    /// Identifies this song's media in blob storage. All of its blobs live in a folder named for
+    /// this GUID - see <see cref="Common.Helpers.SongMediaPaths"/>.
+    ///
+    /// Null for songs uploaded before the GUID scheme, whose blobs are named after the creator's
+    /// original filename. Those paths are still read straight from the columns below; only derived
+    /// paths (the Facebook image, a crop target) need to branch on this being null.
+    /// </summary>
+    public Guid? MediaGuid { get; set; }
+
+    /// <summary>
     /// Full path to the blob file (folder/filename) - DEPRECATED: Use Mp3BlobPath or ImageBlobPath instead
     /// </summary>
     [MaxLength(500)]
@@ -46,6 +56,19 @@ public class SongMetadata
     /// </summary>
     [MaxLength(500)]
     public string ImageBlobPath { get; set; }
+
+    /// <summary>
+    /// Full path to the exact cover art supplied by the creator. Unlike <see cref="ImageBlobPath"/>
+    /// this is never overwritten by a crop or a replacement, so the upload can always be recovered.
+    /// </summary>
+    [MaxLength(500)]
+    public string OriginalCoverArtBlobPath { get; set; }
+
+    /// <summary>
+    /// Browser-supplied filename for the retained original cover art.
+    /// </summary>
+    [MaxLength(255)]
+    public string OriginalCoverArtFileName { get; set; }
 
     /// <summary>
     /// File extension (.mp3, .jpg, .jpeg, .png) - DEPRECATED
