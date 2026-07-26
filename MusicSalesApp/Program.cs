@@ -256,8 +256,9 @@ try
 
     // Configure Data Protection to persist keys to Azure Blob Storage
     // This ensures all instances/domains share the same encryption keys for antiforgery tokens and cookies
-    var azureConnectionString = builder.Configuration["Azure:StorageAccountConnectionString"];
-    var dataProtectionContainerName = builder.Configuration["Azure:DataProtectionContainerName"] ?? "dataprotection-keys";
+    var azureConnectionString = builder.Configuration[AppSettingKeys.AzureStorageConnectionString];
+    var dataProtectionContainerName = builder.Configuration[AppSettingKeys.AzureDataProtectionContainerName]
+        ?? AzureStorageDefaults.DataProtectionContainerName;
     
     if (!string.IsNullOrEmpty(azureConnectionString))
     {
@@ -340,6 +341,8 @@ try
     builder.Services.AddScoped<IPlaylistCleanupService, PlaylistCleanupService>();
     builder.Services.AddScoped<ITrackLengthRepairService, TrackLengthRepairService>();
     builder.Services.AddScoped<IMediaIntegrityAuditService, MediaIntegrityAuditService>();
+    builder.Services.AddScoped<IStorageBackupBlobGateway, StorageBackupBlobGateway>();
+    builder.Services.AddScoped<IStorageBackupService, StorageBackupService>();
     builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
     builder.Services.AddScoped<ISongLikeService, SongLikeService>();
