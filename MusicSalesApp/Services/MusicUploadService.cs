@@ -110,6 +110,8 @@ public class MusicUploadService : IMusicUploadService
         string songTitle,
         string albumName = null,
         int? creatorId = null,
+        Stream validatedPlayback = null,
+        double? validatedDuration = null,
         CancellationToken cancellationToken = default)
         => UploadMusicAsync(
             audioStream,
@@ -119,6 +121,8 @@ public class MusicUploadService : IMusicUploadService
             songTitle,
             albumName,
             creatorId,
+            validatedPlayback,
+            validatedDuration,
             cancellationToken);
 
     public Task<MusicUploadResult> UploadMusicWithoutAlbumArtAsync(
@@ -127,6 +131,8 @@ public class MusicUploadService : IMusicUploadService
         string songTitle,
         string albumName = null,
         int? creatorId = null,
+        Stream validatedPlayback = null,
+        double? validatedDuration = null,
         CancellationToken cancellationToken = default)
         => UploadMusicAsync(
             audioStream,
@@ -136,6 +142,8 @@ public class MusicUploadService : IMusicUploadService
             songTitle,
             albumName,
             creatorId,
+            validatedPlayback,
+            validatedDuration,
             cancellationToken);
 
     private async Task<MusicUploadResult> UploadMusicAsync(
@@ -146,6 +154,8 @@ public class MusicUploadService : IMusicUploadService
         string songTitle,
         string albumName,
         int? creatorId,
+        Stream validatedPlayback,
+        double? validatedDuration,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audioStream);
@@ -215,7 +225,14 @@ public class MusicUploadService : IMusicUploadService
             var previousImagePath = previousMetadata?.ImageBlobPath;
 
             var playbackFile = bufferedAudio;
-            if (!_musicService.IsMp3File(audioFileName))
+            if (validatedPlayback != null)
+            {
+                // The caller already transcoded and decoded this batch to prove it was uploadable.
+                // Redoing either here would double the FFmpeg work for every file.
+                convertedPlayback = await BufferUploadFileAsync(validatedPlayback, cancellationToken);
+                playbackFile = convertedPlayback;
+            }
+            else if (!_musicService.IsMp3File(audioFileName))
             {
                 await using var conversionInput = bufferedAudio.OpenRead();
                 await using var convertedStream = await _musicService.ConvertToMp3Async(
@@ -223,7 +240,12 @@ public class MusicUploadService : IMusicUploadService
                     audioFileName);
                 convertedPlayback = await BufferUploadFileAsync(convertedStream, cancellationToken);
                 playbackFile = convertedPlayback;
+            }
 
+            if (!ReferenceEquals(playbackFile, bufferedAudio))
+            {
+                // Cheap container sniff. Kept even for a pre-validated stream so a truncated
+                // hand-off cannot reach storage.
                 await using var convertedValidationStream = playbackFile.OpenRead();
                 if (!MediaFileContentValidator.AudioContentMatchesExtension(
                         convertedValidationStream,
@@ -235,8 +257,13 @@ public class MusicUploadService : IMusicUploadService
             }
 
             double duration;
-            await using (var durationStream = playbackFile.OpenRead())
+            if (validatedDuration is > 0)
             {
+                duration = validatedDuration.Value;
+            }
+            else
+            {
+                await using var durationStream = playbackFile.OpenRead();
                 // Report the creator's own filename rather than the GUID blob name: this string
                 // only feeds the extension check and the diagnostics the creator ends up reading.
                 duration = await RequirePositiveDurationAsync(

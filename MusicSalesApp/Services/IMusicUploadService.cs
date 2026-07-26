@@ -40,6 +40,15 @@ namespace MusicSalesApp.Services
         /// <param name="songTitle">The song title to store. Required; no longer derived from the filename.</param>
         /// <param name="albumName">Optional album name to store as metadata.</param>
         /// <param name="creatorId">Optional creator ID if uploaded by a creator.</param>
+        /// <param name="validatedPlayback">
+        /// An MP3 the caller has already transcoded and decoded. Supplying it skips the transcode
+        /// here, which otherwise repeats work a batch preflight has just done. Omit to have this
+        /// service do the conversion itself.
+        /// </param>
+        /// <param name="validatedDuration">
+        /// The duration measured while validating <paramref name="validatedPlayback"/>. Supplying
+        /// it skips a second full decode. Omit to have this service measure it.
+        /// </param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>The folder path where files were stored.</returns>
         Task<MusicUploadResult> UploadMusicWithAlbumArtAsync(
@@ -50,6 +59,8 @@ namespace MusicSalesApp.Services
             string songTitle,
             string albumName = null,
             int? creatorId = null,
+            Stream validatedPlayback = null,
+            double? validatedDuration = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -70,6 +81,8 @@ namespace MusicSalesApp.Services
             string songTitle,
             string albumName = null,
             int? creatorId = null,
+            Stream validatedPlayback = null,
+            double? validatedDuration = null,
             CancellationToken cancellationToken = default);
 
         /// <summary>

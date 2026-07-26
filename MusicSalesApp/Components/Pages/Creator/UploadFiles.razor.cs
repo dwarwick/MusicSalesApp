@@ -68,7 +68,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         UploadPairItem Item,
         string AudioTempPath,
         string CoverArtTempPath,
-        string CoverArtContentType);
+        string CoverArtContentType,
+        string PlaybackTempPath,
+        double ValidatedDuration);
 
 
     // Creator ID - will be populated if the current user is a creator
@@ -184,6 +186,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // the finally block can always reach them.
         var audioTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var coverArtTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // The MP3s the preflight transcodes, kept so the upload does not transcode again.
+        // Only populated for non-MP3 sources.
+        var playbackTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var validatedDurations = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         var beforeUnloadEnabled = false;
 
         try
@@ -315,11 +321,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
 
-        // Preflight the complete batch before any upload task is started.
+        // Preflight the complete batch before any upload task is started. Every audio file is
+        // fully decoded here, which for a long track is the slowest part of the whole flow, so
+        // report progress rather than appearing to hang.
         var invalidContentFiles = new List<string>();
         var decoderInfrastructureFailures = new List<string>();
+        var validatedCount = 0;
         foreach (var file in audioFilesByName)
         {
+            validatedCount++;
+            _initialUploadStatusMessage =
+                $"Checking that your audio plays ({validatedCount} of {audioFilesByName.Count}): {file.Key}";
+            _initialUploadBatchProgress = (int)(100.0 * (validatedCount - 1) / audioFilesByName.Count);
+            await InvokeAsync(StateHasChanged);
+
             await using var stream = File.OpenRead(audioTempPaths[file.Key]);
             if (!MediaFileContentValidator.AudioContentMatchesExtension(stream, file.Key, out _))
             {
@@ -343,39 +358,56 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 continue;
             }
 
-            // Prove that every non-MP3 source can be converted before any task is
-            // allowed to write this batch to Azure.
-            if (!MusicService.IsMp3File(file.Key))
+            if (MusicService.IsMp3File(file.Key))
             {
-                try
-                {
-                    stream.Position = 0;
-                    await using var converted = await MusicService.ConvertToMp3Async(stream, file.Key);
-                    if (!MediaFileContentValidator.AudioContentMatchesExtension(converted, "preflight.mp3", out _))
-                    {
-                        invalidContentFiles.Add(file.Key);
-                        continue;
-                    }
+                // The upload can stream this straight through; reuse the duration just measured.
+                validatedDurations[file.Key] = decode.Duration ?? 0;
+                continue;
+            }
 
-                    converted.Position = 0;
-                    var convertedDecode = await MusicService.ValidateAudioDecodeAsync(
-                        converted,
-                        "preflight.mp3",
-                        _uploadCts.Token);
-                    if (convertedDecode.Status == AudioDecodeStatus.Inconclusive)
-                    {
-                        decoderInfrastructureFailures.Add($"{file.Key} ({convertedDecode.FailureCode})");
-                    }
-                    else if (convertedDecode.Status != AudioDecodeStatus.Playable)
-                    {
-                        invalidContentFiles.Add(file.Key);
-                    }
-                }
-                catch (Exception ex)
+            // Prove that every non-MP3 source can be converted before any task is
+            // allowed to write this batch to Azure, and keep the result: converting again
+            // during the upload would double the transcoding work for the whole batch.
+            try
+            {
+                stream.Position = 0;
+                await using var converted = await MusicService.ConvertToMp3Async(stream, file.Key);
+                if (!MediaFileContentValidator.AudioContentMatchesExtension(converted, "preflight.mp3", out _))
                 {
-                    Logger.LogWarning(ex, "Upload preflight conversion failed for {FileName}", file.Key);
                     invalidContentFiles.Add(file.Key);
+                    continue;
                 }
+
+                converted.Position = 0;
+                var convertedDecode = await MusicService.ValidateAudioDecodeAsync(
+                    converted,
+                    "preflight.mp3",
+                    _uploadCts.Token);
+                if (convertedDecode.Status == AudioDecodeStatus.Inconclusive)
+                {
+                    decoderInfrastructureFailures.Add($"{file.Key} ({convertedDecode.FailureCode})");
+                    continue;
+                }
+                if (convertedDecode.Status != AudioDecodeStatus.Playable)
+                {
+                    invalidContentFiles.Add(file.Key);
+                    continue;
+                }
+
+                var playbackTempPath = Path.GetTempFileName();
+                converted.Position = 0;
+                await using (var playbackFile = File.Create(playbackTempPath))
+                {
+                    await converted.CopyToAsync(playbackFile, _uploadCts.Token);
+                }
+
+                playbackTempPaths[file.Key] = playbackTempPath;
+                validatedDurations[file.Key] = convertedDecode.Duration ?? 0;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Upload preflight conversion failed for {FileName}", file.Key);
+                invalidContentFiles.Add(file.Key);
             }
         }
         foreach (var file in coverArtFilesByName)
@@ -481,7 +513,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             };
 
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add(new PendingUpload(uploadItem, audioTempPath, coverArtTempPath, coverArtContentType));
+            playbackTempPaths.TryGetValue(pair.AudioFileName, out var playbackTempPath);
+            validatedDurations.TryGetValue(pair.AudioFileName, out var validatedDuration);
+            uploadItemsWithFiles.Add(new PendingUpload(
+                uploadItem,
+                audioTempPath,
+                coverArtTempPath,
+                coverArtContentType,
+                playbackTempPath,
+                validatedDuration));
         }
 
         _initialUploadItems.Clear();
@@ -495,20 +535,32 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        // Hand the buffered batch to the review step. Nothing is written to Azure until the
-        // creator confirms the titles, so ownership of the temp files transfers to the fields
-        // below and this method's `finally` must no longer delete them.
+        // Ownership of the buffered files transfers to the fields below, so this method's
+        // `finally` must no longer delete them.
         _pendingUploads.AddRange(uploadItemsWithFiles);
         _pendingTempFiles.AddRange(audioTempPaths.Values);
         _pendingTempFiles.AddRange(coverArtTempPaths.Values);
+        _pendingTempFiles.AddRange(playbackTempPaths.Values);
         audioTempPaths.Clear();
         coverArtTempPaths.Clear();
+        playbackTempPaths.Clear();
 
-        _awaitingTitleConfirmation = true;
-        _isUploading = false;
-        await DisableBeforeUnloadAsync();
-        beforeUnloadEnabled = false;
+        // Upload without asking when the titles taken from the filenames are all usable. The
+        // creator only has to intervene when one is blank, too long, or collides with another
+        // song - the cases where uploading first and fixing later would mean a failed upload.
+        if (await PendingTitlesNeedAttentionAsync())
+        {
+            _awaitingTitleConfirmation = true;
+            _isUploading = false;
+            await DisableBeforeUnloadAsync();
+            beforeUnloadEnabled = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         await InvokeAsync(StateHasChanged);
+        await RunPendingUploadsAsync();
+        beforeUnloadEnabled = false;
         }
         catch (JSException ex) when (
             ex.Message.Contains("There is no file with ID", StringComparison.OrdinalIgnoreCase) &&
@@ -556,12 +608,77 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 TempFileHelper.TryDelete(path, Logger);
             foreach (var path in coverArtTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
+            foreach (var path in playbackTempPaths.Values)
+                TempFileHelper.TryDelete(path, Logger);
         }
     }
 
     /// <summary>
-    /// Uploads the reviewed batch. Titles are validated here rather than at file-selection time
-    /// because the creator can edit them after the files are buffered.
+    /// Checks the titles taken from the filenames and marks any that the creator has to fix.
+    /// Returns true when the batch cannot upload as-is.
+    /// </summary>
+    private async Task<bool> PendingTitlesNeedAttentionAsync()
+    {
+        foreach (var pending in _pendingUploads)
+        {
+            pending.Item.SongTitle = (pending.Item.SongTitle ?? string.Empty).Trim();
+            pending.Item.TitleError = null;
+        }
+
+        foreach (var pending in _pendingUploads)
+        {
+            var error = SongTitleHelper.GetTitleValidationErrors(pending.Item.SongTitle).FirstOrDefault();
+            if (error != null)
+            {
+                pending.Item.TitleError = error;
+            }
+        }
+
+        foreach (var collision in _pendingUploads
+            .Where(pending => pending.Item.TitleError == null)
+            .GroupBy(pending => pending.Item.SongTitle, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .SelectMany(group => group))
+        {
+            collision.Item.TitleError = "Another file in this batch has the same title.";
+        }
+
+        try
+        {
+            var existingTitles = await SongMetadataService.FindExistingSongTitlesAsync(
+                _pendingUploads
+                    .Where(pending => pending.Item.TitleError == null)
+                    .Select(pending => pending.Item.SongTitle)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+
+            foreach (var duplicate in _pendingUploads
+                .Where(pending => pending.Item.TitleError == null
+                    && existingTitles.Contains(pending.Item.SongTitle)))
+            {
+                duplicate.Item.TitleError = "You already have a song with this title.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
+            _validationErrorMessage =
+                "No files were uploaded because existing song titles could not be checked. Please try again.";
+            return true;
+        }
+
+        var problems = _pendingUploads.Count(pending => pending.Item.TitleError != null);
+        if (problems == 0)
+            return false;
+
+        _validationErrorMessage = problems == 1
+            ? "One song needs a different title before this batch can upload. It is highlighted below."
+            : $"{problems} songs need different titles before this batch can upload. They are highlighted below.";
+        return true;
+    }
+
+    /// <summary>
+    /// Uploads a batch the creator had to correct first. Only reachable from the review step.
     /// </summary>
     protected async Task StartUploadAsync()
     {
@@ -569,39 +686,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
 
         ClearValidationError();
-        _duplicateSongFiles.Clear();
 
-        foreach (var pending in _pendingUploads)
+        if (await PendingTitlesNeedAttentionAsync())
         {
-            pending.Item.SongTitle = (pending.Item.SongTitle ?? string.Empty).Trim();
-        }
-
-        var titleErrors = _pendingUploads
-            .SelectMany(pending => SongTitleHelper
-                .GetTitleValidationErrors(pending.Item.SongTitle)
-                .Select(error => $"{pending.Item.AudioFileName}: {error}"))
-            .ToList();
-
-        var duplicateWithinBatch = _pendingUploads
-            .GroupBy(pending => pending.Item.SongTitle, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Count() > 1)
-            .Select(group => $"More than one file in this batch is titled '{group.Key}'.")
-            .ToList();
-
-        if (titleErrors.Count > 0 || duplicateWithinBatch.Count > 0)
-        {
-            _validationErrorMessage =
-                "No files were uploaded. Fix these song titles:"
-                + System.Environment.NewLine
-                + string.Join(
-                    System.Environment.NewLine,
-                    titleErrors.Concat(duplicateWithinBatch).Select(message => $"• {message}"));
             await InvokeAsync(StateHasChanged);
             return;
         }
 
-        _isUploading = true;
         _awaitingTitleConfirmation = false;
+        await RunPendingUploadsAsync();
+    }
+
+    /// <summary>
+    /// Runs the buffered batch. Titles have already been checked by this point.
+    /// </summary>
+    private async Task RunPendingUploadsAsync()
+    {
+        _isUploading = true;
         _uploadCts = new CancellationTokenSource();
         lock (_blobPathsLock)
         {
@@ -619,36 +720,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             catch (JSDisconnectedException) { }
 
             var uploads = _pendingUploads.ToList();
-
-            HashSet<string> existingTitles;
-            try
-            {
-                existingTitles = await SongMetadataService.FindExistingSongTitlesAsync(
-                    uploads.Select(pending => pending.Item.SongTitle)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList());
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "UploadFiles: Failed to check for duplicate song titles.");
-                _validationErrorMessage =
-                    "No files were uploaded because existing song titles could not be checked. Please try again.";
-                _awaitingTitleConfirmation = true;
-                return;
-            }
-
-            if (existingTitles.Any())
-            {
-                foreach (var duplicate in uploads
-                    .Where(pending => existingTitles.Contains(pending.Item.SongTitle))
-                    .ToList())
-                {
-                    _duplicateSongFiles.Add(duplicate.Item.AudioFileName);
-                    _uploadItems.Remove(duplicate.Item);
-                    uploads.Remove(duplicate);
-                }
-            }
-
             if (!uploads.Any())
                 return;
 
@@ -679,10 +750,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         finally
         {
             _isUploading = false;
-            if (!_awaitingTitleConfirmation)
-            {
-                CleanupPendingTempFiles();
-            }
+            CleanupPendingTempFiles();
 
             if (beforeUnloadEnabled)
             {
@@ -895,16 +963,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             // Start all uploads in this chunk concurrently
             var chunkTasks = new List<Task>();
-            foreach (var (item, audioTempPath, coverArtTempPath, coverArtContentType) in chunk)
+            foreach (var pending in chunk)
             {
-                if (coverArtTempPath != null)
-                {
-                    chunkTasks.Add(UploadFilePairAsync(audioTempPath, coverArtTempPath, coverArtContentType, item));
-                }
-                else
-                {
-                    chunkTasks.Add(UploadAudioOnlyAsync(audioTempPath, item));
-                }
+                chunkTasks.Add(pending.CoverArtTempPath != null
+                    ? UploadFilePairAsync(pending)
+                    : UploadAudioOnlyAsync(pending));
             }
 
             // Wait for all uploads in this chunk to complete before starting the next chunk
@@ -912,9 +975,19 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadAudioOnlyAsync(string audioTempPath, UploadPairItem uploadItem)
+    /// <summary>
+    /// Opens the MP3 the preflight already produced for a non-MP3 source, or null when the source
+    /// was already an MP3 and the upload can stream it straight through.
+    /// </summary>
+    private static FileStream OpenValidatedPlayback(string playbackTempPath, int bufferSize)
+        => string.IsNullOrEmpty(playbackTempPath)
+            ? null
+            : new FileStream(playbackTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
+
+    private async Task UploadAudioOnlyAsync(PendingUpload pending)
     {
         const int bufferSize = 81920;
+        var (uploadItem, audioTempPath, _, _, playbackTempPath, validatedDuration) = pending;
 
         try
         {
@@ -937,12 +1010,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await InvokeAsync(StateHasChanged);
 
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
+            await using var playbackStream = OpenValidatedPlayback(playbackTempPath, bufferSize);
             var uploadResult = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
                 audioFileStream,
                 uploadItem.AudioFileName,
                 uploadItem.SongTitle,
                 null, // No album name
                 _currentCreatorId,
+                playbackStream,
+                validatedDuration,
                 _uploadCts.Token);
 
             // Track the uploaded blob path for cleanup if user leaves
@@ -987,9 +1063,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private async Task UploadFilePairAsync(string audioTempPath, string coverArtTempPath, string coverArtContentType, UploadPairItem uploadItem)
+    private async Task UploadFilePairAsync(PendingUpload pending)
     {
         const int bufferSize = 81920;
+        var (uploadItem, audioTempPath, coverArtTempPath, _, playbackTempPath, validatedDuration) = pending;
 
         try
         {
@@ -1011,14 +1088,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             uploadItem.Progress = 25;
             await InvokeAsync(StateHasChanged);
 
-            var coverArtExtension = coverArtContentType switch
-            {
-                "image/png" => ".png",
-                "image/jpeg" => ".jpg",
-                _ => Path.GetExtension(uploadItem.CoverArtFileName).ToLowerInvariant() is { Length: > 0 } ext ? ext : ".jpg"
-            };
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             await using var coverArtFileStream = new FileStream(coverArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
+            await using var playbackStream = OpenValidatedPlayback(playbackTempPath, bufferSize);
             var uploadResult = await MusicUploadService.UploadMusicWithAlbumArtAsync(
                 audioFileStream,
                 uploadItem.AudioFileName,
@@ -1027,6 +1099,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 uploadItem.SongTitle,
                 null, // No album name
                 _currentCreatorId,
+                playbackStream,
+                validatedDuration,
                 _uploadCts.Token);
 
             // Track the uploaded blob paths for cleanup if user leaves
@@ -1263,6 +1337,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         /// anything is uploaded.
         /// </summary>
         public string SongTitle { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Why this title cannot be uploaded as-is, or null when it is fine. Set only for the
+        /// rows the creator has to correct.
+        /// </summary>
+        public string TitleError { get; set; }
 
         public string AudioFileName { get; set; } = string.Empty;
         public long AudioFileSize { get; set; }

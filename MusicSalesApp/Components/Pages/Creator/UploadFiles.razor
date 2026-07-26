@@ -125,12 +125,12 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>@(_awaitingTitleConfirmation ? "Review Song Titles" : "Upload Progress")</h5>
+                <h5>@(_awaitingTitleConfirmation ? "Fix These Song Titles" : "Upload Progress")</h5>
                 @if (_awaitingTitleConfirmation)
                 {
                     <p class="text-muted">
-                        Each title was filled in from its filename. Edit any of them, then upload.
-                        Nothing has been uploaded yet.
+                        Titles come from your filenames and normally upload without asking.
+                        These need a change first — nothing has been uploaded yet.
                     </p>
                 }
                 <div class="table-responsive">
@@ -147,7 +147,7 @@
                         <tbody>
                             @foreach (var item in _uploadItems)
                             {
-                                <tr>
+                                <tr class="@(item.TitleError != null ? "table-warning" : "")">
                                     <td style="min-width: 16rem;">
                                         @if (_awaitingTitleConfirmation)
                                         {
@@ -155,6 +155,10 @@
                                                        MaxLength="200"
                                                        Placeholder="Song title"
                                                        aria-label="@($"Song title for {item.AudioFileName}")" />
+                                            @if (item.TitleError != null)
+                                            {
+                                                <small class="text-danger d-block mt-1">@item.TitleError</small>
+                                            }
                                         }
                                         else
                                         {
@@ -224,7 +228,7 @@
                 {
                     <div class="d-flex gap-2 mt-2">
                         <SfButton CssClass="cta-primary" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
-                            Upload @_uploadItems.Count @(_uploadItems.Count == 1 ? "Song" : "Songs")
+                            Continue Upload
                         </SfButton>
                         <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
                     </div>

@@ -121,6 +121,82 @@ public class MusicUploadServiceTests
     }
 
     [Test]
+    public async Task PreValidatedPlayback_IsUsedWithoutTranscodingOrDecodingAgain()
+    {
+        // The upload page transcodes and decodes the whole batch up front to prove it is
+        // uploadable. Repeating either here doubled the FFmpeg work for every file.
+        var original = new byte[] { 82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69 };
+        var converted = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(original);
+        await using var playback = new MemoryStream(converted);
+        _music.Setup(service => service.IsMp3File("Night Drive.wav")).Returns(false);
+
+        var uploaded = new Dictionary<string, byte[]>();
+        _storage.Setup(service => service.UploadAsync(
+                It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns<string, Stream, string>(async (path, stream, _) =>
+            {
+                using var copy = new MemoryStream();
+                await stream.CopyToAsync(copy);
+                uploaded[path] = copy.ToArray();
+            });
+
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio,
+            "Night Drive.wav",
+            "Night Drive",
+            creatorId: 1,
+            validatedPlayback: playback,
+            validatedDuration: 42);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(uploaded[SongMediaPaths.Playback(result.MediaGuid)], Is.EqualTo(converted));
+            Assert.That(uploaded[SongMediaPaths.OriginalAudio(result.MediaGuid, ".wav")], Is.EqualTo(original));
+            Assert.That(result.TrackDuration, Is.EqualTo(42));
+        });
+        _music.Verify(service => service.ConvertToMp3Async(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IProgress<double>>()), Times.Never);
+        _music.Verify(service => service.ValidateAudioDecodeAsync(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public void PreValidatedPlaybackThatIsNotAnMp3_IsRejectedBeforeAnyWrite()
+    {
+        // A truncated or wrong hand-off must not reach storage just because the caller said so.
+        using var audio = new MemoryStream([82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69]);
+        using var playback = new MemoryStream([0, 1, 2, 3, 4, 5, 6, 7]);
+        _music.Setup(service => service.IsMp3File("Night Drive.wav")).Returns(false);
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.UploadMusicWithoutAlbumArtAsync(
+            audio,
+            "Night Drive.wav",
+            "Night Drive",
+            creatorId: 1,
+            validatedPlayback: playback,
+            validatedDuration: 42));
+
+        _storage.Verify(service => service.UploadAsync(
+            It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task WithoutAPreValidatedPlayback_TheServiceStillConvertsAndDecodesItself()
+    {
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        _music.Setup(service => service.IsMp3File("Boof.mp3")).Returns(true);
+
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio, "Boof.mp3", "Boof", creatorId: 1);
+
+        Assert.That(result.TrackDuration, Is.EqualTo(12.5));
+        _music.Verify(service => service.ValidateAudioDecodeAsync(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
     public async Task Mp3Upload_UsesOneBlobForOriginalAndPlayback()
     {
         var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
