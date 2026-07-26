@@ -138,6 +138,9 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IContactRequestAdminService ContactRequestAdminService { get; set; } = default!;
 
+    [Inject]
+    protected IStorageBackupService StorageBackupService { get; set; } = default!;
+
     // Ensure components can access the same scoped UserManager used by DI
     [Inject]
     protected UserManager<ApplicationUser> UserManager { get; set; } = default!;

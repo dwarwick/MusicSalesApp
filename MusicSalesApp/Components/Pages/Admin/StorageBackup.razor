@@ -1,0 +1,187 @@
+@page "/admin/storage-backup"
+@rendermode InteractiveServer
+@inherits StorageBackupModel
+@using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Helpers
+@using MusicSalesApp.Models
+@using Syncfusion.Blazor.DropDowns
+@using Syncfusion.Blazor.Grids
+@using Syncfusion.Blazor.ProgressBar
+@attribute [Authorize(Policy = Permissions.ManageUsers)]
+
+<PageTitle>Storage Backup</PageTitle>
+
+<div class="container-fluid my-4">
+
+    <h3>Storage Backup &amp; Restore</h3>
+
+    <div class="alert alert-info">
+        The media and persona-image containers are mirrored into <strong>backup-</strong> copies each night at 06:45 UTC.
+        Only new and changed files are copied. The Data Protection key ring is deliberately excluded — it is
+        regenerated automatically if lost and protects nothing that is stored permanently.
+        Hangfire remains the place to monitor execution, retries, and failures.
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    @if (_activeRun != null)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">
+                    @(_activeRun.Direction == StorageBackupDirection.Backup ? "Backup" : "Restore")
+                    in progress &mdash; run @_activeRun.Id (@_activeRun.Status)
+                </h5>
+
+                @foreach (var container in OrderedContainers(_activeRun))
+                {
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <strong>@ContainerLabel(container, _activeRun.Direction)</strong>
+                            <span>@ContainerCounts(container)</span>
+                        </div>
+                        <SfProgressBar Type="ProgressType.Linear"
+                                       Height="22"
+                                       Value="@PercentComplete(container)"
+                                       IsIndeterminate="@IsIndeterminate(container)"
+                                       ShowProgressValue="true">
+                        </SfProgressBar>
+                    </div>
+                }
+
+                <SfButton CssClass="e-outline" Disabled="@_busy" OnClick="CancelRunAsync">Cancel Run</SfButton>
+            </div>
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Actions</h5>
+            <div class="d-flex flex-wrap gap-2">
+                <SfButton CssClass="cta-primary" Disabled="@ActionsDisabled" OnClick="@(() => StartBackupAsync(false))">
+                    Run Backup Now
+                </SfButton>
+                <SfButton CssClass="e-outline" Disabled="@ActionsDisabled" OnClick="@(() => StartBackupAsync(true))">
+                    Force Full Re-copy
+                </SfButton>
+                <SfButton CssClass="e-danger" Disabled="@ActionsDisabled" OnClick="OpenRestoreDialog">
+                    Restore from Backup
+                </SfButton>
+                <SfButton CssClass="e-outline" OnClick="LoadAsync">Refresh</SfButton>
+            </div>
+            @if (_activeRun != null)
+            {
+                <p class="mt-2 mb-0 text-muted">Actions are unavailable while a run is active.</p>
+            }
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0">Run history</h4>
+    </div>
+
+    <SfGrid DataSource="@_runs" AllowPaging="true" AllowSorting="true">
+        <GridPageSettings PageSize="10"></GridPageSettings>
+        <GridColumns>
+            <GridColumn Field="@nameof(StorageBackupRun.Id)" HeaderText="Run" Width="80"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.Direction)" HeaderText="Direction" Width="110"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.TriggerSource)" HeaderText="Trigger" Width="100"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.Status)" HeaderText="Status" Width="150"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.CreatedAt)" HeaderText="Created" Format="g" Width="170"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.CopiedCount)" HeaderText="Copied" Width="90"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.SkippedCount)" HeaderText="Skipped" Width="90"></GridColumn>
+            <GridColumn Field="@nameof(StorageBackupRun.FailedCount)" HeaderText="Failed" Width="90"></GridColumn>
+            <GridColumn HeaderText="Copied" Width="110">
+                <Template Context="row">
+                    @{ var run = (StorageBackupRun)row; }
+                    @FormatBytes(run.CopiedBytes)
+                </Template>
+            </GridColumn>
+            <GridColumn HeaderText="Failures" Width="110">
+                <Template Context="row">
+                    @{ var run = (StorageBackupRun)row; }
+                    <SfButton CssClass="e-small e-outline" OnClick="@(() => ViewFailuresAsync(run.Id))">View</SfButton>
+                </Template>
+            </GridColumn>
+        </GridColumns>
+    </SfGrid>
+
+</div>
+
+<SfDialog @bind-Visible="_showRestoreDialog" Width="640px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Restore from backup</Header>
+        <Content>
+            <p>
+                Restore repairs missing or corrupted files. It does <strong>not</strong> roll the catalog back
+                to the backup date, and it never deletes anything.
+            </p>
+
+            <h6>Containers to restore</h6>
+            @foreach (var selection in ContainerSelections)
+            {
+                <div class="mb-2">
+                    <SfCheckBox @bind-Checked="selection.Selected" TChecked="bool" Label="@selection.Name"></SfCheckBox>
+                </div>
+            }
+
+            <h6 class="mt-3">What to replace</h6>
+            <SfDropDownList TValue="StorageRestoreScope" TItem="RestoreScopeOption"
+                            @bind-Value="_restoreScope" DataSource="@_restoreScopeOptions">
+                <DropDownListFieldSettings Value="Scope" Text="Name"></DropDownListFieldSettings>
+            </SfDropDownList>
+
+            @if (_restoreScope == StorageRestoreScope.MissingAndDiffering)
+            {
+                <div class="mt-2">
+                    <SfCheckBox @bind-Checked="_preserveNewerLive" TChecked="bool"
+                                Label="Do not overwrite live files that are newer than the backup"></SfCheckBox>
+                    <div class="text-muted small mt-1">
+                        Leave this unchecked to make the live containers match the backup exactly. Check it when
+                        repairing a single lost file so that unrelated newer uploads are not reverted.
+                    </div>
+                </div>
+            }
+
+            <h6 class="mt-3">Confirm</h6>
+            <p class="mb-1">Type <strong>RESTORE</strong> to enable the restore button.</p>
+            <SfTextBox CssClass="e-outline" @bind-Value="RestoreConfirmation" Placeholder="RESTORE"></SfTextBox>
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-outline" OnClick="@(() => _showRestoreDialog = false)">Cancel</SfButton>
+            <SfButton CssClass="e-danger" Disabled="@(!CanConfirmRestore)" OnClick="StartRestoreAsync">
+                Restore Selected Containers
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+<SfDialog @bind-Visible="_showFailuresDialog" Width="820px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Run @_failuresRunId failures</Header>
+        <Content>
+            @if (_failures.Count == 0)
+            {
+                <p>This run recorded no per-file failures.</p>
+            }
+            else
+            {
+                <SfGrid DataSource="@_failures" AllowPaging="true">
+                    <GridPageSettings PageSize="15"></GridPageSettings>
+                    <GridColumns>
+                        <GridColumn Field="@nameof(StorageBackupItemFailure.ContainerName)" HeaderText="Container" Width="160"></GridColumn>
+                        <GridColumn Field="@nameof(StorageBackupItemFailure.BlobName)" HeaderText="File" Width="260"></GridColumn>
+                        <GridColumn Field="@nameof(StorageBackupItemFailure.FailureCode)" HeaderText="Code" Width="140"></GridColumn>
+                        <GridColumn Field="@nameof(StorageBackupItemFailure.Diagnostic)" HeaderText="Diagnostic" Width="320"></GridColumn>
+                    </GridColumns>
+                </SfGrid>
+            }
+        </Content>
+        <FooterTemplate>
+            <SfButton CssClass="e-outline" OnClick="@(() => _showFailuresDialog = false)">Close</SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

@@ -28,6 +28,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<MediaIntegrityAuditRun> MediaIntegrityAuditRuns { get; set; }
     public DbSet<MediaIntegrityAuditItem> MediaIntegrityAuditItems { get; set; }
     public DbSet<MediaIntegrityAuditNotification> MediaIntegrityAuditNotifications { get; set; }
+    public DbSet<StorageBackupRun> StorageBackupRuns { get; set; }
+    public DbSet<StorageBackupContainerProgress> StorageBackupContainerProgresses { get; set; }
+    public DbSet<StorageBackupItemFailure> StorageBackupItemFailures { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
     public DbSet<UserHistory> UserHistories { get; set; }
@@ -452,6 +455,35 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                 notification.Recipient
             })
             .IsUnique();
+
+        builder.Entity<StorageBackupRun>()
+            .HasMany(run => run.Containers)
+            .WithOne(container => container.Run)
+            .HasForeignKey(container => container.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<StorageBackupRun>()
+            .HasMany(run => run.Failures)
+            .WithOne(failure => failure.Run)
+            .HasForeignKey(failure => failure.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Only one backup or restore may be active at a time; the filtered unique index makes
+        // this race-proof rather than relying on a read-then-write check.
+        builder.Entity<StorageBackupRun>()
+            .HasIndex(run => run.ActiveLockKey)
+            .IsUnique()
+            .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+        builder.Entity<StorageBackupRun>()
+            .HasIndex(run => run.CreatedAt);
+
+        builder.Entity<StorageBackupContainerProgress>()
+            .HasIndex(container => new { container.RunId, container.SourceContainerName })
+            .IsUnique();
+
+        builder.Entity<StorageBackupItemFailure>()
+            .HasIndex(failure => failure.RunId);
 
         // Configure SongStream entity
         builder.Entity<SongStream>()

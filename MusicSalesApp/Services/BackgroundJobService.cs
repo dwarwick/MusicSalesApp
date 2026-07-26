@@ -80,6 +80,15 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.SendPendingEmailsAsync(),
                 Cron.Daily(6));
 
+            // Nightly incremental backup of the Azure blob containers into their backup- copies.
+            // 06:45 UTC sits clear of every other daily job (0:00, 1:30, 2:00, 2:30, 3:00, 3:15,
+            // 4:00, 5:00, 5:30, 6:00) and of the hourly jobs, which fire on the hour.
+            // Restore is admin-triggered only and is deliberately never scheduled.
+            RecurringJob.AddOrUpdate<IStorageBackupService>(
+                HangfireJobIds.StorageBackup,
+                service => service.RunRecurringBackupAsync(),
+                "45 6 * * *");
+
             // Schedule nightly sitemap generation at 5 AM UTC
             // This runs after all other jobs to ensure sitemap reflects current state
             RecurringJob.AddOrUpdate<ISitemapService>(

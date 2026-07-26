@@ -73,6 +73,7 @@ public abstract class BUnitTestBase
     protected Mock<IAdminMessageService> MockAdminMessageService { get; private set; } = default!;
     protected Mock<IAdminMessageHubClient> MockAdminMessageHubClient { get; private set; } = default!;
     protected Mock<IContactRequestAdminService> MockContactRequestAdminService { get; private set; } = default!;
+    protected Mock<IStorageBackupService> MockStorageBackupService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -122,6 +123,11 @@ public abstract class BUnitTestBase
         MockAdminMessageService = new Mock<IAdminMessageService>();
         MockAdminMessageHubClient = new Mock<IAdminMessageHubClient>();
         MockContactRequestAdminService = new Mock<IContactRequestAdminService>();
+        MockStorageBackupService = new Mock<IStorageBackupService>();
+        MockStorageBackupService.Setup(service => service.GetRunsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.StorageBackupRun>());
+        MockStorageBackupService.Setup(service => service.GetConfiguredContainerNames())
+            .Returns(new[] { "musiccontainer", "persona-images" });
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         
@@ -499,6 +505,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAdminMessageService>(MockAdminMessageService.Object);
         TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);
         TestContext.Services.AddSingleton<IContactRequestAdminService>(MockContactRequestAdminService.Object);
+        TestContext.Services.AddSingleton<IStorageBackupService>(MockStorageBackupService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

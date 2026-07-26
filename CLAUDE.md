@@ -1,5 +1,12 @@
 # Claude Instructions
 
+## Working Branches
+
+- **Before editing any file**, check the current branch with `git rev-parse --abbrev-ref HEAD`.
+- If it is `master`, create and switch to a working branch **first** — do not start editing and branch later.
+- Use task-based names such as `work/azure-storage-backup-restore`.
+- Never make code edits on `master` unless the user explicitly asks for that.
+
 ## Git Commits
 
 - Do not assume the user wants changes committed.
