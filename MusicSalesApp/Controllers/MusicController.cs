@@ -24,6 +24,8 @@ namespace MusicSalesApp.Controllers
         private readonly IAppSettingsService _appSettingsService;
         private readonly IMobileSongMapper _songMapper;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ICreatorService _creatorService;
+        private readonly IAuthorizationService _authorizationService;
         private readonly ILogger<MusicController> _logger;
 
         public MusicController(
@@ -37,8 +39,12 @@ namespace MusicSalesApp.Controllers
             IAppSettingsService appSettingsService,
             IMobileSongMapper songMapper,
             UserManager<ApplicationUser> userManager,
+            ICreatorService creatorService,
+            IAuthorizationService authorizationService,
             ILogger<MusicController> logger)
         {
+            _creatorService = creatorService;
+            _authorizationService = authorizationService;
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
@@ -183,19 +189,19 @@ namespace MusicSalesApp.Controllers
         }
 
         /// <summary>
-        /// Accepts a cropped image upload (as a binary blob from canvas) and stores it in Azure Blob Storage.
-        /// The target blob path is supplied via query string. Only authenticated users may call this.
+        /// Accepts a cropped cover-art upload (as a binary blob from canvas) and stores it in
+        /// Azure Blob Storage.
+        ///
+        /// The destination is derived from the song's own record rather than supplied by the
+        /// caller, so an authenticated user cannot write to an arbitrary blob path. Callers must
+        /// either hold the song-management permission or own the song.
         /// </summary>
         [HttpPost("upload-cropped-image")]
         [Microsoft.AspNetCore.Authorization.Authorize]
-        public async Task<IActionResult> UploadCroppedImage([FromQuery] string blobPath)
+        public async Task<IActionResult> UploadCroppedImage([FromQuery] int songMetadataId)
         {
-            if (string.IsNullOrWhiteSpace(blobPath))
-                return BadRequest(new { error = "blobPath is required" });
-
-            // Reject path traversal
-            if (blobPath.Contains("..") || blobPath.Contains("~"))
-                return BadRequest(new { error = "Invalid blobPath" });
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "songMetadataId is required" });
 
             if (Request.ContentLength == null || Request.ContentLength == 0)
                 return BadRequest(new { error = "No image data provided" });
@@ -203,6 +209,25 @@ namespace MusicSalesApp.Controllers
             // Max 10 MB
             if (Request.ContentLength > 10 * 1024 * 1024)
                 return BadRequest(new { error = "Image too large" });
+
+            var song = await _songMetadataService.GetByIdAsync(songMetadataId);
+            if (song == null)
+                return NotFound(new { error = "Song not found" });
+
+            if (!await CanManageSongAsync(song))
+                return Forbid();
+
+            var blobPath = SongMediaPaths.ResolveCoverArtTarget(
+                song.MediaGuid,
+                song.ImageBlobPath,
+                song.Mp3BlobPath,
+                SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath),
+                ".png");
+
+            // Defence in depth: the path is server-derived, but the legacy branch still
+            // interpolates stored values.
+            if (string.IsNullOrWhiteSpace(blobPath) || blobPath.Contains("..") || blobPath.Contains("~"))
+                return BadRequest(new { error = "Invalid destination for this song" });
 
             // Buffer into a MemoryStream because Request.Body is non-seekable and
             // does not support .Length (AzureStorageService logs data.Length after upload).
@@ -212,6 +237,30 @@ namespace MusicSalesApp.Controllers
 
             await _storageService.UploadAsync(blobPath, ms, "image/png");
             return Ok(new { blobPath });
+        }
+
+        /// <summary>
+        /// Whether the current user may replace this song's cover art: admins and song managers
+        /// may edit any song, creators only their own.
+        /// </summary>
+        private async Task<bool> CanManageSongAsync(SongMetadata song)
+        {
+            if (User.IsInRole("Admin")
+                || (await _authorizationService.AuthorizeAsync(User, Permissions.ManageSongs)).Succeeded
+                || (await _authorizationService.AuthorizeAsync(User, Permissions.ManageAllCreatorSongs)).Succeeded)
+            {
+                return true;
+            }
+
+            if (song.CreatorId == null)
+                return false;
+
+            // Read the id from the principal's claims rather than loading the whole user row.
+            if (!int.TryParse(_userManager.GetUserId(User), out var userId))
+                return false;
+
+            var creatorId = await _creatorService.GetCreatorIdForUserAsync(userId);
+            return creatorId != null && creatorId == song.CreatorId;
         }
 
         /// <summary>

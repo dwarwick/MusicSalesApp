@@ -685,7 +685,10 @@ public class CreatorService : ICreatorService
                 song.OriginalAudioBlobPath,
                 song.Mp3BlobPath,
                 song.ImageBlobPath,
-                song.BlobPath
+                song.OriginalCoverArtBlobPath,
+                song.BlobPath,
+                // Derived rather than stored, and previously leaked on every delete.
+                SongMediaPaths.FacebookImageFor(song.ImageBlobPath)
             }
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase);

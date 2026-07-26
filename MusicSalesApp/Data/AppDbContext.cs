@@ -421,6 +421,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
                     "[Mp3BlobPath] IS NULL OR ([SongTitle] IS NOT NULL AND LTRIM(RTRIM([SongTitle])) <> '')"));
         }
 
+        // Every legacy song has a NULL MediaGuid. SQL Server treats NULLs as equal in a unique
+        // index and would allow only one such row, so the index has to be filtered to the rows
+        // that actually carry a GUID. SQLite already permits repeated NULLs, so it needs no filter.
+        var mediaGuidIndex = builder.Entity<SongMetadata>()
+            .HasIndex(song => song.MediaGuid)
+            .IsUnique();
+        if (Database.IsSqlServer())
+        {
+            mediaGuidIndex.HasFilter("[MediaGuid] IS NOT NULL");
+        }
+
         builder.Entity<MediaIntegrityAuditRun>()
             .HasMany(run => run.Items)
             .WithOne(item => item.AuditRun)

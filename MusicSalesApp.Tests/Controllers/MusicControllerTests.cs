@@ -23,6 +23,8 @@ public class MusicControllerTests
     private Mock<IAppSettingsService> _mockAppSettingsService;
     private IMobileSongMapper _songMapper;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
+    private Mock<ICreatorService> _mockCreatorService;
+    private Mock<Microsoft.AspNetCore.Authorization.IAuthorizationService> _mockAuthorizationService;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
 
@@ -52,7 +54,13 @@ public class MusicControllerTests
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
             userStoreMock.Object, null, null, null, null, null, null, null, null);
-        
+
+        _mockCreatorService = new Mock<ICreatorService>();
+        _mockAuthorizationService = new Mock<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+        _mockAuthorizationService.Setup(service => service.AuthorizeAsync(
+                It.IsAny<System.Security.Claims.ClaimsPrincipal>(), It.IsAny<object>(), It.IsAny<string>()))
+            .ReturnsAsync(Microsoft.AspNetCore.Authorization.AuthorizationResult.Failed());
+
         _controller = new MusicController(
             _mockStorageService.Object,
             _mockSubscriptionService.Object,
@@ -64,6 +72,8 @@ public class MusicControllerTests
             _mockAppSettingsService.Object,
             _songMapper,
             _mockUserManager.Object,
+            _mockCreatorService.Object,
+            _mockAuthorizationService.Object,
             _mockLogger.Object);
 
         // Set up HttpContext for controller (required for Response.Headers access)
@@ -73,6 +83,122 @@ public class MusicControllerTests
         };
     }
     
+    #region UploadCroppedImage
+
+    private void GivenCroppedImageRequest(SongMetadata song, bool isAdmin)
+    {
+        _mockSongMetadataService.Setup(s => s.GetByIdAsync(song.Id)).ReturnsAsync(song);
+
+        var identity = isAdmin
+            ? new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "Admin")],
+                "test")
+            : new System.Security.Claims.ClaimsIdentity("test");
+
+        var context = new DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal(identity) };
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("cropped-png-bytes"));
+        context.Request.ContentLength = 17;
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+    }
+
+    [Test]
+    public async Task UploadCroppedImage_DerivesTheDestinationFromTheSongRatherThanTheCaller()
+    {
+        var mediaGuid = Guid.NewGuid();
+        var song = new SongMetadata
+        {
+            Id = 42,
+            MediaGuid = mediaGuid,
+            SongTitle = "Night Drive",
+            Mp3BlobPath = Common.Helpers.SongMediaPaths.Playback(mediaGuid),
+            ImageBlobPath = Common.Helpers.SongMediaPaths.CoverArt(mediaGuid, ".jpg")
+        };
+        GivenCroppedImageRequest(song, isAdmin: true);
+
+        var result = await _controller.UploadCroppedImage(42);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockStorageService.Verify(s => s.UploadAsync(
+            Common.Helpers.SongMediaPaths.CoverArt(mediaGuid, ".png"),
+            It.IsAny<Stream>(),
+            "image/png"), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadCroppedImage_LegacySong_KeepsTheHistoricalDestination()
+    {
+        var song = new SongMetadata
+        {
+            Id = 43,
+            SongTitle = "Night Drive",
+            Mp3BlobPath = "Night Drive/Night Drive.mp3",
+            ImageBlobPath = "Night Drive/Night Drive.jpg"
+        };
+        GivenCroppedImageRequest(song, isAdmin: true);
+
+        await _controller.UploadCroppedImage(43);
+
+        _mockStorageService.Verify(s => s.UploadAsync(
+            "Night Drive/Night Drive.png", It.IsAny<Stream>(), "image/png"), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadCroppedImage_CallerWhoDoesNotOwnTheSong_IsForbiddenAndWritesNothing()
+    {
+        var song = new SongMetadata
+        {
+            Id = 44,
+            SongTitle = "Night Drive",
+            CreatorId = 99,
+            Mp3BlobPath = "Night Drive/Night Drive.mp3"
+        };
+        GivenCroppedImageRequest(song, isAdmin: false);
+        _mockUserManager.Setup(m => m.GetUserId(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .Returns("5");
+        _mockCreatorService.Setup(s => s.GetCreatorIdForUserAsync(5)).ReturnsAsync(7);
+
+        var result = await _controller.UploadCroppedImage(44);
+
+        Assert.That(result, Is.InstanceOf<ForbidResult>());
+        _mockStorageService.Verify(s => s.UploadAsync(
+            It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UploadCroppedImage_OwningCreator_IsAllowed()
+    {
+        var song = new SongMetadata
+        {
+            Id = 45,
+            SongTitle = "Night Drive",
+            CreatorId = 7,
+            Mp3BlobPath = "Night Drive/Night Drive.mp3"
+        };
+        GivenCroppedImageRequest(song, isAdmin: false);
+        _mockUserManager.Setup(m => m.GetUserId(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .Returns("5");
+        _mockCreatorService.Setup(s => s.GetCreatorIdForUserAsync(5)).ReturnsAsync(7);
+
+        var result = await _controller.UploadCroppedImage(45);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public async Task UploadCroppedImage_UnknownSong_ReturnsNotFound()
+    {
+        _mockSongMetadataService.Setup(s => s.GetByIdAsync(999)).ReturnsAsync((SongMetadata)null);
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        _controller.HttpContext.Request.ContentLength = 10;
+        _controller.HttpContext.Request.Body = new MemoryStream([1, 2, 3]);
+
+        var result = await _controller.UploadCroppedImage(999);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    #endregion
+
     [Test]
     public async Task Stream_WithValidFile_ReturnsFileResult()
     {

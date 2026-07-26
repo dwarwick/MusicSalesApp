@@ -300,19 +300,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                     });
                 }
                 
-                // Add image file if present (separate from MP3)
-                if (!string.IsNullOrEmpty(meta.ImageBlobPath))
-                {
-                    allFiles.Add(new StorageFileInfo
-                    {
-                        Name = meta.ImageBlobPath,
-                        Length = 0, // Not needed for display
-                        ContentType = GetContentTypeFromPath(meta.ImageBlobPath),
-                        LastModified = meta.UpdatedAt,
-                        Tags = new Dictionary<string, string>() // No longer using tags
-                    });
-                }
-                
+                // Cover art is no longer added here: it is read straight off the song's row via
+                // artByAudioPath below, so a parallel list of image entries has no consumer.
+
                 // Add legacy BlobPath if neither Mp3BlobPath nor ImageBlobPath is set
                 if (string.IsNullOrEmpty(meta.Mp3BlobPath) && string.IsNullOrEmpty(meta.ImageBlobPath) && !string.IsNullOrEmpty(meta.BlobPath))
                 {
@@ -332,24 +322,17 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 m => m.Mp3BlobPath ?? m.ImageBlobPath ?? m.BlobPath, 
                 m => m);
             
-            // Get all audio files
-            var audioFiles = allFiles.Where(f => MusicFileExtensions.IsAudioFile(f.Name)).ToList();
-            
-            // Get all image files
-            var imageFiles = allFiles.Where(f => IsImageFile(f.Name)).ToList();
+            // Get all audio files. They are all standalone tracks.
+            _files = allFiles.Where(f => MusicFileExtensions.IsAudioFile(f.Name)).ToList();
 
-            // All audio files are standalone tracks
-            _files = audioFiles.ToList();
-
-            // Pre-compute image file lookup for faster art matching
-            var imageFilesLookup = imageFiles
-                .Select(f => new
-                {
-                    File = f,
-                    BaseName = Path.GetFileNameWithoutExtension(Path.GetFileName(f.Name)).ToLowerInvariant(),
-                    Folder = (Path.GetDirectoryName(f.Name)?.Replace("\\", "/") ?? "").ToLowerInvariant()
-                })
-                .ToLookup(x => (x.BaseName, x.Folder));
+            // Cover art belongs to a song by database row, not by sharing a filename with the
+            // audio. Matching on the base name would break the moment the two stop agreeing
+            // (as they do under the GUID scheme, "{guid}-music" vs "{guid}-coverart") and could
+            // previously cross-match a different song whose file happened to share a name.
+            var artByAudioPath = allMetadata
+                .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath) && !string.IsNullOrEmpty(m.ImageBlobPath))
+                .GroupBy(m => m.Mp3BlobPath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             // Clear home page songs tracking
             _homePageSongs.Clear();
@@ -361,23 +344,14 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Build song art URL mappings and extract metadata for tracks
             foreach (var audioFile in _files)
             {
-                var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(audioFile.Name)).ToLowerInvariant();
-                var folder = (Path.GetDirectoryName(audioFile.Name)?.Replace("\\", "/") ?? "").ToLowerInvariant();
-                
-                var artFile = imageFilesLookup[(baseName, folder)].FirstOrDefault()?.File;
-                if (artFile != null)
+                if (artByAudioPath.TryGetValue(audioFile.Name, out var artMetadata))
                 {
-                    // Check metadata for image dimensions - only show square images
-                    var artMetadata = allMetadata.FirstOrDefault(m =>
-                        !string.IsNullOrEmpty(m.ImageBlobPath) &&
-                        m.ImageBlobPath.Equals(artFile.Name, StringComparison.OrdinalIgnoreCase));
-                    
                     // Unknown dimensions (null) - show image (graceful degradation)
-                    var isSquare = artMetadata?.IsImageSquare ?? true;
-                    
+                    var isSquare = artMetadata.IsImageSquare ?? true;
+
                     if (isSquare)
                     {
-                        _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artFile.Name)}";
+                        _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}";
                     }
                 }
                 

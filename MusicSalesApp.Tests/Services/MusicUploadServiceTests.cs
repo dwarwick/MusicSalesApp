@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using SkiaSharp;
@@ -48,30 +49,151 @@ public class MusicUploadServiceTests
     }
 
     [Test]
-    public async Task InvalidFilename_PerformsNoWrites()
+    public void BlankTitle_PerformsNoWrites()
     {
-        await using var audio = new MemoryStream([1, 2, 3]);
+        using var audio = new MemoryStream([1, 2, 3]);
         Assert.ThrowsAsync<InvalidDataException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Bad__Name.wav", creatorId: 1));
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Night Drive.wav", "   ", creatorId: 1));
         _storage.Verify(service => service.UploadAsync(
             It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
         _metadata.Verify(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()), Times.Never);
     }
 
     [Test]
-    public async Task UnderscoreFilename_RetainsBlobNameAndStoresTitleWithSpaces()
+    public void TitleOverMaxLength_PerformsNoWrites()
+    {
+        using var audio = new MemoryStream([1, 2, 3]);
+        Assert.ThrowsAsync<InvalidDataException>(() =>
+            _service.UploadMusicWithoutAlbumArtAsync(
+                audio, "Night Drive.wav", new string('a', 201), creatorId: 1));
+        _storage.Verify(service => service.UploadAsync(
+            It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public void UnsupportedExtension_PerformsNoWrites()
+    {
+        using var audio = new MemoryStream([1, 2, 3]);
+        Assert.ThrowsAsync<InvalidDataException>(() =>
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "notes.txt", "Notes", creatorId: 1));
+        _storage.Verify(service => service.UploadAsync(
+            It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UnconventionalFilename_IsAcceptedAndStoredUnderGuidPaths()
+    {
+        // The whole point of the change: a filename that the old character whitelist rejected
+        // outright now uploads fine, because it never becomes a storage path.
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        const string fileName = "my song's @ mix v1.2 (remix)!.mp3";
+        _music.Setup(service => service.IsMp3File(fileName)).Returns(true);
+
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio, fileName, "My Song's @ Mix v1.2 (Remix)!", creatorId: 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.MediaGuid, Is.Not.EqualTo(Guid.Empty));
+            Assert.That(result.Mp3BlobPath, Is.EqualTo(SongMediaPaths.Playback(result.MediaGuid)));
+            Assert.That(result.Mp3BlobPath, Does.StartWith(SongMediaPaths.Folder(result.MediaGuid) + "/"));
+        });
+        _metadata.Verify(service => service.UpsertValidatedUploadAsync(
+            It.Is<SongMetadata>(item => item.SongTitle == "My Song's @ Mix v1.2 (Remix)!"
+                && item.OriginalAudioFileName == fileName
+                && item.MediaGuid == result.MediaGuid)), Times.Once);
+    }
+
+    [Test]
+    public async Task SuppliedTitle_IsStoredVerbatimAndIgnoresFilename()
     {
         var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
         await using var audio = new MemoryStream(bytes);
         _music.Setup(service => service.IsMp3File("Night_Drive.mp3")).Returns(true);
 
-        var result = await _service.UploadMusicWithoutAlbumArtAsync(
-            audio, "Night_Drive.mp3", creatorId: 1);
+        await _service.UploadMusicWithoutAlbumArtAsync(
+            audio, "Night_Drive.mp3", "Something Else Entirely", creatorId: 1);
 
-        Assert.That(result.Mp3BlobPath, Is.EqualTo("Night_Drive/Night_Drive.mp3"));
         _metadata.Verify(service => service.UpsertValidatedUploadAsync(
-            It.Is<SongMetadata>(item => item.SongTitle == "Night Drive"
+            It.Is<SongMetadata>(item => item.SongTitle == "Something Else Entirely"
                 && item.OriginalAudioFileName == "Night_Drive.mp3")), Times.Once);
+    }
+
+    [Test]
+    public async Task PreValidatedPlayback_IsUsedWithoutTranscodingOrDecodingAgain()
+    {
+        // The upload page transcodes and decodes the whole batch up front to prove it is
+        // uploadable. Repeating either here doubled the FFmpeg work for every file.
+        var original = new byte[] { 82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69 };
+        var converted = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(original);
+        await using var playback = new MemoryStream(converted);
+        _music.Setup(service => service.IsMp3File("Night Drive.wav")).Returns(false);
+
+        var uploaded = new Dictionary<string, byte[]>();
+        _storage.Setup(service => service.UploadAsync(
+                It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns<string, Stream, string>(async (path, stream, _) =>
+            {
+                using var copy = new MemoryStream();
+                await stream.CopyToAsync(copy);
+                uploaded[path] = copy.ToArray();
+            });
+
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio,
+            "Night Drive.wav",
+            "Night Drive",
+            creatorId: 1,
+            validatedPlayback: playback,
+            validatedDuration: 42);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(uploaded[SongMediaPaths.Playback(result.MediaGuid)], Is.EqualTo(converted));
+            Assert.That(uploaded[SongMediaPaths.OriginalAudio(result.MediaGuid, ".wav")], Is.EqualTo(original));
+            Assert.That(result.TrackDuration, Is.EqualTo(42));
+        });
+        _music.Verify(service => service.ConvertToMp3Async(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<IProgress<double>>()), Times.Never);
+        _music.Verify(service => service.ValidateAudioDecodeAsync(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public void PreValidatedPlaybackThatIsNotAnMp3_IsRejectedBeforeAnyWrite()
+    {
+        // A truncated or wrong hand-off must not reach storage just because the caller said so.
+        using var audio = new MemoryStream([82, 73, 70, 70, 4, 0, 0, 0, 87, 65, 86, 69]);
+        using var playback = new MemoryStream([0, 1, 2, 3, 4, 5, 6, 7]);
+        _music.Setup(service => service.IsMp3File("Night Drive.wav")).Returns(false);
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.UploadMusicWithoutAlbumArtAsync(
+            audio,
+            "Night Drive.wav",
+            "Night Drive",
+            creatorId: 1,
+            validatedPlayback: playback,
+            validatedDuration: 42));
+
+        _storage.Verify(service => service.UploadAsync(
+            It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task WithoutAPreValidatedPlayback_TheServiceStillConvertsAndDecodesItself()
+    {
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        _music.Setup(service => service.IsMp3File("Boof.mp3")).Returns(true);
+
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio, "Boof.mp3", "Boof", creatorId: 1);
+
+        Assert.That(result.TrackDuration, Is.EqualTo(12.5));
+        _music.Verify(service => service.ValidateAudioDecodeAsync(
+            It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Test]
@@ -82,16 +204,16 @@ public class MusicUploadServiceTests
         _music.Setup(service => service.IsMp3File("Boof.mp3")).Returns(true);
 
         var result = await _service.UploadMusicWithoutAlbumArtAsync(
-            audio, "Boof.mp3", creatorId: 109);
+            audio, "Boof.mp3", "Boof", creatorId: 109);
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.OriginalAudioBlobPath, Is.EqualTo("Boof/Boof.mp3"));
-            Assert.That(result.Mp3BlobPath, Is.EqualTo("Boof/Boof.mp3"));
+            Assert.That(result.Mp3BlobPath, Is.EqualTo(SongMediaPaths.Playback(result.MediaGuid)));
+            Assert.That(result.OriginalAudioBlobPath, Is.EqualTo(result.Mp3BlobPath));
             Assert.That(result.OriginalAudioFileSize, Is.EqualTo(bytes.Length));
         });
         _storage.Verify(service => service.UploadAsync(
-            "Boof/Boof.mp3", It.IsAny<Stream>(), "audio/mpeg"), Times.Once);
+            result.Mp3BlobPath, It.IsAny<Stream>(), "audio/mpeg"), Times.Once);
         _metadata.Verify(service => service.UpsertValidatedUploadAsync(
             It.Is<SongMetadata>(item => item.SongTitle == "Boof"
                 && item.OriginalAudioBlobPath == item.Mp3BlobPath
@@ -123,12 +245,12 @@ public class MusicUploadServiceTests
             });
 
         var result = await _service.UploadMusicWithoutAlbumArtAsync(
-            audio, "Night Drive.wav", creatorId: 1);
+            audio, "Night Drive.wav", "Night Drive", creatorId: 1);
 
         Assert.Multiple(() =>
         {
-            Assert.That(uploaded["Night Drive/Night Drive.wav"], Is.EqualTo(original));
-            Assert.That(uploaded["Night Drive/Night Drive.mp3"], Is.EqualTo(converted));
+            Assert.That(uploaded[SongMediaPaths.OriginalAudio(result.MediaGuid, ".wav")], Is.EqualTo(original));
+            Assert.That(uploaded[SongMediaPaths.Playback(result.MediaGuid)], Is.EqualTo(converted));
             Assert.That(result.OriginalAudioContentType, Is.EqualTo("audio/wav"));
         });
     }
@@ -155,7 +277,7 @@ public class MusicUploadServiceTests
             });
         byte[] uploaded = null;
         _storage.Setup(service => service.UploadAsync(
-                "Closed Stream/Closed Stream.mp3", It.IsAny<Stream>(), "audio/mpeg"))
+                It.IsAny<string>(), It.IsAny<Stream>(), "audio/mpeg"))
             .Returns<string, Stream, string>(async (_, uploadStream, _) =>
             {
                 using var copy = new MemoryStream();
@@ -166,6 +288,7 @@ public class MusicUploadServiceTests
         var result = await _service.UploadMusicWithoutAlbumArtAsync(
             audio,
             "Closed Stream.mp3",
+            "Closed Stream",
             creatorId: 1);
 
         Assert.Multiple(() =>
@@ -184,10 +307,25 @@ public class MusicUploadServiceTests
         _metadata.Setup(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()))
             .ThrowsAsync(new InvalidOperationException("database unavailable"));
 
-        Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", creatorId: 1));
+        // The GUID is minted inside the call and never returned when it throws, so capture the
+        // paths that were actually written and assert each one is rolled back.
+        var written = new List<string>();
+        _storage.Setup(service => service.UploadAsync(
+                It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns<string, Stream, string>((path, _, _) =>
+            {
+                written.Add(path);
+                return Task.CompletedTask;
+            });
 
-        _storage.Verify(service => service.DeleteAsync("Song/Song.mp3"), Times.Once);
+        Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", "Song", creatorId: 1));
+
+        Assert.That(written, Is.Not.Empty);
+        foreach (var path in written.Distinct())
+        {
+            _storage.Verify(service => service.DeleteAsync(path), Times.Once);
+        }
     }
 
     [Test]
@@ -200,7 +338,7 @@ public class MusicUploadServiceTests
             .ThrowsAsync(new InvalidDataException("decoder failed"));
 
         Assert.ThrowsAsync<InvalidDataException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.wav", creatorId: 1));
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.wav", "Song", creatorId: 1));
         _storage.Verify(service => service.EnsureContainerExistsAsync(), Times.Never);
         _metadata.Verify(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()), Times.Never);
     }
@@ -271,11 +409,11 @@ public class MusicUploadServiceTests
         Assert.Multiple(() =>
         {
             Assert.ThrowsAsync<ArgumentNullException>(() => _service.UploadMusicWithAlbumArtAsync(
-                null, "Song.mp3", image, "Song.png", creatorId: 1));
+                null, "Song.mp3", image, "Song.png", "Song", creatorId: 1));
             Assert.ThrowsAsync<InvalidDataException>(() => _service.UploadMusicWithAlbumArtAsync(
-                audio, "", image, "Song.png", creatorId: 1));
+                audio, "", image, "Song.png", "Song", creatorId: 1));
             Assert.ThrowsAsync<InvalidDataException>(() => _service.UploadMusicWithAlbumArtAsync(
-                audio, "Song.mp3", image, "", creatorId: 1));
+                audio, "Song.mp3", image, "", "Song", creatorId: 1));
         });
         _storage.Verify(service => service.UploadAsync(
             It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()), Times.Never);
@@ -325,16 +463,17 @@ public class MusicUploadServiceTests
         await using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
         _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
         _metadata.Setup(service => service.ValidateUploadTargetAsync(
-                "Song/Song.mp3", "Song/Song.mp3", null, 1))
+                It.IsAny<string>(), It.IsAny<string>(), null, 1))
             .ReturnsAsync(new SongMetadata { OriginalAudioBlobPath = "Song/Song.wav" });
         _storage.Setup(service => service.DeleteAsync("Song/Song.wav"))
             .ThrowsAsync(new InvalidOperationException("blob under lease"));
 
-        var result = await _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", creatorId: 1);
+        var result = await _service.UploadMusicWithoutAlbumArtAsync(
+            audio, "Song.mp3", "Song", creatorId: 1);
 
-        Assert.That(result.Mp3BlobPath, Is.EqualTo("Song/Song.mp3"));
+        Assert.That(result.Mp3BlobPath, Is.EqualTo(SongMediaPaths.Playback(result.MediaGuid)));
         _metadata.Verify(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()), Times.Once);
-        _storage.Verify(service => service.DeleteAsync("Song/Song.mp3"), Times.Never);
+        _storage.Verify(service => service.DeleteAsync(result.Mp3BlobPath), Times.Never);
     }
 
     [Test]
@@ -349,14 +488,73 @@ public class MusicUploadServiceTests
 
         _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
         _metadata.Setup(service => service.ValidateUploadTargetAsync(
-                "Song/Song.mp3", "Song/Song.mp3", "Song/Song.png", 1))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), 1))
             .ReturnsAsync(new SongMetadata { ImageBlobPath = "Song/Song.jpg" });
 
         var result = await _service.UploadMusicWithAlbumArtAsync(
-            audio, "Song.mp3", image, "Song.png", creatorId: 1);
+            audio, "Song.mp3", image, "Song.png", "Song", creatorId: 1);
 
-        Assert.That(result.ImageBlobPath, Is.EqualTo("Song/Song.png"));
+        Assert.That(result.ImageBlobPath, Is.EqualTo(SongMediaPaths.CoverArt(result.MediaGuid, ".png")));
         _storage.Verify(service => service.DeleteAsync("Song/Song.jpg"), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadWithCoverArt_RetainsTheCreatorsOriginalAlongsideTheServedCopy()
+    {
+        await using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
+        using var bitmap = new SKBitmap(2, 2);
+        bitmap.Erase(SKColors.Blue);
+        using var skImage = SKImage.FromBitmap(bitmap);
+        using var pngData = skImage.Encode(SKEncodedImageFormat.Png, 100);
+        var imageBytes = pngData.ToArray();
+        await using var image = new MemoryStream(imageBytes);
+
+        _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
+        var uploaded = new Dictionary<string, byte[]>();
+        _storage.Setup(service => service.UploadAsync(
+                It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns<string, Stream, string>(async (path, stream, _) =>
+            {
+                using var copy = new MemoryStream();
+                await stream.CopyToAsync(copy);
+                uploaded[path] = copy.ToArray();
+            });
+
+        var result = await _service.UploadMusicWithAlbumArtAsync(
+            audio, "Song.mp3", image, "my art v1.2!.png", "Song", creatorId: 1);
+
+        var servedPath = SongMediaPaths.CoverArt(result.MediaGuid, ".png");
+        var originalPath = SongMediaPaths.OriginalCoverArt(result.MediaGuid, ".png");
+        Assert.Multiple(() =>
+        {
+            Assert.That(uploaded[servedPath], Is.EqualTo(imageBytes));
+            Assert.That(uploaded[originalPath], Is.EqualTo(imageBytes));
+            Assert.That(result.OriginalCoverArtBlobPath, Is.EqualTo(originalPath));
+        });
+        _metadata.Verify(service => service.UpsertValidatedUploadAsync(
+            It.Is<SongMetadata>(item => item.OriginalCoverArtBlobPath == originalPath
+                && item.OriginalCoverArtFileName == "my art v1.2!.png")), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadWithCoverArt_GeneratesTheSharingImageWithoutAWastedInvalidation()
+    {
+        await using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
+        using var bitmap = new SKBitmap(2, 2);
+        bitmap.Erase(SKColors.Red);
+        using var skImage = SKImage.FromBitmap(bitmap);
+        using var pngData = skImage.Encode(SKEncodedImageFormat.Png, 100);
+        await using var image = new MemoryStream(pngData.ToArray());
+        _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
+
+        var result = await _service.UploadMusicWithAlbumArtAsync(
+            audio, "Song.mp3", image, "Song.png", "Song", creatorId: 1);
+
+        var coverArtPath = SongMediaPaths.CoverArt(result.MediaGuid, ".png");
+        _openGraph.Verify(service => service.PreGenerateFacebookImageAsync(coverArtPath), Times.Once);
+        // The GUID folder is brand new, so there is no stale sharing image to delete.
+        _openGraph.Verify(
+            service => service.InvalidateFacebookImageAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -369,7 +567,7 @@ public class MusicUploadServiceTests
             .ReturnsAsync(AudioDecodeResult.Inconclusive("FfmpegUnavailable", "FFmpeg was not found."));
 
         var exception = Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", creatorId: 1));
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", "Song", creatorId: 1));
 
         Assert.That(exception!.Message, Does.Contain("decoder was unavailable").IgnoreCase);
         _storage.Verify(service => service.EnsureContainerExistsAsync(), Times.Never);
@@ -384,11 +582,11 @@ public class MusicUploadServiceTests
         await using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
         _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
         _metadata.Setup(service => service.ValidateUploadTargetAsync(
-                "Song/Song.mp3", "Song/Song.mp3", null, 7))
+                It.IsAny<string>(), It.IsAny<string>(), null, 7))
             .ThrowsAsync(new UnauthorizedAccessException("belongs to another creator"));
 
         Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", creatorId: 7));
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", "Song", creatorId: 7));
 
         _storage.Verify(service => service.EnsureContainerExistsAsync(), Times.Never);
         _storage.Verify(service => service.UploadAsync(
@@ -402,39 +600,43 @@ public class MusicUploadServiceTests
         var existing = new byte[] { (byte)'I', (byte)'D', (byte)'3', 1, 2, 3 };
         await using var audio = new MemoryStream(incoming);
         _music.Setup(service => service.IsMp3File("Song.mp3")).Returns(true);
-        _storage.Setup(service => service.ExistsAsync("Song/Song.mp3")).ReturnsAsync(true);
-        _storage.Setup(service => service.GetFileInfoAsync("Song/Song.mp3"))
-            .ReturnsAsync(new StorageFileInfo
+        // The destination GUID is minted inside the call, so pretend every target already holds
+        // a blob that has to be snapshotted and restored.
+        _storage.Setup(service => service.ExistsAsync(It.IsAny<string>())).ReturnsAsync(true);
+        _storage.Setup(service => service.GetFileInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync((string path) => new StorageFileInfo
             {
-                Name = "Song/Song.mp3",
+                Name = path,
                 Length = existing.Length,
                 ContentType = "audio/legacy"
             });
-        _storage.Setup(service => service.OpenReadAsync("Song/Song.mp3"))
+        _storage.Setup(service => service.OpenReadAsync(It.IsAny<string>()))
             .ReturnsAsync(() => new MemoryStream(existing));
         _metadata.Setup(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()))
             .ThrowsAsync(new InvalidOperationException("database unavailable"));
-        var uploads = new List<(byte[] Bytes, string ContentType)>();
+        var uploads = new List<(string Path, byte[] Bytes, string ContentType)>();
         _storage.Setup(service => service.UploadAsync(
-                "Song/Song.mp3", It.IsAny<Stream>(), It.IsAny<string>()))
-            .Returns<string, Stream, string>(async (_, stream, contentType) =>
+                It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>()))
+            .Returns<string, Stream, string>(async (path, stream, contentType) =>
             {
                 using var copy = new MemoryStream();
                 await stream.CopyToAsync(copy);
-                uploads.Add((copy.ToArray(), contentType));
+                uploads.Add((path, copy.ToArray(), contentType));
             });
 
         Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", creatorId: 1));
+            _service.UploadMusicWithoutAlbumArtAsync(audio, "Song.mp3", "Song", creatorId: 1));
 
         Assert.Multiple(() =>
         {
             Assert.That(uploads, Has.Count.EqualTo(2));
             Assert.That(uploads[0].Bytes, Is.EqualTo(incoming));
             Assert.That(uploads[0].ContentType, Is.EqualTo("audio/mpeg"));
+            // The rollback restores the pre-existing bytes and content type to the same path.
+            Assert.That(uploads[1].Path, Is.EqualTo(uploads[0].Path));
             Assert.That(uploads[1].Bytes, Is.EqualTo(existing));
             Assert.That(uploads[1].ContentType, Is.EqualTo("audio/legacy"));
         });
-        _storage.Verify(service => service.DeleteAsync("Song/Song.mp3"), Times.Never);
+        _storage.Verify(service => service.DeleteAsync(It.IsAny<string>()), Times.Never);
     }
 }

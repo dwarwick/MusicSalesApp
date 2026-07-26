@@ -24,25 +24,20 @@
             The app will automatically separate them and try to pair each image with the right audio file.
         </p>
 
-        <div class="alert alert-warning">
-            <strong>Filename requirement:</strong> A filename must begin with a letter or number and contain only
-            Unicode letters, numbers, single spaces, single hyphens, and single underscores. Spaces, hyphens, and
-            underscores must be between letters or numbers. You may add one final, spaced parenthetical suffix containing text, such as
-            <code>Night Drive (Remix).wav</code>. Exactly one dot is allowed, immediately before the supported extension.
-            Underscores in an uploaded filename become spaces in the song title. Titles edited later do not allow
-            underscores and are limited to 200 characters.
+        <div class="alert alert-info">
+            <strong>Filenames:</strong> Name your files however you like &mdash; apostrophes, ampersands, extra dots,
+            any language. Only the extension has to be one of the supported formats listed above. StreamTunes stores
+            your files under its own internal names, so nothing about your filename reaches the website.
         </div>
         <p>
-            Valid: <code>Boof.wav</code>, <code>song_name.wav</code>, <code>Song 2.flac</code>,
-            <code>Night-Drive (Remix).mp3</code>, <code>Été.png</code>. Invalid: <code>song__name.wav</code>,
-            <code>_Song.mp3</code>, <code>Song..mp3</code>, <code>Song.mp3.tmp</code>,
-            <code>Song--Mix.mp3</code>, <code>Song(Remix).mp3</code>,
-            <code>Artist&apos;s Song.mp3</code>, and <code>Song@@.jpg</code>.
+            Song titles are suggested from your filenames and shown to you for review before anything is
+            uploaded — see step 2 below.
         </p>
         <p>
-            StreamTunes rejects the entire selection if any filename, byte count, or media format is invalid.
+            StreamTunes rejects the entire selection if any byte count or media format is invalid.
             Audio must fully decode with a positive duration, and JPEG/PNG cover art must decode successfully.
-            After a successful upload, the exact validated original audio is retained privately alongside the playback MP3.
+            After a successful upload, the exact original audio and cover art you supplied are retained privately
+            alongside the playback MP3.
         </p>
 
         <h5 class="mt-3 mb-2"><i class="fas fa-wand-magic-sparkles me-1"></i> How Smart Matching Works</h5>
@@ -50,8 +45,7 @@
         <ol>
             <li>
                 <strong>Filename similarity</strong> — The app compares filenames intelligently.
-                Differences in permitted spacing, hyphens, underscores, and casing can be handled automatically.
-                Every filename must still satisfy the rules above.
+                Differences in spacing, hyphens, underscores, and casing can be handled automatically.
             </li>
             <li>
                 <strong>Image text extraction</strong> — If filename matching doesn't find a pair,
@@ -132,13 +126,18 @@
     <div class="help-section mb-4">
         <h4><span class="step-badge">2</span> Song Titles &amp; Renaming</h4>
         <p>
-            The filename becomes the song title automatically.
-            For example, uploading <code>Lipstick and Leather.mp3</code> creates a song called <strong>Lipstick and Leather</strong>.
+            Each title starts out as the filename with the extension removed and underscores turned into spaces.
+            Uploading <code>Lipstick_and_Leather.mp3</code> suggests the title <strong>Lipstick and Leather</strong>.
         </p>
         <p>
-            Changed your mind about the title? No problem — you can rename it anytime on the
-            <a href="/creator/songs"><i class="fas fa-file-audio me-1"></i>Manage My Songs</a> page. Changing the display
-            title does not rename the stored blobs.
+            Before anything is uploaded, StreamTunes shows you every title in a review table so you can correct
+            them. Nothing has been sent to StreamTunes at that point — press <strong>Upload</strong> when the
+            titles look right, or <strong>Cancel</strong> to start over.
+        </p>
+        <p>
+            Changed your mind later? No problem — you can rename a song anytime on the
+            <a href="/creator/songs"><i class="fas fa-file-audio me-1"></i>Manage My Songs</a> page. Titles are
+            display text only, so renaming never moves or renames your stored files.
         </p>
     </div>
 

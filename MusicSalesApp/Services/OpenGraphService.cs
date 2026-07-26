@@ -296,6 +296,47 @@ public class OpenGraphService : IOpenGraphService
     }
 
     /// <inheritdoc />
+    public async Task InvalidateFacebookImageAsync(string imageBlobPath)
+    {
+        if (string.IsNullOrEmpty(imageBlobPath))
+            return;
+
+        // Under the GUID scheme a song's sharing image has a fixed name, so GetOrCreate's
+        // "already exists" short-circuit would serve the pre-crop art forever unless the stale
+        // blob is removed whenever the cover art changes.
+        var fbImagePath = GetFacebookImagePath(imageBlobPath);
+        try
+        {
+            await _storageService.DeleteAsync(fbImagePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unable to invalidate sharing image {Path}", fbImagePath);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RefreshSharingImageAsync(string previousCoverArtPath, string newCoverArtPath)
+    {
+        if (!string.IsNullOrEmpty(previousCoverArtPath))
+        {
+            await InvalidateFacebookImageAsync(previousCoverArtPath);
+        }
+
+        if (!string.IsNullOrEmpty(newCoverArtPath))
+        {
+            // Under the GUID scheme this is the same blob as the previous one, so the second
+            // invalidation is a no-op; for legacy art the two names differ and both are stale.
+            if (!string.Equals(previousCoverArtPath, newCoverArtPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await InvalidateFacebookImageAsync(newCoverArtPath);
+            }
+
+            await PreGenerateFacebookImageAsync(newCoverArtPath);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task PreGenerateFacebookImageAsync(string imageBlobPath)
     {
         if (string.IsNullOrEmpty(imageBlobPath))
@@ -313,15 +354,11 @@ public class OpenGraphService : IOpenGraphService
 
     /// <summary>
     /// Generates the blob path for a Facebook-optimized version of an image.
-    /// Example: "folder/image.jpg" → "folder/image_fb.png"
+    /// GUID-scheme art resolves to the song's fixed "{guid}/{guid}-fb.png"; legacy art keeps the
+    /// original rule, e.g. "folder/image.jpg" → "folder/image_fb.png".
     /// </summary>
     internal static string GetFacebookImagePath(string originalPath)
-    {
-        var directory = Path.GetDirectoryName(originalPath)?.Replace('\\', '/') ?? "";
-        var fileNameWithoutExt = Path.GetFileNameWithoutExtension(originalPath);
-        var fbFileName = $"{fileNameWithoutExt}_fb.png";
-        return string.IsNullOrEmpty(directory) ? fbFileName : $"{directory}/{fbFileName}";
-    }
+        => SongMediaPaths.FacebookImageFor(originalPath);
 
     /// <summary>
     /// Creates a 1200×630 Facebook-optimized image by centering the original

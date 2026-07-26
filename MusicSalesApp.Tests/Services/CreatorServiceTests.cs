@@ -86,6 +86,66 @@ public class CreatorServiceTests
         _context?.Dispose();
     }
 
+    #region DeleteCreatorSongAsync storage cleanup
+
+    [Test]
+    public async Task DeleteCreatorSongAsync_GuidSong_DeletesEveryBlobIncludingTheSharingImage()
+    {
+        var mediaGuid = Guid.NewGuid();
+        var creator = new Creator { Id = 0, DisplayName = "Test Creator" };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            MediaGuid = mediaGuid,
+            SongTitle = "Night Drive",
+            CreatorId = creator.Id,
+            Mp3BlobPath = SongMediaPaths.Playback(mediaGuid),
+            OriginalAudioBlobPath = SongMediaPaths.OriginalAudio(mediaGuid, ".wav"),
+            ImageBlobPath = SongMediaPaths.CoverArt(mediaGuid, ".png"),
+            OriginalCoverArtBlobPath = SongMediaPaths.OriginalCoverArt(mediaGuid, ".png")
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        var deleted = await _service.DeleteCreatorSongAsync(song.Id, creator.Id);
+
+        Assert.That(deleted, Is.True);
+        _mockStorageService.Verify(s => s.DeleteAsync(SongMediaPaths.Playback(mediaGuid)), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync(SongMediaPaths.OriginalAudio(mediaGuid, ".wav")), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync(SongMediaPaths.CoverArt(mediaGuid, ".png")), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync(SongMediaPaths.OriginalCoverArt(mediaGuid, ".png")), Times.Once);
+        // Previously leaked on every delete because the path is derived, not stored.
+        _mockStorageService.Verify(s => s.DeleteAsync(SongMediaPaths.FacebookImage(mediaGuid)), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteCreatorSongAsync_LegacySong_DeletesItsUnderscoreSuffixedSharingImage()
+    {
+        var creator = new Creator { Id = 0, DisplayName = "Test Creator" };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        var song = new SongMetadata
+        {
+            SongTitle = "Night Drive",
+            CreatorId = creator.Id,
+            Mp3BlobPath = "Night Drive/Night Drive.mp3",
+            ImageBlobPath = "Night Drive/Night Drive.jpg"
+        };
+        _context.SongMetadata.Add(song);
+        await _context.SaveChangesAsync();
+
+        await _service.DeleteCreatorSongAsync(song.Id, creator.Id);
+
+        _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive.mp3"), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive.jpg"), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive_fb.png"), Times.Once);
+    }
+
+    #endregion
+
     #region ResetCreatorOnboardingAsync Tests
 
     [Test]
