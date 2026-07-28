@@ -67,7 +67,18 @@ public sealed class PayPalSubscriptionAnomalyService : IPayPalSubscriptionAnomal
                 providerDetails,
                 reconciliationError,
                 cancellationToken);
-            await SendPendingNotificationsAsync(anomaly.Id, user, baseUrl, cancellationToken);
+
+            // Withhold the notifications (but not the episode itself) until the mismatch has
+            // survived a grace window. A genuinely ACTIVE agreement whose PAYMENT.SALE.COMPLETED
+            // webhook is still in flight has no LastPaymentDate yet, so it looks mismatched for a
+            // few minutes and then self-heals. The episode is still written immediately so its
+            // correlation ID is available to ResolveCurrentMismatchAsync and the ManageAccount UI.
+            if (anomaly.LastObservedAtUtc - anomaly.DetectedAtUtc
+                >= TimeSpan.FromMinutes(PayPalSubscriptionDefaults.AnomalyNotificationGraceMinutes))
+            {
+                await SendPendingNotificationsAsync(anomaly.Id, user, baseUrl, cancellationToken);
+            }
+
             return await GetByIdAsync(anomaly.Id, cancellationToken) ?? anomaly;
         }
         finally
@@ -199,11 +210,11 @@ public sealed class PayPalSubscriptionAnomalyService : IPayPalSubscriptionAnomal
                     BuildUserEmail(user, anomaly, baseUrl));
             }
 
-            var customerServiceEmail = _configuration[AppSettingKeys.EmailCustomerServiceEmail];
-            if (!adminSent && !string.IsNullOrWhiteSpace(customerServiceEmail))
+            var adminNotificationEmail = _configuration[AppSettingKeys.EmailAdminEmail];
+            if (!adminSent && !string.IsNullOrWhiteSpace(adminNotificationEmail))
             {
                 adminSent = await _emailService.SendEmailAsync(
-                    customerServiceEmail,
+                    adminNotificationEmail,
                     $"StreamTunes - PayPal subscription mismatch {anomaly.CorrelationId}",
                     BuildAdminEmail(user, anomaly));
             }
@@ -264,17 +275,32 @@ public sealed class PayPalSubscriptionAnomalyService : IPayPalSubscriptionAnomal
         var manageAccountUrl = $"{baseUrl.TrimEnd('/')}/manage-account";
         var logoUrl = $"{baseUrl.TrimEnd('/')}/images/logo-light-small.png";
         var payPalUrl = _configuration[AppSettingKeys.PayPalAccountManagementUrl];
-        var statusGuidance = string.Equals(
+        var isSuspended = string.Equals(
             anomaly.ProviderStatus,
             SubscriptionStatuses.Suspended,
-            StringComparison.OrdinalIgnoreCase)
+            StringComparison.OrdinalIgnoreCase);
+        var isActive = string.Equals(
+            anomaly.ProviderStatus,
+            SubscriptionStatuses.Active,
+            StringComparison.OrdinalIgnoreCase);
+
+        var statusGuidance = isSuspended
             ? "PayPal reports that the agreement is suspended. Please review the payment issue in PayPal or stop the agreement."
-            : "PayPal reports that the agreement is active, but StreamTunes cannot confirm a current paid period or free trial.";
+            : isActive
+                ? "PayPal reports that the agreement is active, but StreamTunes cannot confirm a current paid period or free trial."
+                : $"PayPal reports the agreement status as {anomaly.ProviderStatus}, and StreamTunes cannot confirm a current paid period or free trial.";
+
+        // Only ACTIVE and SUSPENDED agreements actually block a new subscription. Keep this in step
+        // with CreateSubscriptionUnderLockAsync and ManageAccount.HasUnresolvedPayPalAgreement so
+        // the email never claims a block that isn't real.
+        var blockingGuidance = isSuspended || isActive
+            ? "Starting another StreamTunes subscription is temporarily blocked to prevent overlapping recurring charges. Creator tips and other one-time payments are not affected."
+            : "This does not stop you from starting a new StreamTunes subscription. Creator tips and other one-time payments are not affected.";
 
         var body = new StringBuilder();
         body.Append($"<div style='text-align:center;margin-bottom:20px;'><img src='{WebUtility.HtmlEncode(logoUrl)}' alt='StreamTunes Logo' style='max-width:150px;height:auto;' /></div>");
         body.Append($"<p>Hello {displayName},</p><p>{WebUtility.HtmlEncode(statusGuidance)}</p>");
-        body.Append("<p>Starting another StreamTunes subscription is temporarily blocked to prevent overlapping recurring charges. Creator tips and other one-time payments are not affected.</p>");
+        body.Append($"<p>{WebUtility.HtmlEncode(blockingGuidance)}</p>");
         body.Append($"<p><a href='{WebUtility.HtmlEncode(manageAccountUrl)}'>Refresh your subscription in Manage Account</a></p>");
         if (!string.IsNullOrWhiteSpace(payPalUrl))
         {

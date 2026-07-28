@@ -232,8 +232,18 @@ public sealed class PayPalSubscriptionApiService : IPayPalSubscriptionApiService
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound && IsResourceNotFound(body))
         {
+            // Two different situations land here, and neither can ever be charged:
+            //   1. The agreement genuinely no longer exists at PayPal.
+            //   2. The agreement exists but was never approved by the buyer. PayPal answers 200 to a
+            //      GET on an APPROVAL_PENDING subscription yet 404s this cancel call, because there
+            //      is no active billing agreement to cancel. Verified against the sandbox on
+            //      2026-07-28: GET returned 200/APPROVAL_PENDING and the cancel 404'd 500ms later.
+            //
+            // Do not narrow this branch without a replacement. Abandoned-checkout cleanup - both the
+            // interactive cancel-return and the nightly sweep - reaches "cancelled" through case 2,
+            // so reporting failure here would silently stop stale checkouts from ever being closed.
             _logger.LogInformation(
-                "PayPal subscription {SubscriptionId} was not found; treating it as already cancelled",
+                "PayPal returned 404 cancelling subscription {SubscriptionId}; it is unapproved or already gone, so treating it as cancelled",
                 subscriptionId);
             return true;
         }

@@ -30,6 +30,7 @@ public class SubscriptionController : ControllerBase
     private readonly IAccountEmailService _accountEmailService;
     private readonly IGooglePlayVerificationService _googlePlayVerificationService;
     private readonly IPayPalSubscriptionManagementService _payPalSubscriptionManagementService;
+    private readonly ICreatorService _creatorService;
 
     /// <summary>
     /// Initializes a new instance of the SubscriptionController.
@@ -51,7 +52,8 @@ public class SubscriptionController : ControllerBase
         ISubscriptionConfirmationEmailService subscriptionConfirmationEmailService,
         IAccountEmailService accountEmailService,
         IGooglePlayVerificationService googlePlayVerificationService,
-        IPayPalSubscriptionManagementService payPalSubscriptionManagementService)
+        IPayPalSubscriptionManagementService payPalSubscriptionManagementService,
+        ICreatorService creatorService)
     {
         _subscriptionService = subscriptionService;
         _userManager = userManager;
@@ -62,6 +64,7 @@ public class SubscriptionController : ControllerBase
         _accountEmailService = accountEmailService;
         _googlePlayVerificationService = googlePlayVerificationService;
         _payPalSubscriptionManagementService = payPalSubscriptionManagementService;
+        _creatorService = creatorService;
     }
 
     [HttpGet("status")]
@@ -102,13 +105,22 @@ public class SubscriptionController : ControllerBase
                 latestSubscription?.TrialEndDate);
         }
 
+        // Mobile clients cache creator status across app restarts, so this endpoint is their only
+        // opportunity to observe a deactivation before the JWT expires. Mirrors the semantics of
+        // MobileAuthController.BuildLoginResponseAsync: an inactive creator record reports neither
+        // the flag nor the id. Projected rather than a full entity load - this endpoint is polled
+        // from several client screens, including mid-playback.
+        var activeCreatorId = await _creatorService.GetActiveCreatorIdAsync(user.Id);
+
         if (latestSubscription == null)
         {
             return Ok(new
             {
                 hasSubscription = false,
                 isOnTrial = false,
-                isSubscriptionBlocked = user.IsSubscriptionBlocked
+                isSubscriptionBlocked = user.IsSubscriptionBlocked,
+                isCreator = activeCreatorId.HasValue,
+                creatorId = activeCreatorId
             });
         }
 
@@ -132,7 +144,9 @@ public class SubscriptionController : ControllerBase
             storePriceCurrencyCode = latestSubscription.StorePriceCurrencyCode,
             paypalSubscriptionId = latestSubscription.PayPalSubscriptionId,
             billingSource = latestSubscription.BillingSource,
-            isSubscriptionBlocked = user.IsSubscriptionBlocked
+            isSubscriptionBlocked = user.IsSubscriptionBlocked,
+            isCreator = activeCreatorId.HasValue,
+            creatorId = activeCreatorId
         });
     }
 

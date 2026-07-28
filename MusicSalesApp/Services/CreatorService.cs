@@ -251,6 +251,16 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<int?> GetActiveCreatorIdAsync(int userId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.Creators
+            .Where(s => s.UserId == userId && s.IsActive)
+            .Select(s => (int?)s.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<Creator>> GetActiveCreatorsAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

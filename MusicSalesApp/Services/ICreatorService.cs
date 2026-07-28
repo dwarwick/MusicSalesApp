@@ -81,6 +81,13 @@ public interface ICreatorService
     Task<bool> IsActiveCreatorAsync(int userId);
 
     /// <summary>
+    /// Gets the creator id for a user, or null if they have no creator record or it is inactive.
+    /// A projection rather than a full entity load, for callers on request-hot paths that need
+    /// only the id and the active flag.
+    /// </summary>
+    Task<int?> GetActiveCreatorIdAsync(int userId);
+
+    /// <summary>
     /// Gets all active creators.
     /// </summary>
     Task<List<Creator>> GetActiveCreatorsAsync();

@@ -1637,6 +1637,288 @@ public class PayPalSubscriptionManagementServiceTests
             Times.AtLeastOnce());
     }
 
+    [TestCase(SubscriptionStatuses.ApprovalPending)]
+    [TestCase(SubscriptionStatuses.Approved)]
+    public async Task ReconcileSubscriptionAsync_DoesNotEscalateMismatch_ForUnapprovedProviderStatus(
+        string providerStatus)
+    {
+        var (user, subscription) = ArrangePendingCheckout(providerStatus);
+
+        await _service.ReconcileSubscriptionAsync(
+            subscription.PayPalSubscriptionId!,
+            "https://streamtunes.example");
+
+        // PayPal cannot charge an agreement the buyer never approved, so there is nothing to warn
+        // anyone about. Any episode opened by the previous over-broad gate must also be closed.
+        _anomalyService.Verify(
+            service => service.RecordMismatchAsync(
+                It.IsAny<Subscription>(),
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<PayPalSubscriptionDetails>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _anomalyService.Verify(
+            service => service.ResolveOpenEpisodeAsync(subscription.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task RefreshIfNeededAsync_DoesNotEscalateMismatch_ForFreshPendingCheckout()
+    {
+        // The production entry point behind api/subscription/status, mobile login, and the
+        // home-page offer island: a pending row always has a null active subscription, so it
+        // reconciles on every single poll.
+        var (user, subscription) = ArrangePendingCheckout(SubscriptionStatuses.ApprovalPending);
+        _subscriptionService.Setup(service => service.GetLatestSubscriptionAsync(user.Id))
+            .ReturnsAsync(subscription);
+
+        await _service.RefreshIfNeededAsync(user.Id, "https://streamtunes.example");
+
+        _anomalyService.Verify(
+            service => service.RecordMismatchAsync(
+                It.IsAny<Subscription>(),
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<PayPalSubscriptionDetails>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task ReconcileSubscriptionAsync_DoesNotEscalateMismatch_WhenPendingReconciliationFails()
+    {
+        var (_, subscription) = ArrangePendingCheckout(SubscriptionStatuses.ApprovalPending);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId!,
+                It.IsAny<PayPalSubscriptionReconciliation>()))
+            .ReturnsAsync((PayPalSubscriptionReconciliationResult?)null);
+
+        await _service.ReconcileSubscriptionAsync(
+            subscription.PayPalSubscriptionId!,
+            "https://streamtunes.example");
+
+        _anomalyService.Verify(
+            service => service.RecordMismatchAsync(
+                It.IsAny<Subscription>(),
+                It.IsAny<ApplicationUser>(),
+                It.IsAny<PayPalSubscriptionDetails>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _anomalyService.Verify(
+            service => service.ResolveOpenEpisodeAsync(subscription.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [TestCase(SubscriptionStatuses.Active)]
+    [TestCase(SubscriptionStatuses.Suspended)]
+    public async Task ReconcileSubscriptionAsync_EscalatesMismatch_WhenProviderIsBillableWithoutEntitlement(
+        string providerStatus)
+    {
+        // Regression guard: narrowing the gate to ACTIVE/SUSPENDED must not disable the feature.
+        var (user, subscription) = ArrangePendingCheckout(providerStatus);
+        _anomalyService.Setup(service => service.RecordMismatchAsync(
+                It.IsAny<Subscription>(),
+                user,
+                It.IsAny<PayPalSubscriptionDetails>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionAnomaly
+            {
+                Id = 77,
+                SubscriptionId = subscription.Id,
+                CorrelationId = "bd6a5c0e-1a2b-4c3d-9e8f-0a1b2c3d4e5f"
+            });
+
+        await _service.ReconcileSubscriptionAsync(
+            subscription.PayPalSubscriptionId!,
+            "https://streamtunes.example");
+
+        _anomalyService.Verify(
+            service => service.RecordMismatchAsync(
+                It.IsAny<Subscription>(),
+                user,
+                It.IsAny<PayPalSubscriptionDetails>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ReconcileSubscriptionAsync_StillForceCancelsPendingAgreement_WhenOtherProviderGrantsAccess()
+    {
+        // Pins IsPotentiallyBillableStatus's other caller. It must keep treating APPROVAL_PENDING as
+        // billable so an overlapping agreement is force-cancelled, even though the mismatch gate no
+        // longer escalates that status. Do not merge the two predicates.
+        var (user, subscription) = ArrangePendingCheckout(SubscriptionStatuses.ApprovalPending);
+        _subscriptionService.Setup(service => service.GetCurrentSubscriptionFromOtherProviderAsync(
+                user.Id,
+                BillingSources.PayPal))
+            .ReturnsAsync(new Subscription
+            {
+                Id = 91,
+                UserId = user.Id,
+                BillingSource = BillingSources.GooglePlay,
+                Status = SubscriptionStatuses.Active
+            });
+        _payPalApi.Setup(service => service.CancelSubscriptionAsync(
+                subscription.PayPalSubscriptionId!,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _subscriptionService.Setup(service => service.CancelPayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId!,
+                It.IsAny<DateTime?>()))
+            .ReturnsAsync(true);
+
+        await _service.ReconcileSubscriptionAsync(
+            subscription.PayPalSubscriptionId!,
+            "https://streamtunes.example");
+
+        _payPalApi.Verify(
+            service => service.CancelSubscriptionAsync(
+                subscription.PayPalSubscriptionId!,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task AbandonPendingCheckoutAsync_RefusesToTouchANewerCheckout_WhenAnExpectedIdIsGiven()
+    {
+        // The background sweep decides a row is stale, then calls this. If the user started a fresh
+        // checkout in between, tearing down "the newest pending row" would kill the new one.
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync(new Subscription
+            {
+                Id = 99,
+                UserId = user.Id,
+                BillingSource = BillingSources.PayPal,
+                PayPalSubscriptionId = "I-BRAND-NEW",
+                Status = SubscriptionStatuses.ApprovalPending
+            });
+
+        var result = await _service.AbandonPendingCheckoutAsync(user, expectedPendingSubscriptionId: 24);
+
+        Assert.That(result, Is.False);
+        _subscriptionService.Verify(
+            service => service.CancelPayPalSubscriptionAsync(It.IsAny<string>(), It.IsAny<DateTime?>()),
+            Times.Never);
+        _payPalApi.Verify(
+            service => service.CancelSubscriptionAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        _subscriptionService.Verify(
+            service => service.DeletePendingSubscriptionAsync(It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task AbandonPendingCheckoutAsync_ReportsFailure_WhenTheTargetedRowIsNoLongerPending()
+    {
+        // Reporting success for a row we did not touch would let the nightly sweep count it as
+        // cleaned up - and resolve its anomaly episode - on every run, forever.
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription)null!);
+
+        var result = await _service.AbandonPendingCheckoutAsync(user, expectedPendingSubscriptionId: 24);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task AbandonPendingCheckoutAsync_TreatsNoPendingCheckoutAsSuccess_ForInteractiveCallers()
+    {
+        // Interactive callers (the PayPal cancel-return page, api/subscription/delete-pending) pass
+        // no id and just want "there is nothing left to abandon" to be a success.
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        _subscriptionService.Setup(service => service.GetPendingSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription)null!);
+
+        var result = await _service.AbandonPendingCheckoutAsync(user);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task ReconcileSubscriptionAsync_ResolvesOpenEpisode_WhenPayPalNoLongerKnowsTheAgreement()
+    {
+        // A provider-confirmed 404 means the agreement cannot bill anyone, so there is no mismatch
+        // left to escalate. This path never reaches SynchronizeAnomalyEpisodeAsync, so without an
+        // explicit resolve the episode would be re-observed hourly forever and never notified.
+        var subscription = new Subscription
+        {
+            Id = 24,
+            UserId = 42,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-GONE",
+            Status = SubscriptionStatuses.Active
+        };
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync("I-GONE"))
+            .ReturnsAsync(subscription);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync("I-GONE", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PayPalSubscriptionDetails)null!);
+
+        var result = await _service.ReconcileSubscriptionAsync("I-GONE", "https://streamtunes.example");
+
+        Assert.That(result, Is.Null);
+        _anomalyService.Verify(
+            service => service.ResolveOpenEpisodeAsync(subscription.Id, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// Arranges a local APPROVAL_PENDING row that PayPal reports with <paramref name="providerStatus"/>,
+    /// with no current entitlement — the shape that used to trigger the mismatch emails.
+    /// </summary>
+    private (ApplicationUser User, Subscription Subscription) ArrangePendingCheckout(string providerStatus)
+    {
+        var user = new ApplicationUser { Id = 42, Email = "listener@example.com" };
+        var subscription = new Subscription
+        {
+            Id = 24,
+            UserId = user.Id,
+            BillingSource = BillingSources.PayPal,
+            PayPalSubscriptionId = "I-PENDING",
+            PayPalPlanId = "P-NO-TRIAL",
+            Status = SubscriptionStatuses.ApprovalPending
+        };
+
+        _subscriptionService.Setup(service => service.GetSubscriptionByPayPalIdAsync(subscription.PayPalSubscriptionId))
+            .ReturnsAsync(subscription);
+        _subscriptionService.Setup(service => service.ReconcilePayPalSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<PayPalSubscriptionReconciliation>()))
+            .ReturnsAsync(new PayPalSubscriptionReconciliationResult { Subscription = subscription });
+        _subscriptionService.Setup(service => service.GetActiveSubscriptionAsync(user.Id))
+            .ReturnsAsync((Subscription?)null);
+        _payPalApi.Setup(service => service.GetSubscriptionAsync(
+                subscription.PayPalSubscriptionId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PayPalSubscriptionDetails
+            {
+                Id = subscription.PayPalSubscriptionId,
+                PlanId = subscription.PayPalPlanId,
+                Status = providerStatus,
+                FailedPaymentsCount = providerStatus == SubscriptionStatuses.Suspended ? 1 : 0,
+                Plan = CreateNoTrialPlan()
+            });
+        _userManager.Setup(manager => manager.FindByIdAsync(user.Id.ToString()))
+            .ReturnsAsync(user);
+
+        return (user, subscription);
+    }
+
     private static PayPalWebSubscriptionOffer CreateOffer(int version = 8)
     {
         return new PayPalWebSubscriptionOffer

@@ -315,6 +315,36 @@ public class SubscriptionServiceTests
     }
 
     [Test]
+    public async Task NormalizeExpiredSubscriptionsAsync_LeavesApprovalPendingCheckoutsUntouched()
+    {
+        // Documents a deliberate division of responsibility. Abandoned APPROVAL_PENDING checkouts
+        // are cleaned up by PayPalCheckoutHygieneService, which verifies each one against PayPal
+        // first. This method is a pure local-state normalizer called on every request, so it must
+        // never delete or cancel a row it has not confirmed with the provider.
+        using (var context = new AppDbContext(_dbOptions))
+        {
+            context.Subscriptions.Add(new Subscription
+            {
+                UserId = 900,
+                PayPalSubscriptionId = "I-ABANDONED",
+                BillingSource = BillingSources.PayPal,
+                Status = SubscriptionStatuses.ApprovalPending,
+                StartDate = DateTime.UtcNow.AddDays(-40),
+                CreatedAt = DateTime.UtcNow.AddDays(-40)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var normalizedCount = await _service.NormalizeExpiredSubscriptionsAsync();
+
+        Assert.That(normalizedCount, Is.Zero);
+        using var verificationContext = new AppDbContext(_dbOptions);
+        var pending = await verificationContext.Subscriptions
+            .SingleAsync(subscription => subscription.PayPalSubscriptionId == "I-ABANDONED");
+        Assert.That(pending.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+    }
+
+    [Test]
     public async Task UpdateSubscriptionStatusAsync_UpdatesStatus()
     {
         // Arrange
@@ -1156,6 +1186,84 @@ public class SubscriptionServiceTests
             Assert.That(result.Subscription.EndDate, Is.EqualTo(trialEnd));
             Assert.That(result.Subscription.LastPaymentDate, Is.Null);
             Assert.That(hasEntitlement, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_DoesNotResurrectACancelledCheckout_WhilePayPalStillReportsPending()
+    {
+        // Reproduces the abandoned-checkout sequence exactly: cancel the unapproved agreement, then
+        // let a status refresh land inside PayPal's propagation window, while it still reports
+        // APPROVAL_PENDING. Without the guard the row reverts and stays that way forever - PayPal
+        // sends no lifecycle webhook for an agreement that was never approved.
+        await _service.CreateSubscriptionAsync(1, "SUB-ABANDONED", "P-TRIAL", 0.99m, "USD");
+        await _service.CancelPayPalSubscriptionAsync("SUB-ABANDONED", providerEntitlementEndDate: null);
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-ABANDONED",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.ApprovalPending,
+                PlanId = "P-TRIAL",
+                MonthlyPrice = 0.99m,
+                CurrencyCode = "USD"
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Cancelled));
+            Assert.That(result.Subscription.CancelledAt, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_StillReportsPending_ForACheckoutThatWasNeverCancelled()
+    {
+        // The guard keys off CancelledAt, so an ordinary in-flight checkout must be untouched.
+        await _service.CreateSubscriptionAsync(1, "SUB-IN-FLIGHT", "P-TRIAL", 0.99m, "USD");
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-IN-FLIGHT",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.ApprovalPending,
+                PlanId = "P-TRIAL",
+                MonthlyPrice = 0.99m,
+                CurrencyCode = "USD"
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.ApprovalPending));
+            Assert.That(result.Subscription.CancelledAt, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task ReconcilePayPalSubscriptionAsync_StillAllowsProviderToReactivateACancelledSubscription()
+    {
+        // The guard must not block a genuine reactivation: ACTIVE is unaffected and clears CancelledAt.
+        var nextBilling = DateTime.UtcNow.AddDays(30);
+        await _service.CreateSubscriptionAsync(1, "SUB-REACTIVATED", "P-TRIAL", 0.99m, "USD");
+        await _service.CancelPayPalSubscriptionAsync("SUB-REACTIVATED", providerEntitlementEndDate: null);
+
+        var result = await _service.ReconcilePayPalSubscriptionAsync(
+            "SUB-REACTIVATED",
+            new PayPalSubscriptionReconciliation
+            {
+                Status = SubscriptionStatuses.Active,
+                PlanId = "P-TRIAL",
+                LastPaymentDate = DateTime.UtcNow,
+                NextBillingDate = nextBilling,
+                MonthlyPrice = 0.99m,
+                CurrencyCode = "USD"
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Subscription.Status, Is.EqualTo(SubscriptionStatuses.Active));
+            Assert.That(result.Subscription.CancelledAt, Is.Null);
         });
     }
 

@@ -67,6 +67,7 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
+                [AppSettingKeys.EmailAdminEmail] = "admin@example.com",
                 [AppSettingKeys.EmailCustomerServiceEmail] = "customerservice@example.com",
                 [AppSettingKeys.PayPalAccountManagementUrl] = "https://www.paypal.com/myaccount/autopay/"
             })
@@ -93,6 +94,16 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
             details,
             "Missing entitlement boundary",
             "https://streamtunes.example");
+        AdvancePastGrace();
+        await _service.RecordMismatchAsync(
+            _subscription,
+            _user,
+            details,
+            "Missing entitlement boundary",
+            "https://streamtunes.example");
+        // A third observation, after the emails have already gone out, is what actually proves the
+        // episode is not re-notified. Two observations only prove the grace window opened once.
+        AdvancePastGrace();
         var second = await _service.RecordMismatchAsync(
             _subscription,
             _user,
@@ -116,7 +127,7 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
             Times.Once);
         _emailService.Verify(
             service => service.SendEmailAsync(
-                "customerservice@example.com",
+                "admin@example.com",
                 It.Is<string>(subject => subject.Contains(first.CorrelationId)),
                 It.Is<string>(body => body.Contains("Missing entitlement boundary")
                     && body.Contains("I-MISMATCH"))),
@@ -124,23 +135,104 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
     }
 
     [Test]
-    public async Task ResolveOpenEpisodeAsync_AllowsLaterMismatchToCreateNewEpisode()
+    public async Task RecordMismatchAsync_SendsInternalAlertToAdminRatherThanCustomerService()
     {
-        var first = await _service.RecordMismatchAsync(
+        await RecordAfterGraceAsync(CreateDetails(SubscriptionStatuses.Active));
+
+        _emailService.Verify(
+            service => service.SendEmailAsync(
+                "admin@example.com",
+                It.Is<string>(subject => subject.Contains("mismatch")),
+                It.IsAny<string>()),
+            Times.Once);
+        _emailService.Verify(
+            service => service.SendEmailAsync(
+                "customerservice@example.com",
+                It.IsAny<string>(),
+                It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task RecordMismatchAsync_WithholdsNotifications_UntilMismatchPersists()
+    {
+        var details = CreateDetails(SubscriptionStatuses.Active);
+
+        var immediate = await _service.RecordMismatchAsync(
             _subscription,
             _user,
-            CreateDetails(SubscriptionStatuses.Suspended),
+            details,
             null,
             "https://streamtunes.example");
 
-        await _service.ResolveOpenEpisodeAsync(_subscription.Id);
-        _timeProvider.Advance(TimeSpan.FromDays(1));
-        var second = await _service.RecordMismatchAsync(
+        // The episode exists right away so its correlation ID is available to the UI, but a
+        // mismatch that might still self-heal must not email anyone yet.
+        Assert.Multiple(() =>
+        {
+            Assert.That(immediate.CorrelationId, Is.Not.Empty);
+            Assert.That(immediate.UserEmailSentAtUtc, Is.Null);
+            Assert.That(immediate.AdminEmailSentAtUtc, Is.Null);
+        });
+        _emailService.Verify(
+            service => service.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+
+        AdvancePastGrace();
+        var persisted = await _service.RecordMismatchAsync(
             _subscription,
             _user,
-            CreateDetails(SubscriptionStatuses.Active),
+            details,
             null,
             "https://streamtunes.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(persisted.Id, Is.EqualTo(immediate.Id));
+            Assert.That(persisted.UserEmailSentAtUtc, Is.Not.Null);
+            Assert.That(persisted.AdminEmailSentAtUtc, Is.Not.Null);
+        });
+        _emailService.Verify(
+            service => service.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Exactly(2));
+    }
+
+    [TestCase(SubscriptionStatuses.Active)]
+    [TestCase(SubscriptionStatuses.Suspended)]
+    public async Task RecordMismatchAsync_TellsUserSubscriptionsAreBlocked_ForBillableStatuses(string status)
+    {
+        await RecordAfterGraceAsync(CreateDetails(status));
+
+        _emailService.Verify(
+            service => service.SendEmailAsync(
+                "listener@example.com",
+                It.IsAny<string>(),
+                It.Is<string>(body => body.Contains("temporarily blocked"))),
+            Times.Once);
+    }
+
+    [TestCase(SubscriptionStatuses.ApprovalPending)]
+    [TestCase(SubscriptionStatuses.Approved)]
+    public async Task RecordMismatchAsync_DoesNotClaimSubscriptionsAreBlocked_ForUnapprovedStatuses(string status)
+    {
+        await RecordAfterGraceAsync(CreateDetails(status));
+
+        _emailService.Verify(
+            service => service.SendEmailAsync(
+                "listener@example.com",
+                It.IsAny<string>(),
+                It.Is<string>(body => !body.Contains("temporarily blocked")
+                    && body.Contains("does not stop you from starting a new StreamTunes subscription"))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ResolveOpenEpisodeAsync_AllowsLaterMismatchToCreateNewEpisode()
+    {
+        var first = await RecordAfterGraceAsync(CreateDetails(SubscriptionStatuses.Suspended));
+
+        await _service.ResolveOpenEpisodeAsync(_subscription.Id);
+        _timeProvider.Advance(TimeSpan.FromDays(1));
+        var second = await RecordAfterGraceAsync(CreateDetails(SubscriptionStatuses.Active));
 
         Assert.Multiple(() =>
         {
@@ -164,12 +256,10 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
             .ReturnsAsync(true);
 
         var details = CreateDetails(SubscriptionStatuses.Active);
-        await _service.RecordMismatchAsync(
-            _subscription,
-            _user,
-            details,
-            null,
-            "https://streamtunes.example");
+        await RecordAfterGraceAsync(details);
+
+        // The episode is already past the grace window, so this second observation retries
+        // immediately without advancing the clock again.
         var retried = await _service.RecordMismatchAsync(
             _subscription,
             _user,
@@ -186,9 +276,33 @@ public sealed class PayPalSubscriptionAnomalyServiceTests
             service => service.SendEmailAsync("listener@example.com", It.IsAny<string>(), It.IsAny<string>()),
             Times.Exactly(2));
         _emailService.Verify(
-            service => service.SendEmailAsync("customerservice@example.com", It.IsAny<string>(), It.IsAny<string>()),
+            service => service.SendEmailAsync("admin@example.com", It.IsAny<string>(), It.IsAny<string>()),
             Times.Once);
     }
+
+    /// <summary>
+    /// Opens an episode, advances past the notification grace window, then re-observes it so the
+    /// withheld emails are released.
+    /// </summary>
+    private async Task<PayPalSubscriptionAnomaly> RecordAfterGraceAsync(PayPalSubscriptionDetails details)
+    {
+        await _service.RecordMismatchAsync(
+            _subscription,
+            _user,
+            details,
+            null,
+            "https://streamtunes.example");
+        AdvancePastGrace();
+        return await _service.RecordMismatchAsync(
+            _subscription,
+            _user,
+            details,
+            null,
+            "https://streamtunes.example");
+    }
+
+    private void AdvancePastGrace() => _timeProvider.Advance(
+        TimeSpan.FromMinutes(PayPalSubscriptionDefaults.AnomalyNotificationGraceMinutes + 1));
 
     private static PayPalSubscriptionDetails CreateDetails(string status) => new()
     {

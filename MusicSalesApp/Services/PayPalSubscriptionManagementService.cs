@@ -339,6 +339,17 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         if (details == null)
         {
             _logger.LogWarning("PayPal subscription {SubscriptionId} was not found", paypalSubscriptionId);
+
+            // A provider-confirmed 404 means the agreement does not exist, so it cannot bill anyone
+            // and there is no mismatch left to escalate. Resolve any open episode here: this path
+            // never reaches SynchronizeAnomalyEpisodeAsync, so without it the episode would be
+            // re-observed forever by the hygiene job and never notified or closed.
+            var missingSubscription = await _subscriptionService.GetSubscriptionByPayPalIdAsync(paypalSubscriptionId);
+            if (missingSubscription != null)
+            {
+                await _anomalyService.ResolveOpenEpisodeAsync(missingSubscription.Id, cancellationToken);
+            }
+
             return null;
         }
 
@@ -534,9 +545,26 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
 
     public async Task<bool> AbandonPendingCheckoutAsync(
         ApplicationUser user,
+        int? expectedPendingSubscriptionId = null,
         CancellationToken cancellationToken = default)
     {
         var pending = await _subscriptionService.GetPendingSubscriptionAsync(user.Id);
+
+        // Background callers target a specific row they decided was stale. Everything below
+        // (including the local delete) resolves "the newest pending row for this user" again, so
+        // without this check a checkout started since that decision would be torn down instead.
+        // This is checked before the null case on purpose: reporting success for a row we did not
+        // touch would let the caller record it as cleaned up and act on that, every run, forever.
+        if (expectedPendingSubscriptionId.HasValue && pending?.Id != expectedPendingSubscriptionId.Value)
+        {
+            _logger.LogInformation(
+                "Skipping abandon of PayPal checkout {ExpectedSubscriptionId} for user {UserId}: the newest pending checkout is now {ActualSubscriptionId}",
+                expectedPendingSubscriptionId.Value,
+                user.Id,
+                pending?.Id);
+            return false;
+        }
+
         if (pending == null)
         {
             return true;
@@ -609,6 +637,9 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
 
         try
         {
+            // Expect a 404 here rather than a 200: PayPal will not cancel an agreement the buyer
+            // never approved. CancelSubscriptionAsync treats that as success - see the comment on
+            // its NotFound branch - which is what lets this path close abandoned checkouts.
             if (!await _payPalApi.CancelSubscriptionAsync(
                 pending.PayPalSubscriptionId,
                 PayPalSubscriptionDefaults.UserCancellationReason,
@@ -805,8 +836,17 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             return;
         }
 
-        if (!IsPotentiallyBillableStatus(details.Status))
+        if (!IsMismatchEscalationStatus(details.Status))
         {
+            // APPROVAL_PENDING/APPROVED checkouts are a normal, unbillable state: either the buyer
+            // is still on the PayPal approval page or they abandoned it. Resolve rather than merely
+            // skip, so an episode opened by the previous (over-broad) gate is closed instead of
+            // staying attached to this row forever.
+            _logger.LogDebug(
+                "PayPal subscription {SubscriptionId} reported non-escalating status {ProviderStatus}; no mismatch recorded",
+                subscription.Id,
+                details.Status);
+            await _anomalyService.ResolveOpenEpisodeAsync(subscription.Id, cancellationToken);
             return;
         }
 
@@ -982,7 +1022,7 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
             return "The earlier PayPal checkout is in an unresolved provider state, so a second subscription was not started. Please try again later.";
         }
 
-        if (!await AbandonPendingCheckoutAsync(user, cancellationToken))
+        if (!await AbandonPendingCheckoutAsync(user, cancellationToken: cancellationToken))
         {
             return "The earlier PayPal checkout could not be closed, so a second subscription was not started. Please try again later.";
         }
@@ -1171,6 +1211,20 @@ public sealed class PayPalSubscriptionManagementService : IPayPalSubscriptionMan
         return string.Equals(status, SubscriptionStatuses.ApprovalPending, StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, SubscriptionStatuses.Approved, StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, SubscriptionStatuses.Suspended, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Provider statuses worth escalating an entitlement mismatch to the user and admin.
+    /// Deliberately narrower than <see cref="IsPotentiallyBillableStatus"/>: APPROVAL_PENDING and
+    /// APPROVED mean the buyer never completed approval, so PayPal cannot charge them and there is
+    /// no double-billing risk to warn about. Keep this aligned with the statuses that actually
+    /// block a new subscription (CreateSubscriptionUnderLockAsync and
+    /// ManageAccount.HasUnresolvedPayPalAgreement).
+    /// </summary>
+    private static bool IsMismatchEscalationStatus(string? status)
+    {
+        return string.Equals(status, SubscriptionStatuses.Active, StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, SubscriptionStatuses.Suspended, StringComparison.OrdinalIgnoreCase);
     }
 

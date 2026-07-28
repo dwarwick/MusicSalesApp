@@ -86,6 +86,42 @@ public class CreatorServiceTests
         _context?.Dispose();
     }
 
+    #region GetActiveCreatorIdAsync
+
+    [Test]
+    public async Task GetActiveCreatorIdAsync_ReturnsId_ForActiveCreator()
+    {
+        _context.Creators.Add(new Creator { UserId = 42, DisplayName = "Active", IsActive = true });
+        await _context.SaveChangesAsync();
+
+        var creatorId = await _service.GetActiveCreatorIdAsync(42);
+
+        Assert.That(creatorId, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task GetActiveCreatorIdAsync_ReturnsNull_ForDeactivatedCreator()
+    {
+        // This is the filter that stops a deactivated creator from keeping mobile creator
+        // privileges - api/subscription/status reports IsCreator straight from this result.
+        _context.Creators.Add(new Creator { UserId = 43, DisplayName = "Deactivated", IsActive = false });
+        await _context.SaveChangesAsync();
+
+        var creatorId = await _service.GetActiveCreatorIdAsync(43);
+
+        Assert.That(creatorId, Is.Null);
+    }
+
+    [Test]
+    public async Task GetActiveCreatorIdAsync_ReturnsNull_WhenUserHasNoCreatorRecord()
+    {
+        var creatorId = await _service.GetActiveCreatorIdAsync(999);
+
+        Assert.That(creatorId, Is.Null);
+    }
+
+    #endregion
+
     #region DeleteCreatorSongAsync storage cleanup
 
     [Test]
