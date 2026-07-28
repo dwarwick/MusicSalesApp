@@ -35,8 +35,14 @@ public interface IPayPalSubscriptionManagementService
         string baseUrl,
         CancellationToken cancellationToken = default);
 
+    /// <param name="expectedPendingSubscriptionId">
+    /// When set, the abandon is skipped unless the user's newest pending checkout is still this
+    /// row. Background sweeps must pass it so a checkout started since the row was selected is
+    /// never torn down.
+    /// </param>
     Task<bool> AbandonPendingCheckoutAsync(
         ApplicationUser user,
+        int? expectedPendingSubscriptionId = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> RefreshIfNeededAsync(

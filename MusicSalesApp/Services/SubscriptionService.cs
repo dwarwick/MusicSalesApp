@@ -284,9 +284,25 @@ public class SubscriptionService : ISubscriptionService
         var previousTrialConvertedAt = subscription.TrialConvertedAt;
 
         var normalizedStatus = reconciliation.Status.Trim().ToUpperInvariant();
-        subscription.Status = normalizedStatus == SubscriptionStatuses.Canceled
+        var resolvedStatus = normalizedStatus == SubscriptionStatuses.Canceled
             ? SubscriptionStatuses.Cancelled
             : normalizedStatus;
+
+        // PayPal keeps reporting APPROVAL_PENDING for a few minutes after accepting the
+        // cancellation of an agreement the buyer never approved. Any status refresh landing in that
+        // window would otherwise overwrite the CANCELLED we just wrote, leaving the row stuck at
+        // APPROVAL_PENDING with CancelledAt set - a state nothing later corrects, because PayPal
+        // sends no lifecycle webhook for an agreement that was never approved. An agreement we
+        // cancelled cannot legitimately return to unapproved; a genuine reactivation arrives as
+        // ACTIVE, which clears CancelledAt just below.
+        if (subscription.CancelledAt.HasValue
+            && (resolvedStatus == SubscriptionStatuses.ApprovalPending
+                || resolvedStatus == SubscriptionStatuses.Approved))
+        {
+            resolvedStatus = SubscriptionStatuses.Cancelled;
+        }
+
+        subscription.Status = resolvedStatus;
 
         if (subscription.Status == SubscriptionStatuses.Active)
         {

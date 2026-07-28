@@ -325,6 +325,34 @@ public class ManageAccountTests : BUnitTestBase
             Times.Never);
     }
 
+    [TestCase(SubscriptionStatuses.ApprovalPending)]
+    [TestCase(SubscriptionStatuses.Approved)]
+    public void ManageAccount_UnapprovedPayPalCheckout_StillOffersSubscription(string status)
+    {
+        // The counterpart to the test above, and the reason the mismatch email must not claim a
+        // block for these statuses: an agreement the buyer never approved does not block anything.
+        SetupAccountWithSubscriptionStatus(new
+        {
+            HasSubscription = false,
+            Status = status,
+            BillingSource = BillingSources.PayPal,
+            PaypalSubscriptionId = "I-ABANDONED"
+        });
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(
+            () => cut.Markup.Contains("with PayPal", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("PayPal billing needs attention"));
+            Assert.That(cut.Markup, Does.Not.Contain("prevent overlapping charges"));
+            Assert.That(cut.Markup, Does.Not.Contain("Stop PayPal Billing"));
+        });
+    }
+
     [Test]
     public async Task ManageAccount_RefreshSubscription_ShowsSupportCorrelation_WhenActiveMismatchRemains()
     {
@@ -504,7 +532,7 @@ public class ManageAccountTests : BUnitTestBase
             Status = SubscriptionStatuses.ApprovalPending
         });
         MockPayPalSubscriptionManagementService
-            .Setup(x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<CancellationToken>()))
+            .Setup(x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         SetupRendererInfo();
@@ -515,7 +543,7 @@ public class ManageAccountTests : BUnitTestBase
         cut.WaitForState(() => cut.Markup.Contains("Subscription setup was cancelled"), TimeSpan.FromSeconds(5));
 
         MockPayPalSubscriptionManagementService.Verify(
-            x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<CancellationToken>()),
+            x => x.AbandonPendingCheckoutAsync(testUser, It.IsAny<int?>(), It.IsAny<CancellationToken>()),
             Times.Once);
         MockSubscriptionService.Verify(
             x => x.DeletePendingSubscriptionAsync(It.IsAny<int>()),

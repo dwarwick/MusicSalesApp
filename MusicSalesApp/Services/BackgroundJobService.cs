@@ -68,6 +68,20 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.DeleteStaleUnverifiedUsersAsync(),
                 Cron.Daily(3, 15));
 
+            // Verify abandoned PayPal checkouts against the provider and close them out, so stale
+            // APPROVAL_PENDING rows stop accumulating as each user's "latest subscription".
+            RecurringJob.AddOrUpdate<IPayPalCheckoutHygieneService>(
+                HangfireJobIds.CleanupStalePayPalCheckouts,
+                service => service.CleanupStalePendingCheckoutsAsync(),
+                "45 3 * * *");
+
+            // Backstop for the mismatch notification grace window: a persistent mismatch must still
+            // be reported even if the affected user never polls the site again.
+            RecurringJob.AddOrUpdate<IPayPalCheckoutHygieneService>(
+                HangfireJobIds.ReobservePayPalMismatches,
+                service => service.ReobserveOpenMismatchEpisodesAsync(),
+                "20 * * * *");
+
             // Schedule nightly new song notification emails at 4 AM UTC
             // This runs after song cleanup and sends emails to opted-in users about new songs added in the past 24 hours
             RecurringJob.AddOrUpdate<INewSongNotificationService>(
@@ -82,7 +96,7 @@ public class BackgroundJobService : IBackgroundJobService
 
             // Nightly incremental backup of the Azure blob containers into their backup- copies.
             // 06:45 UTC sits clear of every other daily job (0:00, 1:30, 2:00, 2:30, 3:00, 3:15,
-            // 4:00, 5:00, 5:30, 6:00) and of the hourly jobs, which fire on the hour.
+            // 3:45, 4:00, 5:00, 5:30, 6:00) and of the hourly jobs, which fire on the hour or at :20.
             // Restore is admin-triggered only and is deliberately never scheduled.
             RecurringJob.AddOrUpdate<IStorageBackupService>(
                 HangfireJobIds.StorageBackup,

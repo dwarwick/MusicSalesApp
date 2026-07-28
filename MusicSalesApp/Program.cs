@@ -334,6 +334,7 @@ try
     builder.Services.AddScoped<IPayPalSubscriptionApiService, PayPalSubscriptionApiService>();
     builder.Services.AddScoped<IPayPalSubscriptionManagementService, PayPalSubscriptionManagementService>();
     builder.Services.AddScoped<IPayPalSubscriptionAnomalyService, PayPalSubscriptionAnomalyService>();
+    builder.Services.AddScoped<IPayPalCheckoutHygieneService, PayPalCheckoutHygieneService>();
     builder.Services.AddSingleton<IGooglePlayVerificationService, GooglePlayVerificationService>();
     builder.Services.AddSingleton<IAppleAppStoreVerificationService, AppleAppStoreVerificationService>();
     builder.Services.AddScoped<IAppSettingsService, AppSettingsService>();

@@ -24,6 +24,7 @@ public class GooglePlaySubscriptionTests
     private Mock<IAccountEmailService> _mockAccountEmailService;
     private Mock<IGooglePlayVerificationService> _mockGooglePlayService;
     private Mock<IPayPalSubscriptionManagementService> _mockPayPalSubscriptionManagementService;
+    private Mock<ICreatorService> _mockCreatorService;
     private SubscriptionController _controller;
 
     [SetUp]
@@ -37,6 +38,7 @@ public class GooglePlaySubscriptionTests
         _mockAccountEmailService = new Mock<IAccountEmailService>();
         _mockGooglePlayService = new Mock<IGooglePlayVerificationService>();
         _mockPayPalSubscriptionManagementService = new Mock<IPayPalSubscriptionManagementService>();
+        _mockCreatorService = new Mock<ICreatorService>();
 
         var userStoreMock = new Mock<IUserStore<ApplicationUser>>();
         _mockUserManager = new Mock<UserManager<ApplicationUser>>(
@@ -51,7 +53,8 @@ public class GooglePlaySubscriptionTests
             _mockSubscriptionConfirmationEmailService.Object,
             _mockAccountEmailService.Object,
             _mockGooglePlayService.Object,
-            _mockPayPalSubscriptionManagementService.Object);
+            _mockPayPalSubscriptionManagementService.Object,
+            _mockCreatorService.Object);
 
         // Set up authenticated user context
         var user = new ApplicationUser { Id = 1, UserName = "testuser", Email = "test@test.com" };
@@ -94,6 +97,75 @@ public class GooglePlaySubscriptionTests
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
         Assert.That(json, Does.Contain("\"billingSource\":\"PayPal\""));
         Assert.That(json, Does.Not.Contain("subscriptionPrice"));
+    }
+
+    [Test]
+    public async Task GetSubscriptionStatus_ReturnsCreatorStatus_ForActiveCreator()
+    {
+        // Mobile clients cache creator status across restarts, so this endpoint is their only
+        // chance to observe a deactivation before the JWT expires.
+        _mockCreatorService.Setup(service => service.GetActiveCreatorIdAsync(1)).ReturnsAsync(7);
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync(new Subscription
+        {
+            Id = 1,
+            UserId = 1,
+            Status = "ACTIVE",
+            BillingSource = BillingSources.PayPal,
+            StartDate = DateTime.UtcNow.AddDays(-10)
+        });
+
+        var result = await _controller.GetSubscriptionStatus();
+        var json = System.Text.Json.JsonSerializer.Serialize((result as OkObjectResult)!.Value);
+
+        Assert.That(json, Does.Contain("\"isCreator\":true"));
+        Assert.That(json, Does.Contain("\"creatorId\":7"));
+    }
+
+    [Test]
+    public async Task GetSubscriptionStatus_ReportsCreatorStatus_WhenUserHasNoSubscription()
+    {
+        // The no-subscription branch is a separate response shape. Omitting the creator fields here
+        // would demote every creator who is not also a subscriber.
+        _mockCreatorService.Setup(service => service.GetActiveCreatorIdAsync(1)).ReturnsAsync(7);
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+        _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+
+        var result = await _controller.GetSubscriptionStatus();
+        var json = System.Text.Json.JsonSerializer.Serialize((result as OkObjectResult)!.Value);
+
+        Assert.That(json, Does.Contain("\"hasSubscription\":false"));
+        Assert.That(json, Does.Contain("\"isCreator\":true"));
+        Assert.That(json, Does.Contain("\"creatorId\":7"));
+    }
+
+    [Test]
+    public async Task GetSubscriptionStatus_ReportsDeactivatedCreatorAsNonCreator()
+    {
+        // GetActiveCreatorIdAsync filters on IsActive (covered in CreatorServiceTests), so a
+        // deactivated creator arrives here as null and must surrender both the flag and the id.
+        _mockCreatorService.Setup(service => service.GetActiveCreatorIdAsync(1)).ReturnsAsync((int?)null);
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+        _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+
+        var result = await _controller.GetSubscriptionStatus();
+        var json = System.Text.Json.JsonSerializer.Serialize((result as OkObjectResult)!.Value);
+
+        Assert.That(json, Does.Contain("\"isCreator\":false"));
+        Assert.That(json, Does.Contain("\"creatorId\":null"));
+    }
+
+    [Test]
+    public async Task GetSubscriptionStatus_ReportsNonCreator_WhenNoCreatorRecordExists()
+    {
+        _mockCreatorService.Setup(service => service.GetActiveCreatorIdAsync(1)).ReturnsAsync((int?)null);
+        _mockSubscriptionService.Setup(s => s.GetActiveSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+        _mockSubscriptionService.Setup(s => s.GetLatestSubscriptionAsync(1)).ReturnsAsync((Subscription)null);
+
+        var result = await _controller.GetSubscriptionStatus();
+        var json = System.Text.Json.JsonSerializer.Serialize((result as OkObjectResult)!.Value);
+
+        Assert.That(json, Does.Contain("\"isCreator\":false"));
+        Assert.That(json, Does.Contain("\"creatorId\":null"));
     }
 
     [Test]
