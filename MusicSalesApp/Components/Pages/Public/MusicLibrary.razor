@@ -131,10 +131,14 @@ else
                     }
                 </div>
 
-                <AiContentBadges IsAiMusic="IsAiGeneratedSong(f.Name)"
-                                  IsAiVocals="IsAiVocalsSong(f.Name)"
-                                  IsAiLyrics="IsAiLyricsSong(f.Name)"
-                                  CssClass="card-ai-content-badges" />
+                <!-- AI disclosure badges (left) and like/dislike buttons (right) -->
+                <div class="card-ai-actions-row">
+                    <AiContentBadges IsAiMusic="IsAiGeneratedSong(f.Name)"
+                                      IsAiVocals="IsAiVocalsSong(f.Name)"
+                                      IsAiLyrics="IsAiLyricsSong(f.Name)"
+                                      CssClass="card-ai-content-badges" />
+                    <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
+                </div>
 
                 <!-- Song Title -->
                 <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>
@@ -261,12 +265,11 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions: Play button, Like/Dislike, and View button -->
+                    <!-- Card Actions: Play button and View button (like/dislike live in the AI badges row above) -->
                     <div class="card-actions-with-likes">
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
                         </div>
-                        <LikeDislikeButtons SongMetadataId="GetSongMetadataId(f.Name)" VerticalLayout="false" />
                         <div class="action-column">
                             <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
                         </div>

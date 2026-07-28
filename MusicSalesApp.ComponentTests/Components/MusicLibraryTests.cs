@@ -410,6 +410,106 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
+    public void MusicLibrary_RendersLikeDislikeButtons_InAiActionsRow()
+    {
+        // Arrange - an AI song so both the badges and the buttons share the row
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 1,
+                Mp3BlobPath = "AiSong.mp3",
+                SongTitle = "AI Song",
+                IsAiGenerated = true,
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - the like/dislike buttons live inside the AI badges row, not the bottom action row
+        var aiActionsRow = cut.Find(".card-ai-actions-row");
+        Assert.Multiple(() =>
+        {
+            Assert.That(aiActionsRow.QuerySelector(".card-ai-content-badges"), Is.Not.Null);
+            Assert.That(aiActionsRow.QuerySelector(".like-button"), Is.Not.Null);
+            Assert.That(aiActionsRow.QuerySelector(".dislike-button"), Is.Not.Null);
+            Assert.That(cut.Find(".card-actions-with-likes").QuerySelector(".like-dislike-container"), Is.Null);
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_RendersAiActionsRowWithLikeButtons_ForSongWithoutAiFlags()
+    {
+        // Arrange - no AI flags, so AiContentBadges renders nothing at all
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 2,
+                Mp3BlobPath = "PlainSong.mp3",
+                SongTitle = "Plain Song",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        // Act
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Assert - the row and its buttons still render (they are right-aligned via margin-left: auto)
+        var aiActionsRow = cut.Find(".card-ai-actions-row");
+        Assert.Multiple(() =>
+        {
+            Assert.That(aiActionsRow.QuerySelector(".ai-content-badges"), Is.Null);
+            Assert.That(aiActionsRow.QuerySelector(".like-button"), Is.Not.Null);
+            Assert.That(aiActionsRow.QuerySelector(".dislike-button"), Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_KeepsLikeDislikeButtons_WhenCardIsPlaying()
+    {
+        // Arrange
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 3,
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Act - start playback, which swaps the bottom action row for the mini player
+        cut.Find("button[title='play']").Click();
+
+        // Assert - the mini player is showing but the like/dislike buttons are still available
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("card-mini-player"));
+            Assert.That(cut.Markup, Does.Not.Contain("card-actions-with-likes"));
+            Assert.That(cut.Find(".card-ai-actions-row").QuerySelector(".like-button"), Is.Not.Null);
+            Assert.That(cut.Find(".card-ai-actions-row").QuerySelector(".dislike-button"), Is.Not.Null);
+        });
+    }
+
+    [Test]
     public void MusicLibrary_AiFilter_FiltersByAnyAndIndividualAiFlags()
     {
         var metadata = new List<MusicSalesApp.Models.SongMetadata>

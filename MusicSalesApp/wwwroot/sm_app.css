@@ -608,6 +608,24 @@
         font-size: 0.75rem !important;
     }
 
+    /* Keep the card AI-badge row's like/dislike buttons compact - the rules above
+       use !important and would otherwise scale them back up to 32px */
+    .card-ai-actions-row .like-button,
+    .card-ai-actions-row .dislike-button {
+        min-width: 22px !important;
+        min-height: 22px !important;
+        padding: 3px !important;
+    }
+
+    .card-ai-actions-row .action-icon {
+        width: 11px !important;
+        height: 11px !important;
+    }
+
+    .card-ai-actions-row .count-text {
+        font-size: 0.7rem !important;
+    }
+
     /* Compact cart button */
     .card-cart-button {
         padding: 6px 10px;

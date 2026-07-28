@@ -926,15 +926,6 @@ h1:focus {
     overflow: hidden;
 }
 
-.card-actions-with-likes > .like-dislike-container {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
 .action-column {
     display: flex;
     flex-direction: column;
@@ -1509,6 +1500,47 @@ h1:focus {
 .count-text {
     font-size: 0.875rem;
     font-weight: 500;
+}
+
+/* Card row holding the AI disclosure badges (left) and the like/dislike buttons (right).
+   Lives outside the is-playing conditional, so the buttons stay available during playback. */
+.card-ai-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 28px;
+    margin-top: -8px;
+    margin-bottom: 10px;
+}
+
+.card-ai-actions-row .like-dislike-container {
+    /* Keeps the buttons right-aligned on songs with no AI badges to sit opposite */
+    margin-left: auto;
+    gap: 0.5rem;
+}
+
+.card-ai-actions-row .like-dislike-actions {
+    gap: 0.25rem;
+}
+
+/* ~40% smaller than the default 40px / 20px like/dislike buttons so they sit
+   comfortably alongside the 28px AI badges. Scoped to the card row only -
+   the song/playlist players keep the full-size buttons. */
+.card-ai-actions-row .like-button,
+.card-ai-actions-row .dislike-button {
+    min-width: 24px;
+    min-height: 24px;
+    padding: 4px;
+    gap: 0.125rem;
+}
+
+.card-ai-actions-row .action-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.card-ai-actions-row .count-text {
+    font-size: 0.75rem;
 }
 
 

@@ -207,9 +207,10 @@
     gap: 4px;
 }
 
+/* Spacing now lives on the .card-ai-actions-row wrapper (app.css) */
 .card-ai-content-badges {
-    margin-top: -8px;
-    margin-bottom: 10px;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .player-ai-content-badges {
