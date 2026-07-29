@@ -985,6 +985,152 @@ public class MusicControllerTests
         Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
     }
 
+    [Test]
+    public async Task ToggleLike_WhenTheSongNoLongerExists_ReturnsBadRequest()
+    {
+        // Same contract as SetLikeState: a permanent failure is a 400 on every like route.
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.ToggleLikeAsync(user.Id, 42))
+            .ThrowsAsync(new SongNotFoundException(42));
+
+        var result = await _controller.ToggleLike(42);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ToggleDislike_WhenTheSongNoLongerExists_ReturnsBadRequest()
+    {
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.ToggleDislikeAsync(user.Id, 42))
+            .ThrowsAsync(new SongNotFoundException(42));
+
+        var result = await _controller.ToggleDislike(42);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    // --- SetLikeState tests ---
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task SetLikeState_WithValidIdAndAuthUser_ReturnsRequestedStatus(bool status)
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.SetLikeStateAsync(user.Id, 42, status))
+            .ReturnsAsync(status);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(42))
+            .ReturnsAsync((10, 3));
+
+        // Act
+        var result = await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = status });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var value = ((OkObjectResult)result).Value!;
+        Assert.That((bool?)value.GetType().GetProperty("userLikeStatus")!.GetValue(value), Is.EqualTo(status));
+        Assert.That((int)value.GetType().GetProperty("likeCount")!.GetValue(value)!, Is.EqualTo(10));
+        Assert.That((int)value.GetType().GetProperty("dislikeCount")!.GetValue(value)!, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task SetLikeState_WithNullStatus_ClearsOpinion()
+    {
+        // Arrange
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.SetLikeStateAsync(user.Id, 42, null))
+            .ReturnsAsync((bool?)null);
+        _mockSongLikeService.Setup(s => s.GetLikeCountsAsync(42))
+            .ReturnsAsync((9, 3));
+
+        // Act
+        var result = await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = null });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var value = ((OkObjectResult)result).Value!;
+        Assert.That((bool?)value.GetType().GetProperty("userLikeStatus")!.GetValue(value), Is.Null);
+        _mockSongLikeService.Verify(s => s.SetLikeStateAsync(user.Id, 42, null), Times.Once);
+    }
+
+    [Test]
+    public async Task SetLikeState_WithInvalidId_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.SetLikeState(0, new MusicController.SetLikeStateRequest { Status = true });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task SetLikeState_WithNullRequest_ReturnsBadRequest()
+    {
+        // Act
+        var result = await _controller.SetLikeState(42, null!);
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task SetLikeState_WhenTheSongNoLongerExists_ReturnsBadRequestNotNotFound()
+    {
+        // Deliberately 400. The MAUI app reads a 404 on this route as "the server predates this
+        // endpoint" and falls back to the toggle endpoints, which cannot succeed either - leaving the
+        // queued intent stuck and blocking every intent behind it. 400 is in the client's drop set.
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.SetLikeStateAsync(user.Id, 42, true))
+            .ThrowsAsync(new SongNotFoundException(42));
+
+        var result = await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = true });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(result, Is.Not.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task SetLikeState_WhenTheSongNoLongerExists_DoesNotReadCounts()
+    {
+        // The counts call would only be a second pointless round trip for a song that is gone.
+        var user = new ApplicationUser { Id = 1, UserName = "testuser" };
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync(user);
+        _mockSongLikeService.Setup(s => s.SetLikeStateAsync(user.Id, 42, true))
+            .ThrowsAsync(new SongNotFoundException(42));
+
+        await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = true });
+
+        _mockSongLikeService.Verify(s => s.GetLikeCountsAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task SetLikeState_WithNoUser_ReturnsUnauthorized()
+    {
+        // Arrange
+        _mockUserManager.Setup(x => x.GetUserAsync(It.IsAny<System.Security.Claims.ClaimsPrincipal>()))
+            .ReturnsAsync((ApplicationUser)null);
+
+        // Act
+        var result = await _controller.SetLikeState(42, new MusicController.SetLikeStateRequest { Status = true });
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<UnauthorizedResult>());
+    }
+
     // --- ReportSong Tests ---
 
     [Test]

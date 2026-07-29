@@ -86,6 +86,12 @@ Controllers under `Controllers/` gated by `[RequireMobileApiKey]` (header `X-Api
 - `SubscriptionController` (`api/subscription`) — shared web+mobile subscription status/management.
 - `PasskeyController` (`api/passkey`) — WebAuthn, used by both web and mobile.
 
+The MAUI app also calls `MusicController` (`api/music`) directly — it is *not* `[RequireMobileApiKey]`-gated, only per-action `[Authorize]`. Relevant actions: `songs`, `likes/bulk`, `likes/user-status`, `like/{id}`, `dislike/{id}`, `like-state/{id}`, `report/{id}`, `stream/{id}`.
+
+- `PUT api/music/like-state/{id}` (body `{ "status": true | false | null }`) is the **idempotent** counterpart to the `like`/`dislike` toggles, added for the mobile offline queue: the outcome depends only on the requested state, so a queued intent can be replayed safely. The toggle endpoints remain for the Blazor `LikeDislikeButtons` component, which depends on their flip semantics — keep the flip decision in the toggle; do not express one endpoint's semantics in terms of another's.
+  - All three share one private writer, `SongLikeService.ApplyLikeStateAsync`, which takes an already-decided terminal state. It recovers from a concurrent writer losing the unique `(UserId, SongMetadataId)` race, and raises `SongNotFoundException` for a song that has since been deleted.
+  - That exception maps to **400, not 404 and never a 500** — deliberately, on all three routes. The MAUI client reads a 404 on `like-state` as "this server predates the endpoint" and falls back to the toggles; it retries any 5xx forever, and its flush stops at the first failure, so a permanent error dressed as a transient one strands every intent queued behind it. 400 is in the client's drop set.
+
 **Known wart**: route naming is inconsistent (`api/mobile/...` vs `api/mobile-auth` vs `api/mobile-settings`) with no versioning scheme anywhere.
 
 ## Environment configuration

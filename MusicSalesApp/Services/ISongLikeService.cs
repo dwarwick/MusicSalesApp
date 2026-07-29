@@ -39,6 +39,18 @@ public interface ISongLikeService
     Task<bool> ToggleDislikeAsync(int userId, int songMetadataId);
 
     /// <summary>
+    /// Idempotently set the user's opinion of a song, replacing whatever it was before.
+    /// Unlike <see cref="ToggleLikeAsync"/>/<see cref="ToggleDislikeAsync"/> the outcome depends only on
+    /// <paramref name="state"/>, never on the current row, so a client may safely replay the same call.
+    /// This is what the mobile app uses to drain its offline like/dislike queue on reconnect.
+    /// </summary>
+    /// <param name="userId">The user ID</param>
+    /// <param name="songMetadataId">The song metadata ID</param>
+    /// <param name="state">True to like, false to dislike, null to clear any opinion</param>
+    /// <returns>The resulting like status (echoes <paramref name="state"/>)</returns>
+    Task<bool?> SetLikeStateAsync(int userId, int songMetadataId, bool? state);
+
+    /// <summary>
     /// Get all songs that a user has liked (not disliked)
     /// </summary>
     /// <param name="userId">The user ID</param>

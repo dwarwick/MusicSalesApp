@@ -14,6 +14,15 @@ namespace MusicSalesApp.Controllers
     [ApiController]
     public class MusicController : ControllerBase
     {
+        /// <summary>
+        /// Response for an opinion written against a song that no longer exists. Returned as 400 on
+        /// every like route, never 404 or 500, and the choice is load-bearing: the MAUI app reads a 404
+        /// on <c>like-state</c> as "this server predates the endpoint" and falls back to the toggles,
+        /// while it retries any 5xx forever. Its flush stops at the first failure, so a permanent error
+        /// dressed up as a transient one strands every queued intent behind it.
+        /// </summary>
+        internal const string SongNotFoundError = "Song not found";
+
         private readonly IAzureStorageService _storageService;
         private readonly ISubscriptionService _subscriptionService;
         private readonly IStreamCountService _streamCountService;
@@ -307,7 +316,16 @@ namespace MusicSalesApp.Controllers
             if (user == null)
                 return Unauthorized();
 
-            var isLiked = await _songLikeService.ToggleLikeAsync(user.Id, songMetadataId);
+            bool isLiked;
+            try
+            {
+                isLiked = await _songLikeService.ToggleLikeAsync(user.Id, songMetadataId);
+            }
+            catch (SongNotFoundException)
+            {
+                return BadRequest(new { error = SongNotFoundError });
+            }
+
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
 
             return Ok(new { isLiked, likeCount, dislikeCount });
@@ -327,10 +345,53 @@ namespace MusicSalesApp.Controllers
             if (user == null)
                 return Unauthorized();
 
-            var isDisliked = await _songLikeService.ToggleDislikeAsync(user.Id, songMetadataId);
+            bool isDisliked;
+            try
+            {
+                isDisliked = await _songLikeService.ToggleDislikeAsync(user.Id, songMetadataId);
+            }
+            catch (SongNotFoundException)
+            {
+                return BadRequest(new { error = SongNotFoundError });
+            }
+
             var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
 
             return Ok(new { isDisliked, likeCount, dislikeCount });
+        }
+
+        /// <summary>
+        /// Idempotently sets the caller's like/dislike state for a song. Requires authentication.
+        /// Unlike the toggle endpoints above, the outcome depends only on the requested state, so the
+        /// mobile app can safely replay a queued offline intent without flipping the wrong way.
+        /// </summary>
+        [HttpPut("like-state/{songMetadataId:int}")]
+        [Authorize]
+        public async Task<IActionResult> SetLikeState(int songMetadataId, [FromBody] SetLikeStateRequest request)
+        {
+            if (songMetadataId <= 0)
+                return BadRequest(new { error = "Invalid song metadata ID" });
+
+            if (request == null)
+                return BadRequest(new { error = "Request body is required" });
+
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return Unauthorized();
+
+            bool? userLikeStatus;
+            try
+            {
+                userLikeStatus = await _songLikeService.SetLikeStateAsync(user.Id, songMetadataId, request.Status);
+            }
+            catch (SongNotFoundException)
+            {
+                return BadRequest(new { error = SongNotFoundError });
+            }
+
+            var (likeCount, dislikeCount) = await _songLikeService.GetLikeCountsAsync(songMetadataId);
+
+            return Ok(new { userLikeStatus, likeCount, dislikeCount });
         }
 
         /// <summary>
@@ -478,6 +539,12 @@ namespace MusicSalesApp.Controllers
         public class ReportSongRequest
         {
             public string Reason { get; set; } = string.Empty;
+        }
+
+        public class SetLikeStateRequest
+        {
+            /// <summary>True to like, false to dislike, null to clear any opinion.</summary>
+            public bool? Status { get; set; }
         }
     }
 }

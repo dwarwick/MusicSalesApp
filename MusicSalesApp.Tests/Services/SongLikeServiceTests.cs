@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Hubs;
 using MusicSalesApp.Models;
@@ -13,6 +14,7 @@ public class SongLikeServiceTests
 {
     private Mock<IDbContextFactory<AppDbContext>> _mockContextFactory;
     private Mock<IHubContext<LikeCountHub>> _mockHubContext;
+    private Mock<IClientProxy> _mockClientProxy;
     private SongLikeService _service;
     private AppDbContext _context;
     private DbContextOptions<AppDbContext> _contextOptions;
@@ -35,8 +37,8 @@ public class SongLikeServiceTests
         // Mock IHubContext for SignalR broadcasting
         _mockHubContext = new Mock<IHubContext<LikeCountHub>>();
         var mockClients = new Mock<IHubClients>();
-        var mockClientProxy = new Mock<IClientProxy>();
-        mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
+        _mockClientProxy = new Mock<IClientProxy>();
+        mockClients.Setup(c => c.All).Returns(_mockClientProxy.Object);
         _mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
 
         _service = new SongLikeService(_mockContextFactory.Object, _mockHubContext.Object);
@@ -333,6 +335,120 @@ public class SongLikeServiceTests
         Assert.That(updatedLike, Is.Not.Null);
         Assert.That(updatedLike.CreatedAt, Is.EqualTo(originalTime));
         Assert.That(updatedLike.UpdatedAt, Is.GreaterThan(originalTime));
+    }
+
+    // --- SetLikeStateAsync (idempotent set-state used by the mobile offline queue) ---
+
+    [Test]
+    public async Task SetLikeStateAsync_NoExistingPreference_CreatesLike()
+    {
+        var result = await _service.SetLikeStateAsync(1, 1, true);
+
+        Assert.That(result, Is.True);
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var savedLike = await verifyContext.SongLikes.FirstOrDefaultAsync(sl => sl.UserId == 1 && sl.SongMetadataId == 1);
+        Assert.That(savedLike, Is.Not.Null);
+        Assert.That(savedLike.IsLike, Is.True);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_NoExistingPreference_CreatesDislike()
+    {
+        var result = await _service.SetLikeStateAsync(1, 1, false);
+
+        Assert.That(result, Is.False);
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var savedLike = await verifyContext.SongLikes.FirstOrDefaultAsync(sl => sl.UserId == 1 && sl.SongMetadataId == 1);
+        Assert.That(savedLike, Is.Not.Null);
+        Assert.That(savedLike.IsLike, Is.False);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_AppliedTwice_IsIdempotent()
+    {
+        // The whole point of this endpoint: replaying a queued offline intent must not flip state back.
+        await _service.SetLikeStateAsync(1, 1, true);
+        var result = await _service.SetLikeStateAsync(1, 1, true);
+
+        Assert.That(result, Is.True);
+        var (likeCount, dislikeCount) = await _service.GetLikeCountsAsync(1);
+        Assert.That(likeCount, Is.EqualTo(1));
+        Assert.That(dislikeCount, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_LikedThenDisliked_FlipsRowInPlace()
+    {
+        await _service.SetLikeStateAsync(1, 1, true);
+
+        var result = await _service.SetLikeStateAsync(1, 1, false);
+
+        Assert.That(result, Is.False);
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var rows = await verifyContext.SongLikes.Where(sl => sl.UserId == 1 && sl.SongMetadataId == 1).ToListAsync();
+        Assert.That(rows, Has.Count.EqualTo(1));
+        Assert.That(rows[0].IsLike, Is.False);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_NullState_RemovesExistingRow()
+    {
+        await _service.SetLikeStateAsync(1, 1, true);
+
+        var result = await _service.SetLikeStateAsync(1, 1, null);
+
+        Assert.That(result, Is.Null);
+        using var verifyContext = new AppDbContext(_contextOptions);
+        var savedLike = await verifyContext.SongLikes.FirstOrDefaultAsync(sl => sl.UserId == 1 && sl.SongMetadataId == 1);
+        Assert.That(savedLike, Is.Null);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_NullStateWithNoExistingRow_IsNoOp()
+    {
+        var result = await _service.SetLikeStateAsync(1, 1, null);
+
+        Assert.That(result, Is.Null);
+        using var verifyContext = new AppDbContext(_contextOptions);
+        Assert.That(await verifyContext.SongLikes.AnyAsync(), Is.False);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_DoesNotAffectOtherUsersOpinions()
+    {
+        await _service.SetLikeStateAsync(1, 1, true);
+        await _service.SetLikeStateAsync(2, 1, true);
+
+        await _service.SetLikeStateAsync(1, 1, null);
+
+        var (likeCount, dislikeCount) = await _service.GetLikeCountsAsync(1);
+        Assert.That(likeCount, Is.EqualTo(1));
+        Assert.That(dislikeCount, Is.EqualTo(0));
+        Assert.That(await _service.GetUserLikeStatusAsync(2, 1), Is.True);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_MutatingChange_BroadcastsOnce()
+    {
+        await _service.SetLikeStateAsync(1, 1, true);
+
+        _mockClientProxy.Verify(
+            p => p.SendCoreAsync(SignalRMethodNames.ReceiveLikeCountUpdate, It.IsAny<object[]>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task SetLikeStateAsync_NoOpChange_DoesNotBroadcast()
+    {
+        // A replayed intent that matches the stored row must not spam every connected client.
+        await _service.SetLikeStateAsync(1, 1, true);
+        _mockClientProxy.Invocations.Clear();
+
+        await _service.SetLikeStateAsync(1, 1, true);
+
+        _mockClientProxy.Verify(
+            p => p.SendCoreAsync(It.IsAny<string>(), It.IsAny<object[]>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Test]
