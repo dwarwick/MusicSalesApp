@@ -37,7 +37,16 @@ public static class SongMediaPaths
     private const string GuidFormat = "N";
 
     private const string PlaybackExtension = ".mp3";
-    private const string FacebookExtension = ".png";
+
+    /// <summary>
+    /// Sharing images are JPEG. They were PNG until July 2026: a 1200x630 photographic PNG runs to
+    /// 1-2 MB where JPEG at quality 85 is under 150 KB, and the image is composited onto an opaque
+    /// black canvas so there is no transparency to preserve.
+    /// </summary>
+    private const string FacebookExtension = ".jpg";
+
+    /// <summary>The extension sharing images used before the move to JPEG.</summary>
+    private const string LegacyFacebookExtension = ".png";
 
     private const string MusicSuffix = "-music";
     private const string OriginalMusicSuffix = "-music-original";
@@ -90,9 +99,40 @@ public static class SongMediaPaths
         if (TryGetGuidFromPath(coverArtBlobPath, out var mediaGuid))
             return FacebookImage(mediaGuid);
 
+        return LegacyFacebookImageFor(coverArtBlobPath, FacebookExtension);
+    }
+
+    /// <summary>
+    /// Every path a song's sharing image may occupy, current name first.
+    ///
+    /// <para>
+    /// Sharing images moved from PNG to JPEG. The superseded name is returned alongside the current
+    /// one so invalidation can clear both - otherwise the stale PNG would keep being served by any
+    /// crawler that had already cached its URL - and so the image-variant backfill can sweep the
+    /// orphaned PNGs up in the same pass.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> FacebookImageCandidatesFor(string? coverArtBlobPath)
+    {
+        if (string.IsNullOrWhiteSpace(coverArtBlobPath))
+            return Array.Empty<string>();
+
+        var current = FacebookImageFor(coverArtBlobPath);
+
+        var legacy = TryGetGuidFromPath(coverArtBlobPath, out var mediaGuid)
+            ? Build(mediaGuid, FacebookSuffix, LegacyFacebookExtension)
+            : LegacyFacebookImageFor(coverArtBlobPath, LegacyFacebookExtension);
+
+        return string.Equals(current, legacy, StringComparison.OrdinalIgnoreCase)
+            ? new[] { current }
+            : new[] { current, legacy };
+    }
+
+    private static string LegacyFacebookImageFor(string coverArtBlobPath, string extension)
+    {
         var normalized = Normalize(coverArtBlobPath);
         var directory = Path.GetDirectoryName(normalized)?.Replace('\\', '/') ?? string.Empty;
-        var fileName = $"{Path.GetFileNameWithoutExtension(normalized)}_fb{FacebookExtension}";
+        var fileName = $"{Path.GetFileNameWithoutExtension(normalized)}_fb{extension}";
         return string.IsNullOrEmpty(directory) ? fileName : $"{directory}/{fileName}";
     }
 

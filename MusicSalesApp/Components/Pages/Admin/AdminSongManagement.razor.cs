@@ -21,7 +21,10 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
 {
     private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB, loaded from settings
     private const string PriceFormat = "F2";
-    private const int CropOutputSize = 800; // Output size in pixels for cropped square images
+    // Must match outputSize in wwwroot/js/image-crop-helper.js: the browser produces the pixels and
+    // this records the dimensions. 1024 so a cropped cover can still fill the largest pre-resized
+    // rendition, which is never upscaled.
+    private const int CropOutputSize = 1024;
 
     [Inject] protected IAzureStorageService StorageService { get; set; }
     [Inject] protected ISongAdminService SongAdminService { get; set; }
@@ -36,6 +39,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected IConfiguration Configuration { get; set; }
     [Inject] protected IAppSettingsService AppSettingsService { get; set; }
     [Inject] protected IOpenGraphService OpenGraphService { get; set; }
+    [Inject] protected IImageVariantCoordinator ImageVariantCoordinator { get; set; }
+    [Inject] protected ICoverArtUrlBuilder CoverArtUrlBuilder { get; set; }
     [Inject] protected ILogger<AdminSongManagementModel> Logger { get; set; }
 
     protected bool _isLoading = true;
@@ -168,16 +173,20 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     IsAiLyrics = m.IsAiLyrics,
                     IsEnabled = m.IsEnabled,
                     StatusReason = m.StatusReason ?? string.Empty,
-                    IsImageSquare = m.IsImageSquare
+                    IsImageSquare = m.IsImageSquare,
+                    CoverArtVariantWidths = m.CoverArtVariantWidths ?? string.Empty
                 };
             }).ToList();
-        
+
         // Generate SAS URLs for images
         foreach (var song in _allSongs)
         {
             if (!string.IsNullOrEmpty(song.JpegFileName))
             {
-                song.SongImageUrl = StorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
+                // One URL feeds both the 80px grid thumbnail and the 200px edit-dialog preview, so
+                // it has to satisfy the larger of the two.
+                song.SongImageUrl = CoverArtUrlBuilder.BuildSasForDisplayWidth(
+                    song.JpegFileName, song.CoverArtVariantWidths, 200, TimeSpan.FromHours(1)) ?? string.Empty;
             }
         }
     }
@@ -386,6 +395,11 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.ImageWidth = CropOutputSize;
                     existingMetadata.ImageHeight = CropOutputSize;
                     await MetadataService.UpsertAsync(existingMetadata);
+
+                    // The renditions hang off the cover-art path, so a crop has to rebuild them for
+                    // the same reason it has to refresh the sharing image above.
+                    await ImageVariantCoordinator.RefreshCoverArtVariantsAsync(
+                        existingMetadata.Id, oldFileName);
                 }
 
                 _cropApplied = false;
@@ -481,11 +495,14 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     existingMetadata.IsAiVocals = _editIsAiVocals;
                     existingMetadata.IsAiLyrics = _editIsAiLyrics;
                     await MetadataService.UpsertAsync(existingMetadata);
+
+                    await ImageVariantCoordinator.RefreshCoverArtVariantsAsync(
+                        existingMetadata.Id, oldFileName);
                 }
                 else
                 {
                     // Create new metadata if none exists
-                    await MetadataService.UpsertAsync(new SongMetadata
+                    var createdMetadata = await MetadataService.UpsertAsync(new SongMetadata
                     {
                         BlobPath = newFileName,
                         ImageBlobPath = newFileName,
@@ -497,6 +514,8 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                         IsAiVocals = _editIsAiVocals,
                         IsAiLyrics = _editIsAiLyrics
                     });
+
+                    await ImageVariantCoordinator.RefreshCoverArtVariantsAsync(createdMetadata.Id);
                 }
             }
 

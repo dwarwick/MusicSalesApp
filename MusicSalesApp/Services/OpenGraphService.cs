@@ -285,7 +285,7 @@ public class OpenGraphService : IOpenGraphService
             }
 
             // Upload the Facebook-optimized image
-            await _storageService.UploadAsync(fbImagePath, fbImageStream, "image/png");
+            await _storageService.UploadAsync(fbImagePath, fbImageStream, "image/jpeg");
             return fbImagePath;
         }
         catch (Exception ex)
@@ -304,14 +304,20 @@ public class OpenGraphService : IOpenGraphService
         // Under the GUID scheme a song's sharing image has a fixed name, so GetOrCreate's
         // "already exists" short-circuit would serve the pre-crop art forever unless the stale
         // blob is removed whenever the cover art changes.
-        var fbImagePath = GetFacebookImagePath(imageBlobPath);
-        try
+        //
+        // Both the current JPEG name and the superseded PNG one are cleared: songs whose art was
+        // last generated before the format change still have a .png sitting there, and leaving it
+        // would strand an orphan that nothing ever overwrites.
+        foreach (var fbImagePath in SongMediaPaths.FacebookImageCandidatesFor(imageBlobPath))
         {
-            await _storageService.DeleteAsync(fbImagePath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Unable to invalidate sharing image {Path}", fbImagePath);
+            try
+            {
+                await _storageService.DeleteAsync(fbImagePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unable to invalidate sharing image {Path}", fbImagePath);
+            }
         }
     }
 
@@ -403,9 +409,12 @@ public class OpenGraphService : IOpenGraphService
             using var skImage = SKImage.FromBitmap(original);
             canvas.DrawImage(skImage, sourceRect, destRect, sampling);
 
-            // Encode as PNG (lossless)
+            // JPEG rather than PNG: this is a photograph on an opaque background, where lossless
+            // encoding costs 1-2 MB against roughly 120 KB for quality 85 at a difference no one
+            // sees in a social preview. The canvas is cleared to solid black above, so the lack of
+            // an alpha channel changes nothing.
             using var image = surface.Snapshot();
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            using var data = image.Encode(SKEncodedImageFormat.Jpeg, 85);
 
             var ms = new MemoryStream();
             data.SaveTo(ms);

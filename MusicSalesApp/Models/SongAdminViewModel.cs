@@ -13,6 +13,12 @@ public class SongAdminViewModel
     public string OriginalAudioFileName { get; set; } = string.Empty;
 
     /// <summary>
+    /// The song's recorded cover-art rendition widths, carried here so the grid can request a
+    /// thumbnail-sized image instead of the full-size master without a second database round trip.
+    /// </summary>
+    public string CoverArtVariantWidths { get; set; } = string.Empty;
+
+    /// <summary>
     /// Identifies this song's media in blob storage; null for songs that predate the GUID naming
     /// scheme. Carried here so the crop and cover-art-replace flows can derive their target path
     /// without a second database round trip.

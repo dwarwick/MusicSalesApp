@@ -31,6 +31,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<StorageBackupRun> StorageBackupRuns { get; set; }
     public DbSet<StorageBackupContainerProgress> StorageBackupContainerProgresses { get; set; }
     public DbSet<StorageBackupItemFailure> StorageBackupItemFailures { get; set; }
+    public DbSet<ImageVariantBackfillRun> ImageVariantBackfillRuns { get; set; }
+    public DbSet<ImageVariantBackfillItemFailure> ImageVariantBackfillItemFailures { get; set; }
     public DbSet<SongStream> SongStreams { get; set; }
     public DbSet<Genre> Genres { get; set; }
     public DbSet<UserHistory> UserHistories { get; set; }
@@ -492,6 +494,26 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
         builder.Entity<StorageBackupContainerProgress>()
             .HasIndex(container => new { container.RunId, container.SourceContainerName })
             .IsUnique();
+
+        builder.Entity<ImageVariantBackfillRun>()
+            .HasMany(run => run.Failures)
+            .WithOne(failure => failure.Run)
+            .HasForeignKey(failure => failure.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Same singleton-lock pattern as the storage backup: the image backfill is CPU-bound and
+        // runs in-process with the web app, so two overlapping runs would be a self-inflicted
+        // outage rather than merely wasteful.
+        builder.Entity<ImageVariantBackfillRun>()
+            .HasIndex(run => run.ActiveLockKey)
+            .IsUnique()
+            .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+        builder.Entity<ImageVariantBackfillRun>()
+            .HasIndex(run => run.CreatedAt);
+
+        builder.Entity<ImageVariantBackfillItemFailure>()
+            .HasIndex(failure => failure.RunId);
 
         builder.Entity<StorageBackupItemFailure>()
             .HasIndex(failure => failure.RunId);

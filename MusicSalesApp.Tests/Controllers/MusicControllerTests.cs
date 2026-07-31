@@ -24,6 +24,7 @@ public class MusicControllerTests
     private IMobileSongMapper _songMapper;
     private Mock<UserManager<ApplicationUser>> _mockUserManager;
     private Mock<ICreatorService> _mockCreatorService;
+    private Mock<IImageVariantCoordinator> _mockImageVariantCoordinator;
     private Mock<Microsoft.AspNetCore.Authorization.IAuthorizationService> _mockAuthorizationService;
     private Mock<ILogger<MusicController>> _mockLogger;
     private MusicController _controller;
@@ -56,6 +57,7 @@ public class MusicControllerTests
             userStoreMock.Object, null, null, null, null, null, null, null, null);
 
         _mockCreatorService = new Mock<ICreatorService>();
+        _mockImageVariantCoordinator = new Mock<IImageVariantCoordinator>();
         _mockAuthorizationService = new Mock<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
         _mockAuthorizationService.Setup(service => service.AuthorizeAsync(
                 It.IsAny<System.Security.Claims.ClaimsPrincipal>(), It.IsAny<object>(), It.IsAny<string>()))
@@ -74,6 +76,7 @@ public class MusicControllerTests
             _mockUserManager.Object,
             _mockCreatorService.Object,
             _mockAuthorizationService.Object,
+            _mockImageVariantCoordinator.Object,
             _mockLogger.Object);
 
         // Set up HttpContext for controller (required for Response.Headers access)

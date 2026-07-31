@@ -18,7 +18,7 @@ public class SongMediaPathsTests
             Assert.That(SongMediaPaths.OriginalAudio(MediaGuid, ".wav"), Is.EqualTo($"{Name}/{Name}-music-original.wav"));
             Assert.That(SongMediaPaths.CoverArt(MediaGuid, ".jpg"), Is.EqualTo($"{Name}/{Name}-coverart.jpg"));
             Assert.That(SongMediaPaths.OriginalCoverArt(MediaGuid, ".png"), Is.EqualTo($"{Name}/{Name}-coverart-original.png"));
-            Assert.That(SongMediaPaths.FacebookImage(MediaGuid), Is.EqualTo($"{Name}/{Name}-fb.png"));
+            Assert.That(SongMediaPaths.FacebookImage(MediaGuid), Is.EqualTo($"{Name}/{Name}-fb.jpg"));
         });
     }
 
@@ -73,19 +73,41 @@ public class SongMediaPathsTests
     public void FacebookImageFor_GuidSchemeArt_ResolvesToTheSongsFixedSharingImage()
         => Assert.That(
             SongMediaPaths.FacebookImageFor(SongMediaPaths.CoverArt(MediaGuid, ".jpg")),
-            Is.EqualTo($"{Name}/{Name}-fb.png"));
+            Is.EqualTo($"{Name}/{Name}-fb.jpg"));
 
     [Test]
     public void FacebookImageFor_LegacyArt_KeepsTheHistoricalUnderscoreSuffix()
     {
-        // Existing "_fb.png" blobs must stay reachable, or every legacy share image regenerates.
+        // The "_fb" suffix and folder placement are unchanged; only the extension moved to JPEG.
         Assert.Multiple(() =>
         {
             Assert.That(SongMediaPaths.FacebookImageFor("Night Drive/Night Drive.jpg"),
-                Is.EqualTo("Night Drive/Night Drive_fb.png"));
-            Assert.That(SongMediaPaths.FacebookImageFor("Cover.png"), Is.EqualTo("Cover_fb.png"));
+                Is.EqualTo("Night Drive/Night Drive_fb.jpg"));
+            Assert.That(SongMediaPaths.FacebookImageFor("Cover.png"), Is.EqualTo("Cover_fb.jpg"));
         });
     }
+
+    [Test]
+    public void FacebookImageCandidatesFor_ReturnsTheCurrentJpegAndTheSupersededPng()
+    {
+        // Sharing images moved from PNG to JPEG. Invalidation and the backfill both need the old
+        // name so the orphaned PNG can be cleared rather than left in storage forever.
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                SongMediaPaths.FacebookImageCandidatesFor(SongMediaPaths.CoverArt(MediaGuid, ".jpg")),
+                Is.EqualTo(new[] { $"{Name}/{Name}-fb.jpg", $"{Name}/{Name}-fb.png" }));
+
+            Assert.That(
+                SongMediaPaths.FacebookImageCandidatesFor("Night Drive/Night Drive.jpg"),
+                Is.EqualTo(new[] { "Night Drive/Night Drive_fb.jpg", "Night Drive/Night Drive_fb.png" }));
+        });
+    }
+
+    [TestCase("")]
+    [TestCase(null)]
+    public void FacebookImageCandidatesFor_BlankPath_IsEmpty(string coverArtPath)
+        => Assert.That(SongMediaPaths.FacebookImageCandidatesFor(coverArtPath), Is.Empty);
 
     [TestCase("")]
     [TestCase(null)]

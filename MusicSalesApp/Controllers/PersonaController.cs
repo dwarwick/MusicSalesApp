@@ -155,6 +155,11 @@ public class PersonaController : ControllerBase
             await blobClient.UploadAsync(ms, new Azure.Storage.Blobs.Models.BlobUploadOptions { HttpHeaders = headers });
 
             _logger.LogInformation("Uploaded cropped persona image to {BlobPath}", blobPath);
+
+            // As with the cropped cover-art endpoint, no pre-resized renditions are generated here.
+            // The persona row does not reference this blob until ManagePersonas saves, and that save
+            // calls UpdatePersonaAsync with imageReplaced: true, which is the single place persona
+            // renditions are rebuilt.
             return Ok(new { blobPath });
         }
         catch (Exception ex)

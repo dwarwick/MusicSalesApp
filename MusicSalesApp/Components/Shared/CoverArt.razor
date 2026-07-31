@@ -1,0 +1,15 @@
+@namespace MusicSalesApp.Components.Shared
+
+@if (Source.HasImage)
+{
+    <img src="@Source.BaseUrl"
+         srcset="@SrcSet"
+         sizes="@SizesAttribute"
+         class="@CssClass"
+         alt="@Alt"
+         loading="@LoadingAttribute"
+         decoding="async"
+         width="@IntrinsicWidth"
+         height="@IntrinsicHeight"
+         @attributes="AdditionalAttributes" />
+}

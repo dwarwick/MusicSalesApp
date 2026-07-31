@@ -1,4 +1,5 @@
 using System.IO;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -37,7 +38,13 @@ public class MobileSongMapper : IMobileSongMapper
             ArtistName = m.GetEffectiveArtistName(),
             Genre = m.Genre ?? string.Empty,
             AlbumArtUrl = ResolveAlbumArtUrl(m, sasLifetime),
+            AlbumArtThumbUrl = ResolveAlbumArtVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
+            AlbumArtHeroUrl = ResolveAlbumArtVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
+            AlbumArtVersion = m.CoverArtVariantVersion,
             PersonaImageUrl = ResolvePersonaImageUrl(m, sasLifetime),
+            PersonaImageThumbUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
+            PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
+            PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
             PersonaBio = ResolvePersonaBio(m),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
@@ -63,7 +70,13 @@ public class MobileSongMapper : IMobileSongMapper
             ArtistName = m.GetEffectiveArtistName(),
             Genre = m.Genre ?? string.Empty,
             AlbumArtUrl = ResolveAlbumArtUrl(m, sasLifetime),
+            AlbumArtThumbUrl = ResolveAlbumArtVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
+            AlbumArtHeroUrl = ResolveAlbumArtVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
+            AlbumArtVersion = m.CoverArtVariantVersion,
             PersonaImageUrl = ResolvePersonaImageUrl(m, sasLifetime),
+            PersonaImageThumbUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileThumbWidth),
+            PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
+            PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
             PersonaBio = ResolvePersonaBio(m),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
@@ -90,6 +103,30 @@ public class MobileSongMapper : IMobileSongMapper
     private string? ResolvePersonaImageUrl(SongMetadata m, TimeSpan sasLifetime) =>
         m.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
             ? _creatorPersonaService.GetPersonaImageSasUrl(m.Persona.ImageBlobPath, sasLifetime)
+            : null;
+
+    /// <summary>
+    /// A rendition URL, or null when that rendition does not exist for this song.
+    ///
+    /// <para>
+    /// Null rather than a guess: the app's fallback chain ends at
+    /// <see cref="SongListItemDto.AlbumArtUrl"/>, so a missing rendition degrades to today's
+    /// behaviour, whereas a URL pointing at a blob that was never generated would be a broken image.
+    /// </para>
+    /// </summary>
+    private string? ResolveAlbumArtVariantUrl(SongMetadata m, TimeSpan sasLifetime, int width) =>
+        !string.IsNullOrEmpty(m.ImageBlobPath)
+        && ImageVariantSizes.CsvContains(m.CoverArtVariantWidths, width)
+            ? _storageService
+                .GetReadSasUri(ImageVariantPaths.Variant(m.ImageBlobPath, width), sasLifetime)
+                .ToString()
+            : null;
+
+    private string? ResolvePersonaImageVariantUrl(SongMetadata m, TimeSpan sasLifetime, int width) =>
+        m.Persona is { IsEnabled: true, ImageBlobPath: not null and not "" }
+        && ImageVariantSizes.CsvContains(m.Persona.ImageVariantWidths, width)
+            ? _creatorPersonaService.GetPersonaImageSasUrl(
+                ImageVariantPaths.Variant(m.Persona.ImageBlobPath, width), sasLifetime)
             : null;
 
     private static string? ResolvePersonaBio(SongMetadata m) =>

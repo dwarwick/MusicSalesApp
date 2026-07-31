@@ -31,7 +31,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected bool _loading = true;
     protected string _error;
     protected StorageFileInfo _songInfo;
-    protected string _albumArtUrl;
+    protected CoverArtSource _albumArtSource = CoverArtSource.None;
     protected string _streamUrl;
     protected bool _isPlaying;
     protected double _currentTime;
@@ -268,9 +268,12 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
                 && IsImageFile(_songMetadata.ImageBlobPath)
                 && (_songMetadata.IsImageSquare ?? true);
 
-            _albumArtUrl = hasCoverArt
-                ? $"api/music/{SafeEncodePath(_songMetadata.ImageBlobPath)}"
-                : null;
+            _albumArtSource = hasCoverArt
+                ? CoverArtUrlBuilder.BuildProxy(
+                    _songMetadata.ImageBlobPath,
+                    _songMetadata.CoverArtVariantWidths,
+                    _songMetadata.CoverArtVariantVersion)
+                : CoverArtSource.None;
 
             if (_isAuthenticated)
             {
@@ -469,7 +472,9 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         var persona = GetPersona();
         if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
             return null;
-        return CreatorPersonaService.GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromHours(2));
+        // .persona-image-sm renders at 60 CSS px (40 below 576px), so the 60 covers every case.
+        return CreatorPersonaService.GetPersonaImageSasUrl(
+            persona.ImageBlobPath, persona.ImageVariantWidths, 60, TimeSpan.FromHours(2));
     }
 
     protected double? GetTrackLengthSeconds()

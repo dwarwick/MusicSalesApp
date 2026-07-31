@@ -26,9 +26,13 @@ else if (!string.IsNullOrEmpty(_error))
                 <div class="title-container">
                     <div class="player-art-content">
                         <div class="player-art-shell">
-                            @if (!string.IsNullOrEmpty(_albumArtUrl))
+                            @if (_albumArtSource.HasImage)
                             {
-                                <img src="@_albumArtUrl" alt="Album Art" class="playlist-art" />
+                                <CoverArt Source="_albumArtSource"
+                                          Sizes="@CoverArtSizes.PlayerHero"
+                                          CssClass="playlist-art"
+                                          Alt="Album Art"
+                                          Eager="true" />
                             }
                             else
                             {

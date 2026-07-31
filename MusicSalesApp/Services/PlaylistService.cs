@@ -169,6 +169,10 @@ public class PlaylistService : IPlaylistService
                 .Include(up => up.SongMetadata)
                     .ThenInclude(sm => sm.Creator)
                         .ThenInclude(c => c.User)
+                // Without this the mobile mapper sees a null Persona and silently omits the artist
+                // image and its rendition from every playlist song. Lazy-loading proxies are off.
+                .Include(up => up.SongMetadata)
+                    .ThenInclude(sm => sm.Persona)
                 .Where(up => up.PlaylistId == playlistId)
                 .Where(up => up.SongMetadata != null && up.SongMetadata.IsEnabled && up.SongMetadata.IsActive) // Filter out disabled/inactive songs
                 .OrderBy(up => up.SortOrder)
@@ -328,7 +332,10 @@ public class PlaylistService : IPlaylistService
 
             // Get all active and enabled songs that are not album covers and not already in the playlist
             var availableSongs = await context.SongMetadata
-                .Where(sm => sm.IsActive && 
+                // Without this the mobile mapper sees a null Persona and silently omits the artist
+                // image and its rendition. Lazy-loading proxies are off.
+                .Include(sm => sm.Persona)
+                .Where(sm => sm.IsActive &&
                              sm.IsEnabled && // Filter out disabled songs
                              !sm.IsAlbumCover && 
                              !string.IsNullOrEmpty(sm.Mp3BlobPath) &&

@@ -33,6 +33,10 @@ public class RecommendationService : IRecommendationService
                 .Include(rp => rp.SongMetadata)
                     .ThenInclude(sm => sm.Creator)
                         .ThenInclude(c => c.User)
+                // Without this the mobile mapper sees a null Persona and silently omits the artist
+                // image and its rendition from every song. Lazy-loading proxies are off.
+                .Include(rp => rp.SongMetadata)
+                    .ThenInclude(sm => sm.Persona)
                 .Where(rp => rp.UserId == userId)
                 .Where(rp => rp.SongMetadata != null && rp.SongMetadata.IsEnabled && rp.SongMetadata.IsActive)
                 .OrderBy(rp => rp.DisplayOrder)
@@ -170,6 +174,8 @@ public class RecommendationService : IRecommendationService
                 .Include(rp => rp.SongMetadata)
                     .ThenInclude(sm => sm.Creator)
                         .ThenInclude(c => c.User)
+                .Include(rp => rp.SongMetadata)
+                    .ThenInclude(sm => sm.Persona)
                 .Where(rp => rp.UserId == userId)
                 .OrderBy(rp => rp.DisplayOrder)
                 .ToListAsync();

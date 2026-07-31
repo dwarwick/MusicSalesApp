@@ -74,6 +74,9 @@ public abstract class BUnitTestBase
     protected Mock<IAdminMessageHubClient> MockAdminMessageHubClient { get; private set; } = default!;
     protected Mock<IContactRequestAdminService> MockContactRequestAdminService { get; private set; } = default!;
     protected Mock<IStorageBackupService> MockStorageBackupService { get; private set; } = default!;
+    protected Mock<IImageVariantCoordinator> MockImageVariantCoordinator { get; private set; } = default!;
+    protected Mock<ICoverArtUrlBuilder> MockCoverArtUrlBuilder { get; private set; } = default!;
+    protected Mock<IImageVariantBackfillService> MockImageVariantBackfillService { get; private set; } = default!;
     protected Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>> MockDbContextFactory { get; private set; } = default!;
     protected FakeTimeProvider FakeTimeProvider { get; private set; } = default!;
 
@@ -128,6 +131,33 @@ public abstract class BUnitTestBase
             .ReturnsAsync(new List<MusicSalesApp.Models.StorageBackupRun>());
         MockStorageBackupService.Setup(service => service.GetConfiguredContainerNames())
             .Returns(new[] { "musiccontainer", "persona-images" });
+        MockImageVariantCoordinator = new Mock<IImageVariantCoordinator>();
+        MockImageVariantCoordinator
+            .Setup(service => service.RefreshCoverArtVariantsAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        MockImageVariantCoordinator
+            .Setup(service => service.RefreshPersonaVariantsAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        MockCoverArtUrlBuilder = new Mock<ICoverArtUrlBuilder>();
+        MockCoverArtUrlBuilder
+            .Setup(service => service.BuildProxy(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+            .Returns(CoverArtSource.None);
+        MockCoverArtUrlBuilder
+            .Setup(service => service.BuildSas(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan>()))
+            .Returns(CoverArtSource.None);
+
+        MockImageVariantBackfillService = new Mock<IImageVariantBackfillService>();
+        MockImageVariantBackfillService.Setup(service => service.GetRunsAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.ImageVariantBackfillRun>());
+        MockImageVariantBackfillService.Setup(service => service.GetActiveRunAsync())
+            .ReturnsAsync((MusicSalesApp.Models.ImageVariantBackfillRun)null);
+        MockImageVariantBackfillService.Setup(service => service.GetTargetContainerNames())
+            .Returns(new[] { "musiccontainer", "persona-images" });
+
         MockDbContextFactory = new Mock<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>();
         FakeTimeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
         
@@ -506,6 +536,9 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IAdminMessageHubClient>(MockAdminMessageHubClient.Object);
         TestContext.Services.AddSingleton<IContactRequestAdminService>(MockContactRequestAdminService.Object);
         TestContext.Services.AddSingleton<IStorageBackupService>(MockStorageBackupService.Object);
+        TestContext.Services.AddSingleton<IImageVariantCoordinator>(MockImageVariantCoordinator.Object);
+        TestContext.Services.AddSingleton<ICoverArtUrlBuilder>(MockCoverArtUrlBuilder.Object);
+        TestContext.Services.AddSingleton<IImageVariantBackfillService>(MockImageVariantBackfillService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));
         TestContext.Services.AddSingleton<TimeProvider>(FakeTimeProvider);

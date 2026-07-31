@@ -1111,6 +1111,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 _uploadedBlobPaths.Add(uploadResult.ImageBlobPath);
                 _uploadedBlobPaths.Add(uploadResult.OriginalCoverArtBlobPath);
                 _uploadedBlobPaths.Add(SongMediaPaths.FacebookImageFor(uploadResult.ImageBlobPath));
+
+                // The pre-resized renditions are generated after the metadata commit, so an
+                // abandoned batch would otherwise strand them in storage with no row referencing
+                // them. Sweeping the whole ladder is fine here: cleanup deletes best-effort, and a
+                // rung the source was too small to fill simply does not exist.
+                foreach (var variantPath in ImageVariantPaths.VariantsFor(
+                             uploadResult.ImageBlobPath, ImageVariantSizes.CoverArt))
+                {
+                    _uploadedBlobPaths.Add(variantPath);
+                }
             }
 
             uploadItem.Progress = 100;

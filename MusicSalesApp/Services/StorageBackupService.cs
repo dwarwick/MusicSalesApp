@@ -22,6 +22,15 @@ namespace MusicSalesApp.Services;
 public sealed class StorageBackupService : IStorageBackupService
 {
     private const int ProgressFlushInterval = 25;
+
+    /// <summary>
+    /// The longest a container's progress row may go without an update while copying. The admin page
+    /// polls every two seconds, and <see cref="ProgressFlushInterval"/> on its own ties the bar to
+    /// throughput - a container holding fewer blobs than the interval, or one whose copies are slow,
+    /// would show nothing at all until it completed.
+    /// </summary>
+    private static readonly TimeSpan ProgressFlushWindow = TimeSpan.FromSeconds(1);
+
     private const int ConsecutiveFailureAbortThreshold = 50;
     private const int DefaultMaxParallelCopies = 4;
     private const int MinParallelCopies = 1;
@@ -35,6 +44,7 @@ public sealed class StorageBackupService : IStorageBackupService
     private readonly IConfiguration _configuration;
     private readonly IBackgroundJobClient _jobs;
     private readonly ILogger<StorageBackupService> _logger;
+    private readonly TimeProvider _time;
 
     public StorageBackupService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -42,8 +52,10 @@ public sealed class StorageBackupService : IStorageBackupService
         IOptions<AzureStorageOptions> storageOptions,
         IConfiguration configuration,
         IBackgroundJobClient jobs,
-        ILogger<StorageBackupService> logger)
+        ILogger<StorageBackupService> logger,
+        TimeProvider time = null)
     {
+        _time = time ?? TimeProvider.System;
         _contextFactory = contextFactory;
         _gateway = gateway;
         _storageOptions = storageOptions;
@@ -544,7 +556,7 @@ public sealed class StorageBackupService : IStorageBackupService
 
         using var slots = new SemaphoreSlim(maxParallel, maxParallel);
         var inFlight = new List<Task>();
-        var lastFlushed = 0;
+        var flushGate = new ProgressFlushGate(ProgressFlushInterval, ProgressFlushWindow, _time);
         var cancelled = false;
 
         await SetContainerStatusAsync(containerId, StorageBackupContainerStatus.Copying);
@@ -579,10 +591,8 @@ public sealed class StorageBackupService : IStorageBackupService
                 inFlight.RemoveAll(task => task.IsCompleted);
             }
 
-            var processed = Volatile.Read(ref tally.Processed);
-            if (processed - lastFlushed >= ProgressFlushInterval)
+            if (flushGate.ShouldFlush(Volatile.Read(ref tally.Processed)))
             {
-                lastFlushed = processed;
                 await FlushContainerProgressAsync(containerId, tally);
                 if (await IsCancellationRequestedAsync(runId))
                 {
@@ -601,7 +611,17 @@ public sealed class StorageBackupService : IStorageBackupService
 
         // Let in-flight server-side copies finish even on cancellation; aborting them would
         // leave half-written destination blobs.
-        await Task.WhenAll(inFlight);
+        //
+        // The listing loop is the only other thing that writes progress, so without flushing here the
+        // last batch of copies - up to maxParallel of them, and the slowest ones at that, since large
+        // blobs are what is still outstanding - would complete invisibly.
+        var drain = Task.WhenAll(inFlight);
+        while (await Task.WhenAny(drain, Task.Delay(ProgressFlushWindow)) != drain)
+        {
+            await FlushContainerProgressAsync(containerId, tally);
+        }
+
+        await drain;
         return cancelled;
     }
 

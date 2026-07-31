@@ -56,8 +56,8 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected ElementReference _activeProgressBarElement;
     protected ElementReference _activeVolumeBarElement;
 
-    // Map file names to song art URLs
-    private Dictionary<string, string> _songArtUrls = new Dictionary<string, string>();
+    // Map file names to song art URL sets (full-size plus the pre-resized renditions)
+    private Dictionary<string, CoverArtSource> _songArtSources = new Dictionary<string, CoverArtSource>();
     
     // Map file names to song prices
     
@@ -351,7 +351,10 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
                     if (isSquare)
                     {
-                        _songArtUrls[audioFile.Name] = $"api/music/{SafeEncodePath(artMetadata.ImageBlobPath)}";
+                        _songArtSources[audioFile.Name] = CoverArtUrlBuilder.BuildProxy(
+                            artMetadata.ImageBlobPath,
+                            artMetadata.CoverArtVariantWidths,
+                            artMetadata.CoverArtVariantVersion);
                     }
                 }
                 
@@ -426,7 +429,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 LinkUrl = $"/artist/{Uri.EscapeDataString(songMeta.Persona.Name)}",
                 PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
                     ? null
-                    : CreatorPersonaService.GetPersonaImageSasUrl(songMeta.Persona.ImageBlobPath, TimeSpan.FromHours(2))
+                    // .card-persona-image renders at 40 CSS px at every breakpoint.
+                    : CreatorPersonaService.GetPersonaImageSasUrl(
+                        songMeta.Persona.ImageBlobPath, songMeta.Persona.ImageVariantWidths, 40, TimeSpan.FromHours(2))
             };
         }
 
@@ -928,9 +933,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return $"api/music/{safePath}";
     }
 
-    protected string GetAlbumArtUrl(string fileName)
+    protected CoverArtSource GetAlbumArtSource(string fileName)
     {
-        return _songArtUrls.TryGetValue(fileName, out var url) ? url : null;
+        return _songArtSources.TryGetValue(fileName, out var source) ? source : CoverArtSource.None;
     }
 
     protected void GetSongPlayerUrl(string fileName)

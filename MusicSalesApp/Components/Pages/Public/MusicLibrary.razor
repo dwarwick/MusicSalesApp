@@ -114,14 +114,16 @@ else
         {
             var cardId = GetCardId(f.Name);
             var isPlaying = IsCardPlaying(cardId);
-            var albumArtUrl = GetAlbumArtUrl(f.Name);
+            var albumArtSource = GetAlbumArtSource(f.Name);
 
             <SfCard CssClass="music-card">
                 <!-- Album Art -->
                 <div class="card-album-art">
-                    @if (!string.IsNullOrEmpty(albumArtUrl))
+                    @if (albumArtSource.HasImage)
                     {
-                        <img src="@albumArtUrl" alt="Album Art" />
+                        @* The card art is fluid - width:100% inside a grid track - so the sizes
+                           preset is what lets the browser pick a rendition before layout runs. *@
+                        <CoverArt Source="albumArtSource" Sizes="@CoverArtSizes.Card" Alt="Album Art" />
                     }
                     else
                     {

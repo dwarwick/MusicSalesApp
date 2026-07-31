@@ -35,6 +35,7 @@ namespace MusicSalesApp.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ICreatorService _creatorService;
         private readonly IAuthorizationService _authorizationService;
+        private readonly IImageVariantCoordinator _imageVariants;
         private readonly ILogger<MusicController> _logger;
 
         public MusicController(
@@ -50,10 +51,12 @@ namespace MusicSalesApp.Controllers
             UserManager<ApplicationUser> userManager,
             ICreatorService creatorService,
             IAuthorizationService authorizationService,
+            IImageVariantCoordinator imageVariants,
             ILogger<MusicController> logger)
         {
             _creatorService = creatorService;
             _authorizationService = authorizationService;
+            _imageVariants = imageVariants;
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
@@ -98,10 +101,23 @@ namespace MusicSalesApp.Controllers
                 return NotFound();
 
             var stream = await _storageService.OpenReadAsync(fileName);
+            var contentTypeSource = fileName;
+
+            if ((stream == null || stream.Length == 0)
+                && ImageVariantPaths.TryParseVariant(fileName, out var masterPath, out _))
+            {
+                // A rendition can be legitimately absent: mid-backfill, or restored from a backup
+                // taken before the backfill ran. Serve the full-size master instead of 404ing -
+                // a browser does not fall back to another srcset candidate on a 404, it just shows
+                // a broken image. Slower, but correct, and it makes the whole feature fail soft.
+                stream = await _storageService.OpenReadAsync(masterPath);
+                contentTypeSource = masterPath;
+            }
+
             if (stream == null || stream.Length == 0)
                 return NotFound();
 
-            var contentType = NormalizeContentType(null, fileName);
+            var contentType = NormalizeContentType(null, contentTypeSource);
 
             // Allow aggressive client/CDN caching for static media
             Response.Headers["Cache-Control"] = "public,max-age=31536000,immutable";
@@ -141,10 +157,37 @@ namespace MusicSalesApp.Controllers
 
         private async Task<bool> IsRegisteredPublicMediaPathAsync(string fileName)
         {
-            var metadata = await _songMetadataService.GetByBlobPathAsync(fileName);
-            return metadata is { IsActive: true, IsEnabled: true }
-                && (string.Equals(metadata.Mp3BlobPath, fileName, StringComparison.Ordinal)
-                    || string.Equals(metadata.ImageBlobPath, fileName, StringComparison.Ordinal));
+            // A rendition path is its master's path with ".w{width}.webp" appended, so the master is
+            // recoverable by string alone and the existing lookup works unchanged - no extra query,
+            // no new index.
+            var isVariant = ImageVariantPaths.TryParseVariant(fileName, out var basePath, out var width);
+            var lookupPath = isVariant ? basePath : fileName;
+
+            var metadata = await _songMetadataService.GetByBlobPathAsync(lookupPath);
+            if (metadata is not { IsActive: true, IsEnabled: true })
+                return false;
+
+            if (!isVariant)
+            {
+                return string.Equals(metadata.Mp3BlobPath, fileName, StringComparison.Ordinal)
+                    || string.Equals(metadata.ImageBlobPath, fileName, StringComparison.Ordinal);
+            }
+
+            // A rendition is public only when its master is this song's registered cover art, which
+            // rules out a forged "{guid}-music.mp3.w320.webp".
+            if (!string.Equals(metadata.ImageBlobPath, basePath, StringComparison.Ordinal))
+                return false;
+
+            // Ladder widths are accepted unconditionally, and deliberately not by consulting the
+            // song's recorded set: during a backfill the blobs exist before the row is updated, and
+            // checking the row would 404 renditions sitting right there in storage.
+            //
+            // The recorded set is then consulted as well, because a master narrower than the smallest
+            // rung yields one rendition at its own, non-ladder width. Those are real, they are the
+            // only candidate in that song's srcset, and a browser shows a broken image rather than
+            // falling back to src when one 404s.
+            return ImageVariantSizes.IsKnownCoverArtWidth(width)
+                || ImageVariantSizes.CsvContains(metadata.CoverArtVariantWidths, width);
         }
 
         /// <summary>
@@ -245,6 +288,19 @@ namespace MusicSalesApp.Controllers
             ms.Position = 0;
 
             await _storageService.UploadAsync(blobPath, ms, "image/png");
+
+            // Under the GUID scheme the crop target is the song's *current* cover-art path, so the
+            // upload above has already replaced the artwork the whole site is serving - before the
+            // edit dialog is saved, and whether or not it ever is. Refresh here so the renditions and
+            // the version match the bytes now in storage; abandoning the dialog would otherwise leave
+            // every srcset candidate and every mobile cache entry showing the pre-crop image forever,
+            // with no version change to invalidate either.
+            //
+            // The legacy branch resolves to a path the song row does not reference yet, so there is
+            // nothing being served to keep consistent and the save is still the right moment.
+            if (string.Equals(blobPath, song.ImageBlobPath, StringComparison.Ordinal))
+                await _imageVariants.RefreshCoverArtVariantsAsync(song.Id);
+
             return Ok(new { blobPath });
         }
 
@@ -456,7 +512,13 @@ namespace MusicSalesApp.Controllers
                 artistName = mappedSong.ArtistName,
                 genre = mappedSong.Genre,
                 albumArtUrl = mappedSong.AlbumArtUrl,
+                albumArtThumbUrl = mappedSong.AlbumArtThumbUrl,
+                albumArtHeroUrl = mappedSong.AlbumArtHeroUrl,
+                albumArtVersion = mappedSong.AlbumArtVersion,
                 personaImageUrl = mappedSong.PersonaImageUrl,
+                personaImageThumbUrl = mappedSong.PersonaImageThumbUrl,
+                personaImageHeroUrl = mappedSong.PersonaImageHeroUrl,
+                personaImageVersion = mappedSong.PersonaImageVersion,
                 personaBio = mappedSong.PersonaBio,
                 streamUrl = mappedSong.StreamUrl,
                 streamCount,
@@ -500,6 +562,12 @@ namespace MusicSalesApp.Controllers
                 ".flac" => "audio/flac",
                 ".m4a" => "audio/mp4",
                 ".aac" => "audio/aac",
+                // Images reach this endpoint too - cover art has always been served through it, and
+                // the pre-resized renditions now are as well. Browsers mostly sniff their way past a
+                // wrong type, but they should not have to.
+                ".webp" => ImageVariantPaths.VariantContentType,
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
                 _ => "application/octet-stream"
             };
         }

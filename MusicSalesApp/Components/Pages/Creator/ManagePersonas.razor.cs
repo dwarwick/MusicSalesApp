@@ -9,7 +9,9 @@ namespace MusicSalesApp.Components.Pages.Creator;
 
 public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
 {
-    private const int PersonaImageOutputSize = 800; // Output size in pixels for cropped square images
+    // Must match outputSize in wwwroot/js/image-crop-helper.js. Personas only need renditions up to
+    // 640, but the crop tool is shared, so this tracks the same value.
+    private const int PersonaImageOutputSize = 1024;
 
     private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB
 
@@ -129,7 +131,10 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
             };
             if (!string.IsNullOrEmpty(p.ImageBlobPath))
             {
-                vm.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(p.ImageBlobPath, TimeSpan.FromHours(1));
+                // One URL feeds both the 60px grid thumbnail and the 200px edit-dialog preview, so
+                // it has to satisfy the larger of the two.
+                vm.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(
+                    p.ImageBlobPath, p.ImageVariantWidths, 200, TimeSpan.FromHours(1));
             }
             viewModels.Add(vm);
         }
@@ -272,11 +277,16 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
             string imageContentType = null;
             string imageFileExtension = null;
 
+            // Tracked separately from imageBlobPath: a replacement image with the same extension
+            // reuses the identical blob path, so the path alone cannot say whether the bytes changed.
+            bool imageReplaced = false;
+
             if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
             {
                 imageBlobPath = _cropTargetBlobPath;
                 imageWidth = PersonaImageOutputSize;
                 imageHeight = PersonaImageOutputSize;
+                imageReplaced = true;
             }
             else if (_bufferedPersonaImageBytes != null && _personaImageFile != null)
             {
@@ -324,6 +334,7 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                 await using var stream = new MemoryStream(imageBytes);
                 imageBlobPath = await CreatorPersonaService.UploadPersonaImageAsync(
                     personaId, _creatorId.Value, stream, imageContentType, imageFileExtension);
+                imageReplaced = true;
             }
 
             await CreatorPersonaService.UpdatePersonaAsync(
@@ -334,7 +345,8 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
                 _editWebsiteUrl?.Trim(),
                 imageBlobPath,
                 imageWidth,
-                imageHeight);
+                imageHeight,
+                imageReplaced: imageReplaced);
 
             _successMessage = _isNewPersona
                 ? $"Persona '{_editName}' has been created."

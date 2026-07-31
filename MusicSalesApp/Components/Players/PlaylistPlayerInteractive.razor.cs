@@ -59,7 +59,7 @@ namespace MusicSalesApp.Components.Players
         protected Dictionary<int, double> _trackDurations = new Dictionary<int, double>();
         protected Dictionary<int, int> _trackStreamCounts = new Dictionary<int, int>();
         private List<string> _trackStreamUrls = new List<string>();
-        private Dictionary<int, string> _trackImageUrls = new Dictionary<int, string>();
+        private Dictionary<int, CoverArtSource> _trackArtSources = new Dictionary<int, CoverArtSource>();
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<PlaylistPlayerInteractiveModel> _dotNetRef;
@@ -568,7 +568,7 @@ namespace MusicSalesApp.Components.Players
                     {
                         if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
                         {
-                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                            _trackArtSources[i] = BuildTrackArtSource(metadata);
                         }
                     }
                 }
@@ -712,7 +712,7 @@ namespace MusicSalesApp.Components.Players
                     {
                         if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
                         {
-                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                            _trackArtSources[i] = BuildTrackArtSource(metadata);
                         }
                     }
                 }
@@ -836,7 +836,7 @@ namespace MusicSalesApp.Components.Players
                     {
                         if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
                         {
-                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                            _trackArtSources[i] = BuildTrackArtSource(metadata);
                         }
                     }
                 }
@@ -961,7 +961,7 @@ namespace MusicSalesApp.Components.Players
                     {
                         if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
                         {
-                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                            _trackArtSources[i] = BuildTrackArtSource(metadata);
                         }
                     }
                 }
@@ -1085,7 +1085,7 @@ namespace MusicSalesApp.Components.Players
                     {
                         if (!string.IsNullOrEmpty(metadata.ImageBlobPath))
                         {
-                            _trackImageUrls[i] = $"api/music/{SafeEncodePath(metadata.ImageBlobPath)}";
+                            _trackArtSources[i] = BuildTrackArtSource(metadata);
                         }
                     }
                 }
@@ -1190,7 +1190,9 @@ namespace MusicSalesApp.Components.Players
             var persona = GetCurrentTrackPersona();
             if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
                 return null;
-            return CreatorPersonaService.GetPersonaImageSasUrl(persona.ImageBlobPath, TimeSpan.FromHours(2));
+            // .persona-image-sm renders at 60 CSS px (40 below 576px).
+            return CreatorPersonaService.GetPersonaImageSasUrl(
+                persona.ImageBlobPath, persona.ImageVariantWidths, 60, TimeSpan.FromHours(2));
         }
 
         /// <summary>
@@ -1400,10 +1402,20 @@ namespace MusicSalesApp.Components.Players
             return (index + 1).ToString(); // Fallback to 1-based index
         }
 
-        protected string GetTrackImageUrl(int index)
+        /// <summary>
+        /// Builds the URL set for one track's cover art, including the pre-resized renditions the
+        /// browser can pick from. Falls back to just the full-size blob when none exist yet.
+        /// </summary>
+        private CoverArtSource BuildTrackArtSource(Models.SongMetadata metadata)
+            => CoverArtUrlBuilder.BuildProxy(
+                metadata.ImageBlobPath,
+                metadata.CoverArtVariantWidths,
+                metadata.CoverArtVariantVersion);
+
+        protected CoverArtSource GetTrackArtSource(int index)
         {
-            if (!_trackImageUrls.TryGetValue(index, out var url) || string.IsNullOrEmpty(url))
-                return null;
+            if (!_trackArtSources.TryGetValue(index, out var source) || !source.HasImage)
+                return CoverArtSource.None;
 
             // Check if image dimensions are known and non-square
             if (_playlistInfo != null && index < _playlistInfo.Tracks.Count)
@@ -1412,11 +1424,11 @@ namespace MusicSalesApp.Components.Players
                 if (_metadataLookup.TryGetValue(track.Name, out var metadata)
                     && metadata.IsImageSquare == false)
                 {
-                    return null; // Non-square image - don't display
+                    return CoverArtSource.None; // Non-square image - don't display
                 }
             }
 
-            return url;
+            return source;
         }
 
         protected bool IsCurrentTrackAiGenerated()
