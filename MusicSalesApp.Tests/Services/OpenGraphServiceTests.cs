@@ -348,21 +348,21 @@ public class OpenGraphServiceTests
     public void GetFacebookImagePath_WithFolderPath_ReturnsCorrectPath()
     {
         var result = OpenGraphService.GetFacebookImagePath("folder/image.jpg");
-        Assert.That(result, Is.EqualTo("folder/image_fb.png"));
+        Assert.That(result, Is.EqualTo("folder/image_fb.jpg"));
     }
 
     [Test]
     public void GetFacebookImagePath_WithoutFolder_ReturnsCorrectPath()
     {
         var result = OpenGraphService.GetFacebookImagePath("image.jpg");
-        Assert.That(result, Is.EqualTo("image_fb.png"));
+        Assert.That(result, Is.EqualTo("image_fb.jpg"));
     }
 
     [Test]
     public void GetFacebookImagePath_WithNestedFolder_ReturnsCorrectPath()
     {
         var result = OpenGraphService.GetFacebookImagePath("artist/album/cover.png");
-        Assert.That(result, Is.EqualTo("artist/album/cover_fb.png"));
+        Assert.That(result, Is.EqualTo("artist/album/cover_fb.jpg"));
     }
 
     [Test]
@@ -396,8 +396,32 @@ public class OpenGraphServiceTests
         await _service.InvalidateFacebookImageAsync("Night Drive/Night Drive.jpg");
 
         _mockStorageService.Verify(
+            service => service.DeleteAsync("Night Drive/Night Drive_fb.jpg"),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task InvalidateFacebookImageAsync_AlsoClearsTheSupersededPngSharingImage()
+    {
+        // Sharing images moved from PNG to JPEG. A song whose image was last generated before the
+        // change still has a .png in storage, and nothing else will ever overwrite it.
+        await _service.InvalidateFacebookImageAsync("Night Drive/Night Drive.jpg");
+
+        _mockStorageService.Verify(
             service => service.DeleteAsync("Night Drive/Night Drive_fb.png"),
             Times.Once);
+    }
+
+    [Test]
+    public async Task InvalidateFacebookImageAsync_GuidScheme_ClearsBothTheJpegAndTheSupersededPng()
+    {
+        var mediaGuid = Guid.NewGuid();
+        var name = mediaGuid.ToString("N");
+
+        await _service.InvalidateFacebookImageAsync(Common.Helpers.SongMediaPaths.CoverArt(mediaGuid, ".jpg"));
+
+        _mockStorageService.Verify(service => service.DeleteAsync($"{name}/{name}-fb.jpg"), Times.Once);
+        _mockStorageService.Verify(service => service.DeleteAsync($"{name}/{name}-fb.png"), Times.Once);
     }
 
     [Test]
@@ -424,7 +448,7 @@ public class OpenGraphServiceTests
     {
         // Arrange
         var originalPath = "folder/image.jpg";
-        var fbPath = "folder/image_fb.png";
+        var fbPath = "folder/image_fb.jpg";
         _mockStorageService.Setup(s => s.ExistsAsync(fbPath)).ReturnsAsync(true);
 
         // Act
@@ -478,14 +502,14 @@ public class OpenGraphServiceTests
         };
 
         _mockSongMetadataService.Setup(s => s.GetAllAsync()).ReturnsAsync(metadata);
-        _mockStorageService.Setup(s => s.ExistsAsync("Test Song/cover_fb.png")).ReturnsAsync(true);
+        _mockStorageService.Setup(s => s.ExistsAsync("Test Song/cover_fb.jpg")).ReturnsAsync(true);
 
         // Act
         var result = await _service.GenerateSongMetaTagsAsync(songTitle);
 
         // Assert
         Assert.That(result, Is.Not.Empty);
-        Assert.That(result, Does.Contain("cover_fb.png"));
+        Assert.That(result, Does.Contain("cover_fb.jpg"));
         Assert.That(result, Does.Contain("og:image:width"));
         Assert.That(result, Does.Contain("1200"));
         Assert.That(result, Does.Contain("og:image:height"));
@@ -556,13 +580,13 @@ public class OpenGraphServiceTests
     {
         // Arrange
         var imagePath = "folder/cover.jpg";
-        _mockStorageService.Setup(s => s.ExistsAsync("folder/cover_fb.png")).ReturnsAsync(true);
+        _mockStorageService.Setup(s => s.ExistsAsync("folder/cover_fb.jpg")).ReturnsAsync(true);
 
         // Act
         await _service.PreGenerateFacebookImageAsync(imagePath);
 
         // Assert - should check if FB image exists
-        _mockStorageService.Verify(s => s.ExistsAsync("folder/cover_fb.png"), Times.Once);
+        _mockStorageService.Verify(s => s.ExistsAsync("folder/cover_fb.jpg"), Times.Once);
     }
 
     [Test]

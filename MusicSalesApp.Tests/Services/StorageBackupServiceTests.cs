@@ -25,6 +25,7 @@ public class StorageBackupServiceTests
     private Mock<IStorageBackupBlobGateway> _gateway = null!;
     private Mock<IBackgroundJobClient> _jobs = null!;
     private AzureStorageOptions _storageOptions = null!;
+    private ManualTimeProvider _clock = null!;
     private StorageBackupService _service = null!;
 
     [SetUp]
@@ -65,6 +66,7 @@ public class StorageBackupServiceTests
             PersonaImageContainerName = PersonaContainer
         };
 
+        _clock = new ManualTimeProvider();
         _service = BuildService();
     }
 
@@ -75,7 +77,8 @@ public class StorageBackupServiceTests
             Options.Create(_storageOptions),
             new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>()).Build(),
             _jobs.Object,
-            Mock.Of<ILogger<StorageBackupService>>());
+            Mock.Of<ILogger<StorageBackupService>>(),
+            _clock);
 
     // ---------------- Queueing ----------------
 
@@ -654,6 +657,38 @@ public class StorageBackupServiceTests
             () => _service.StartRestoreAsync(
                 1, "admin@example.com", new[] { KeysContainer },
                 StorageRestoreScope.MissingAndDiffering, true));
+
+    // ---------------- Progress reporting ----------------
+
+    [Test]
+    public async Task Run_ReportsProgressWhileACopyIsStillGoing()
+    {
+        // The admin page reads these counters, so a container holding fewer blobs than the flush
+        // interval - or one whose copies are slow - would otherwise sit at zero until it finished.
+        SetupContainer(MusicContainer, Blob("a.mp3"), Blob("b.mp3"), Blob("c.mp3"));
+
+        var observed = new List<int>();
+        _gateway.Setup(gateway => gateway.CopyAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IDictionary<string, string>>(), It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                await using var reader = new AppDbContext(_options);
+                observed.Add(reader.StorageBackupContainerProgresses
+                    .Single(container => container.SourceContainerName == MusicContainer)
+                    .ProcessedCount);
+
+                // Stand in for the real duration of a server-side copy.
+                _clock.Advance(TimeSpan.FromSeconds(2));
+            });
+
+        var run = await _service.StartBackupAsync(1, "admin@example.com", false);
+        await _service.RunAsync(run.Id);
+
+        Assert.That(observed, Is.EqualTo(new[] { 0, 1, 2 }),
+            "each copy should see the previous one's progress already recorded");
+    }
 
     // ---------------- Helpers ----------------
 

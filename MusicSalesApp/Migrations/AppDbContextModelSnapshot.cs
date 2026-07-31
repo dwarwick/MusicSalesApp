@@ -884,6 +884,13 @@ namespace MusicSalesApp.Migrations
                     b.Property<int?>("ImageHeight")
                         .HasColumnType("int");
 
+                    b.Property<int>("ImageVariantVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ImageVariantWidths")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<int?>("ImageWidth")
                         .HasColumnType("int");
 
@@ -1004,6 +1011,140 @@ namespace MusicSalesApp.Migrations
                             IsActive = true,
                             Name = "Rock"
                         });
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillItemFailure", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("EntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("ItemKind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId");
+
+                    b.ToTable("ImageVariantBackfillItemFailures");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ActiveLockKey")
+                        .HasColumnType("int");
+
+                    b.Property<long>("BytesWritten")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("CancellationRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("DryRun")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("GeneratedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("HangfireJobId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InitiatedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<int?>("InitiatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LegacySharingImagesRemoved")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProcessedCount")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RegenerateExisting")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("RemoveLegacyPngSharingImages")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SkippedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalItemCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TriggerSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("UndersizedSourceCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VariantBlobCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveLockKey")
+                        .IsUnique()
+                        .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("ImageVariantBackfillRuns");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
@@ -1568,6 +1709,13 @@ namespace MusicSalesApp.Migrations
                     b.Property<string>("BlobPath")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("CoverArtVariantVersion")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CoverArtVariantWidths")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -2511,6 +2659,17 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Creator");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillItemFailure", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.ImageVariantBackfillRun", "Run")
+                        .WithMany("Failures")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.MediaIntegrityAuditRun", "AuditRun")
@@ -2822,6 +2981,11 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Recipients");
 
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.ImageVariantBackfillRun", b =>
+                {
+                    b.Navigation("Failures");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditRun", b =>

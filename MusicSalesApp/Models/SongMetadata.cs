@@ -71,6 +71,28 @@ public class SongMetadata
     public string OriginalCoverArtFileName { get; set; }
 
     /// <summary>
+    /// Comma-separated widths of the pre-resized WebP renditions that exist for
+    /// <see cref="ImageBlobPath"/>, e.g. <c>"128,320,640"</c>. Null or empty means none have been
+    /// generated, which is why the feature degrades safely: every consumer falls back to serving
+    /// the full-size blob, exactly as it did before renditions existed.
+    ///
+    /// A comma-separated list rather than a bitmask because a bitmask would be pinned to the
+    /// *index order* of the width ladder — inserting a rung would silently change the meaning of
+    /// every row already stored. It also has to express the never-upscale outcome, where a small
+    /// source legitimately has fewer renditions than the ladder, or one at a non-ladder width.
+    /// </summary>
+    [MaxLength(64)]
+    public string CoverArtVariantWidths { get; set; }
+
+    /// <summary>
+    /// Incremented every time the renditions are regenerated, and emitted as a <c>?v=</c> query
+    /// parameter on the URLs. Cover art under the GUID naming scheme lives at a fixed path that a
+    /// re-crop overwrites in place, and the media endpoint serves it with a year-long
+    /// <c>immutable</c> cache header — without this, a recropped image would stay stale in browsers.
+    /// </summary>
+    public int CoverArtVariantVersion { get; set; }
+
+    /// <summary>
     /// File extension (.mp3, .jpg, .jpeg, .png) - DEPRECATED
     /// </summary>
     [MaxLength(10)]

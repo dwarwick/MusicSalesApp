@@ -177,7 +177,11 @@ public class CreatorServiceTests
 
         _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive.mp3"), Times.Once);
         _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive.jpg"), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive_fb.jpg"), Times.Once);
+        // The superseded PNG sharing image and the pre-resized renditions are derived rather than
+        // stored, so deleting a song has to name them explicitly or they leak.
         _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive_fb.png"), Times.Once);
+        _mockStorageService.Verify(s => s.DeleteAsync("Night Drive/Night Drive.jpg.w320.webp"), Times.Once);
     }
 
     #endregion

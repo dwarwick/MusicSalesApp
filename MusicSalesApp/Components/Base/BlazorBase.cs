@@ -66,6 +66,23 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected IOpenGraphService OpenGraphService { get; set; } = default!;
 
+    /// <summary>
+    /// Call after any page commits new cover art or a new persona image, so the pre-resized WebP
+    /// renditions are rebuilt and the recorded width set stays in step with what is in storage.
+    /// </summary>
+    [Inject]
+    protected IImageVariantCoordinator ImageVariantCoordinator { get; set; } = default!;
+
+    /// <summary>
+    /// Builds the URL set for a piece of cover art. Use this instead of hand-rolling an
+    /// <c>api/music/...</c> string, so pages pick up the pre-resized renditions automatically.
+    /// </summary>
+    [Inject]
+    protected ICoverArtUrlBuilder CoverArtUrlBuilder { get; set; } = default!;
+
+    [Inject]
+    protected IImageVariantBackfillService ImageVariantBackfillService { get; set; } = default!;
+
     [Inject]
     protected IStreamCountService StreamCountService { get; set; } = default!;
 

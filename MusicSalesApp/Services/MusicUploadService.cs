@@ -11,6 +11,7 @@ public class MusicUploadService : IMusicUploadService
     private readonly IMusicService _musicService;
     private readonly ISongMetadataService _metadataService;
     private readonly IOpenGraphService _openGraphService;
+    private readonly IImageVariantCoordinator _imageVariantCoordinator;
     private readonly ILogger<MusicUploadService> _logger;
 
     public MusicUploadService(
@@ -18,12 +19,14 @@ public class MusicUploadService : IMusicUploadService
         IMusicService musicService,
         ISongMetadataService metadataService,
         IOpenGraphService openGraphService,
+        IImageVariantCoordinator imageVariantCoordinator,
         ILogger<MusicUploadService> logger)
     {
         _storageService = storageService;
         _musicService = musicService;
         _metadataService = metadataService;
         _openGraphService = openGraphService;
+        _imageVariantCoordinator = imageVariantCoordinator;
         _logger = logger;
     }
 
@@ -333,7 +336,7 @@ public class MusicUploadService : IMusicUploadService
                     cancellationToken);
             }
 
-            await _metadataService.UpsertValidatedUploadAsync(new SongMetadata
+            var savedMetadata = await _metadataService.UpsertValidatedUploadAsync(new SongMetadata
             {
                 MediaGuid = mediaGuid,
                 BlobPath = mp3Path,
@@ -399,6 +402,15 @@ public class MusicUploadService : IMusicUploadService
                 {
                     _logger.LogWarning(ex, "Unable to pre-generate sharing image for {Path}", imagePath);
                 }
+
+                // Deliberately outside the rollback ledger and after rollbackRequired was cleared.
+                // The ledger exists to make the authoritative blobs - audio, cover art, original -
+                // atomically restorable; renditions are derived data that the admin backfill can
+                // rebuild at any time. Tracking them would double the rollback surface and let an
+                // image-processing hiccup fail an upload whose real blobs committed cleanly. The
+                // coordinator swallows its own failures, leaving no recorded widths, and every
+                // consumer then falls back to the full-size master.
+                await _imageVariantCoordinator.RefreshCoverArtVariantsAsync(savedMetadata.Id, cancellationToken: cancellationToken);
             }
 
             return new MusicUploadResult

@@ -12,7 +12,10 @@ namespace MusicSalesApp.Components.Pages.Creator;
 public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 {
     private long _maxImageFileSize = 10 * 1024 * 1024; // default 10MB, loaded from settings
-    private const int CropOutputSize = 800; // Output size in pixels for cropped square images
+    // Must match outputSize in wwwroot/js/image-crop-helper.js: the browser produces the pixels and
+    // this records the dimensions. 1024 so a cropped cover can still fill the largest pre-resized
+    // rendition, which is never upscaled.
+    private const int CropOutputSize = 1024;
 
     protected bool _loading = true;
     protected string _errorMessage = string.Empty;
@@ -178,15 +181,21 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
         foreach (var song in _songs)
         {
-            if (!string.IsNullOrEmpty(song.JpegFileName))
-            {
-                song.SongImageUrl = AzureStorageService.GetReadSasUri(song.JpegFileName, TimeSpan.FromHours(1)).ToString();
-            }
             // Generate persona image SAS URLs
             var personaSong = creatorSongs.FirstOrDefault(m => m.Id.ToString() == song.Id);
+
+            if (!string.IsNullOrEmpty(song.JpegFileName))
+            {
+                // One URL feeds both the 60px grid thumbnail and the 200px edit-dialog preview, so
+                // it has to satisfy the larger of the two.
+                song.SongImageUrl = CoverArtUrlBuilder.BuildSasForDisplayWidth(
+                    song.JpegFileName, personaSong?.CoverArtVariantWidths, 200, TimeSpan.FromHours(1));
+            }
             if (personaSong?.Persona != null && !string.IsNullOrEmpty(personaSong.Persona.ImageBlobPath))
             {
-                song.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(personaSong.Persona.ImageBlobPath, TimeSpan.FromHours(1));
+                // The creator grid caps the persona thumbnail at 60 CSS px.
+                song.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(
+                    personaSong.Persona.ImageBlobPath, personaSong.Persona.ImageVariantWidths, 60, TimeSpan.FromHours(1));
             }
 
             if (int.TryParse(song.Id, out var songId))
@@ -520,11 +529,17 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     var originalTitle = metadata.SongTitle;
                     var artChanged = false;
 
+                    // Hoisted out of the two branches below so the rendition refresh can clean up
+                    // anything stranded at the old path. Only legacy name-based art actually moves;
+                    // GUID-scheme art keeps one fixed path and is overwritten in place.
+                    string previousCoverArtPath = null;
+
                     // Handle cropped image (already uploaded to blob storage by JS)
                     if (_cropApplied && !string.IsNullOrEmpty(_cropTargetBlobPath))
                     {
                         var oldFileName = metadata.ImageBlobPath;
                         var newFileName = _cropTargetBlobPath;
+                        previousCoverArtPath = oldFileName;
 
                         // Delete old blob if it differs from the new one
                         if (!string.IsNullOrEmpty(oldFileName) && oldFileName != newFileName)
@@ -557,6 +572,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                             metadata.Mp3BlobPath,
                             _editSongTitle,
                             fileExtension);
+                        previousCoverArtPath = oldFileName;
 
                         // Delete old blob before uploading new one (if it exists)
                         if (!string.IsNullOrEmpty(oldFileName))
@@ -610,6 +626,15 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                     metadata.PersonaId = _editPersonaId;
 
                     await SongMetadataService.UpsertAsync(metadata);
+
+                    if (artChanged)
+                    {
+                        // Mirrors the RefreshSharingImageAsync calls above: the renditions live at
+                        // paths derived from the cover art, so replacing the art without rebuilding
+                        // them would serve the previous image at every size but full.
+                        await ImageVariantCoordinator.RefreshCoverArtVariantsAsync(
+                            metadata.Id, previousCoverArtPath);
+                    }
 
                     // Send admin notifications for rename and art update
                     try

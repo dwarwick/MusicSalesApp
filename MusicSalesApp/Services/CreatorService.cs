@@ -696,10 +696,13 @@ public class CreatorService : ICreatorService
                 song.Mp3BlobPath,
                 song.ImageBlobPath,
                 song.OriginalCoverArtBlobPath,
-                song.BlobPath,
-                // Derived rather than stored, and previously leaked on every delete.
-                SongMediaPaths.FacebookImageFor(song.ImageBlobPath)
+                song.BlobPath
             }
+            // Both derived rather than stored, and both leak on every delete if not named here.
+            // The sharing image contributes two candidates because it moved from PNG to JPEG, and
+            // songs last shared before that change still have the PNG sitting in storage.
+            .Concat(SongMediaPaths.FacebookImageCandidatesFor(song.ImageBlobPath))
+            .Concat(ImageVariantPaths.VariantsFor(song.ImageBlobPath, ImageVariantSizes.CoverArt))
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 

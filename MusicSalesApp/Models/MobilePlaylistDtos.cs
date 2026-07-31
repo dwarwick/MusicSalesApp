@@ -47,7 +47,30 @@ public class MobilePlaylistSongDto
     public string ArtistName { get; set; } = string.Empty;
     public string Genre { get; set; } = string.Empty;
     public string? AlbumArtUrl { get; set; }
+
+    /// <summary>Small cover-art rendition; null when none exists. See <see cref="SongListItemDto"/>.</summary>
+    public string? AlbumArtThumbUrl { get; set; }
+
+    /// <summary>Larger cover-art rendition for the player hero; null when none exists.</summary>
+    public string? AlbumArtHeroUrl { get; set; }
+
+    /// <summary>Cache-busting counter for the cover art. See <see cref="SongListItemDto"/>.</summary>
+    public int AlbumArtVersion { get; set; }
+
     public string? PersonaImageUrl { get; set; }
+
+    /// <summary>Small persona-image rendition; null when none exists.</summary>
+    public string? PersonaImageThumbUrl { get; set; }
+
+    /// <summary>
+    /// Larger persona-image rendition; null when none exists. The player pages show the persona at
+    /// 120 DIP, which needs 360 px on a 3x screen - more than the thumb carries.
+    /// </summary>
+    public string? PersonaImageHeroUrl { get; set; }
+
+    /// <summary>Cache-busting counter for the persona image.</summary>
+    public int PersonaImageVersion { get; set; }
+
     public string? PersonaBio { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }

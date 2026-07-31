@@ -62,6 +62,20 @@ public class CreatorPersona
     public int? ImageHeight { get; set; }
 
     /// <summary>
+    /// Comma-separated widths of the pre-resized WebP renditions that exist for
+    /// <see cref="ImageBlobPath"/>, e.g. <c>"128,320,640"</c>. Null or empty means none have been
+    /// generated and callers serve the full-size blob instead.
+    /// </summary>
+    [MaxLength(64)]
+    public string? ImageVariantWidths { get; set; }
+
+    /// <summary>
+    /// Incremented every time the renditions are regenerated, and emitted as a <c>?v=</c> query
+    /// parameter so a replaced persona image is not served from a stale browser cache.
+    /// </summary>
+    public int ImageVariantVersion { get; set; }
+
+    /// <summary>
     /// When this persona was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

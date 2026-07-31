@@ -32,8 +32,14 @@ public interface ICreatorPersonaService
     /// Updates an existing persona. Only the creator who owns it can update it.
     /// </summary>
     /// <param name="sendNotification">When true (default), sends email notifications and records user history. Set to false for internal updates like dimension checks.</param>
+    /// <param name="imageReplaced">
+    /// True when the caller has just written new image bytes, which triggers a rebuild of the
+    /// pre-resized renditions. It cannot be inferred from <paramref name="imageBlobPath"/>: a
+    /// replacement keeping the same file extension lands on the identical deterministic path.
+    /// </param>
     Task<CreatorPersona> UpdatePersonaAsync(int personaId, int creatorId, string name, string? bio, string? websiteUrl,
-        string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true);
+        string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true,
+        bool imageReplaced = false);
 
     /// <summary>
     /// Deletes a persona and its associated image from blob storage.
@@ -61,6 +67,17 @@ public interface ICreatorPersonaService
     /// Generates a SAS URL for a persona image blob.
     /// </summary>
     string GetPersonaImageSasUrl(string blobPath, TimeSpan lifetime);
+
+    /// <summary>
+    /// Generates a SAS URL for the pre-resized rendition best suited to a known display size,
+    /// falling back to the full-size blob when no rendition is large enough or none exist yet.
+    /// </summary>
+    /// <param name="variantWidthsCsv">The persona's recorded rendition widths.</param>
+    /// <param name="displayWidthCssPx">
+    /// How wide the avatar renders in CSS pixels. The chosen rendition is at least twice this, so it
+    /// stays sharp on a high-density display.
+    /// </param>
+    string GetPersonaImageSasUrl(string blobPath, string? variantWidthsCsv, int displayWidthCssPx, TimeSpan lifetime);
 
     /// <summary>
     /// Uploads a persona profile image and returns the blob path.

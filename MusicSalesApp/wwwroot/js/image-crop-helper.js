@@ -198,8 +198,12 @@ export function getCroppedImageAndUpload(uploadUrl) {
 
         const { img, scale, offsetX, offsetY, canvasSize } = cropState;
 
-        // Output at 800x800 regardless of display canvas size
-        const outputSize = 800;
+        // Output at a fixed size regardless of the display canvas size.
+        //
+        // 1024 rather than 800 so a cropped cover can still fill the largest pre-resized rendition;
+        // at 800 every cropped image silently lost that rung, because renditions are never upscaled.
+        // The source here is the creator's full-resolution upload, so this costs only upload bytes.
+        const outputSize = 1024;
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = outputSize;
         tempCanvas.height = outputSize;

@@ -21,6 +21,7 @@ public class CreatorPersonaService : ICreatorPersonaService
     private readonly BlobContainerClient? _personaContainerClient;
     private readonly IAdminNotificationService _adminNotificationService;
     private readonly IEmailService _emailService;
+    private readonly IImageVariantCoordinator _imageVariantCoordinator;
     private readonly string _customerServiceEmail;
 
     public CreatorPersonaService(
@@ -29,12 +30,14 @@ public class CreatorPersonaService : ICreatorPersonaService
         ILogger<CreatorPersonaService> logger,
         IAdminNotificationService adminNotificationService,
         IEmailService emailService,
+        IImageVariantCoordinator imageVariantCoordinator,
         IConfiguration configuration)
     {
         _dbContextFactory = dbContextFactory;
         _logger = logger;
         _adminNotificationService = adminNotificationService;
         _emailService = emailService;
+        _imageVariantCoordinator = imageVariantCoordinator;
         _customerServiceEmail = configuration["EmailSettings:CustomerServiceEmail"] ?? string.Empty;
 
         var opts = options.Value;
@@ -112,7 +115,8 @@ public class CreatorPersonaService : ICreatorPersonaService
 
     /// <inheritdoc />
     public async Task<CreatorPersona> UpdatePersonaAsync(int personaId, int creatorId, string name, string? bio,
-        string? websiteUrl, string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true)
+        string? websiteUrl, string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true,
+        bool imageReplaced = false)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
@@ -126,6 +130,17 @@ public class CreatorPersonaService : ICreatorPersonaService
         persona.Name = name;
         persona.Bio = bio;
         persona.WebsiteUrl = websiteUrl;
+
+        // Every persona image change lands here - the direct upload and the cropped upload both
+        // call this immediately after writing the blob - which makes it the one place the
+        // renditions need refreshing from.
+        //
+        // The caller has to say so explicitly: a replacement image keeping the same file extension
+        // lands on the identical deterministic blob path (creator-{id}/persona-{id}{ext}), so
+        // comparing paths would miss it entirely. Editing only the name or bio must not trigger a
+        // pointless download-decode-reencode of an unchanged image.
+        var previousImageBlobPath = persona.ImageBlobPath;
+
         if (imageBlobPath != null)
         {
             persona.ImageBlobPath = imageBlobPath;
@@ -136,6 +151,11 @@ public class CreatorPersonaService : ICreatorPersonaService
 
         await context.SaveChangesAsync();
         _logger.LogInformation("Updated persona {PersonaId} for creator {CreatorId}", personaId, creatorId);
+
+        if (imageReplaced)
+        {
+            await _imageVariantCoordinator.RefreshPersonaVariantsAsync(personaId, previousImageBlobPath);
+        }
 
         // Send notification emails and record user history
         if (sendNotification)
@@ -165,6 +185,10 @@ public class CreatorPersonaService : ICreatorPersonaService
         var personaName = persona.Name;
         var personaBio = persona.Bio;
         var personaImageBlobPath = persona.ImageBlobPath;
+
+        // Email deliberately gets the full-size master rather than a WebP rendition: Outlook on
+        // Windows renders mail through Word, which cannot decode WebP, so a rendition would show as
+        // a broken image for a large share of recipients.
         var personaImageUrl = !string.IsNullOrEmpty(personaImageBlobPath)
             ? GetPersonaImageSasUrl(personaImageBlobPath, TimeSpan.FromDays(7))
             : null;
@@ -187,7 +211,7 @@ public class CreatorPersonaService : ICreatorPersonaService
         // Delete the image from blob storage
         if (!string.IsNullOrEmpty(personaImageBlobPath))
         {
-            await DeletePersonaImageFromStorageAsync(personaImageBlobPath);
+            await DeletePersonaImageFromStorageAsync(personaImageBlobPath, persona.ImageVariantWidths);
         }
 
         // Clear PersonaId from any songs that reference this persona
@@ -224,7 +248,7 @@ public class CreatorPersonaService : ICreatorPersonaService
         {
             if (!string.IsNullOrEmpty(persona.ImageBlobPath))
             {
-                await DeletePersonaImageFromStorageAsync(persona.ImageBlobPath);
+                await DeletePersonaImageFromStorageAsync(persona.ImageBlobPath, persona.ImageVariantWidths);
             }
         }
 
@@ -401,6 +425,24 @@ public class CreatorPersonaService : ICreatorPersonaService
     }
 
     /// <inheritdoc />
+    public string GetPersonaImageSasUrl(string blobPath, string? variantWidthsCsv, int displayWidthCssPx, TimeSpan lifetime)
+    {
+        if (string.IsNullOrWhiteSpace(blobPath))
+            return string.Empty;
+
+        // Persona avatars render at a handful of fixed sizes (20-200 CSS px), so there is nothing
+        // for a srcset to choose between - just pick the rendition once, here. Double the CSS width
+        // so the image is still sharp on a 2x display.
+        var width = ImageVariantSizes.SelectAtLeast(variantWidthsCsv, displayWidthCssPx * 2);
+
+        // No rendition is big enough - or none exist yet - so serve the master, which is what the
+        // site did before renditions existed.
+        var path = width.HasValue ? ImageVariantPaths.Variant(blobPath, width.Value) : blobPath;
+
+        return GetPersonaImageSasUrl(path, lifetime);
+    }
+
+    /// <inheritdoc />
     public async Task<string> UploadPersonaImageAsync(int personaId, int creatorId, Stream imageStream,
         string contentType, string fileExtension)
     {
@@ -550,21 +592,46 @@ public class CreatorPersonaService : ICreatorPersonaService
         }
     }
 
-    private async Task DeletePersonaImageFromStorageAsync(string blobPath)
+    /// <summary>
+    /// Removes a persona image and every pre-resized rendition derived from it.
+    ///
+    /// <para>
+    /// The renditions have to go with the master: nothing else ever references them, and the backfill
+    /// only walks rows that still exist, so anything left here is orphaned permanently. The whole
+    /// ladder is attempted rather than only the recorded widths, because deleting a blob that is not
+    /// there costs one call and returns false - whereas a row whose widths were never recorded, or a
+    /// master too narrow for any ladder rung, would otherwise strand its renditions silently.
+    /// </para>
+    /// </summary>
+    private async Task DeletePersonaImageFromStorageAsync(string blobPath, string? variantWidthsCsv = null)
     {
         if (_personaContainerClient == null || string.IsNullOrWhiteSpace(blobPath))
             return;
 
-        try
+        var widths = new List<int>(ImageVariantSizes.Persona);
+        foreach (var recorded in ImageVariantSizes.ParseCsv(variantWidthsCsv))
         {
-            var blobClient = _personaContainerClient.GetBlobClient(blobPath);
-            await blobClient.DeleteIfExistsAsync();
-            _logger.LogInformation("Deleted persona image {BlobPath}", blobPath);
+            if (!widths.Contains(recorded))
+                widths.Add(recorded);
         }
-        catch (Exception ex)
+
+        var paths = new List<string> { blobPath };
+        paths.AddRange(ImageVariantPaths.VariantsFor(blobPath, widths));
+
+        foreach (var path in paths)
         {
-            _logger.LogError(ex, "Failed to delete persona image {BlobPath}", blobPath);
+            try
+            {
+                var blobClient = _personaContainerClient.GetBlobClient(path);
+                await blobClient.DeleteIfExistsAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete persona image {BlobPath}", path);
+            }
         }
+
+        _logger.LogInformation("Deleted persona image {BlobPath} and its renditions", blobPath);
     }
 
     /// <inheritdoc />

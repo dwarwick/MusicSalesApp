@@ -14,6 +14,7 @@ public class MusicUploadServiceTests
     private Mock<IMusicService> _music = null!;
     private Mock<ISongMetadataService> _metadata = null!;
     private Mock<IOpenGraphService> _openGraph = null!;
+    private Mock<IImageVariantCoordinator> _imageVariants = null!;
     private MusicUploadService _service = null!;
 
     [SetUp]
@@ -40,11 +41,16 @@ public class MusicUploadServiceTests
             .ReturnsAsync((SongMetadata item) => item);
         _metadata.Setup(service => service.UpsertAsync(It.IsAny<SongMetadata>()))
             .ReturnsAsync((SongMetadata item) => item);
+        _imageVariants = new Mock<IImageVariantCoordinator>();
+        _imageVariants.Setup(coordinator => coordinator.RefreshCoverArtVariantsAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         _service = new MusicUploadService(
             _storage.Object,
             _music.Object,
             _metadata.Object,
             _openGraph.Object,
+            _imageVariants.Object,
             Mock.Of<ILogger<MusicUploadService>>());
     }
 
@@ -103,6 +109,70 @@ public class MusicUploadServiceTests
             It.Is<SongMetadata>(item => item.SongTitle == "My Song's @ Mix v1.2 (Remix)!"
                 && item.OriginalAudioFileName == fileName
                 && item.MediaGuid == result.MediaGuid)), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadWithAlbumArt_RebuildsTheImageRenditionsForTheSavedSong()
+    {
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        await using var art = new MemoryStream(CreateSquarePng());
+        _music.Setup(service => service.IsMp3File("Night Drive.mp3")).Returns(true);
+        _metadata.Setup(service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()))
+            .ReturnsAsync((SongMetadata item) => { item.Id = 4242; return item; });
+
+        await _service.UploadMusicWithAlbumArtAsync(
+            audio, "Night Drive.mp3", art, "cover.png", "Night Drive", creatorId: 1);
+
+        _imageVariants.Verify(coordinator => coordinator.RefreshCoverArtVariantsAsync(
+            4242, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Test]
+    public async Task UploadWithoutAlbumArt_DoesNotAttemptToBuildRenditions()
+    {
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        _music.Setup(service => service.IsMp3File("Night Drive.mp3")).Returns(true);
+
+        await _service.UploadMusicWithoutAlbumArtAsync(audio, "Night Drive.mp3", "Night Drive", creatorId: 1);
+
+        _imageVariants.Verify(coordinator => coordinator.RefreshCoverArtVariantsAsync(
+            It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task WhenRenditionGenerationFails_TheUploadStillSucceeds()
+    {
+        // Renditions are derived data the admin backfill can rebuild. They are generated after the
+        // rollback ledger is released precisely so an image-processing failure cannot undo blobs
+        // that already committed.
+        var bytes = new byte[] { (byte)'I', (byte)'D', (byte)'3', 4, 0, 0, 0, 0, 0, 0 };
+        await using var audio = new MemoryStream(bytes);
+        await using var art = new MemoryStream(CreateSquarePng());
+        _music.Setup(service => service.IsMp3File("Night Drive.mp3")).Returns(true);
+        _imageVariants.Setup(coordinator => coordinator.RefreshCoverArtVariantsAsync(
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _service.UploadMusicWithAlbumArtAsync(
+            audio, "Night Drive.mp3", art, "cover.png", "Night Drive", creatorId: 1);
+
+        Assert.That(result.ImageBlobPath, Is.Not.Null);
+        _storage.Verify(service => service.DeleteAsync(result.Mp3BlobPath), Times.Never);
+    }
+
+    private static byte[] CreateSquarePng()
+    {
+        using var bitmap = new SKBitmap(64, 64);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.CornflowerBlue);
+        }
+
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     [Test]

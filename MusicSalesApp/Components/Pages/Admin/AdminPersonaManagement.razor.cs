@@ -78,7 +78,9 @@ public partial class AdminPersonaManagementModel : BlazorBase
             };
             if (!string.IsNullOrEmpty(p.ImageBlobPath))
             {
-                vm.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(p.ImageBlobPath, TimeSpan.FromHours(1));
+                // The admin grid caps the thumbnail at 55 CSS px.
+                vm.PersonaImageUrl = CreatorPersonaService.GetPersonaImageSasUrl(
+                    p.ImageBlobPath, p.ImageVariantWidths, 55, TimeSpan.FromHours(1));
             }
             viewModels.Add(vm);
         }

@@ -25,13 +25,17 @@ else if (!string.IsNullOrEmpty(_error))
             <div class="playlist-art-container">
                 <div class="title-container">
                     @{
-                        var displayImageUrl = GetTrackImageUrl(_currentTrackIndex);
+                        var displayArtSource = GetTrackArtSource(_currentTrackIndex);
                     }
                     <div class="player-art-content">
                         <div class="player-art-shell">
-                            @if (!string.IsNullOrEmpty(displayImageUrl))
+                            @if (displayArtSource.HasImage)
                             {
-                                <img src="@displayImageUrl" alt="Track Art" class="playlist-art" />
+                                <CoverArt Source="displayArtSource"
+                                          Sizes="@CoverArtSizes.PlaylistPlayerHero"
+                                          CssClass="playlist-art"
+                                          Alt="Track Art"
+                                          Eager="true" />
                             }
                             else
                             {
@@ -233,11 +237,16 @@ else if (!string.IsNullOrEmpty(_error))
                             </td>
                             <td class="track-image">
                                 @{
-                                    var trackImageUrl = GetTrackImageUrl(index);
+                                    var trackArtSource = GetTrackArtSource(index);
                                 }
-                                @if (!string.IsNullOrEmpty(trackImageUrl))
+                                @if (trackArtSource.HasImage)
                                 {
-                                    <img src="@trackImageUrl" alt="Track art" class="track-thumbnail" />
+                                    <CoverArt Source="trackArtSource"
+                                              Sizes="@CoverArtSizes.TrackThumbnail"
+                                              CssClass="track-thumbnail"
+                                              Alt="Track art"
+                                              IntrinsicWidth="40"
+                                              IntrinsicHeight="40" />
                                 }
                                 else
                                 {

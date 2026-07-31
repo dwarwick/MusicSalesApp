@@ -348,6 +348,10 @@ try
     builder.Services.AddScoped<IPasskeyService, PasskeyService>();
     builder.Services.AddScoped<ISongLikeService, SongLikeService>();
     builder.Services.AddScoped<IOpenGraphService, OpenGraphService>();
+    builder.Services.AddScoped<IImageVariantService, ImageVariantService>();
+    builder.Services.AddScoped<IImageVariantCoordinator, ImageVariantCoordinator>();
+    builder.Services.AddScoped<ICoverArtUrlBuilder, CoverArtUrlBuilder>();
+    builder.Services.AddScoped<IImageVariantBackfillService, ImageVariantBackfillService>();
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();
     builder.Services.AddScoped<ILikeCountHubClient, LikeCountHubClient>();
@@ -414,6 +418,11 @@ try
 
     builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
     builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
+
+    // Reaches both the media and persona-image containers, which the single-container
+    // AzureStorageService cannot. Deliberately offers no container-by-name lookup, so the
+    // image-variant backfill has no way to write into the backup-* containers.
+    builder.Services.AddSingleton<IBlobContainerFactory, BlobContainerFactory>();
 
     builder.Services.AddCascadingAuthenticationState();
 
