@@ -259,11 +259,36 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             trustedRoot);
     }
 
-    internal static string DetermineSubscriptionStatus(DateTime utcNow, DateTime? expiryTimeUtc, DateTime? revocationTimeUtc)
+    /// <summary>Apple subscription status codes from Get All Subscription Statuses.</summary>
+    internal const int AppleStatusActive = 1;
+    internal const int AppleStatusExpired = 2;
+    internal const int AppleStatusBillingRetry = 3;
+    internal const int AppleStatusGracePeriod = 4;
+    internal const int AppleStatusRevoked = 5;
+
+    internal static string DetermineSubscriptionStatus(
+        DateTime utcNow,
+        DateTime? expiryTimeUtc,
+        DateTime? revocationTimeUtc,
+        int? appleStatus = null)
     {
-        if (revocationTimeUtc.HasValue)
+        if (revocationTimeUtc.HasValue || appleStatus == AppleStatusRevoked)
         {
             return SubscriptionStatuses.Cancelled;
+        }
+
+        // Grace period: the paid-through date has passed but Apple is retrying the renewal and the
+        // customer is still entitled. Reading expiry alone would cut off a paying subscriber here.
+        if (appleStatus == AppleStatusGracePeriod)
+        {
+            return SubscriptionStatuses.Active;
+        }
+
+        // Apple's own verdict outranks a date comparison when it says the subscription is over,
+        // which covers an expiry Apple has moved without us seeing the renewal.
+        if (appleStatus is AppleStatusExpired or AppleStatusBillingRetry)
+        {
+            return SubscriptionStatuses.Expired;
         }
 
         if (expiryTimeUtc.HasValue && expiryTimeUtc.Value <= utcNow)
@@ -272,6 +297,63 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         }
 
         return SubscriptionStatuses.Active;
+    }
+
+    /// <summary>
+    /// Picks the transaction that describes the subscription's current state. Apple returns the
+    /// latest transaction per original transaction ID, so an entitled entry - if there is one - is
+    /// the answer; otherwise the first entry still describes the lapsed subscription correctly.
+    /// </summary>
+    internal static AppleLastTransaction SelectCurrentTransaction(AppleSubscriptionStatusResponse response)
+    {
+        var transactions = response?.Data?
+            .Where(group => group?.LastTransactions != null)
+            .SelectMany(group => group.LastTransactions)
+            .Where(transaction => transaction != null
+                && !string.IsNullOrWhiteSpace(transaction.SignedTransactionInfo))
+            .ToList();
+
+        if (transactions == null || transactions.Count == 0)
+        {
+            throw new AppleAppStoreVerificationException(
+                "Apple App Store returned no subscription transactions for this customer.");
+        }
+
+        return transactions.FirstOrDefault(transaction =>
+                   transaction.Status is AppleStatusActive or AppleStatusGracePeriod)
+               ?? transactions[0];
+    }
+
+    /// <summary>
+    /// Resolves the recurring price, in currency units, from Apple's milliunit fields.
+    /// </summary>
+    /// <remarks>
+    /// Apple omits price/currency from the signed transaction payload for subscription chains that
+    /// predate those fields, and the controller only tolerates a missing price when a subscription
+    /// record already exists — so a first-time subscriber on such a chain was rejected with a 503
+    /// after Apple had already charged them. The renewal info in the same response still carries
+    /// the recurring price, so it stands in when the transaction has none.
+    /// </remarks>
+    internal static (decimal? Price, string CurrencyCode) ResolveSubscriptionPrice(
+        long? transactionPriceMilliunits,
+        string transactionCurrency,
+        long? renewalPriceMilliunits,
+        string renewalCurrency)
+    {
+        if (transactionPriceMilliunits is > 0)
+        {
+            return (transactionPriceMilliunits.Value / 1000m, transactionCurrency);
+        }
+
+        if (renewalPriceMilliunits is > 0)
+        {
+            // A transaction that carries no price usually carries no currency either, but prefer
+            // the transaction's own currency on the chance that only the price was missing.
+            return (renewalPriceMilliunits.Value / 1000m,
+                string.IsNullOrWhiteSpace(transactionCurrency) ? renewalCurrency : transactionCurrency);
+        }
+
+        return (null, transactionCurrency);
     }
 
     internal static string DetermineNotificationStatus(
@@ -501,7 +583,18 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
 
         try
         {
-            var requestUri = $"{_apiBaseUrl.TrimEnd('/')}/inApps/v1/transactions/{Uri.EscapeDataString(transactionId)}";
+            // Get All Subscription Statuses, NOT Get Transaction Info.
+            //
+            // /inApps/v1/transactions/{id} answers "what did that one transaction contain", and for
+            // an auto-renewable subscription every renewal is a separate transaction with its own
+            // expiresDate. So any transaction but the very latest reports as expired, however
+            // current the subscription actually is - which is exactly what happened: a subscription
+            // bought minutes earlier verified as EXPIRED with an end date hours old, and successive
+            // attempts reported different end dates as they walked different links in the chain.
+            //
+            // /inApps/v1/subscriptions/{id} accepts any transaction belonging to the subscription
+            // and answers the question entitlement actually depends on: is it active right now.
+            var requestUri = $"{_apiBaseUrl.TrimEnd('/')}/inApps/v1/subscriptions/{Uri.EscapeDataString(transactionId)}";
             _logger.LogInformation(
                 "Starting Apple App Store subscription verification. TransactionId={TransactionId}, ProductId={ProductId}, RequestUri={RequestUri}, BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, PrivateKeyPath={PrivateKeyPath}",
                 transactionId,
@@ -547,11 +640,13 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
                 throw new AppleAppStoreVerificationException("Apple App Store verification failed on the server.");
             }
 
-            var lookupResponse = await response.Content.ReadFromJsonAsync<AppleTransactionLookupResponse>();
+            var statusResponse = await response.Content.ReadFromJsonAsync<AppleSubscriptionStatusResponse>();
+            var latestTransaction = SelectCurrentTransaction(statusResponse);
             _logger.LogInformation(
-                "Apple App Store verification response payload received. HasSignedTransactionInfo={HasSignedTransactionInfo}",
-                !string.IsNullOrWhiteSpace(lookupResponse?.SignedTransactionInfo));
-            var payload = DecodeSignedTransactionInfo(lookupResponse?.SignedTransactionInfo);
+                "Apple App Store verification response payload received. GroupCount={GroupCount}, AppleStatus={AppleStatus}",
+                statusResponse?.Data?.Count ?? 0,
+                latestTransaction.Status);
+            var payload = DecodeSignedTransactionInfo(latestTransaction.SignedTransactionInfo);
             _logger.LogInformation(
                 "Decoded Apple signed transaction payload. PayloadTransactionId={PayloadTransactionId}, PayloadOriginalTransactionId={PayloadOriginalTransactionId}, PayloadProductId={PayloadProductId}, PayloadBundleId={PayloadBundleId}, PayloadEnvironment={PayloadEnvironment}",
                 payload.TransactionId,
@@ -570,11 +665,42 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             var revocationTime = payload.RevocationDate.HasValue
                 ? DateTimeOffset.FromUnixTimeMilliseconds(payload.RevocationDate.Value).UtcDateTime
                 : (DateTime?)null;
-            var transactionPrice = payload.Price.HasValue && payload.Price.Value > 0
-                ? payload.Price.Value / 1000m
-                : (decimal?)null;
+            // Only worth decoding the renewal info when the transaction itself came without a price.
+            AppleSignedRenewalInfoPayload renewalInfo = null;
+            if (payload.Price is not > 0 && !string.IsNullOrWhiteSpace(latestTransaction.SignedRenewalInfo))
+            {
+                try
+                {
+                    renewalInfo = DecodeSignedRenewalInfo(latestTransaction.SignedRenewalInfo);
+                }
+                catch (AppleAppStoreVerificationException ex)
+                {
+                    // A malformed renewal payload must not sink an otherwise-valid verification;
+                    // leaving the price unresolved just restores the previous behaviour.
+                    _logger.LogWarning(
+                        ex,
+                        "Could not read renewal info while looking for a fallback price for transaction {TransactionId}",
+                        payload.TransactionId);
+                }
+            }
 
-            var resolvedStatus = DetermineSubscriptionStatus(DateTime.UtcNow, expiryTime, revocationTime);
+            var (transactionPrice, priceCurrencyCode) = ResolveSubscriptionPrice(
+                payload.Price,
+                payload.Currency,
+                renewalInfo?.RenewalPrice,
+                renewalInfo?.Currency);
+
+            if (transactionPrice.HasValue && payload.Price is not > 0)
+            {
+                _logger.LogInformation(
+                    "Apple transaction {TransactionId} carried no price; falling back to the renewal price {RenewalPrice} {PriceCurrencyCode}",
+                    payload.TransactionId,
+                    transactionPrice,
+                    priceCurrencyCode ?? "<none>");
+            }
+
+            var resolvedStatus = DetermineSubscriptionStatus(
+                DateTime.UtcNow, expiryTime, revocationTime, latestTransaction.Status);
             _logger.LogInformation(
                 "Apple subscription verification succeeded. TransactionId={TransactionId}, OriginalTransactionId={OriginalTransactionId}, ProductId={ProductId}, Environment={Environment}, ExpiryTimeUtc={ExpiryTimeUtc}, RevocationTimeUtc={RevocationTimeUtc}, ResolvedStatus={ResolvedStatus}",
                 payload.TransactionId,
@@ -595,7 +721,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
                 payload.Environment,
                 payload.AppAccountToken,
                 transactionPrice,
-                payload.Currency);
+                priceCurrencyCode);
         }
         catch (AppleAppStoreVerificationException)
         {
@@ -645,15 +771,58 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             throw new AppleAppStoreVerificationException("Apple App Store transaction product ID does not match the configured subscription.");
         }
 
-        if (!string.Equals(payload.TransactionId, transactionId, StringComparison.Ordinal))
+        // Deliberately NOT an equality check against the requested transaction ID any more. The
+        // subscription-statuses endpoint answers with the subscription's *latest* transaction, which
+        // for anything that has renewed is by definition not the one the client had on hand — so
+        // requiring equality rejected exactly the renewed subscriptions this call exists to confirm.
+        //
+        // Nothing security-relevant is lost. The bundle and product checks above already pin the
+        // response to this app's subscription, the bearer token is scoped to our bundle, and
+        // ownership is enforced separately in the controller, which refuses to attach a transaction
+        // chain that already belongs to another user.
+        if (!string.Equals(payload.TransactionId, transactionId, StringComparison.Ordinal) &&
+            !string.Equals(payload.OriginalTransactionId, transactionId, StringComparison.Ordinal))
         {
-            throw new AppleAppStoreVerificationException("Apple App Store returned a different transaction than the one requested.");
+            _logger.LogInformation(
+                "Apple resolved requested transaction {RequestedTransactionId} to a later transaction in the same subscription. ResolvedTransactionId={ResolvedTransactionId}, OriginalTransactionId={OriginalTransactionId}",
+                transactionId,
+                payload.TransactionId,
+                payload.OriginalTransactionId);
         }
     }
 
     internal sealed class AppleTransactionLookupResponse
     {
         public string SignedTransactionInfo { get; set; }
+    }
+
+    /// <summary>
+    /// Shape of Apple's Get All Subscription Statuses response. Each entry in <see cref="Data"/> is
+    /// one subscription group, and its <c>lastTransactions</c> carry the most recent transaction per
+    /// original transaction ID — which is what makes this the right call for "is it active now".
+    /// </summary>
+    internal sealed class AppleSubscriptionStatusResponse
+    {
+        public string Environment { get; set; }
+        public string BundleId { get; set; }
+        public List<AppleSubscriptionGroup> Data { get; set; }
+    }
+
+    internal sealed class AppleSubscriptionGroup
+    {
+        public string SubscriptionGroupIdentifier { get; set; }
+        public List<AppleLastTransaction> LastTransactions { get; set; }
+    }
+
+    internal sealed class AppleLastTransaction
+    {
+        public string OriginalTransactionId { get; set; }
+
+        /// <summary>Apple's status code: 1 active, 2 expired, 3 billing retry, 4 grace period, 5 revoked.</summary>
+        public int? Status { get; set; }
+
+        public string SignedTransactionInfo { get; set; }
+        public string SignedRenewalInfo { get; set; }
     }
 
     internal sealed class AppleSignedTransactionPayload

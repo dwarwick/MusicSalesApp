@@ -125,6 +125,134 @@ public class AppleAppStoreVerificationServiceTests
     }
 
     [Test]
+    public void DetermineSubscriptionStatus_ReturnsActive_DuringAppleGracePeriod()
+    {
+        // The paid-through date has passed but Apple is retrying the renewal and the customer is
+        // still entitled. Reading the expiry alone cuts off a paying subscriber here.
+        var result = AppleAppStoreVerificationService.DetermineSubscriptionStatus(
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddMinutes(-5),
+            null,
+            AppleAppStoreVerificationService.AppleStatusGracePeriod);
+
+        Assert.That(result, Is.EqualTo(SubscriptionStatuses.Active));
+    }
+
+    [Test]
+    public void DetermineSubscriptionStatus_ReturnsCancelled_WhenAppleReportsRevoked()
+    {
+        var result = AppleAppStoreVerificationService.DetermineSubscriptionStatus(
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(10),
+            null,
+            AppleAppStoreVerificationService.AppleStatusRevoked);
+
+        Assert.That(result, Is.EqualTo(SubscriptionStatuses.Cancelled));
+    }
+
+    [Test]
+    public void DetermineSubscriptionStatus_ReturnsExpired_WhenAppleReportsExpired()
+    {
+        var result = AppleAppStoreVerificationService.DetermineSubscriptionStatus(
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(10),
+            null,
+            AppleAppStoreVerificationService.AppleStatusExpired);
+
+        Assert.That(result, Is.EqualTo(SubscriptionStatuses.Expired));
+    }
+
+    [Test]
+    public void DetermineSubscriptionStatus_IsUnchanged_WhenAppleStatusIsAbsent()
+    {
+        // The server-notification path still calls this without an Apple status code.
+        var result = AppleAppStoreVerificationService.DetermineSubscriptionStatus(
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(10),
+            null);
+
+        Assert.That(result, Is.EqualTo(SubscriptionStatuses.Active));
+    }
+
+    [Test]
+    public void SelectCurrentTransaction_PrefersTheEntitledTransaction()
+    {
+        // Apple returns the latest transaction per original transaction ID. A customer who
+        // resubscribed has both a lapsed chain and a live one, and only the live one describes
+        // what they are entitled to now.
+        var response = new AppleAppStoreVerificationService.AppleSubscriptionStatusResponse
+        {
+            Data =
+            [
+                new AppleAppStoreVerificationService.AppleSubscriptionGroup
+                {
+                    LastTransactions =
+                    [
+                        new AppleAppStoreVerificationService.AppleLastTransaction
+                        {
+                            OriginalTransactionId = "old",
+                            Status = AppleAppStoreVerificationService.AppleStatusExpired,
+                            SignedTransactionInfo = "expired-jws"
+                        },
+                        new AppleAppStoreVerificationService.AppleLastTransaction
+                        {
+                            OriginalTransactionId = "current",
+                            Status = AppleAppStoreVerificationService.AppleStatusActive,
+                            SignedTransactionInfo = "active-jws"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var selected = AppleAppStoreVerificationService.SelectCurrentTransaction(response);
+
+        Assert.That(selected.SignedTransactionInfo, Is.EqualTo("active-jws"));
+    }
+
+    [Test]
+    public void SelectCurrentTransaction_FallsBackToTheLapsedTransaction_WhenNoneAreEntitled()
+    {
+        // A genuinely lapsed subscriber must still get a real answer rather than an error, so the
+        // caller can record the expiry and stop granting access.
+        var response = new AppleAppStoreVerificationService.AppleSubscriptionStatusResponse
+        {
+            Data =
+            [
+                new AppleAppStoreVerificationService.AppleSubscriptionGroup
+                {
+                    LastTransactions =
+                    [
+                        new AppleAppStoreVerificationService.AppleLastTransaction
+                        {
+                            Status = AppleAppStoreVerificationService.AppleStatusExpired,
+                            SignedTransactionInfo = "expired-jws"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var selected = AppleAppStoreVerificationService.SelectCurrentTransaction(response);
+
+        Assert.That(selected.SignedTransactionInfo, Is.EqualTo("expired-jws"));
+    }
+
+    [Test]
+    public void SelectCurrentTransaction_Throws_WhenAppleReturnsNothingUsable()
+    {
+        var response = new AppleAppStoreVerificationService.AppleSubscriptionStatusResponse
+        {
+            Data = []
+        };
+
+        var exception = Assert.Throws<AppleAppStoreVerificationException>(
+            () => AppleAppStoreVerificationService.SelectCurrentTransaction(response));
+
+        Assert.That(exception!.Message, Does.Contain("no subscription transactions"));
+    }
+
+    [Test]
     public void DetermineNotificationStatus_ReturnsSuspended_ForFailedRenewal()
     {
         var result = AppleAppStoreVerificationService.DetermineNotificationStatus(
@@ -276,6 +404,87 @@ public class AppleAppStoreVerificationServiceTests
 
         Assert.That(exception!.Message, Is.EqualTo("Apple App Store private key could not be loaded on the server."));
         httpClientFactory.Verify(factory => factory.CreateClient(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public void ResolveSubscriptionPrice_UsesTheTransactionPrice_WhenAppleSendsOne()
+    {
+        var (price, currency) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
+            transactionPriceMilliunits: 4990,
+            transactionCurrency: "USD",
+            renewalPriceMilliunits: 9990,
+            renewalCurrency: "GBP");
+
+        // The transaction is what the customer was actually charged, so it outranks the renewal
+        // price even when both are present.
+        Assert.Multiple(() =>
+        {
+            Assert.That(price, Is.EqualTo(4.99m));
+            Assert.That(currency, Is.EqualTo("USD"));
+        });
+    }
+
+    [Test]
+    public void ResolveSubscriptionPrice_FallsBackToTheRenewalPrice_WhenTheTransactionHasNone()
+    {
+        // Apple omits price/currency from the transaction payload on older subscription chains.
+        // Without this fallback a first-time subscriber is rejected with a 503 after Apple has
+        // already charged them, because the controller only tolerates a missing price when a
+        // subscription record already exists.
+        var (price, currency) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
+            transactionPriceMilliunits: null,
+            transactionCurrency: null,
+            renewalPriceMilliunits: 4990,
+            renewalCurrency: "USD");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(price, Is.EqualTo(4.99m));
+            Assert.That(currency, Is.EqualTo("USD"));
+        });
+    }
+
+    [Test]
+    public void ResolveSubscriptionPrice_TreatsAZeroTransactionPriceAsMissing()
+    {
+        // Apple sends 0 for a free trial or an offer, which is not a recurring price.
+        var (price, _) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
+            transactionPriceMilliunits: 0,
+            transactionCurrency: "USD",
+            renewalPriceMilliunits: 4990,
+            renewalCurrency: "USD");
+
+        Assert.That(price, Is.EqualTo(4.99m));
+    }
+
+    [Test]
+    public void ResolveSubscriptionPrice_KeepsTheTransactionCurrency_WhenOnlyThePriceIsMissing()
+    {
+        var (_, currency) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
+            transactionPriceMilliunits: null,
+            transactionCurrency: "GBP",
+            renewalPriceMilliunits: 4990,
+            renewalCurrency: "USD");
+
+        Assert.That(currency, Is.EqualTo("GBP"));
+    }
+
+    [Test]
+    public void ResolveSubscriptionPrice_ReturnsNoPrice_WhenNeitherSourceHasOne()
+    {
+        // The caller still rejects the purchase in this case; the point is that it only does so
+        // once both sources have genuinely come up empty.
+        var (price, currency) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
+            transactionPriceMilliunits: null,
+            transactionCurrency: "USD",
+            renewalPriceMilliunits: null,
+            renewalCurrency: null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(price, Is.Null);
+            Assert.That(currency, Is.EqualTo("USD"));
+        });
     }
 
     private static SignedPayload CreateSignedPayload(string payloadJson)
