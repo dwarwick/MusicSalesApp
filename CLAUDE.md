@@ -1,4 +1,4 @@
-# Claude Instructions
+﻿# Claude Instructions
 
 ## Working Branches
 
@@ -25,7 +25,7 @@ Blazor Server web app for StreamTunes — a music platform with two audiences: *
 - **Production**: https://streamtunes.net
 - **Test**: https://davidtest.dev
 
-Hosted on **smarterasp.net** (IIS-based Windows host), *not* Azure App Service — Azure is used only for Blob Storage and Data Protection key persistence. Deployment is manual; there is no CI/CD pipeline in this repo (no `.github/workflows`).
+The web app is hosted on **smarterasp.net** (IIS-based Windows host), *not* Azure App Service — Azure is used for Blob Storage, Data Protection key persistence, and (since audio processing moved off the web server) two **Azure Functions** apps and the queues that feed them. Deployment is manual for both; there is no CI/CD pipeline in this repo (no `.github/workflows`). `.vscode/tasks.json` has the four publish tasks — two MSDeploy profiles for the site, two `func azure functionapp publish` for the Functions.
 
 This app is also the **backend API for the sibling MAUI mobile app** (`../MusicSalesApp_Maui`, listeners only — see "Sibling repo" below).
 
@@ -33,7 +33,8 @@ This app is also the **backend API for the sibling MAUI mobile app** (`../MusicS
 
 | Project | Purpose |
 |---|---|
-| `MusicSalesApp/` | The only deployable project — Blazor Server UI, Razor Pages, all API controllers, EF Core DbContext, services, SignalR hubs, Hangfire jobs. |
+| `MusicSalesApp/` | The Blazor Server UI, Razor Pages, all API controllers, EF Core DbContext, services, SignalR hubs, Hangfire jobs. Deployed to smarterasp.net. |
+| `MusicSalesApp.Functions/` | Azure Functions (isolated, Windows Consumption) — **all FFmpeg work**. Two queue triggers: transcode a creator upload, and decode-probe a stored blob for the maintenance jobs. Owns `ffmpeg.exe`. See its README. |
 | `MusicSalesApp.Common/` | Shared constants/helpers (`Helpers/*.cs` — `Roles`, `Permissions`, `SubscriptionStatuses`, `BillingSources`, `AuthStorageKeys`, etc.). Also referenced directly by the sibling MAUI repo. |
 | `MusicSalesApp.Tests/` | xUnit unit tests (Controllers, Services, Helpers, Middleware, Authorization). |
 | `MusicSalesApp.ComponentTests/` | bUnit Blazor component tests. |
@@ -46,10 +47,10 @@ There's no separate Data/Identity/Infrastructure project — everything lives in
 - **EF Core / SQL Server** — single `AppDbContext`; both a scoped `DbContext` and `IDbContextFactory<AppDbContext>` are registered (the factory exists specifically to avoid Blazor Server's concurrent-DbContext-per-circuit problems). Migrations auto-apply at startup.
 - **Auth**: ASP.NET Core Identity (`ApplicationUser : IdentityUser<int>`) with **cookie auth for the web UI and JWT Bearer for the mobile app simultaneously** (combined default policy). Claims-based `Permissions` policies built dynamically via reflection. Google external login (web + mobile "exchange token" flow). WebAuthn/FIDO2 passkeys via Fido2NetLib.
 - **Background jobs**: Hangfire (SQL Server storage, `/hangfire` dashboard gated by `HangfireAuthorizationFilter`).
-- **Real-time**: SignalR — `StreamCountHub`, `LikeCountHub`, `WebhookStatusHub`, `MaintenanceHub`, `AdminMessageHub`.
+- **Real-time**: SignalR — `StreamCountHub`, `LikeCountHub`, `WebhookStatusHub`, `MaintenanceHub`, `AdminMessageHub`, `UploadProgressHub` (per-creator groups, carries live upload progress).
 - **UI**: Syncfusion Blazor components exclusively (see `AGENTS.md` for CTA/theme conventions).
-- **Storage**: Azure Blob Storage for media files and ASP.NET Data Protection keys (two configs: `Azure` "high speed" + `AzureLowSpeed` fallback).
-- **Media processing**: FFMpegCore + a bundled `ffmpeg.exe` (used to extract track length on upload).
+- **Storage**: **Two Azure storage accounts, and they are not interchangeable.** `Azure` is the *Premium* `highspeedstorageaccount` holding all song media and Data Protection keys. `AzureLowSpeed` is the *Standard general-purpose* `musicsalesstorageaccount` — once a dead config section, now the home of the audio-processing queues and the `musicuploads{-env}` staging container, because premium accounts offer no Queue service at all. One section per storage account, so each connection string exists once. Media never moves between them, so staging→media copies are **cross-account** and need a source SAS. `MediaProcessingOptions` is bound by hand from `AzureLowSpeed` plus the top-level `MediaProcessingApiKey` (see `Program.cs`) — the property names differ from the JSON because the section describes an account while the options describe what processing does with it.
+- **Media processing**: none in this app. FFmpeg lives entirely in `MusicSalesApp.Functions`; here there is only header sniffing (`AudioContainerSniffer` in `Common`). An upload is staged + queued by `SongUploadJobService`, then assembled by `MediaProcessingCompletionService` when the Function calls back to `api/media-processing/*`. `SongMetadata` is written **only on success**, so no catalogue query has to filter out half-built songs — in-flight state lives in `SongUploadJob`.
 - **Payments/Billing**: PayPal (Expanded Checkout, Subscriptions API, webhooks), Google Play Billing (server-side purchase/subscription verification + real-time developer notifications), Apple App Store (StoreKit server API + App Store Server Notifications v2).
 - **Tax**: TaxBandits integration for creator W-9/W-8BEN forms and 1099 reporting.
 - **Logging**: Serilog (console + rolling file sink under `logs/`).
@@ -113,6 +114,10 @@ The MAUI app also calls `MusicController` (`api/music`) directly — it is *not*
 | `MusicSalesApp/Models/Subscription.cs`, `Services/SubscriptionService.cs`, `Services/PayPalSubscriptionManagementService.cs`, `Services/PayPalSubscriptionAnomalyService.cs` | Multi-provider billing/entitlement core — also the most actively-changing area. |
 | `MusicSalesApp/Controllers/MobileAuthController.cs`, `MobilePlaylistController.cs` | Best reference examples for the mobile API pattern (API key + JWT + DTOs + subscription gating). |
 | `MusicSalesApp/Controllers/CartController.cs` | Intentionally dead shim — read before touching, don't extend. |
+| `MusicSalesApp.Functions/CLAUDE.md` | **Read first for anything audio-processing.** End-to-end upload flow across the three processes, the throw-vs-report invariant, progress monotonicity, and the traps (read-only package mount, `batchSize: 1`, 10-min ceiling). |
+| `MusicSalesApp.Functions/README.md` | The operational half: settings, provisioning, deploying, running locally, tearing an environment down. |
+| `MusicSalesApp.Common/Contracts/AudioProcessingProgressCalculator.cs` | The single definition of the upload progress bar's bands, shared by the upload page, the Function and the API. |
+| `MusicSalesApp/Services/MediaProcessingCompletionService.cs` | Assembles a finished transcode into a live song — the cross-account copy, the metadata write, and the idempotency that makes a queue retry safe. |
 | `Migrations/20260108000000_RemoveCartAndOwnedSongsTables.cs`, `Migrations/20260713020755_RemoveSubscriptionPriceSetting.cs` | Read these before trusting any doc/comment describing "ownership" or "pricing settings" — this area changed significantly and older references lag. |
 
 ## Where to look next

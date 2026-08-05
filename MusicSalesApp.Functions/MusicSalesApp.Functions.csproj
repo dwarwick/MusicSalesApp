@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>MusicSalesApp.Functions</RootNamespace>
+    <!-- Windows Consumption. The Linux Consumption plan does not support .NET 10 at all, and no
+         premium/blob-only storage account offers the Queue service these triggers need. -->
+    <_FunctionsSkipCleanOutput>true</_FunctionsSkipCleanOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MusicSalesApp.Common\MusicSalesApp.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FFmpeg output parsing and the playable/unplayable/inconclusive classification are internal
+         to this app but are exactly the parts worth testing without spawning a real process. -->
+    <InternalsVisibleTo Include="MusicSalesApp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Web SDK includes these implicitly and the web app relies on that; this is a plain
+         class-library SDK, so they are declared here rather than repeated as usings in every file. -->
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.4" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.51.0" />
+    <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
+    <PackageReference Include="FFMpegCore" Version="5.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ffmpeg travels in the deployment package. On Windows Consumption with
+         WEBSITE_RUN_FROM_PACKAGE=1 that package is mounted read-only: executing the binary from
+         there is fine, but nothing may be written beside it, which is why FFMpegCore's temporary
+         folder is pointed at %TEMP% in Program.cs rather than at the content root. -->
+    <Content Include="ffmpeg.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <None Update="host.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="local.settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

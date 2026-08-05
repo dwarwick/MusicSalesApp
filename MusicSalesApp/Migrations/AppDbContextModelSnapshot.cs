@@ -1906,6 +1906,109 @@ namespace MusicSalesApp.Migrations
                     b.ToTable("SongStreams");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.SongUploadJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AlbumName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CoverArtBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CoverArtExtension")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("CoverArtFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatorId")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("DurationSeconds")
+                        .HasColumnType("float");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("MediaGuid")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PlaybackBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SongTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SourceBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("SourceContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("SourceExtension")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("SourceFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<long>("SourceFileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("SourceWasAlreadyMp3")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StepUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaGuid")
+                        .IsUnique();
+
+                    b.HasIndex("SongMetadataId");
+
+                    b.HasIndex("CreatorId", "Status");
+
+                    b.HasIndex("Status", "StepUpdatedAt");
+
+                    b.ToTable("SongUploadJobs");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.StorageBackupContainerProgress", b =>
                 {
                     b.Property<int>("Id")
@@ -2847,6 +2950,24 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("SongMetadata");
 
                     b.Navigation("StreamerUser");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.SongUploadJob", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.Creator", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SongMetadataId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("SongMetadata");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.StorageBackupContainerProgress", b =>

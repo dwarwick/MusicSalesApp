@@ -1,0 +1,279 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Moq;
+using MusicSalesApp.Common.Contracts;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Data;
+using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+
+namespace MusicSalesApp.Tests.Services;
+
+/// <summary>
+/// The API half of the pipeline: what happens when the Azure Function reports back.
+///
+/// <para>
+/// The behaviours pinned here are the ones that a queue can break. The completion callback is
+/// retried on any non-2xx and can also be replayed from the poison path, so it has to be safe to
+/// call twice; and a failure verdict has to be recorded rather than retried, or a genuinely corrupt
+/// upload would cycle forever.
+/// </para>
+/// </summary>
+[TestFixture]
+public class MediaProcessingCompletionServiceTests
+{
+    private DbContextOptions<AppDbContext> _options = null!;
+    private TestFactory _factory = null!;
+    private Mock<IBlobContainerFactory> _containers = null!;
+    private Mock<ISongMetadataService> _metadata = null!;
+    private Mock<IOpenGraphService> _openGraph = null!;
+    private Mock<IImageVariantCoordinator> _imageVariants = null!;
+    private Mock<ISongUploadJobService> _jobService = null!;
+    private RecordingProgressNotifier _progress = null!;
+    private MediaProcessingCompletionService _service = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"completion-{Guid.NewGuid():N}")
+            .Options;
+        _factory = new TestFactory(_options);
+        _containers = new Mock<IBlobContainerFactory>();
+        _metadata = new Mock<ISongMetadataService>();
+        _openGraph = new Mock<IOpenGraphService>();
+        _imageVariants = new Mock<IImageVariantCoordinator>();
+        _jobService = new Mock<ISongUploadJobService>();
+        _progress = new RecordingProgressNotifier();
+
+        _service = new MediaProcessingCompletionService(
+            _factory,
+            _containers.Object,
+            _metadata.Object,
+            _openGraph.Object,
+            _imageVariants.Object,
+            _jobService.Object,
+            _progress,
+            Options.Create(new MediaProcessingOptions()),
+            Mock.Of<ILogger<MediaProcessingCompletionService>>());
+    }
+
+    [Test]
+    public async Task ReplayedCompletionForAFinishedJob_IsANoOp()
+    {
+        // The queue retries on any non-2xx, so a lost response means this arrives twice. Assembling
+        // again would publish the same song a second time.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Completed, AudioProcessingStep.Completed);
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 10
+        });
+
+        _metadata.Verify(
+            service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()),
+            Times.Never);
+        _containers.Verify(factory => factory.GetUploadStagingContainer(), Times.Never);
+    }
+
+    [Test]
+    public async Task CompletionForAnUnknownJob_IsIgnoredRatherThanThrowing()
+    {
+        // Throwing would make the Function retry a message that can never succeed, all the way to
+        // the poison queue.
+        Assert.DoesNotThrowAsync(() => _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = Guid.NewGuid(),
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 10
+        }));
+
+        await using var context = new AppDbContext(_options);
+        Assert.That(context.SongUploadJobs.Count(), Is.Zero);
+    }
+
+    [Test]
+    public async Task AnUnplayableVerdict_FailsTheJobAndTellsTheCreatorWhy()
+    {
+        var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Analyzing);
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Unplayable,
+            FailureCode = MediaProcessingFailureCodes.NotDecodable,
+            Diagnostic = "Invalid data found when processing input"
+        });
+
+        await using var context = new AppDbContext(_options);
+        var job = await context.SongUploadJobs.SingleAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.Status, Is.EqualTo(SongUploadJobStatus.Failed));
+            Assert.That(job.Step, Is.EqualTo(AudioProcessingStep.Failed));
+            Assert.That(job.FailureCode, Is.EqualTo(MediaProcessingFailureCodes.NotDecodable));
+            Assert.That(job.FailureMessage, Does.Contain("Invalid data"));
+            Assert.That(job.CompletedAt, Is.Not.Null);
+        });
+
+        // No song is created: SongMetadata only ever gets a row on success, which is why the
+        // catalogue can never show a track with no playable audio.
+        _metadata.Verify(
+            service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task APlayableVerdictWithNoDuration_IsTreatedAsAFailure()
+    {
+        // Duration is what the player and the payout rules run on; publishing a song without one
+        // would produce a track that cannot be scrubbed or credited.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Verifying);
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 0
+        });
+
+        await using var context = new AppDbContext(_options);
+        var job = await context.SongUploadJobs.SingleAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.Status, Is.EqualTo(SongUploadJobStatus.Failed));
+            Assert.That(job.FailureCode, Is.EqualTo(MediaProcessingFailureCodes.ZeroDuration));
+        });
+    }
+
+    [Test]
+    public async Task FailingAJob_LeavesTheBarWhereItGotToRatherThanResetting()
+    {
+        var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Transcoding);
+
+        await _service.FailAsync(jobId, MediaProcessingFailureCodes.TranscodeFailed, "FFmpeg gave up.");
+
+        var update = _progress.Updates.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(update.Step, Is.EqualTo(AudioProcessingStep.Failed));
+            Assert.That(
+                update.OverallPercent,
+                Is.EqualTo(AudioProcessingProgressCalculator.ToOverallPercent(AudioProcessingStep.Transcoding)),
+                "The creator should see how far the song got, not a bar snapped to 0 or 100.");
+            Assert.That(update.Detail, Does.Contain("FFmpeg gave up"));
+        });
+    }
+
+    [Test]
+    public async Task FailingAnAlreadyCompletedJob_DoesNotUnpublishIt()
+    {
+        // A late failure callback - say the reconciler and a real result racing - must never
+        // retract a song that is already live.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Completed, AudioProcessingStep.Completed);
+
+        await _service.FailAsync(jobId, MediaProcessingFailureCodes.Abandoned, "Timed out.");
+
+        await using var context = new AppDbContext(_options);
+        var job = await context.SongUploadJobs.SingleAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.Status, Is.EqualTo(SongUploadJobStatus.Completed));
+            Assert.That(job.FailureCode, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task FailingAJob_CleansUpItsStagedBlobs()
+    {
+        var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Downloading);
+
+        await _service.FailAsync(jobId, MediaProcessingFailureCodes.NotDecodable, "Bad file.");
+
+        _jobService.Verify(
+            service => service.DeleteStagedBlobsAsync(
+                It.Is<SongUploadJob>(job => job.MediaGuid == jobId),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task FailureDiagnostics_AreTruncatedToTheirColumnWidths()
+    {
+        var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Analyzing);
+
+        await _service.FailAsync(jobId, new string('c', 500), new string('d', 5000));
+
+        await using var context = new AppDbContext(_options);
+        var job = await context.SongUploadJobs.SingleAsync();
+        Assert.Multiple(() =>
+        {
+            // nvarchar(100) and nvarchar(2000); anything longer throws on save and would lose the
+            // failure entirely.
+            Assert.That(job.FailureCode, Has.Length.EqualTo(100));
+            Assert.That(job.FailureMessage, Has.Length.EqualTo(2000));
+        });
+    }
+
+    private async Task<Guid> AddJobAsync(SongUploadJobStatus status, AudioProcessingStep step)
+    {
+        var jobId = Guid.NewGuid();
+        await using var context = new AppDbContext(_options);
+        context.SongUploadJobs.Add(new SongUploadJob
+        {
+            MediaGuid = jobId,
+            CreatorId = 1,
+            SongTitle = "Song",
+            SourceBlobPath = MediaProcessingStagingPaths.Source(jobId, ".wav"),
+            SourceFileName = "Song.wav",
+            SourceExtension = ".wav",
+            SourceContentType = "audio/wav",
+            SourceFileSize = 1024,
+            Status = status,
+            Step = step,
+            StepUpdatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        return jobId;
+    }
+
+    private sealed class RecordingProgressNotifier : IUploadProgressNotifier
+    {
+        public List<AudioProcessingProgress> Updates { get; } = [];
+
+        public Task NotifyAsync(
+            int creatorId,
+            AudioProcessingProgress progress,
+            CancellationToken cancellationToken = default)
+        {
+            Updates.Add(progress);
+            return Task.CompletedTask;
+        }
+
+        public Task NotifyStepAsync(
+            int creatorId,
+            Guid jobId,
+            AudioProcessingStep step,
+            string detail = null,
+            CancellationToken cancellationToken = default)
+            => NotifyAsync(
+                creatorId,
+                new AudioProcessingProgress
+                {
+                    JobId = jobId,
+                    Step = step,
+                    OverallPercent = AudioProcessingProgressCalculator.ToOverallPercent(step),
+                    Detail = detail
+                },
+                cancellationToken);
+    }
+
+    private sealed class TestFactory(DbContextOptions<AppDbContext> options)
+        : IDbContextFactory<AppDbContext>
+    {
+        public AppDbContext CreateDbContext() => new(options);
+    }
+}

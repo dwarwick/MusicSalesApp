@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Antiforgery;
+﻿using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -97,6 +97,12 @@ public abstract class BlazorBase : ComponentBase
 
     [Inject]
     protected IMaintenanceHubClient MaintenanceHubClient { get; set; } = default!;
+
+    [Inject]
+    protected IUploadProgressHubClient UploadProgressHubClient { get; set; } = default!;
+
+    [Inject]
+    protected ISongUploadJobService SongUploadJobService { get; set; } = default!;
 
     [Inject]
     protected IRecommendationService RecommendationService { get; set; } = default!;

@@ -111,10 +111,19 @@ public class BackgroundJobService : IBackgroundJobService
                 Cron.Daily(5));
 
             // Retry duration extraction for active songs whose metadata is missing TrackLength.
+            // Dispatches probes to the audio-processing Function; the durations are written as the
+            // results come back, not before this job returns.
             RecurringJob.AddOrUpdate<ITrackLengthRepairService>(
                 "repair-missing-track-lengths",
                 service => service.RepairMissingTrackLengthsAsync(),
                 Cron.Daily(5, 30));
+
+            // Audio processing spans two clouds now, so a lost queue message leaves an upload job
+            // or an audit run stuck with nothing to finish it. This sweeps those up.
+            RecurringJob.AddOrUpdate<ISongUploadJobReconciler>(
+                HangfireJobIds.ReconcileStalledMediaProcessing,
+                service => service.ReconcileAsync(),
+                "*/15 * * * *");
 
             // Schedule hourly retry of pending 1099 transactions
             // This retries TaxBandits 1099 reports that were deferred due to maintenance or failures

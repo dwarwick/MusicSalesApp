@@ -1,8 +1,9 @@
-using Microsoft.AspNetCore.Antiforgery;
+﻿using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.JSInterop;
+using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
@@ -64,13 +65,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private readonly List<PendingUpload> _pendingUploads = new();
     private readonly List<string> _pendingTempFiles = new();
 
+    // Progress for a queued song arrives over SignalR from a different request entirely - the
+    // Azure Function posts to the API, which broadcasts to this creator's group - so the row has to
+    // be findable by media GUID rather than by position in the batch.
+    private readonly Dictionary<Guid, UploadPairItem> _jobRows = new();
+    private readonly object _jobRowsLock = new();
+
+    // Fallback for when the progress hub is unavailable. Everything still processes correctly in
+    // that case - the only symptom is a bar frozen on "Waiting to be processed" forever, which is
+    // indistinguishable from a stuck pipeline. Polling the job rows gives step-level movement
+    // regardless of SignalR. Percentages are not persisted, so this is coarser than the live feed
+    // and deliberately only fills in what the hub failed to deliver.
+    private static readonly TimeSpan JobStatePollInterval = TimeSpan.FromSeconds(5);
+    private CancellationTokenSource _jobPollCts;
+
     private sealed record PendingUpload(
         UploadPairItem Item,
         string AudioTempPath,
-        string CoverArtTempPath,
-        string CoverArtContentType,
-        string PlaybackTempPath,
-        double ValidatedDuration);
+        string CoverArtTempPath);
 
 
     // Creator ID - will be populated if the current user is a creator
@@ -78,12 +90,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private string _currentUserEmail = null;
     private bool _hasLoadedCreatorId = false;
 
-    // Track upload state for navigation/close warnings and cleanup
+    // Track upload state for navigation/close warnings
     protected bool _isUploading = false;
     protected bool _isProcessingFiles = false;
-    private readonly List<string> _uploadedBlobPaths = new();
-    private readonly object _blobPathsLock = new();
     private bool _disposed = false;
+
+    /// <summary>
+    /// Guards the batch notification so it is sent once per batch, however many times the last song
+    /// is reported terminal - the hub and the fallback poller can both deliver that transition.
+    /// </summary>
+    private bool _batchNotificationSent;
 
     // Configuration for chunked uploads
     private const int MaxFilesAllowed = 50;
@@ -100,6 +116,95 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private static readonly string[] ValidAudioExtensions = MusicFileExtensions.ValidAudioExtensions;
     private static readonly string[] ValidCoverArtExtensions = MusicFileExtensions.ValidCoverArtExtensions;
     
+    /// <summary>
+    /// True once the receiving phase has completed in this session, so the batch bar can credit it
+    /// as done. Rows restored on a later visit never went through receiving here, and
+    /// <see cref="_uploadItems"/> being populated stands in for it then.
+    /// </summary>
+    private bool _filesReceived;
+
+    /// <summary>
+    /// One bar for the whole batch: receiving every file, then processing every song. Shown from
+    /// the moment files are selected until the last song reaches a terminal step.
+    /// </summary>
+    protected bool ShowOverallProgress => _initialUploadItems.Any() || _uploadItems.Any();
+
+    /// <summary>
+    /// True while at least one song is still moving through the pipeline.
+    ///
+    /// <para>
+    /// This is what hides the drop box during phase two. <see cref="_isUploading"/> covers only the
+    /// receiving half and goes false the moment the last file is staged, which is exactly when
+    /// processing starts - so on its own it let the box reappear underneath a batch that was still
+    /// transcoding, inviting a second batch on top of the first.
+    /// </para>
+    ///
+    /// <para>
+    /// Keyed on <c>MediaGuid</c> rather than status so the title-review pause is excluded: those
+    /// rows exist but have not been staged, and choosing different files there has always been a
+    /// legitimate way to replace the batch.
+    /// </para>
+    /// </summary>
+    protected bool IsBatchProcessing => _uploadItems.Any(item =>
+        item.MediaGuid != Guid.Empty && !AudioProcessingProgressCalculator.IsTerminal(item.Step));
+
+    /// <summary>
+    /// Whether the drop box is out of the way: while files are being received, while they are being
+    /// inspected, and now for the whole of processing. It comes back once every song is terminal,
+    /// which is the same moment the batch bar reaches 100%.
+    /// </summary>
+    protected bool HideUploadBox => _isUploading || _isProcessingFiles || IsBatchProcessing;
+
+    /// <summary>
+    /// Batch progress, 0-100. Terminal songs count as complete - a failed song will not progress
+    /// further, and treating it as unfinished would strand this below 100 forever.
+    /// </summary>
+    protected int OverallProgressPercent
+    {
+        get
+        {
+            var receiving = (_filesReceived || _uploadItems.Any())
+                ? 100d
+                : _initialUploadBatchProgress;
+
+            var songPercents = _uploadItems
+                .Select(item => AudioProcessingProgressCalculator.IsTerminal(item.Step)
+                    ? 100d
+                    : item.Progress)
+                .ToList();
+
+            return (int)AudioProcessingProgressCalculator.ToBatchPercent(receiving, songPercents);
+        }
+    }
+
+    /// <summary>Wording for the batch bar, so it says which half of the run is underway.</summary>
+    protected string OverallProgressMessage
+    {
+        get
+        {
+            if (_uploadItems.Count == 0)
+            {
+                return _initialUploadItems.Any() ? "Receiving your files..." : string.Empty;
+            }
+
+            var finished = _uploadItems.Count(item => AudioProcessingProgressCalculator.IsTerminal(item.Step));
+            if (finished == _uploadItems.Count)
+            {
+                var failed = _uploadItems.Count(item => item.Step == AudioProcessingStep.Failed);
+                return failed == 0
+                    ? $"All {_uploadItems.Count} song(s) published."
+                    : $"Finished: {_uploadItems.Count - failed} published, {failed} failed.";
+            }
+
+            if (_awaitingTitleConfirmation)
+            {
+                return "Waiting for you to fix the highlighted titles.";
+            }
+
+            return $"Processing songs ({finished} of {_uploadItems.Count} finished)...";
+        }
+    }
+
     protected InputFile FileInput { get; set;}
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -109,6 +214,70 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _hasLoadedCreatorId = true;
             await LoadCreatorIdAsync();
             await LoadMaxAudioFileSizeAsync();
+
+            UploadProgressHubClient.OnProgress += ApplyProgressAsync;
+            await UploadProgressHubClient.StartAsync();
+
+            // Songs queued on a previous visit are still being processed, so rebuild their rows
+            // rather than showing an empty page while work is in flight.
+            await RestoreInFlightJobsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds progress rows for jobs that have not finished, at the step they actually reached.
+    ///
+    /// <para>
+    /// Processing outlives the circuit now: a creator can queue a batch, navigate away or refresh,
+    /// and come back to find it still running. The persisted step is what makes that resumable -
+    /// the percentage itself is never stored, it is recomputed from the step.
+    /// </para>
+    /// </summary>
+    private async Task RestoreInFlightJobsAsync()
+    {
+        if (_currentCreatorId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var active = await SongUploadJobService.GetActiveJobsAsync(_currentCreatorId.Value);
+            if (active.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var job in active)
+            {
+                var row = new UploadPairItem
+                {
+                    SongTitle = job.SongTitle,
+                    AudioFileName = job.SourceFileName,
+                    AudioFileSize = job.SourceFileSize,
+                    CoverArtFileName = job.CoverArtFileName ?? string.Empty,
+                    HasCoverArt = !string.IsNullOrEmpty(job.CoverArtBlobPath),
+                    MediaGuid = job.MediaGuid,
+                    Step = job.Step,
+                    Status = UploadStatus.Processing,
+                    StatusMessage = DescribeStep(job.Step),
+                    Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(job.Step)
+                };
+
+                _uploadItems.Add(row);
+                lock (_jobRowsLock)
+                {
+                    _jobRows[job.MediaGuid] = row;
+                }
+            }
+
+            StartJobStatePolling();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            // Cosmetic: the songs keep processing regardless of whether their rows are shown.
+            Logger.LogWarning(ex, "Could not restore in-flight upload jobs for creator {CreatorId}", _currentCreatorId);
         }
     }
 
@@ -188,8 +357,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         var coverArtTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // The MP3s the preflight transcodes, kept so the upload does not transcode again.
         // Only populated for non-MP3 sources.
-        var playbackTempPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var validatedDurations = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         var beforeUnloadEnabled = false;
 
         try
@@ -201,6 +368,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         // Clear previous validation errors
         ClearValidationError();
+        _filesReceived = false;
         _uploadItems.Clear();
         _initialUploadItems.Clear();
         _initialUploadStatusMessage = string.Empty;
@@ -229,10 +397,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         
         // Reset upload tracking for this batch
         _uploadCts = new CancellationTokenSource();
-        lock (_blobPathsLock)
-        {
-            _uploadedBlobPaths.Clear();
-        }
+        _batchNotificationSent = false;
 
         try
         {
@@ -321,92 +486,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
 
-        // Preflight the complete batch before any upload task is started. Every audio file is
-        // fully decoded here, which for a long track is the slowest part of the whole flow, so
-        // report progress rather than appearing to hang.
+        // Preflight is now a header check only.
+        //
+        // This used to fully decode every audio file here, and transcode every non-MP3 one - three
+        // FFmpeg passes per WAV, on this circuit, before a byte reached Azure. That was the long
+        // freeze after "100% received". FFmpeg moved to the audio-processing Azure Function, so
+        // what is left is a magic-byte sniff that costs 64 bytes per file and catches the obvious
+        // cases (a renamed file, a zero-length one) immediately.
+        //
+        // The trade: a file that sniffs correctly but does not actually decode is no longer caught
+        // here. It is caught in the Function, and the creator is told through the job's progress
+        // row rather than an error on this page.
         var invalidContentFiles = new List<string>();
-        var decoderInfrastructureFailures = new List<string>();
-        var validatedCount = 0;
         foreach (var file in audioFilesByName)
         {
-            validatedCount++;
-            _initialUploadStatusMessage =
-                $"Checking that your audio plays ({validatedCount} of {audioFilesByName.Count}): {file.Key}";
-            _initialUploadBatchProgress = (int)(100.0 * (validatedCount - 1) / audioFilesByName.Count);
-            await InvokeAsync(StateHasChanged);
-
             await using var stream = File.OpenRead(audioTempPaths[file.Key]);
-            if (!MediaFileContentValidator.AudioContentMatchesExtension(stream, file.Key, out _))
+            if (!AudioContainerSniffer.ContentMatchesExtension(stream, file.Key, out _))
             {
-                invalidContentFiles.Add(file.Key);
-                continue;
-            }
-
-            stream.Position = 0;
-            var decode = await MusicService.ValidateAudioDecodeAsync(
-                stream,
-                file.Key,
-                _uploadCts.Token);
-            if (decode.Status == AudioDecodeStatus.Inconclusive)
-            {
-                decoderInfrastructureFailures.Add($"{file.Key} ({decode.FailureCode})");
-                continue;
-            }
-            if (decode.Status != AudioDecodeStatus.Playable)
-            {
-                invalidContentFiles.Add(file.Key);
-                continue;
-            }
-
-            if (MusicService.IsMp3File(file.Key))
-            {
-                // The upload can stream this straight through; reuse the duration just measured.
-                validatedDurations[file.Key] = decode.Duration ?? 0;
-                continue;
-            }
-
-            // Prove that every non-MP3 source can be converted before any task is
-            // allowed to write this batch to Azure, and keep the result: converting again
-            // during the upload would double the transcoding work for the whole batch.
-            try
-            {
-                stream.Position = 0;
-                await using var converted = await MusicService.ConvertToMp3Async(stream, file.Key);
-                if (!MediaFileContentValidator.AudioContentMatchesExtension(converted, "preflight.mp3", out _))
-                {
-                    invalidContentFiles.Add(file.Key);
-                    continue;
-                }
-
-                converted.Position = 0;
-                var convertedDecode = await MusicService.ValidateAudioDecodeAsync(
-                    converted,
-                    "preflight.mp3",
-                    _uploadCts.Token);
-                if (convertedDecode.Status == AudioDecodeStatus.Inconclusive)
-                {
-                    decoderInfrastructureFailures.Add($"{file.Key} ({convertedDecode.FailureCode})");
-                    continue;
-                }
-                if (convertedDecode.Status != AudioDecodeStatus.Playable)
-                {
-                    invalidContentFiles.Add(file.Key);
-                    continue;
-                }
-
-                var playbackTempPath = Path.GetTempFileName();
-                converted.Position = 0;
-                await using (var playbackFile = File.Create(playbackTempPath))
-                {
-                    await converted.CopyToAsync(playbackFile, _uploadCts.Token);
-                }
-
-                playbackTempPaths[file.Key] = playbackTempPath;
-                validatedDurations[file.Key] = convertedDecode.Duration ?? 0;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Upload preflight conversion failed for {FileName}", file.Key);
                 invalidContentFiles.Add(file.Key);
             }
         }
@@ -417,21 +513,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             {
                 invalidContentFiles.Add(file.Key);
             }
-        }
-        if (decoderInfrastructureFailures.Count > 0)
-        {
-            _validationErrorMessage =
-                "No files were uploaded because the media decoder could not complete validation. "
-                + "Please retry after the server issue is resolved: "
-                + string.Join(", ", decoderInfrastructureFailures);
-            _isUploading = false;
-            _initialUploadItems.Clear();
-            _initialUploadStatusMessage = string.Empty;
-            _initialUploadBatchProgress = 0;
-            await DisableBeforeUnloadAsync();
-            beforeUnloadEnabled = false;
-            await InvokeAsync(StateHasChanged);
-            return;
         }
         if (invalidContentFiles.Count > 0)
         {
@@ -477,17 +558,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 continue;
 
             string coverArtTempPath = null;
-            string coverArtContentType = null;
             string coverArtFileName = "(No cover art)";
             long coverArtFileSize = 0;
 
             if (!string.IsNullOrEmpty(pair.ImageFileName))
             {
                 coverArtTempPaths.TryGetValue(pair.ImageFileName, out coverArtTempPath);
-
-                // Determine content type from file extension
-                var ext = Path.GetExtension(pair.ImageFileName).ToLowerInvariant();
-                coverArtContentType = ext == ".png" ? "image/png" : "image/jpeg";
 
                 // Metadata for display in the progress table
                 if (coverArtFilesByName.TryGetValue(pair.ImageFileName, out var metaFile))
@@ -513,17 +589,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             };
 
             _uploadItems.Add(uploadItem);
-            playbackTempPaths.TryGetValue(pair.AudioFileName, out var playbackTempPath);
-            validatedDurations.TryGetValue(pair.AudioFileName, out var validatedDuration);
             uploadItemsWithFiles.Add(new PendingUpload(
                 uploadItem,
                 audioTempPath,
-                coverArtTempPath,
-                coverArtContentType,
-                playbackTempPath,
-                validatedDuration));
+                coverArtTempPath));
         }
 
+        // Receiving is over. The batch bar credits it in full from here, including through the
+        // title-review pause when no song has started processing yet.
+        _filesReceived = true;
         _initialUploadItems.Clear();
         _initialUploadStatusMessage = string.Empty;
         _initialUploadBatchProgress = 0;
@@ -540,10 +614,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _pendingUploads.AddRange(uploadItemsWithFiles);
         _pendingTempFiles.AddRange(audioTempPaths.Values);
         _pendingTempFiles.AddRange(coverArtTempPaths.Values);
-        _pendingTempFiles.AddRange(playbackTempPaths.Values);
         audioTempPaths.Clear();
         coverArtTempPaths.Clear();
-        playbackTempPaths.Clear();
 
         // Upload without asking when the titles taken from the filenames are all usable. The
         // creator only has to intervene when one is blank, too long, or collides with another
@@ -607,8 +679,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             foreach (var path in audioTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
             foreach (var path in coverArtTempPaths.Values)
-                TempFileHelper.TryDelete(path, Logger);
-            foreach (var path in playbackTempPaths.Values)
                 TempFileHelper.TryDelete(path, Logger);
         }
     }
@@ -704,10 +774,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     {
         _isUploading = true;
         _uploadCts = new CancellationTokenSource();
-        lock (_blobPathsLock)
-        {
-            _uploadedBlobPaths.Clear();
-        }
+        _batchNotificationSent = false;
 
         var beforeUnloadEnabled = false;
         try
@@ -725,27 +792,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             await ProcessUploadsInChunksAsync(uploads);
 
-            // Send batch upload notification after all uploads complete
-            try
-            {
-                // Use the actual MP3 blob paths tracked during upload for reliable matching
-                List<string> uploadedMp3Paths;
-                lock (_blobPathsLock)
-                {
-                    uploadedMp3Paths = _uploadedBlobPaths
-                        .Where(p => p.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                }
-                if (uploadedMp3Paths.Any() && !string.IsNullOrEmpty(_currentUserEmail) && _currentCreatorId.HasValue)
-                {
-                    await AdminNotificationService.NotifyUploadBatchCompletedAsync(
-                        _currentUserEmail, _currentCreatorId.Value, uploadedMp3Paths);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to send batch upload notification");
-            }
+            // The batch notification is NOT sent here any more. Reaching this line means the files
+            // have been staged and queued - the songs do not exist yet, so a lookup by blob path
+            // would match nothing and the email would list an empty batch. It is sent instead from
+            // MaybeNotifyBatchCompletedAsync, once the pipeline reports the last song assembled.
+            await MaybeNotifyBatchCompletedAsync();
         }
         finally
         {
@@ -976,18 +1027,277 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Opens the MP3 the preflight already produced for a non-MP3 source, or null when the source
-    /// was already an MP3 and the upload can stream it straight through.
+    /// Maps the browser-to-Azure staging upload onto the first band of the overall bar, so it
+    /// starts moving immediately rather than sitting at zero until the queue picks the song up.
     /// </summary>
-    private static FileStream OpenValidatedPlayback(string playbackTempPath, int bufferSize)
-        => string.IsNullOrEmpty(playbackTempPath)
-            ? null
-            : new FileStream(playbackTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
+    private IProgress<double> BuildStagingProgress(UploadPairItem uploadItem)
+        => new Progress<double>(percent =>
+        {
+            uploadItem.Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(
+                AudioProcessingStep.Staging,
+                percent);
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+    /// <summary>
+    /// Marks a row as handed off to the pipeline.
+    ///
+    /// <para>
+    /// Note what this deliberately does <em>not</em> do: it no longer records blob paths for
+    /// cleanup-on-abandon. Once a job is queued the song completes whether or not the creator stays
+    /// on the page, which is the point of moving the work off the request thread - deleting its
+    /// blobs on navigation would sabotage a transcode already in flight.
+    /// </para>
+    /// </summary>
+    private void TrackQueuedJob(UploadPairItem uploadItem, Models.SongUploadJob job)
+    {
+        uploadItem.MediaGuid = job.MediaGuid;
+        uploadItem.Step = AudioProcessingStep.Queued;
+        uploadItem.Status = UploadStatus.Processing;
+        uploadItem.Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(AudioProcessingStep.Queued);
+        uploadItem.StatusMessage = DescribeStep(AudioProcessingStep.Queued);
+        uploadItem.ErrorMessage = null;
+
+        lock (_jobRowsLock)
+        {
+            _jobRows[job.MediaGuid] = uploadItem;
+        }
+
+        StartJobStatePolling();
+    }
+
+    /// <summary>
+    /// Starts the fallback poller if it is not already running. Idempotent; stops on its own once
+    /// every tracked row reaches a terminal step.
+    /// </summary>
+    private void StartJobStatePolling()
+    {
+        if (_jobPollCts is not null || _currentCreatorId is null)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _jobPollCts = cts;
+        _ = PollJobStatesAsync(cts);
+    }
+
+    private async Task PollJobStatesAsync(CancellationTokenSource ownCts)
+    {
+        var cancellationToken = ownCts.Token;
+
+        try
+        {
+            using var timer = new PeriodicTimer(JobStatePollInterval);
+
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                Guid[] pending;
+                lock (_jobRowsLock)
+                {
+                    pending = _jobRows
+                        .Where(entry => !AudioProcessingProgressCalculator.IsTerminal(entry.Value.Step))
+                        .Select(entry => entry.Key)
+                        .ToArray();
+                }
+
+                if (pending.Length == 0)
+                {
+                    return;
+                }
+
+                var jobs = await SongUploadJobService.GetRecentJobsAsync(
+                    _currentCreatorId!.Value,
+                    cancellationToken: cancellationToken);
+
+                var changed = false;
+                foreach (var job in jobs)
+                {
+                    UploadPairItem row;
+                    lock (_jobRowsLock)
+                    {
+                        if (!_jobRows.TryGetValue(job.MediaGuid, out row))
+                        {
+                            continue;
+                        }
+                    }
+
+                    // Only ever move forwards, same rule the hub path follows - a poll that raced a
+                    // live update must not drag the bar back.
+                    if (!AudioProcessingProgressCalculator.IsAdvance(row.Step, job.Step))
+                    {
+                        continue;
+                    }
+
+                    row.Step = job.Step;
+                    row.Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(job.Step);
+                    row.Status = job.Status switch
+                    {
+                        Models.SongUploadJobStatus.Completed => UploadStatus.Completed,
+                        Models.SongUploadJobStatus.Failed => UploadStatus.Failed,
+                        _ => UploadStatus.Processing
+                    };
+                    row.StatusMessage = DescribeStep(job.Step);
+                    row.ErrorMessage = job.FailureMessage;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    await InvokeAsync(StateHasChanged);
+                    await MaybeNotifyBatchCompletedAsync();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Page went away.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Upload job state polling stopped unexpectedly");
+        }
+        finally
+        {
+            // Release the field so a second batch can start a fresh poller. The loop returns of its
+            // own accord once every row is terminal, and leaving a spent source parked here meant
+            // StartJobStatePolling saw "already running" forever after - so a second batch uploaded
+            // in the same visit had no fallback if the hub was down.
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _jobPollCts, null, ownCts), ownCts))
+            {
+                ownCts.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Applies one progress update pushed from the hub to the row it belongs to.</summary>
+    private async Task ApplyProgressAsync(AudioProcessingProgress progress)
+    {
+        UploadPairItem row;
+        lock (_jobRowsLock)
+        {
+            if (!_jobRows.TryGetValue(progress.JobId, out row))
+            {
+                return;
+            }
+        }
+
+        // The server already drops out-of-order updates, but a second guard here is cheap and this
+        // is the surface the creator actually looks at.
+        if (progress.Step < row.Step)
+        {
+            return;
+        }
+
+        row.Step = progress.Step;
+        row.Progress = (int)progress.OverallPercent;
+
+        switch (progress.Step)
+        {
+            case AudioProcessingStep.Completed:
+                row.Status = UploadStatus.Completed;
+                row.StatusMessage = string.IsNullOrWhiteSpace(progress.Detail)
+                    ? "Published"
+                    : $"Published '{progress.Detail}'";
+                row.ErrorMessage = null;
+                break;
+
+            case AudioProcessingStep.Failed:
+                row.Status = UploadStatus.Failed;
+                row.StatusMessage = "Processing failed";
+                row.ErrorMessage = progress.Detail;
+                break;
+
+            default:
+                row.Status = UploadStatus.Processing;
+                row.StatusMessage = DescribeStep(progress.Step);
+                break;
+        }
+
+        await InvokeAsync(StateHasChanged);
+        await MaybeNotifyBatchCompletedAsync();
+    }
+
+    /// <summary>
+    /// Sends the batch upload notification once the whole batch has finished processing.
+    ///
+    /// <para>
+    /// This used to fire at the end of the upload loop, which was the right moment when the request
+    /// thread did the transcoding and wrote the songs itself. It is not any more: staging only hands
+    /// the work to the queue, so at that point no <c>SongMetadata</c> row exists for the notification
+    /// to describe. The batch is finished when every tracked row is terminal, which arrives from the
+    /// hub or the fallback poller - hence the guard, since both can deliver the same last transition.
+    /// </para>
+    /// </summary>
+    private async Task MaybeNotifyBatchCompletedAsync()
+    {
+        List<string> publishedPaths;
+        lock (_jobRowsLock)
+        {
+            if (_batchNotificationSent || _jobRows.Count == 0)
+            {
+                return;
+            }
+
+            if (_jobRows.Values.Any(row => !AudioProcessingProgressCalculator.IsTerminal(row.Step)))
+            {
+                return;
+            }
+
+            // Failed songs are excluded rather than reported as uploads: nothing was published, and
+            // the creator has already been told about the failure on the row itself.
+            publishedPaths = _jobRows.Values
+                .Where(row => row.Step == AudioProcessingStep.Completed && row.MediaGuid != Guid.Empty)
+                .Select(row => SongMediaPaths.Playback(row.MediaGuid))
+                .ToList();
+
+            _batchNotificationSent = true;
+        }
+
+        if (publishedPaths.Count == 0
+            || string.IsNullOrEmpty(_currentUserEmail)
+            || !_currentCreatorId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            // Assembly writes Mp3BlobPath as exactly SongMediaPaths.Playback(mediaGuid), so deriving
+            // the path from the GUID here matches the same rows the old tracked-path list did.
+            await AdminNotificationService.NotifyUploadBatchCompletedAsync(
+                _currentUserEmail,
+                _currentCreatorId.Value,
+                publishedPaths);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to send batch upload notification");
+        }
+    }
+
+    /// <summary>Creator-facing wording for each pipeline stage.</summary>
+    private static string DescribeStep(AudioProcessingStep step) => step switch
+    {
+        AudioProcessingStep.Staging => "Uploading...",
+        AudioProcessingStep.Queued => "Waiting to be processed...",
+        AudioProcessingStep.Downloading => "Preparing your audio...",
+        AudioProcessingStep.Analyzing => "Checking that your audio plays...",
+        AudioProcessingStep.Transcoding => "Converting to MP3...",
+        AudioProcessingStep.Verifying => "Verifying the converted audio...",
+        AudioProcessingStep.Uploading => "Saving the converted audio...",
+        AudioProcessingStep.Copying => "Storing your song...",
+        AudioProcessingStep.SavingMetadata => "Adding it to your library...",
+        AudioProcessingStep.GeneratingArtwork => "Preparing artwork...",
+        AudioProcessingStep.Completed => "Published",
+        AudioProcessingStep.Failed => "Processing failed",
+        _ => "Working..."
+    };
 
     private async Task UploadAudioOnlyAsync(PendingUpload pending)
     {
         const int bufferSize = 81920;
-        var (uploadItem, audioTempPath, _, _, playbackTempPath, validatedDuration) = pending;
+        var (uploadItem, audioTempPath, _) = pending;
 
         try
         {
@@ -1006,32 +1316,29 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Uploading...";
-            uploadItem.Progress = 25;
+            // The staging band's start, not a made-up 25. StagingProgress reports real bytes-sent
+            // percentages inside that band moments later, so anything higher here shows as a jump
+            // forward followed by a slide back.
+            uploadItem.Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(
+                AudioProcessingStep.Staging);
             await InvokeAsync(StateHasChanged);
 
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
-            await using var playbackStream = OpenValidatedPlayback(playbackTempPath, bufferSize);
-            var uploadResult = await MusicUploadService.UploadMusicWithoutAlbumArtAsync(
-                audioFileStream,
-                uploadItem.AudioFileName,
-                uploadItem.SongTitle,
-                null, // No album name
-                _currentCreatorId,
-                playbackStream,
-                validatedDuration,
+            var job = await SongUploadJobService.CreateAsync(
+                new SongUploadJobRequest
+                {
+                    AudioStream = audioFileStream,
+                    AudioFileName = uploadItem.AudioFileName,
+                    SongTitle = uploadItem.SongTitle,
+                    CreatorId = _currentCreatorId.Value,
+                    StagingProgress = BuildStagingProgress(uploadItem)
+                },
                 _uploadCts.Token);
 
-            // Track the uploaded blob path for cleanup if user leaves
-            lock (_blobPathsLock)
-            {
-                _uploadedBlobPaths.Add(uploadResult.Mp3BlobPath);
-                _uploadedBlobPaths.Add(uploadResult.OriginalAudioBlobPath);
-            }
-
-            uploadItem.Progress = 100;
-            uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded '{uploadResult.SongTitle}'";
-            uploadItem.ErrorMessage = null;
+            // Staged and queued, not published. The song does not exist yet - the Function
+            // transcodes it and the API assembles it, and this row keeps moving from the
+            // upload-progress hub until it does.
+            TrackQueuedJob(uploadItem, job);
         }
         catch (InvalidDataException ex)
         {
@@ -1066,7 +1373,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private async Task UploadFilePairAsync(PendingUpload pending)
     {
         const int bufferSize = 81920;
-        var (uploadItem, audioTempPath, coverArtTempPath, _, playbackTempPath, validatedDuration) = pending;
+        var (uploadItem, audioTempPath, coverArtTempPath) = pending;
 
         try
         {
@@ -1085,48 +1392,29 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             uploadItem.Status = UploadStatus.Uploading;
             uploadItem.StatusMessage = "Uploading...";
-            uploadItem.Progress = 25;
+            // The staging band's start, not a made-up 25. StagingProgress reports real bytes-sent
+            // percentages inside that band moments later, so anything higher here shows as a jump
+            // forward followed by a slide back.
+            uploadItem.Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(
+                AudioProcessingStep.Staging);
             await InvokeAsync(StateHasChanged);
 
             await using var audioFileStream = new FileStream(audioTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
             await using var coverArtFileStream = new FileStream(coverArtTempPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
-            await using var playbackStream = OpenValidatedPlayback(playbackTempPath, bufferSize);
-            var uploadResult = await MusicUploadService.UploadMusicWithAlbumArtAsync(
-                audioFileStream,
-                uploadItem.AudioFileName,
-                coverArtFileStream,
-                uploadItem.CoverArtFileName,
-                uploadItem.SongTitle,
-                null, // No album name
-                _currentCreatorId,
-                playbackStream,
-                validatedDuration,
+            var job = await SongUploadJobService.CreateAsync(
+                new SongUploadJobRequest
+                {
+                    AudioStream = audioFileStream,
+                    AudioFileName = uploadItem.AudioFileName,
+                    CoverArtStream = coverArtFileStream,
+                    CoverArtFileName = uploadItem.CoverArtFileName,
+                    SongTitle = uploadItem.SongTitle,
+                    CreatorId = _currentCreatorId.Value,
+                    StagingProgress = BuildStagingProgress(uploadItem)
+                },
                 _uploadCts.Token);
 
-            // Track the uploaded blob paths for cleanup if user leaves
-            lock (_blobPathsLock)
-            {
-                _uploadedBlobPaths.Add(uploadResult.Mp3BlobPath);
-                _uploadedBlobPaths.Add(uploadResult.OriginalAudioBlobPath);
-                _uploadedBlobPaths.Add(uploadResult.ImageBlobPath);
-                _uploadedBlobPaths.Add(uploadResult.OriginalCoverArtBlobPath);
-                _uploadedBlobPaths.Add(SongMediaPaths.FacebookImageFor(uploadResult.ImageBlobPath));
-
-                // The pre-resized renditions are generated after the metadata commit, so an
-                // abandoned batch would otherwise strand them in storage with no row referencing
-                // them. Sweeping the whole ladder is fine here: cleanup deletes best-effort, and a
-                // rung the source was too small to fill simply does not exist.
-                foreach (var variantPath in ImageVariantPaths.VariantsFor(
-                             uploadResult.ImageBlobPath, ImageVariantSizes.CoverArt))
-                {
-                    _uploadedBlobPaths.Add(variantPath);
-                }
-            }
-
-            uploadItem.Progress = 100;
-            uploadItem.Status = UploadStatus.Completed;
-            uploadItem.StatusMessage = $"Uploaded '{uploadResult.SongTitle}'";
-            uploadItem.ErrorMessage = null;
+            TrackQueuedJob(uploadItem, job);
         }
         catch (InvalidDataException ex)
         {
@@ -1334,7 +1622,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             UploadStatus.Completed => "bg-success",
             UploadStatus.Failed => "bg-danger",
-            UploadStatus.Converting => "bg-info progress-bar-striped progress-bar-animated",
+            UploadStatus.Processing => "bg-info progress-bar-striped progress-bar-animated",
             UploadStatus.Uploading => "bg-primary progress-bar-striped progress-bar-animated",
             _ => "bg-secondary"
         };
@@ -1361,23 +1649,48 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         public bool HasCoverArt { get; set; }
         public UploadStatus Status { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
+
+        /// <summary>
+        /// One bar for the whole lifecycle, 0-100. It starts filling as the browser's bytes reach
+        /// the staging container, holds while the song waits for a Function instance, and keeps
+        /// climbing through transcoding and then the API's assembly. It is never hidden and never
+        /// runs backwards.
+        /// </summary>
         public int Progress { get; set; }
+
         public string ErrorMessage { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The job's media GUID once it has been staged, which is how progress pushed over SignalR
+        /// finds the right row. Empty until then.
+        /// </summary>
+        public Guid MediaGuid { get; set; }
+
+        /// <summary>Where the pipeline has got to, for the label beside the bar.</summary>
+        public AudioProcessingStep Step { get; set; } = AudioProcessingStep.Staging;
     }
 
     protected enum UploadStatus
     {
         Pending,
         Uploading,
-        Converting,
+
+        /// <summary>Staged and queued; the Azure Function has it now.</summary>
+        Processing,
         Completed,
         Failed
     }
 
     /// <summary>
-    /// Intercepts in-app navigation while uploads are in progress.
-    /// Shows a confirmation dialog — if the user confirms leaving,
-    /// cancels pending uploads and cleans up already-uploaded files.
+    /// Intercepts in-app navigation while files are still being sent.
+    ///
+    /// <para>
+    /// What leaving costs has changed: a song that has been staged and queued is finished by the
+    /// Function and the API whether or not this page is open, so only the files still being sent are
+    /// lost. The wording says exactly that rather than the old promise to remove everything uploaded
+    /// in the session, which would now be a lie in both directions - nothing is removed, and nothing
+    /// queued needs to be.
+    /// </para>
     /// </summary>
     protected async Task OnBeforeInternalNavigation(LocationChangingContext context)
     {
@@ -1387,13 +1700,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         var isConfirmed = await JS.InvokeAsync<bool>("confirm",
             _awaitingTitleConfirmation && !_isUploading
                 ? "Your files are ready to upload but have not been uploaded yet. If you leave now they will be discarded. Are you sure you want to leave?"
-                : "Uploads are in progress. If you leave now, all uploads will be cancelled and any files already uploaded in this session will be removed. Are you sure you want to leave?");
+                : "Files are still being sent. If you leave now, anything not yet sent will be cancelled. Songs already queued will finish processing without you. Are you sure you want to leave?");
 
         if (isConfirmed)
         {
-            // User chose to leave — cancel pending uploads and clean up
+            // Cancels only what is still being sent. Queued songs are left alone deliberately.
             _uploadCts.Cancel();
-            await CleanupUploadedFilesAsync();
             _awaitingTitleConfirmation = false;
             CleanupPendingTempFiles();
         }
@@ -1404,48 +1716,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Deletes all blobs uploaded during this session from Azure Blob Storage
-    /// and sets their SongMetadata records to inactive and not enabled.
-    /// </summary>
-    private async Task CleanupUploadedFilesAsync()
-    {
-        List<string> pathsToCleanup;
-        lock (_blobPathsLock)
-        {
-            pathsToCleanup = _uploadedBlobPaths
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            _uploadedBlobPaths.Clear();
-        }
-
-        foreach (var blobPath in pathsToCleanup)
-        {
-            try
-            {
-                // Delete the blob from Azure Storage
-                await AzureStorageService.DeleteAsync(blobPath);
-
-                // Set the SongMetadata record to inactive and not enabled
-                await SongMetadataService.DeactivateByBlobPathAsync(blobPath,
-                    "Upload cancelled — user left before uploads completed.");
-            }
-            catch
-            {
-                // Best-effort cleanup — don't throw if a single file fails
-            }
-        }
-    }
-
     protected async Task TriggerFileDialog()
     {
         await JS.InvokeVoidAsync("triggerClick", FileInput.Element);
     }
 
     /// <summary>
-    /// Handles circuit disconnection (e.g., browser tab closed during upload).
-    /// Cancels pending uploads and removes already-uploaded files.
+    /// Handles circuit disconnection (e.g., browser tab closed during upload). Cancels files still
+    /// being sent; queued songs are left to the pipeline.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
@@ -1453,10 +1731,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         _disposed = true;
 
+        UploadProgressHubClient.OnProgress -= ApplyProgressAsync;
+
+        // Exchanged rather than read-then-null: the poller nulls this field itself when it finishes,
+        // so whichever of the two gets here first owns the disposal and the other sees null.
+        var poll = Interlocked.Exchange(ref _jobPollCts, null);
+        if (poll is not null)
+        {
+            await poll.CancelAsync();
+            poll.Dispose();
+        }
+
         if (_isUploading)
         {
+            // Cancels staging that is still in flight. Anything already queued is deliberately left
+            // alone: the Function and the API finish it whether or not this page is open, which is
+            // the whole point of moving the work off the request thread.
             _uploadCts.Cancel();
-            await CleanupUploadedFilesAsync();
         }
 
         // Backstop for a batch buffered for review that was never uploaded or cancelled,

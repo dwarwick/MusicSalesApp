@@ -1,18 +1,37 @@
-using System.Net;
+﻿using System.Net;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
+using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
 
+/// <summary>
+/// Drives the media-integrity audit.
+///
+/// <para>
+/// This no longer decodes anything itself. FFmpeg runs in an Azure Function, so a run here is a
+/// <em>dispatcher</em>: it works out the candidate songs, puts one probe message on the queue for
+/// each, and returns. Results arrive later through
+/// <see cref="RecordProbedItemAsync"/>, and the run completes on the last one rather than when the
+/// Hangfire job returns.
+/// </para>
+/// </summary>
 public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
 {
     private const int BatchSize = 25;
+
+    /// <summary>
+    /// How long a Running audit may go without a single probe result before it is closed out with
+    /// whatever arrived. Generous, because a slow queue is normal and a large catalogue can take
+    /// hours in total - what this catches is a run that has stopped moving altogether.
+    /// </summary>
+    private static readonly TimeSpan StalledRunTimeout = TimeSpan.FromHours(2);
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
-    private readonly IAzureStorageService _storage;
-    private readonly IMusicService _music;
+    private readonly IMediaProcessingQueueClient _queueClient;
     private readonly IEmailService _email;
     private readonly IConfiguration _configuration;
     private readonly IBackgroundJobClient _jobs;
@@ -20,16 +39,14 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
 
     public MediaIntegrityAuditService(
         IDbContextFactory<AppDbContext> contextFactory,
-        IAzureStorageService storage,
-        IMusicService music,
+        IMediaProcessingQueueClient queueClient,
         IEmailService email,
         IConfiguration configuration,
         IBackgroundJobClient jobs,
         ILogger<MediaIntegrityAuditService> logger)
     {
         _contextFactory = contextFactory;
-        _storage = storage;
-        _music = music;
+        _queueClient = queueClient;
         _email = email;
         _configuration = configuration;
         _jobs = jobs;
@@ -126,8 +143,10 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
     {
         try
         {
+            // Dispatch only. The run is *not* finished when this returns - decoding happens in the
+            // Azure Function, and the run completes on the last probe result to come back through
+            // RecordProbedItemAsync. The completion notifications fire from there.
             await ExecuteAsync(runId);
-            await SendCompletionNotificationsAsync(runId);
         }
         catch (Exception ex)
         {
@@ -140,8 +159,17 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
 
     private async Task ExecuteAsync(int runId)
     {
-        List<int> songIds;
+        if (!_queueClient.IsConfigured)
+        {
+            // Nothing can be dispatched. Failing here is honest and releases the single-run lock,
+            // rather than stranding the run Running until the reconciler two hours later.
+            throw new InvalidOperationException(
+                "Audio processing is not configured, so the media-integrity audit cannot dispatch probes.");
+        }
+
+        List<AudioProbeRequest> probes;
         MediaAuditMode mode;
+
         await using (var context = await _contextFactory.CreateDbContextAsync())
         {
             var run = await context.MediaIntegrityAuditRuns.FindAsync(runId)
@@ -156,26 +184,55 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
             run.StartedAt ??= DateTime.UtcNow;
             mode = run.Mode;
 
+            // Candidates and their blob paths are resolved in ONE read, and CandidateCount is set
+            // from what actually gets dispatched. Selecting ids and paths in separate queries let
+            // them diverge: a song deleted between the two produced fewer probes than candidates,
+            // so the completion condition (ProcessedCount >= CandidateCount) could never hold and
+            // the run held its lock until the reconciler closed it hours later.
+            List<AudioProbeRequest> candidates;
             if (mode == MediaAuditMode.QuarantineConfirmedFailures)
             {
-                songIds = await context.MediaIntegrityAuditItems
+                candidates = await context.MediaIntegrityAuditItems
                     .Where(item => item.AuditRunId == run.SourceRunId
                         && item.Outcome == MediaAuditOutcome.ConfirmedUnplayable
                         && item.SongMetadataId.HasValue
                         && item.SongMetadata.IsActive
-                        && item.SongMetadata.IsEnabled)
-                    .Select(item => item.SongMetadataId!.Value)
-                    .Distinct()
-                    .OrderBy(id => id)
+                        && item.SongMetadata.IsEnabled
+                        // The report-only branch has always had this guard; without it here, a song
+                        // whose playback blob was since cleared dispatches a probe with a null path,
+                        // which throws inside the Function and poisons instead of calling back.
+                        && item.SongMetadata.Mp3BlobPath != null
+                        && item.SongMetadata.Mp3BlobPath != string.Empty)
+                    .Select(item => new AudioProbeRequest
+                    {
+                        Kind = AudioProbeKind.MediaIntegrityAudit,
+                        AuditRunId = runId,
+                        SongMetadataId = item.SongMetadataId!.Value,
+                        BlobPath = item.SongMetadata.Mp3BlobPath,
+                        Attempt = 1
+                    })
                     .ToListAsync();
+
+                candidates = candidates
+                    .GroupBy(candidate => candidate.SongMetadataId)
+                    .Select(group => group.First())
+                    .OrderBy(candidate => candidate.SongMetadataId)
+                    .ToList();
             }
             else
             {
-                songIds = await context.SongMetadata
+                candidates = await context.SongMetadata
                     .Where(song => song.IsActive && song.IsEnabled && !song.IsAlbumCover
                         && song.Mp3BlobPath != null && song.Mp3BlobPath != string.Empty)
-                    .Select(song => song.Id)
-                    .OrderBy(id => id)
+                    .OrderBy(song => song.Id)
+                    .Select(song => new AudioProbeRequest
+                    {
+                        Kind = AudioProbeKind.MediaIntegrityAudit,
+                        AuditRunId = runId,
+                        SongMetadataId = song.Id,
+                        BlobPath = song.Mp3BlobPath,
+                        Attempt = 1
+                    })
                     .ToListAsync();
             }
 
@@ -183,266 +240,198 @@ public sealed class MediaIntegrityAuditService : IMediaIntegrityAuditService
                 .Where(item => item.AuditRunId == runId && item.SongMetadataId.HasValue)
                 .Select(item => item.SongMetadataId!.Value)
                 .ToListAsync();
-            songIds = songIds.Except(processed).ToList();
-            run.CandidateCount = processed.Count + songIds.Count;
+
+            probes = candidates.Where(candidate => !processed.Contains(candidate.SongMetadataId)).ToList();
+            run.CandidateCount = processed.Count + probes.Count;
             await context.SaveChangesAsync();
         }
 
-        foreach (var batch in songIds.Chunk(BatchSize))
+        if (probes.Count == 0)
         {
-            foreach (var songId in batch)
+            // Nothing left to probe - an empty catalogue, or a resumed run that had already
+            // finished its work. There will be no callback to complete the run, so close it here.
+            await RefreshTotalsAsync(runId, complete: true);
+            await SendCompletionNotificationsAsync(runId);
+            return;
+        }
+
+        foreach (var probe in probes)
+        {
+            probe.ProbeId = Guid.NewGuid();
+        }
+
+        // Chunked so a very large catalogue does not hold one long-running enqueue loop open, and
+        // so partial progress survives an interruption - anything not enqueued is left pending and
+        // swept up by the reconciler.
+        foreach (var batch in probes.Chunk(BatchSize))
+        {
+            await _queueClient.EnqueueProbesAsync(batch);
+        }
+
+        _logger.LogInformation(
+            "Media-integrity audit {RunId} dispatched {Count} probe(s) in {Mode} mode",
+            runId,
+            probes.Count,
+            mode);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordProbedItemAsync(
+        MediaIntegrityAuditItem item,
+        MediaAuditMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
+        {
+            var trackedSong = item.SongMetadataId.HasValue
+                ? await context.SongMetadata.FindAsync([item.SongMetadataId.Value], cancellationToken)
+                : null;
+
+            if (trackedSong is not null)
             {
-                await AuditSongAsync(runId, songId, mode);
+                if (mode == MediaAuditMode.RepairSafeMetadata
+                    && item.Outcome == MediaAuditOutcome.MetadataRepairable
+                    && item.DecodedDuration > 0)
+                {
+                    if (string.IsNullOrWhiteSpace(trackedSong.SongTitle))
+                    {
+                        var repairedTitle = SongTitleHelper.GetEffectiveTitle(
+                            trackedSong.SongTitle,
+                            trackedSong.Mp3BlobPath,
+                            trackedSong.BlobPath);
+                        trackedSong.SongTitle = string.IsNullOrWhiteSpace(repairedTitle)
+                            ? $"Song {trackedSong.Id}"
+                            : repairedTitle[..Math.Min(repairedTitle.Length, SongTitleHelper.MaxTitleLength)];
+                        if (string.IsNullOrWhiteSpace(repairedTitle))
+                        {
+                            trackedSong.StatusReason = "Media integrity repair: title requires manual correction.";
+                        }
+                    }
+
+                    if (!trackedSong.TrackLength.HasValue || trackedSong.TrackLength <= 0)
+                    {
+                        trackedSong.TrackLength = item.DecodedDuration;
+                    }
+
+                    trackedSong.UpdatedAt = DateTime.UtcNow;
+                    item.MetadataRepaired = true;
+                }
+
+                if (mode == MediaAuditMode.QuarantineConfirmedFailures
+                    && item.Outcome == MediaAuditOutcome.ConfirmedUnplayable)
+                {
+                    trackedSong.IsEnabled = false;
+                    trackedSong.IsActive = true;
+                    trackedSong.StatusReason = MediaIntegrityConstants.QuarantineReason;
+                    trackedSong.UpdatedAt = DateTime.UtcNow;
+                    context.SongStatusHistories.Add(new SongStatusHistory
+                    {
+                        SongMetadataId = trackedSong.Id,
+                        IsEnabled = false,
+                        Reason = MediaIntegrityConstants.QuarantineReason,
+                        ChangedByUserId = null,
+                        ChangedAt = DateTime.UtcNow
+                    });
+                    item.Quarantined = true;
+                }
             }
 
-            await RefreshTotalsAsync(runId);
+            context.MediaIntegrityAuditItems.Add(item);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        await CompleteIfFinishedAsync(item.AuditRunId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordSkippedItemAsync(
+        int runId,
+        int songMetadataId,
+        CancellationToken cancellationToken = default)
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
+        {
+            var alreadyRecorded = await context.MediaIntegrityAuditItems.AnyAsync(
+                existing => existing.AuditRunId == runId && existing.SongMetadataId == songMetadataId,
+                cancellationToken);
+            if (alreadyRecorded)
+            {
+                return;
+            }
+
+            context.MediaIntegrityAuditItems.Add(new MediaIntegrityAuditItem
+            {
+                AuditRunId = runId,
+                SongMetadataId = songMetadataId,
+                Outcome = MediaAuditOutcome.Inconclusive,
+                FailureCode = "SongUnavailable",
+                Diagnostic = "The song was removed or lost its playback blob before it could be checked.",
+                Attempts = 1,
+                CheckedAt = DateTime.UtcNow
+            });
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        await CompleteIfFinishedAsync(runId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task ReconcileStalledRunsAsync(CancellationToken cancellationToken = default)
+    {
+        List<int> stalledRunIds;
+        var cutoff = DateTime.UtcNow - StalledRunTimeout;
+
+        await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
+        {
+            // "Stalled" means no item has landed recently, not merely that the run is old - a large
+            // catalogue can legitimately take hours to work through.
+            stalledRunIds = await context.MediaIntegrityAuditRuns
+                .Where(run => run.Status == MediaAuditRunStatus.Running)
+                .Where(run => !context.MediaIntegrityAuditItems
+                    .Where(item => item.AuditRunId == run.Id)
+                    .Any(item => item.CheckedAt > cutoff))
+                .Where(run => (run.StartedAt ?? run.CreatedAt) < cutoff)
+                .Select(run => run.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        foreach (var runId in stalledRunIds)
+        {
+            _logger.LogWarning(
+                "Media-integrity audit {RunId} stopped receiving probe results; completing it with what arrived.",
+                runId);
+            await RefreshTotalsAsync(runId, complete: true);
+            await SendCompletionNotificationsAsync(runId);
+        }
+    }
+
+    private async Task CompleteIfFinishedAsync(int runId, CancellationToken cancellationToken)
+    {
+        await RefreshTotalsAsync(runId);
+
+        bool finished;
+        await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
+        {
+            var run = await context.MediaIntegrityAuditRuns
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == runId, cancellationToken);
+            finished = run is not null
+                && run.Status == MediaAuditRunStatus.Running
+                && run.CandidateCount > 0
+                && run.ProcessedCount >= run.CandidateCount;
+        }
+
+        if (!finished)
+        {
+            return;
         }
 
         await RefreshTotalsAsync(runId, complete: true);
+        await SendCompletionNotificationsAsync(runId);
     }
 
-    private async Task AuditSongAsync(int runId, int songId, MediaAuditMode mode)
-    {
-        SongMetadata song;
-        await using (var readContext = await _contextFactory.CreateDbContextAsync())
-        {
-            song = await readContext.SongMetadata.AsNoTracking()
-                .Include(item => item.Creator).ThenInclude(creator => creator.User)
-                .FirstOrDefaultAsync(item => item.Id == songId);
-        }
-        if (song == null || string.IsNullOrWhiteSpace(song.Mp3BlobPath))
-        {
-            return;
-        }
-
-        var item = await InspectWithConfirmationAsync(runId, song);
-
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var trackedSong = await context.SongMetadata.FindAsync(songId);
-        if (trackedSong == null)
-        {
-            return;
-        }
-
-        if (mode == MediaAuditMode.RepairSafeMetadata
-            && item.Outcome == MediaAuditOutcome.MetadataRepairable
-            && item.DecodedDuration > 0)
-        {
-            if (string.IsNullOrWhiteSpace(trackedSong.SongTitle))
-            {
-                var repairedTitle = SongTitleHelper.GetEffectiveTitle(
-                    trackedSong.SongTitle,
-                    trackedSong.Mp3BlobPath,
-                    trackedSong.BlobPath);
-                trackedSong.SongTitle = string.IsNullOrWhiteSpace(repairedTitle)
-                    ? $"Song {trackedSong.Id}"
-                    : repairedTitle[..Math.Min(repairedTitle.Length, SongTitleHelper.MaxTitleLength)];
-                if (string.IsNullOrWhiteSpace(repairedTitle))
-                {
-                    trackedSong.StatusReason = "Media integrity repair: title requires manual correction.";
-                }
-            }
-            if (!trackedSong.TrackLength.HasValue || trackedSong.TrackLength <= 0)
-            {
-                trackedSong.TrackLength = item.DecodedDuration;
-            }
-            trackedSong.UpdatedAt = DateTime.UtcNow;
-            item.MetadataRepaired = true;
-        }
-
-        if (mode == MediaAuditMode.QuarantineConfirmedFailures
-            && item.Outcome == MediaAuditOutcome.ConfirmedUnplayable)
-        {
-            trackedSong.IsEnabled = false;
-            trackedSong.IsActive = true;
-            trackedSong.StatusReason = MediaIntegrityConstants.QuarantineReason;
-            trackedSong.UpdatedAt = DateTime.UtcNow;
-            context.SongStatusHistories.Add(new SongStatusHistory
-            {
-                SongMetadataId = trackedSong.Id,
-                IsEnabled = false,
-                Reason = MediaIntegrityConstants.QuarantineReason,
-                ChangedByUserId = null,
-                ChangedAt = DateTime.UtcNow
-            });
-            item.Quarantined = true;
-        }
-
-        context.MediaIntegrityAuditItems.Add(item);
-        await context.SaveChangesAsync();
-    }
-
-    private async Task<MediaIntegrityAuditItem> InspectWithConfirmationAsync(
-        int runId,
-        SongMetadata song)
-    {
-        var first = await InspectOnceAsync(runId, song, 1);
-        if (first.Outcome != MediaAuditOutcome.ConfirmedUnplayable)
-        {
-            return first;
-        }
-
-        var second = await InspectOnceAsync(runId, song, 2);
-        if (second.Outcome == MediaAuditOutcome.ConfirmedUnplayable)
-        {
-            second.Attempts = 2;
-            return second;
-        }
-
-        second.Outcome = MediaAuditOutcome.Inconclusive;
-        second.FailureCode = "FailureNotReproduced";
-        second.Diagnostic = "The suspected failure was not reproduced on a fresh Azure stream.";
-        second.Attempts = 2;
-        return second;
-    }
-
-    private async Task<MediaIntegrityAuditItem> InspectOnceAsync(
-        int runId,
-        SongMetadata song,
-        int attempt)
-    {
-        var item = NewItem(runId, song, attempt);
-        string tempPath = null;
-        try
-        {
-            await PopulateOriginalSourceEvidenceAsync(item, song);
-            var properties = await _storage.GetFileInfoAsync(song.Mp3BlobPath!);
-            if (properties == null)
-            {
-                return Confirmed(item, "PlaybackBlobMissing", "The registered playback blob does not exist.");
-            }
-
-            item.BlobLength = properties.Length;
-            item.ContentType = properties.ContentType;
-            item.ETag = properties.ETag;
-            item.BlobLastModified = properties.LastModified;
-            tempPath = Path.Combine(Path.GetTempPath(), $"media-audit-{Guid.NewGuid():N}.tmp");
-            long copied = 0;
-            await using (var source = await _storage.OpenReadAsync(song.Mp3BlobPath!))
-            await using (var target = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
-            {
-                var buffer = new byte[81920];
-                int read;
-                while ((read = await source.ReadAsync(buffer)) > 0)
-                {
-                    await target.WriteAsync(buffer.AsMemory(0, read));
-                    copied += read;
-                }
-            }
-            if (copied != properties.Length)
-            {
-                return Confirmed(item, "LengthMismatch", $"Azure reported {properties.Length} bytes but {copied} bytes were copied.");
-            }
-
-            await using var stream = File.OpenRead(tempPath);
-            MediaFileContentValidator.AudioContentMatchesExtension(stream, song.Mp3BlobPath!, out var detected);
-            item.DetectedFormat = detected;
-            stream.Position = 0;
-            var decode = await _music.ValidateAudioDecodeAsync(stream, song.Mp3BlobPath!);
-            item.DecodedDuration = decode.Duration;
-            if (decode.Status == AudioDecodeStatus.Inconclusive)
-            {
-                item.Outcome = MediaAuditOutcome.Inconclusive;
-                item.FailureCode = decode.FailureCode ?? "DecoderInfrastructureFailure";
-                item.Diagnostic = decode.Diagnostic;
-                return item;
-            }
-            if (decode.Status != AudioDecodeStatus.Playable
-                || !decode.Duration.HasValue
-                || decode.Duration <= 0)
-            {
-                return Confirmed(
-                    item,
-                    decode.FailureCode ?? "DecoderRejected",
-                    decode.Diagnostic ?? "FFmpeg could not completely decode an audio stream with positive duration.");
-            }
-
-            var metadataMissing = string.IsNullOrWhiteSpace(song.SongTitle)
-                || !song.TrackLength.HasValue || song.TrackLength <= 0;
-            // Filenames are no longer constrained, so only the container and content type are
-            // worth warning about here.
-            var containerWarning =
-                !string.Equals(detected, ".mp3", StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(properties.ContentType, "audio/mpeg", StringComparison.OrdinalIgnoreCase);
-            item.Outcome = metadataMissing
-                ? MediaAuditOutcome.MetadataRepairable
-                : containerWarning
-                    ? MediaAuditOutcome.NamingWarning
-                    : item.IsOriginalSourceMissing
-                        ? MediaAuditOutcome.OriginalSourceMissing
-                        : MediaAuditOutcome.Healthy;
-            if (item.IsOriginalSourceMissing)
-            {
-                item.FailureCode = "OriginalSourceMissing";
-                item.Diagnostic = string.IsNullOrWhiteSpace(song.OriginalAudioBlobPath)
-                    ? "This legacy record has no retained original source registered."
-                    : "The retained original source path is registered but the blob is missing.";
-            }
-            return item;
-        }
-        catch (Exception ex)
-        {
-            item.Outcome = MediaAuditOutcome.Inconclusive;
-            item.FailureCode = ex is TimeoutException ? "Timeout" : "InfrastructureFailure";
-            item.Diagnostic = SanitizeDiagnostic(ex);
-            return item;
-        }
-        finally
-        {
-            if (tempPath != null)
-            {
-                TempFileHelper.TryDelete(tempPath, _logger);
-            }
-        }
-    }
-
-    private async Task PopulateOriginalSourceEvidenceAsync(
-        MediaIntegrityAuditItem item,
-        SongMetadata song)
-    {
-        if (string.IsNullOrWhiteSpace(song.OriginalAudioBlobPath))
-        {
-            item.IsOriginalSourceMissing = true;
-            return;
-        }
-
-        try
-        {
-            item.IsOriginalSourceMissing = !await _storage.ExistsAsync(song.OriginalAudioBlobPath);
-        }
-        catch (Exception ex)
-        {
-            item.IsOriginalSourceCheckInconclusive = true;
-            _logger.LogWarning(
-                ex,
-                "Unable to verify original source {OriginalPath} for song {SongId}",
-                song.OriginalAudioBlobPath,
-                song.Id);
-        }
-    }
-
-    private static MediaIntegrityAuditItem NewItem(int runId, SongMetadata song, int attempt)
-        => new()
-        {
-            AuditRunId = runId,
-            SongMetadataId = song.Id,
-            EffectiveTitle = SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath),
-            PlaybackBlobPath = song.Mp3BlobPath,
-            OriginalAudioBlobPath = song.OriginalAudioBlobPath,
-            Attempts = attempt,
-            CheckedAt = DateTime.UtcNow
-        };
-
-    private static MediaIntegrityAuditItem Confirmed(
-        MediaIntegrityAuditItem item,
-        string code,
-        string diagnostic)
-    {
-        item.Outcome = MediaAuditOutcome.ConfirmedUnplayable;
-        item.FailureCode = code;
-        item.Diagnostic = diagnostic;
-        return item;
-    }
 
     private async Task RefreshTotalsAsync(int runId, bool complete = false)
     {

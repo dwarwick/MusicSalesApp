@@ -37,7 +37,6 @@
 
     <PackageReference Include="Syncfusion.Blazor" Version="33.1.44" />
     <PackageReference Include="Syncfusion.Blazor.Themes" Version="33.1.44" />
-    <PackageReference Include="FFMpegCore" Version="5.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -50,6 +49,9 @@
     </PackageReference>
     <!-- Azure Blob Storage SDK -->
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
+    <!-- Queues carry audio-processing work to the Azure Function. Note these live on the Standard
+         storage account, not the Premium media one, which has no Queue service at all. -->
+    <PackageReference Include="Azure.Storage.Queues" Version="12.25.0" />
     <!-- Azure Data Protection for shared keys across deployments -->
     <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.3" />
     <PackageReference Include="Portable.BouncyCastle" Version="1.9.0" />
@@ -59,11 +61,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Publish ffmpeg.exe with the app -->
-    <Content Include="ffmpeg.exe">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
+    <!-- ffmpeg.exe no longer ships here. Audio processing moved to the MusicSalesApp.Functions
+         Azure Functions app, which owns the binary; this host does header-level container sniffing
+         only. -->
     <Content Include="App_Data\Secrets\*.p8">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

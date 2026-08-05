@@ -3,38 +3,25 @@ using System.Threading.Tasks;
 
 namespace MusicSalesApp.Services
 {
+    /// <summary>
+    /// Header-level checks on audio files.
+    ///
+    /// <para>
+    /// Everything that needed FFmpeg - transcoding, decode validation, duration extraction - moved to
+    /// the <c>MusicSalesApp.Functions</c> Azure Functions app. This host runs on shared hosting and
+    /// no longer has an ffmpeg binary at all, so what is left here is the cheap magic-byte gate that
+    /// can safely run on a request thread.
+    /// </para>
+    /// </summary>
     public interface IMusicService
     {
+        /// <summary>
+        /// Whether the stream's actual container matches its extension. Header inspection only: it
+        /// catches a renamed or truncated-at-byte-zero file instantly, but proving the audio decodes
+        /// end to end is the Function's job.
+        /// </summary>
         Task<bool> IsValidAudioFileAsync(Stream fileStream, string fileName);
-        Task<Stream> ConvertToMp3Async(Stream inputStream, string originalFileName, IProgress<double> progress = null);
+
         bool IsMp3File(string fileName);
-        Task<double?> GetAudioDurationAsync(Stream audioStream, string fileName);
-        Task<AudioDecodeResult> ValidateAudioDecodeAsync(
-            Stream audioStream,
-            string fileName,
-            CancellationToken cancellationToken = default);
-    }
-
-    public enum AudioDecodeStatus
-    {
-        Playable,
-        Unplayable,
-        Inconclusive
-    }
-
-    public sealed record AudioDecodeResult(
-        AudioDecodeStatus Status,
-        double? Duration,
-        string FailureCode = null,
-        string Diagnostic = null)
-    {
-        public static AudioDecodeResult Playable(double duration)
-            => new(AudioDecodeStatus.Playable, duration);
-
-        public static AudioDecodeResult Unplayable(string code, string diagnostic)
-            => new(AudioDecodeStatus.Unplayable, null, code, diagnostic);
-
-        public static AudioDecodeResult Inconclusive(string code, string diagnostic)
-            => new(AudioDecodeStatus.Inconclusive, null, code, diagnostic);
     }
 }

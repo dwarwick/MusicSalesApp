@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using MusicSalesApp.Components.Pages.Creator;
 using MusicSalesApp.ComponentTests.Testing;
 
@@ -44,8 +44,15 @@ public class UploadFilesTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<UploadFiles>();
 
-        // Assert
-        Assert.That(cut.Markup, Does.Not.Contain("Upload Progress"));
+        // Assert - none of the three progress sections should render before files are selected.
+        // Named individually rather than checking one string, so renaming a heading cannot quietly
+        // turn this into an assertion about text that no longer exists anywhere.
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Overall Progress"));
+            Assert.That(cut.Markup, Does.Not.Contain("Receiving Files"));
+            Assert.That(cut.Markup, Does.Not.Contain("Processing Progress"));
+        });
     }
 
     [Test]

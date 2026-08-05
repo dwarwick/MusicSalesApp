@@ -1,25 +1,39 @@
-using MusicSalesApp.Common.Helpers;
+﻿using MusicSalesApp.Common.Helpers;
 using SkiaSharp;
 
 #nullable enable
 
 namespace MusicSalesApp.Services;
 
+/// <summary>
+/// Header-level checks on uploaded media.
+///
+/// <para>
+/// The audio half moved to <see cref="AudioContainerSniffer"/> in the Common project when FFmpeg
+/// processing moved to Azure Functions - the Function needs the same sniff, and it is pure byte
+/// inspection with no dependencies. The image half stays here because it decodes through SkiaSharp,
+/// which has no business in a library the MAUI app also references. These forwarders exist so the
+/// web app's call sites did not have to change.
+/// </para>
+/// </summary>
 public static class MediaFileContentValidator
 {
-    private static readonly byte[] AsfHeader =
-        { 0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C };
-
+    /// <inheritdoc cref="AudioContainerSniffer.ContentMatchesExtension"/>
     public static bool AudioContentMatchesExtension(Stream stream, string fileName, out string detectedExtension)
-    {
-        detectedExtension = DetectAudioExtension(stream) ?? string.Empty;
-        if (string.IsNullOrEmpty(detectedExtension))
-            return false;
+        => AudioContainerSniffer.ContentMatchesExtension(stream, fileName, out detectedExtension);
 
-        var expectedExtension = Path.GetExtension(fileName).ToLowerInvariant();
-        return string.Equals(expectedExtension, detectedExtension, StringComparison.OrdinalIgnoreCase);
-    }
-
+    /// <summary>
+    /// Whether the stream decodes as an image matching <paramref name="fileName"/>'s extension.
+    ///
+    /// <para>
+    /// <b>Leaves the caller's stream open and repositioned.</b> That is not free:
+    /// <c>SKCodec.Create(Stream)</c> wraps the stream in an adapter that <em>owns</em> it, so
+    /// disposing the codec closes the caller's stream. Every original call site handed in a
+    /// throwaway buffer, which hid it; the upload path now validates the stream it is about to
+    /// upload, and closing it there produced "Cannot access a closed file" at the next read.
+    /// Reading through <see cref="SKData"/> sidesteps the ownership entirely.
+    /// </para>
+    /// </summary>
     public static bool ImageContentMatchesExtension(Stream stream, string fileName, out string detectedExtension)
     {
         detectedExtension = string.Empty;
@@ -32,7 +46,13 @@ public static class MediaFileContentValidator
             if (stream.CanSeek)
                 stream.Position = 0;
 
-            using var codec = SKCodec.Create(stream);
+            // SKData.Create reads the bytes out; it does not take ownership of the stream. Bounded
+            // by the cover-art upload cap, so the transient copy is small.
+            using var data = SKData.Create(stream);
+            if (data == null)
+                return false;
+
+            using var codec = SKCodec.Create(data);
             if (codec == null)
                 return false;
 
@@ -65,54 +85,7 @@ public static class MediaFileContentValidator
         }
     }
 
+    /// <inheritdoc cref="AudioContainerSniffer.DetectExtension"/>
     public static string? DetectAudioExtension(Stream stream)
-    {
-        if (stream == null || !stream.CanRead)
-            return null;
-
-        var originalPosition = stream.CanSeek ? stream.Position : 0;
-        try
-        {
-            if (stream.CanSeek)
-                stream.Position = 0;
-
-            Span<byte> header = stackalloc byte[64];
-            var bytesRead = stream.Read(header);
-            var data = header[..bytesRead];
-
-            if (StartsWith(data, "ID3"u8) ||
-                (bytesRead >= 2 && data[0] == 0xFF && (data[1] & 0xE0) == 0xE0 && (data[1] & 0x06) != 0))
-                return ".mp3";
-
-            if (bytesRead >= 12 &&
-                (StartsWith(data, "RIFF"u8) || StartsWith(data, "RF64"u8)) &&
-                data[8..12].SequenceEqual("WAVE"u8))
-                return ".wav";
-
-            if (StartsWith(data, "fLaC"u8))
-                return ".flac";
-
-            if (StartsWith(data, "OggS"u8))
-                return ".ogg";
-
-            if (bytesRead >= 12 && data[4..8].SequenceEqual("ftyp"u8))
-                return ".m4a";
-
-            if (bytesRead >= 2 && data[0] == 0xFF && (data[1] & 0xF6) == 0xF0)
-                return ".aac";
-
-            if (bytesRead >= AsfHeader.Length && data[..AsfHeader.Length].SequenceEqual(AsfHeader))
-                return ".wma";
-
-            return null;
-        }
-        finally
-        {
-            if (stream.CanSeek)
-                stream.Position = originalPosition;
-        }
-    }
-
-    private static bool StartsWith(ReadOnlySpan<byte> source, ReadOnlySpan<byte> prefix)
-        => source.Length >= prefix.Length && source[..prefix.Length].SequenceEqual(prefix);
+        => AudioContainerSniffer.DetectExtension(stream);
 }

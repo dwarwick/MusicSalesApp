@@ -1,0 +1,34 @@
+﻿{
+  "//": "DO NOT hand-edit. Generate this from the web app's appsettings so the storage connection strings have one source of truth: pwsh ./Sync-FunctionSettings.ps1 -Environment Test",
+
+  "//why-one-file": "The QueueTrigger attributes resolve their queue names (%MediaProcessing:*QueueName%) and their storage connection (StagingStorageConnectionString) through the Functions HOST, before the worker's IConfiguration exists. A per-environment appsettings.*.json loaded by the worker could not supply them, which is why every setting lives here rather than being split across two mechanisms.",
+
+  "//in-azure": "There are no settings files in Azure. Each of the two Function Apps carries its own Application Settings, and that is the per-environment mechanism. Sync-FunctionSettings.ps1 -ShowAzureCli prints the az command to push these same values up.",
+
+  "//not-azurite": "The values below are placeholders. In practice Development points at the REAL storage accounts (musiccontainer-local / musicuploads-local), matching how the web app already treats Development - so running func start locally polls a real queue.",
+
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+
+    "//AzureWebJobsStorage": "Functions runtime bookkeeping. Shares the standard account with the queues.",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "//StagingStorageConnectionString": "STANDARD general-purpose account: the queues and the upload staging container. Read/write. Premium accounts have no Queue service, which is the whole reason there are two accounts.",
+    "StagingStorageConnectionString": "UseDevelopmentStorage=true",
+
+    "//MediaStorageConnectionString": "PREMIUM account holding song media. Read-only from here - the web app owns every write into the catalogue. Used only by the probe path.",
+    "MediaStorageConnectionString": "UseDevelopmentStorage=true",
+
+    "MediaProcessing:TranscodeQueueName": "audio-transcode-local",
+    "MediaProcessing:ProbeQueueName": "audio-probe-local",
+    "MediaProcessing:StagingContainerName": "musicuploads-local",
+    "MediaProcessing:MediaContainerName": "musiccontainer-local",
+
+    "//CallbackBaseUrl": "Where results are posted. Must match the environment the queues belong to.",
+    "CallbackBaseUrl": "https://localhost:7217",
+
+    "//MediaProcessingApiKey": "Must equal the top-level MediaProcessingApiKey in the web app's appsettings for the same environment.",
+    "MediaProcessingApiKey": ""
+  }
+}

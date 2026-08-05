@@ -376,3 +376,7 @@ FodyWeavers.xsd
 **/bin\\*
 /MusicSalesApp/appsettings.Test.json
 /MusicSalesApp/appsettings.Production.json
+
+# Azure Functions local settings - holds both storage connection strings and the
+# media-processing API key, exactly like the appsettings.* files above.
+/MusicSalesApp.Functions/local.settings.json

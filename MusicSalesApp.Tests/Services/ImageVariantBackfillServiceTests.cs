@@ -639,15 +639,29 @@ public class ImageVariantBackfillServiceTests
     [Test]
     public void TheContainerFactoryOffersNoWayToReachABackupContainer()
     {
-        // Decision enforced by the type system rather than by discipline: IBlobContainerFactory has
-        // only GetMediaContainer and GetPersonaImageContainer, with no lookup by name, so no amount
+        // Decision enforced by the type system rather than by discipline: every accessor on
+        // IBlobContainerFactory names one specific container, with no lookup by name, so no amount
         // of edits to the backfill can point it at backup-*. If a by-name overload is ever added,
         // this test fails and the reviewer has to think about it.
+        //
+        // The count is a deliberate speed bump too. Adding an accessor is fine - GetUploadStagingContainer
+        // was added when audio processing moved to Azure Functions - but it should be a decision,
+        // not something that slides in.
         var methods = typeof(IBlobContainerFactory).GetMethods()
-            .Where(m => m.ReturnType == typeof(BlobContainerClient))
+            .Where(m => m.ReturnType == typeof(BlobContainerClient)
+                || m.ReturnType == typeof(BlobContainerClient).MakeByRefType()
+                || Nullable.GetUnderlyingType(m.ReturnType) == typeof(BlobContainerClient)
+                || m.ReturnType.FullName == typeof(BlobContainerClient).FullName)
             .ToList();
 
-        Assert.That(methods, Has.Count.EqualTo(2));
+        Assert.That(
+            methods.Select(m => m.Name),
+            Is.EquivalentTo(new[]
+            {
+                nameof(IBlobContainerFactory.GetMediaContainer),
+                nameof(IBlobContainerFactory.GetPersonaImageContainer),
+                nameof(IBlobContainerFactory.GetUploadStagingContainer)
+            }));
         Assert.That(
             methods.All(m => m.GetParameters().Length == 0),
             Is.True,

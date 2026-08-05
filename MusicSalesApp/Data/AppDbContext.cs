@@ -27,6 +27,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<SongStatusHistory> SongStatusHistories { get; set; }
     public DbSet<MediaIntegrityAuditRun> MediaIntegrityAuditRuns { get; set; }
     public DbSet<MediaIntegrityAuditItem> MediaIntegrityAuditItems { get; set; }
+    public DbSet<SongUploadJob> SongUploadJobs { get; set; }
     public DbSet<MediaIntegrityAuditNotification> MediaIntegrityAuditNotifications { get; set; }
     public DbSet<StorageBackupRun> StorageBackupRuns { get; set; }
     public DbSet<StorageBackupContainerProgress> StorageBackupContainerProgresses { get; set; }
@@ -453,6 +454,36 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .HasIndex(run => run.ActiveLockKey)
             .IsUnique()
             .HasFilter("[ActiveLockKey] IS NOT NULL");
+
+        // The media GUID is how every queue message and callback finds its job, and a duplicate
+        // would let two callbacks assemble the same song twice. Unique rather than merely indexed.
+        builder.Entity<SongUploadJob>()
+            .HasIndex(job => job.MediaGuid)
+            .IsUnique();
+
+        // The upload page lists a creator's in-flight jobs on every load, always filtered to the
+        // unfinished ones.
+        builder.Entity<SongUploadJob>()
+            .HasIndex(job => new { job.CreatorId, job.Status });
+
+        // The reconciler sweeps by "stopped moving", not by age.
+        builder.Entity<SongUploadJob>()
+            .HasIndex(job => new { job.Status, job.StepUpdatedAt });
+
+        builder.Entity<SongUploadJob>()
+            .HasOne(job => job.Creator)
+            .WithMany()
+            .HasForeignKey(job => job.CreatorId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // A completed job points at the song it produced. Deleting the song must not delete the
+        // job history, so the link is severed rather than cascaded - the same choice
+        // SongMetadata.CreatorId already makes.
+        builder.Entity<SongUploadJob>()
+            .HasOne(job => job.SongMetadata)
+            .WithMany()
+            .HasForeignKey(job => job.SongMetadataId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.Entity<MediaIntegrityAuditNotification>()
             .HasOne(notification => notification.AuditRun)

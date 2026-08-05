@@ -36,6 +36,9 @@
   <ItemGroup>
     <ProjectReference Include="..\MusicSalesApp\MusicSalesApp.csproj" />
     <ProjectReference Include="..\MusicSalesApp.Common\MusicSalesApp.Common.csproj" />
+    <!-- The audio-processing Function app. Its FFmpeg output parsing and playable/unplayable/
+         inconclusive classification are covered here rather than in a separate test project. -->
+    <ProjectReference Include="..\MusicSalesApp.Functions\MusicSalesApp.Functions.csproj" />
   </ItemGroup>
 
 </Project>

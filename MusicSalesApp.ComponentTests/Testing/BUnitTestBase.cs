@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Antiforgery;
@@ -55,6 +55,8 @@ public abstract class BUnitTestBase
     protected Mock<ILikeCountHubClient> MockLikeCountHubClient { get; private set; } = default!;
     protected Mock<IWebhookStatusHubClient> MockWebhookStatusHubClient { get; private set; } = default!;
     protected Mock<IMaintenanceHubClient> MockMaintenanceHubClient { get; private set; } = default!;
+    protected Mock<IUploadProgressHubClient> MockUploadProgressHubClient { get; private set; } = default!;
+    protected Mock<ISongUploadJobService> MockSongUploadJobService { get; private set; } = default!;
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
@@ -108,6 +110,8 @@ public abstract class BUnitTestBase
         MockLikeCountHubClient = new Mock<ILikeCountHubClient>();
         MockWebhookStatusHubClient = new Mock<IWebhookStatusHubClient>();
         MockMaintenanceHubClient = new Mock<IMaintenanceHubClient>();
+        MockUploadProgressHubClient = new Mock<IUploadProgressHubClient>();
+        MockSongUploadJobService = new Mock<ISongUploadJobService>();
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
@@ -517,6 +521,8 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ILikeCountHubClient>(MockLikeCountHubClient.Object);
         TestContext.Services.AddSingleton<IWebhookStatusHubClient>(MockWebhookStatusHubClient.Object);
         TestContext.Services.AddSingleton<IMaintenanceHubClient>(MockMaintenanceHubClient.Object);
+        TestContext.Services.AddSingleton<IUploadProgressHubClient>(MockUploadProgressHubClient.Object);
+        TestContext.Services.AddSingleton<ISongUploadJobService>(MockSongUploadJobService.Object);
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);

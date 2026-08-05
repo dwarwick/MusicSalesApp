@@ -36,6 +36,21 @@ public interface IBlobContainerFactory
     BlobContainerClient GetPersonaImageContainer();
 
     /// <summary>
+    /// The upload staging container for the current environment - <c>musicuploads</c>,
+    /// <c>musicuploads-dev</c> or <c>musicuploads-local</c>.
+    ///
+    /// <para>
+    /// <b>This lives on a different storage account from the other two.</b> Song media is on a
+    /// Premium account, which offers no Queue service, so the queues and this container are on the
+    /// Standard general-purpose account instead. Anything copying from here into the media
+    /// container is therefore a cross-account copy and needs a source SAS.
+    /// </para>
+    ///
+    /// <para>Null when <see cref="MediaProcessingOptions"/> is not configured.</para>
+    /// </summary>
+    BlobContainerClient? GetUploadStagingContainer();
+
+    /// <summary>
     /// The names of the containers this environment writes to, for display on the admin pages so an
     /// operator can confirm which environment a destructive job is about to touch.
     /// </summary>
@@ -47,8 +62,11 @@ public sealed class BlobContainerFactory : IBlobContainerFactory
 {
     private readonly BlobContainerClient _mediaContainer;
     private readonly BlobContainerClient _personaImageContainer;
+    private readonly BlobContainerClient? _uploadStagingContainer;
 
-    public BlobContainerFactory(IOptions<AzureStorageOptions> options)
+    public BlobContainerFactory(
+        IOptions<AzureStorageOptions> options,
+        IOptions<MediaProcessingOptions> mediaProcessingOptions)
     {
         var opts = options?.Value
             ?? throw new ArgumentNullException(nameof(options));
@@ -64,6 +82,15 @@ public sealed class BlobContainerFactory : IBlobContainerFactory
         // built once and shared, matching how AzureStorageService treats its own.
         _mediaContainer = new BlobContainerClient(opts.StorageAccountConnectionString, opts.ContainerName);
         _personaImageContainer = new BlobContainerClient(opts.StorageAccountConnectionString, opts.PersonaImageContainerName);
+
+        // Note the different connection string: staging is on the Standard account, not the Premium
+        // media one. Missing configuration degrades to null rather than throwing, matching how
+        // StorageBackupBlobGateway and CreatorPersonaService handle their optional accounts - a web
+        // app that cannot process uploads should still start and serve the existing catalogue.
+        var mediaProcessing = mediaProcessingOptions?.Value;
+        _uploadStagingContainer = mediaProcessing is { IsConfigured: true }
+            ? new BlobContainerClient(mediaProcessing.StorageConnectionString, mediaProcessing.StagingContainerName)
+            : null;
     }
 
     /// <inheritdoc />
@@ -71,6 +98,9 @@ public sealed class BlobContainerFactory : IBlobContainerFactory
 
     /// <inheritdoc />
     public BlobContainerClient GetPersonaImageContainer() => _personaImageContainer;
+
+    /// <inheritdoc />
+    public BlobContainerClient? GetUploadStagingContainer() => _uploadStagingContainer;
 
     /// <inheritdoc />
     public IReadOnlyList<string> GetConfiguredContainerNames()

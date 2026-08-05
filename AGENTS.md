@@ -1,4 +1,4 @@
-# Agent Instructions - MusicSalesApp
+﻿# Agent Instructions - MusicSalesApp
 
 ## Working Branches
 
@@ -427,32 +427,48 @@ protected async Task SaveEdit()
 }
 ```
 
-## Track Length Extraction
+## Audio Processing and Track Length
 
-### Implementation Details
+### FFmpeg does not run in this app
 
-Track length is automatically extracted during file upload using FFMpeg:
+**There is no ffmpeg binary in `MusicSalesApp` and no `FFMpegCore` reference.** All transcoding and
+decode validation runs in the `MusicSalesApp.Functions` Azure Functions app - see that project's
+README. This app runs on SmarterASP shared hosting, where every FFmpeg pass used to block a request
+thread; a single WAV upload cost three of them.
 
-1. **When:** During upload, after MP3 conversion (if needed)
-2. **How:** Uses `MusicService.GetAudioDurationAsync()`
-3. **Storage:** Saved in SQL `SongMetadata.TrackLength` field as double (e.g., 245.67)
-4. **Scope:** ALL MP3 files (album tracks AND standalone songs)
+What this app still does is header-level container sniffing: `AudioContainerSniffer` in
+`MusicSalesApp.Common` reads 64 bytes and compares magic numbers. Cheap enough for a request thread,
+and it catches a renamed or empty file instantly - but it cannot prove a file decodes.
 
-### FFMpeg Approach
+### How a song gets uploaded now
 
-```csharp
-// Primary method: Use FFMpeg with null output
-var duration = await FFMpegArguments
-    .FromFileInput(tempFilePath)
-    .OutputToFile("NUL", true, options => options.WithCustomArgument("-f null"))
-    .NotifyOnProgress(progress => duration = progress)
-    .ProcessAsynchronously(throwOnError: false);
+1. `SongUploadJobService.CreateAsync` validates the title, sniffs the headers, runs the
+   ownership/collision check, stages the raw bytes to the `musicuploads{-env}` container and writes
+   a `SongUploadJob` row. It returns as soon as the queue message is sent - **the song does not
+   exist yet.**
+2. The Function transcodes to MP3, measures the duration, and POSTs to `api/media-processing/*`.
+3. `MediaProcessingCompletionService` copies the staged blobs into the song's GUID folder, writes
+   the `SongMetadata` row (including `TrackLength`), and generates the sharing image and renditions.
 
-// Fallback: Try FFProbe if available
-var mediaInfo = await FFProbe.AnalyseAsync(tempFilePath);
-```
+`SongMetadata` is therefore only ever written on success, which is why no catalogue query has to
+filter out half-built songs.
 
-### UI Display
+### Two storage accounts
+
+Song media is on a **Premium** account. No premium account type offers the Queue service, so the
+queues and the staging container are on the **Standard general-purpose** account. Media never
+moves. The practical consequence: staging-to-media copies are cross-account and need a source SAS
+(`MediaProcessingCompletionService`), not a same-account server-side copy.
+
+### Progress
+
+One bar per song spans the whole lifecycle, 0-100, across all three processes.
+`AudioProcessingProgressCalculator` in `MusicSalesApp.Common` owns the band table and is the single
+place the percentages are defined. Progress posts are best-effort in both directions - senders
+swallow failures, and the receiver drops stale or out-of-order updates so the bar cannot run
+backwards.
+
+### Track Length UI Display
 
 - Track length is displayed in admin grid and form
 - Formatted as `m:ss` or `h:mm:ss` using `TimeSpan.FromSeconds()`

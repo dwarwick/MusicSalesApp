@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Services;
 using System.Text;
@@ -213,71 +213,5 @@ public class MusicServiceTests
 
         // Assert
         Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public void TryParseDurationFromFfmpegOutput_WithDurationLine_ReturnsTotalSeconds()
-    {
-        var output = "Input #0, mp3, from 'song.mp3':\r\n  Duration: 00:03:21.50, start: 0.025057, bitrate: 320 kb/s";
-
-        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
-
-        Assert.That(result, Is.EqualTo(201.5).Within(0.001));
-    }
-
-    [Test]
-    public void TryParseDurationFromFfmpegOutput_WithHourDurationLine_ReturnsTotalSeconds()
-    {
-        var output = "Duration: 01:02:03.25, start: 0.000000, bitrate: 192 kb/s";
-
-        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
-
-        Assert.That(result, Is.EqualTo(3723.25).Within(0.001));
-    }
-
-    [Test]
-    public void TryParseDurationFromFfmpegOutput_WithoutDurationLine_ReturnsNull()
-    {
-        var output = "Invalid data found when processing input";
-
-        var result = MusicService.TryParseDurationFromFfmpegOutput(output);
-
-        Assert.That(result, Is.Null);
-    }
-
-    [Test]
-    public void ConvertToMp3Async_WithNullStream_ThrowsArgumentNullException()
-    {
-        // Arrange
-        Stream stream = null;
-        var fileName = "test.wav";
-
-        // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(async () => 
-            await _service.ConvertToMp3Async(stream, fileName));
-    }
-
-    [Test]
-    public void ConvertToMp3Async_WithNullFileName_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test"));
-        string fileName = null;
-
-        // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(async () => 
-            await _service.ConvertToMp3Async(stream, fileName));
-    }
-
-    [Test]
-    public void ConvertToMp3Async_WithEmptyFileName_ThrowsArgumentNullException()
-    {
-        // Arrange
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("test"));
-        var fileName = string.Empty;
-
-        // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(async () => 
-            await _service.ConvertToMp3Async(stream, fileName));
     }
 }

@@ -1,5 +1,4 @@
-using FFMpegCore;
-using Fido2NetLib;
+﻿using Fido2NetLib;
 using Fido2NetLib.Serialization;
 using Hangfire;
 using Hangfire.Dashboard;
@@ -357,6 +356,7 @@ try
     builder.Services.AddScoped<ILikeCountHubClient, LikeCountHubClient>();
     builder.Services.AddScoped<IWebhookStatusHubClient, WebhookStatusHubClient>();
     builder.Services.AddScoped<IMaintenanceHubClient, MaintenanceHubClient>();
+    builder.Services.AddScoped<IUploadProgressHubClient, UploadProgressHubClient>();
     builder.Services.AddScoped<IAdminMessageHubClient, AdminMessageHubClient>();
     builder.Services.AddScoped<IRecommendationService, RecommendationService>();
     builder.Services.AddScoped<IFileMatchingService, FileMatchingService>();
@@ -418,6 +418,29 @@ try
 
     builder.Services.Configure<AzureStorageOptions>(builder.Configuration.GetSection("Azure"));
     builder.Services.AddSingleton<IAzureStorageService, AzureStorageService>();
+
+    // A *second* storage account. Song media lives on a Premium account, and no Premium account
+    // type offers the Queue service, so the audio-processing queues and the upload staging
+    // container are on the Standard general-purpose account instead. Media itself never moves.
+    //
+    // That account is "AzureLowSpeed" - already configured, already holding the connection string.
+    // Bound by hand rather than by section so there is exactly one copy of that secret to rotate;
+    // the property names differ from the JSON because this section describes a storage account
+    // while these options describe what audio processing does with it.
+    builder.Services.Configure<MediaProcessingOptions>(options =>
+    {
+        var storageSection = builder.Configuration.GetSection("AzureLowSpeed");
+        options.StorageConnectionString = storageSection["StorageAccountConnectionString"];
+        options.StagingContainerName = storageSection["UploadStagingContainerName"];
+        options.TranscodeQueueName = storageSection["TranscodeQueueName"] ?? MediaProcessingQueues.Transcode;
+        options.ProbeQueueName = storageSection["ProbeQueueName"] ?? MediaProcessingQueues.Probe;
+    });
+    builder.Services.AddSingleton<IMediaProcessingQueueClient, MediaProcessingQueueClient>();
+    builder.Services.AddScoped<ISongUploadJobService, SongUploadJobService>();
+    builder.Services.AddScoped<IMediaProcessingCompletionService, MediaProcessingCompletionService>();
+    builder.Services.AddScoped<IAudioProbeResultHandler, AudioProbeResultHandler>();
+    builder.Services.AddScoped<IUploadProgressNotifier, UploadProgressNotifier>();
+    builder.Services.AddScoped<ISongUploadJobReconciler, SongUploadJobReconciler>();
 
     // Reaches both the media and persona-image containers, which the single-container
     // AzureStorageService cannot. Deliberately offers no container-by-name lookup, so the
@@ -539,6 +562,7 @@ try
     app.MapHub<MusicSalesApp.Hubs.WebhookStatusHub>("/webhookstatushub");
     app.MapHub<MusicSalesApp.Hubs.MaintenanceHub>("/maintenancehub");
     app.MapHub<MusicSalesApp.Hubs.AdminMessageHub>("/adminmessagehub");
+    app.MapHub<MusicSalesApp.Hubs.UploadProgressHub>("/uploadprogresshub");
 
     app.MapGet("/antiforgery/token", (HttpContext context, IAntiforgery antiforgery) =>
     {
@@ -552,24 +576,9 @@ try
         });
     });
 
-    // This is the folder where appsettings.json lives (and where you said ffmpeg.exe is)
-    var ffRoot = app.Environment.ContentRootPath;
-    var ffmpegLogger = app.Services.GetRequiredService<ILogger<Program>>();
-
-    // Optional: quick diagnostic log to confirm paths on the server
-    var ffmpegPath = Path.Combine(ffRoot, "ffmpeg.exe");
-    ffmpegLogger.LogInformation("[FFMPEG] ContentRootPath: {ContentRootPath}", ffRoot);
-    ffmpegLogger.LogInformation("[FFMPEG] Expecting ffmpeg at: {FFmpegPath}", ffmpegPath);
-    ffmpegLogger.LogInformation("[FFMPEG] Exists? {Exists}", File.Exists(ffmpegPath));
-
-    GlobalFFOptions.Configure(options =>
-    {
-        options.BinaryFolder = ffRoot;                                // look next to appsettings.json
-        options.TemporaryFilesFolder = Path.Combine(ffRoot, "fftemp"); // any writable folder
-    });
-
-    // Ensure temp directory exists
-    Directory.CreateDirectory(Path.Combine(ffRoot, "fftemp"));
+    // FFmpeg is no longer configured or shipped here. All transcoding and decode validation runs in
+    // the MusicSalesApp.Functions Azure Functions app, which owns the binary - see that project's
+    // README. This host does header-level container sniffing only (AudioContainerSniffer).
 
     // Initialize recurring Hangfire jobs
     var hangfireLogger = app.Services.GetRequiredService<ILogger<Program>>();

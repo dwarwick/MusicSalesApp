@@ -36,4 +36,27 @@ public static class SignalRMethodNames
     /// Payload: (int songMetadataId, int likeCount, int dislikeCount)
     /// </summary>
     public const string ReceiveLikeCountUpdate = "ReceiveLikeCountUpdate";
+
+    /// <summary>
+    /// Sent to one creator's group as their upload moves through transcoding and assembly.
+    /// Payload: AudioProcessingProgress.
+    /// </summary>
+    public const string ReceiveUploadProgress = "ReceiveUploadProgress";
+}
+
+/// <summary>
+/// Group naming for hubs that fan out to a subset of connections rather than broadcasting.
+/// </summary>
+public static class SignalRGroups
+{
+    /// <summary>
+    /// The group carrying one creator's upload progress.
+    ///
+    /// <para>
+    /// Callers must derive <paramref name="creatorId"/> from the connected user's own identity,
+    /// never from a value the client supplied - otherwise a creator could join another creator's
+    /// group and watch their uploads.
+    /// </para>
+    /// </summary>
+    public static string ForCreator(int creatorId) => $"creator-{creatorId}";
 }

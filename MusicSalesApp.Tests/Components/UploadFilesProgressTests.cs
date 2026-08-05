@@ -1,7 +1,107 @@
+using MusicSalesApp.Common.Contracts;
+using MusicSalesApp.Components.Pages.Creator;
+
 namespace MusicSalesApp.Tests.Components;
 
 public class UploadFilesProgressTests
 {
+    // -----------------------------------------------------------------
+    // Drop-box visibility across both phases.
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void UploadBox_IsHiddenWhileFilesAreBeingReceived()
+    {
+        var page = new TestableUploadFiles { Uploading = true };
+
+        Assert.That(page.HideBox, Is.True);
+    }
+
+    [Test]
+    public void UploadBox_StaysHiddenWhileSongsAreStillProcessing()
+    {
+        // The regression this pins: _isUploading goes false the instant the last file is staged,
+        // which is the instant processing starts. The box used to reappear right underneath a batch
+        // that was still transcoding, inviting a second batch on top of the first.
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Transcoding);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.Uploading, Is.False, "Receiving is over by this point.");
+            Assert.That(page.HideBox, Is.True);
+        });
+    }
+
+    [Test]
+    public void UploadBox_ComesBackOnceEverySongIsTerminal()
+    {
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Completed);
+        page.AddQueuedRow(AudioProcessingStep.Failed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.HideBox, Is.False);
+            Assert.That(
+                page.OverallPercent,
+                Is.EqualTo(100),
+                "The box returning and the batch bar reaching 100% are the same moment.");
+        });
+    }
+
+    [Test]
+    public void UploadBox_IsStillOfferedDuringTheTitleReviewPause()
+    {
+        // Those rows exist but have never been staged, and choosing different files at the review
+        // step has always been a legitimate way to replace the batch.
+        var page = new TestableUploadFiles();
+        page.AddUnstagedRow();
+
+        Assert.That(page.HideBox, Is.False);
+    }
+
+    [Test]
+    public void UploadBox_IsHiddenForAnInFlightBatchRestoredOnARevisit()
+    {
+        // Coming back to the page mid-processing rebuilds the rows from the job table. They carry a
+        // media GUID and a real step, so they gate the box exactly as the originals did.
+        var page = new TestableUploadFiles();
+        page.AddQueuedRow(AudioProcessingStep.Copying);
+
+        Assert.That(page.HideBox, Is.True);
+    }
+
+    /// <summary>
+    /// Reaches the protected visibility members. Nothing here renders or touches an injected
+    /// service, so the component needs no DI graph.
+    /// </summary>
+    private sealed class TestableUploadFiles : UploadFilesModel
+    {
+        public bool Uploading
+        {
+            get => _isUploading;
+            init => _isUploading = value;
+        }
+
+        public bool HideBox => HideUploadBox;
+
+        public int OverallPercent => OverallProgressPercent;
+
+        public void AddQueuedRow(AudioProcessingStep step) => _uploadItems.Add(new UploadPairItem
+        {
+            MediaGuid = Guid.NewGuid(),
+            Step = step,
+            Progress = (int)AudioProcessingProgressCalculator.ToOverallPercent(step)
+        });
+
+        /// <summary>A row buffered for the title review, before anything has been staged.</summary>
+        public void AddUnstagedRow() => _uploadItems.Add(new UploadPairItem
+        {
+            Step = AudioProcessingStep.Staging
+        });
+    }
+
     [Test]
     public void UploadFiles_UsesBlazorStateForInitialUploadProgress()
     {
@@ -11,7 +111,10 @@ public class UploadFilesProgressTests
         Assert.That(markup, Does.Contain("@if (_initialUploadItems.Any())"));
         Assert.That(markup, Does.Contain("_initialUploadBatchProgress"));
         Assert.That(markup, Does.Contain("_initialUploadStatusMessage"));
-        Assert.That(markup, Does.Contain("_isUploading || _isProcessingFiles"));
+
+        // The drop box is gated through HideUploadBox now, which folds the processing phase in
+        // alongside the two upload flags - see the UploadBox_* tests above.
+        Assert.That(markup, Does.Contain("HideUploadBox"));
 
         Assert.That(codeBehind, Does.Contain("InitialUploadProgressUpdateInterval = TimeSpan.FromSeconds(1)"));
         Assert.That(codeBehind, Does.Contain("await InvokeAsync(StateHasChanged);"));
@@ -66,9 +169,11 @@ public class UploadFilesProgressTests
         // Unsupported extensions are skipped with a notice instead of failing the whole batch.
         Assert.That(codeBehind, Does.Contain("_skippedFiles"));
 
-        // The playability preflight is untouched.
-        Assert.That(codeBehind, Does.Contain("ValidateAudioDecodeAsync"));
-        Assert.That(codeBehind, Does.Contain("AudioContentMatchesExtension"));
+        // The cheap gates that can still run on the request thread are untouched. The full decode
+        // that used to sit alongside them moved to the audio-processing Azure Function, so this
+        // deliberately no longer looks for ValidateAudioDecodeAsync - see
+        // FfmpegAudioProcessorTests for where that behaviour lives now.
+        Assert.That(codeBehind, Does.Contain("ContentMatchesExtension"));
         Assert.That(codeBehind, Does.Contain("MediaTransferValidator.RequireComplete"));
     }
 

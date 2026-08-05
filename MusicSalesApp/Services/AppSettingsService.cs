@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;

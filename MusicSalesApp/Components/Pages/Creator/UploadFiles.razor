@@ -1,4 +1,4 @@
-@page "/upload-files"
+﻿@page "/upload-files"
 @rendermode InteractiveServer
 @inherits UploadFilesModel
 @using Microsoft.AspNetCore.Authorization
@@ -24,8 +24,8 @@
 
 <div class="container-fluid">
     
-    <label class="upload-box @((_isUploading || _isProcessingFiles) ? "upload-box-disabled" : "") mb-2"
-           style="display: @((_isUploading || _isProcessingFiles) ? "none" : "flex")">
+    <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
+           style="display: @(HideUploadBox ? "none" : "flex")">
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
                    class="hidden-input"
@@ -60,11 +60,41 @@
         </div>
     }
 
+    @* One bar for the whole batch, above both phases and present from the first file selected
+       until the last song finishes. The per-song bars below answer "where is this song"; this
+       answers "how far through is the batch", which is the useful question when several are in
+       flight at once. Receiving is weighted at 25% - see AudioProcessingProgressCalculator. *@
+    @if (ShowOverallProgress)
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <h5>Overall Progress</h5>
+                @if (!string.IsNullOrEmpty(OverallProgressMessage))
+                {
+                    <div class="mb-2">
+                        <span class="text-muted small">@OverallProgressMessage</span>
+                    </div>
+                }
+                <div class="progress mb-4" style="height: 1.5rem;">
+                    <div class="progress-bar @(OverallProgressPercent >= 100 ? "bg-success" : "bg-primary progress-bar-striped progress-bar-animated")"
+                         role="progressbar"
+                         style="width: @(OverallProgressPercent)%"
+                         aria-valuenow="@OverallProgressPercent"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-label="@($"Overall progress: {OverallProgressMessage}")">
+                        @OverallProgressPercent%
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (_initialUploadItems.Any())
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>Upload Progress</h5>
+                <h5>Receiving Files</h5>
                 <div class="mb-2">
                     <span class="text-muted small">@_initialUploadStatusMessage</span>
                 </div>
@@ -125,7 +155,7 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>@(_awaitingTitleConfirmation ? "Fix These Song Titles" : "Upload Progress")</h5>
+                <h5>@(_awaitingTitleConfirmation ? "Fix These Song Titles" : "Processing Progress")</h5>
                 @if (_awaitingTitleConfirmation)
                 {
                     <p class="text-muted">
@@ -185,7 +215,7 @@
                                         }
                                     </td>
                                     <td>
-                                        @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Converting)
+                                        @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
                                         {
                                             <span class="badge bg-info">@item.StatusMessage</span>
                                         }
@@ -202,6 +232,10 @@
                                             <span class="badge bg-secondary">@item.StatusMessage</span>
                                         }
                                     </td>
+                                    @* One bar for the whole lifecycle: the browser-to-Azure upload,
+                                       then transcoding in the Azure Function, then assembly here.
+                                       It is never hidden and never runs backwards, so a creator can
+                                       see exactly where each song is. *@
                                     <td style="width: 30%;">
                                         <div class="progress">
                                             <div class="progress-bar @GetProgressBarClass(item.Status)"
@@ -209,7 +243,8 @@
                                                  style="width: @(item.Progress)%"
                                                  aria-valuenow="@item.Progress"
                                                  aria-valuemin="0"
-                                                 aria-valuemax="100">
+                                                 aria-valuemax="100"
+                                                 aria-label="@($"{item.SongTitle}: {item.StatusMessage}")">
                                                 @item.Progress%
                                             </div>
                                         </div>

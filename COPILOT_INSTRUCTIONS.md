@@ -315,11 +315,15 @@ await _songMetadataService.UpsertAsync(new SongMetadata
 
 ### Track Length Extraction
 
-- Track length is automatically extracted during upload using FFMpeg
-- Extracted for ALL MP3 files
+- **FFmpeg does not run in this app.** Transcoding and duration extraction happen in the
+  `MusicSalesApp.Functions` Azure Functions app; this app has no ffmpeg binary and no FFMpegCore
+  reference.
+- An upload is staged and queued (`SongUploadJobService`), then assembled when the Function reports
+  back (`MediaProcessingCompletionService`), which is when `SongMetadata.TrackLength` is written.
 - Stored in SQL `SongMetadata.TrackLength` field as double (e.g., 245.67)
 - Read-only in UI - cannot be edited manually
-- Falls back to FFProbe if available, but primarily uses FFMpeg with null output
+- This app only sniffs container headers (`AudioContainerSniffer`), which is cheap but cannot prove
+  a file decodes
 
 ## Build and Deployment
 

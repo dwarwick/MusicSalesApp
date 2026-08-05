@@ -80,6 +80,107 @@
                 "panel": "new"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Publish Functions to test (davidtest)",
+            "detail": "Publishes the FFmpeg audio-processing Function app to streamtunes-media-test. Resolves func.exe directly, so a stale PATH right after installing Core Tools does not look like 'not installed'.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Invoke-FunctionPublish.ps1",
+                "-FunctionAppName",
+                "streamtunes-media-test"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Publish Functions to production (streamtunes)",
+            "detail": "Publishes the FFmpeg audio-processing Function app to streamtunes-media-prod. Resolves func.exe directly, so a stale PATH right after installing Core Tools does not look like 'not installed'.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Invoke-FunctionPublish.ps1",
+                "-FunctionAppName",
+                "streamtunes-media-prod"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Sync Function settings (Development)",
+            "detail": "Regenerates MusicSalesApp.Functions/local.settings.json from MusicSalesApp/appsettings.Development.json, so the storage connection strings have one source of truth.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Sync-FunctionSettings.ps1",
+                "-Environment",
+                "Development"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Sync Function settings (Test)",
+            "detail": "Regenerates MusicSalesApp.Functions/local.settings.json from MusicSalesApp/appsettings.Test.json, so the storage connection strings have one source of truth.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Sync-FunctionSettings.ps1",
+                "-Environment",
+                "Test"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Provision Functions infrastructure (test)",
+            "detail": "Creates/updates the streamtunes-media-test Function App. Idempotent; leaves app settings alone once the app exists and only reports drift.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Provision-FunctionApp.ps1",
+                "-Environment",
+                "Test"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Provision Functions infrastructure (production)",
+            "detail": "Creates/updates the streamtunes-media-prod Function App. Idempotent; leaves app settings alone once the app exists and only reports drift.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Provision-FunctionApp.ps1",
+                "-Environment",
+                "Production"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Check Functions settings drift (test)",
+            "detail": "Read-only. Reports any setting where Azure and appsettings.Test.json disagree.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Provision-FunctionApp.ps1",
+                "-Environment",
+                "Test",
+                "-WhatIf"
+            ],
+            "problemMatcher": []
         }
     ],
     "inputs": [
