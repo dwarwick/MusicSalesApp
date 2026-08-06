@@ -1,7 +1,7 @@
 #nullable enable
 using SkiaSharp;
 
-namespace MusicSalesApp.Services;
+namespace MusicSalesApp.Imaging;
 
 /// <summary>
 /// The pixel work behind the image renditions: choosing which widths to produce for a given source,
@@ -9,10 +9,13 @@ namespace MusicSalesApp.Services;
 ///
 /// <para>
 /// Deliberately free of Azure and Entity Framework so the sizing and quality rules can be tested
-/// directly. <see cref="ImageVariantService"/> supplies the I/O around it.
+/// directly. The I/O around it belongs to whoever owns the storage account:
+/// <c>ImageVariantService</c> in the web app, <c>CoverArtRenditionGenerator</c> in the Azure
+/// Function. Both call this, so a cover art's rendition ladder has the same shape whether it was
+/// built at upload or rebuilt by an admin re-crop.
 /// </para>
 /// </summary>
-internal static class ImageVariantEncoder
+public static class ImageVariantEncoder
 {
     /// <summary>
     /// WebP quality per rendition width.
@@ -21,7 +24,7 @@ internal static class ImageVariantEncoder
     /// pixels-per-unit-of-detail than a thumbnail of the same image, so compression artefacts are
     /// correspondingly less visible — and the large rungs are where nearly all the storage goes.
     /// </summary>
-    internal static int QualityFor(int width) => width switch
+    public static int QualityFor(int width) => width switch
     {
         <= 128 => 82,
         <= 320 => 80,
@@ -40,7 +43,7 @@ internal static class ImageVariantEncoder
     /// depends on: any image with cover art has at least one rendition.
     /// </para>
     /// </summary>
-    internal static IReadOnlyList<int> SelectWidths(IReadOnlyList<int> ladder, int sourceWidth)
+    public static IReadOnlyList<int> SelectWidths(IReadOnlyList<int> ladder, int sourceWidth)
     {
         if (ladder == null || ladder.Count == 0 || sourceWidth <= 0)
             return Array.Empty<int>();
@@ -67,7 +70,7 @@ internal static class ImageVariantEncoder
     /// </para>
     /// </summary>
     /// <returns>A rewound stream, or <see langword="null"/> if the encode failed.</returns>
-    internal static MemoryStream? EncodeWebp(SKBitmap source, int targetWidth)
+    public static MemoryStream? EncodeWebp(SKBitmap source, int targetWidth)
     {
         if (source == null || source.Width <= 0 || source.Height <= 0 || targetWidth <= 0)
             return null;

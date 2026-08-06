@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MusicSalesApp.Common\MusicSalesApp.Common.csproj" />
+    <ProjectReference Include="..\MusicSalesApp.Imaging\MusicSalesApp.Imaging.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

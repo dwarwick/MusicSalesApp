@@ -1,5 +1,5 @@
 using MusicSalesApp.Common.Helpers;
-using MusicSalesApp.Services;
+using MusicSalesApp.Imaging;
 using SkiaSharp;
 
 namespace MusicSalesApp.Tests.Services;

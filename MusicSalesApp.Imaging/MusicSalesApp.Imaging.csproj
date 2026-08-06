@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The SkiaSharp half of the codebase, shared by the web app and the Azure Function.
+
+    It is a separate project rather than a folder in MusicSalesApp.Common because Common is
+    referenced by the MAUI app, and MediaFileContentValidator records the rule this project exists to
+    honour: SkiaSharp "has no business in a library the MAUI app also references". Nothing here is
+    referenced by MAUI, so that boundary is a compile-time fact rather than a comment.
+
+    Deliberately free of Azure and Entity Framework. The I/O around these rules lives with whoever
+    owns the storage account - ImageVariantService in the web app, CoverArtRenditionGenerator in the
+    Function - so the sizing and quality rules themselves stay directly testable.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SkiaSharp itself carries the Windows natives, which is all the Azure Function needs.
+         SkiaSharp.NativeAssets.Linux stays declared on MusicSalesApp and MusicSalesApp.Tests, the
+         two projects that actually deploy to Linux - adding it here would grow every deployment
+         package, including the Function's already-large one, with natives it cannot use. -->
+    <PackageReference Include="SkiaSharp" Version="4.148.0" />
+  </ItemGroup>
+
+</Project>
