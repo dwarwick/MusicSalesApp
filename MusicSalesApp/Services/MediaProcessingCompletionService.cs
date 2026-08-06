@@ -45,7 +45,6 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
     private readonly IBlobContainerFactory _containerFactory;
     private readonly ISongMetadataService _metadataService;
     private readonly IOpenGraphService _openGraphService;
-    private readonly IImageVariantCoordinator _imageVariantCoordinator;
     private readonly ISongUploadJobService _jobService;
     private readonly IUploadProgressNotifier _progressNotifier;
     private readonly IOptions<MediaProcessingOptions> _options;
@@ -56,7 +55,6 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         IBlobContainerFactory containerFactory,
         ISongMetadataService metadataService,
         IOpenGraphService openGraphService,
-        IImageVariantCoordinator imageVariantCoordinator,
         ISongUploadJobService jobService,
         IUploadProgressNotifier progressNotifier,
         IOptions<MediaProcessingOptions> options,
@@ -66,7 +64,6 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         _containerFactory = containerFactory;
         _metadataService = metadataService;
         _openGraphService = openGraphService;
-        _imageVariantCoordinator = imageVariantCoordinator;
         _jobService = jobService;
         _progressNotifier = progressNotifier;
         _options = options;
@@ -191,6 +188,22 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 OriginalAudioContentType = job.SourceContentType,
                 OriginalCoverArtBlobPath = originalImagePath,
                 OriginalCoverArtFileName = job.CoverArtFileName,
+
+                // The Function already wrote these renditions into the GUID folder, straight from
+                // the bitmap it had decoded. Recording the width set here rather than re-deriving it
+                // saves a download from the Premium account, a second decode, four re-encodes and a
+                // second database round trip - all inside the assembly budget the Function is
+                // holding an HTTP request open for.
+                //
+                // Null and empty mean different things: null is "no cover art", empty is "art we
+                // could not render", which serves the full-size master. Version is set explicitly
+                // because the coordinator call this replaced incremented 0 -> 1 on every upload, and
+                // CoverArtUrlBuilder emits the value unconditionally as ?v=.
+                CoverArtVariantWidths = result.CoverArtVariantWidths is null
+                    ? null
+                    : ImageVariantSizes.ToCsv(result.CoverArtVariantWidths),
+                CoverArtVariantVersion = 1,
+
                 FileExtension = ".mp3",
                 SongTitle = job.SongTitle,
                 AlbumName = job.AlbumName ?? string.Empty,
@@ -218,12 +231,23 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                     _logger.LogWarning(ex, "Unable to pre-generate sharing image for {Path}", imagePath);
                 }
 
-                // Swallows its own failures. A song with no recorded rendition widths serves its
-                // full-size master, exactly as it did before renditions existed - so an image
-                // hiccup must not stop this job reaching Completed.
-                await _imageVariantCoordinator.RefreshCoverArtVariantsAsync(
-                    savedMetadata.Id,
-                    cancellationToken: assemblyToken);
+                // Renditions are NOT regenerated here. The Function wrote them before this callback,
+                // and their widths were recorded above. Calling the coordinator "for safety" would
+                // re-download the master from the Premium account, re-decode it, re-encode every
+                // rung and overwrite the Function's identical bytes - doubling the exact work this
+                // moved off the web server, inside the assembly budget.
+                //
+                // An empty width set means the art could not be rendered. The song still publishes
+                // and serves its full-size master; ImageVariantBackfillService is what sweeps songs
+                // with no recorded widths, so there is nothing to retry inline.
+                if (result.CoverArtVariantWidths is { Count: 0 })
+                {
+                    _logger.LogWarning(
+                        "Song {SongMetadataId} published with no cover-art renditions ({DiagnosticCode}); "
+                        + "it will serve its full-size master until the backfill regenerates them",
+                        savedMetadata.Id,
+                        result.CoverArtDiagnosticCode);
+                }
             }
 
             await MarkCompletedAsync(job, savedMetadata.Id, result, assemblyToken);

@@ -60,8 +60,10 @@ function Get-MediaProcessingSettings {
         return $Value
     }
 
-    # The premium account holding song media. The Function only ever READS this - the web app owns
-    # every write into the catalogue.
+    # The premium account holding song media. The Function reads this for the probe path and writes
+    # cover-art renditions into it - derived artefacts only. The web app is still the sole writer of
+    # every primary blob and of the database, so this is the same connection string either way and
+    # no credential change was needed when renditions moved into the Function.
     $mediaConnection = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "StorageAccountConnectionString") "Azure:StorageAccountConnectionString"
     $mediaContainer = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "ContainerName") "Azure:ContainerName"
 

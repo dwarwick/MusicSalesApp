@@ -22,7 +22,7 @@ process in parallel and the web server never runs FFmpeg at all.
 
 | Function | Queue | Does |
 |---|---|---|
-| `ProcessAudioUpload` | `audio-transcode{-env}` | Transcodes one staged creator upload to MP3 and reports its duration. Posts live progress as it goes. |
+| `ProcessAudioUpload` | `audio-transcode{-env}` | Transcodes one staged creator upload to MP3, reports its duration, and writes the cover art's WebP renditions. Posts live progress as it goes. |
 | `ProbeAudio` | `audio-probe{-env}` | Decodes an already-stored playback blob without producing anything, for the audit and track-length repair jobs. No progress — nobody is watching. |
 
 Neither function touches the database. The site and its SQL Server are on shared hosting and are not
@@ -41,7 +41,13 @@ the queues and the upload staging container are on the **Standard general-purpos
 never moves. This app therefore needs both connection strings:
 
 - `StagingStorageConnectionString` — Standard: queues, and reading/writing staged upload blobs.
-- `MediaStorageConnectionString` — Premium: read-only, for the probe path.
+- `MediaStorageConnectionString` — Premium: read for the probe path, and write for cover-art
+  renditions **only**. Every primary blob is still written by the web app. See CLAUDE.md's
+  "no primary blob, no row" invariant before adding any other write here.
+
+Both are the same account-key connection strings the web app already uses (see
+`Get-MediaProcessingSettings.ps1`), so no credential change was needed when renditions moved here —
+the constraint is enforced by the shape of `IMediaBlobStore`, not by the key.
 
 ## Hosting
 

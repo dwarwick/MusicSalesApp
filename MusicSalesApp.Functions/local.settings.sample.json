@@ -17,7 +17,7 @@
     "//StagingStorageConnectionString": "STANDARD general-purpose account: the queues and the upload staging container. Read/write. Premium accounts have no Queue service, which is the whole reason there are two accounts.",
     "StagingStorageConnectionString": "UseDevelopmentStorage=true",
 
-    "//MediaStorageConnectionString": "PREMIUM account holding song media. Read-only from here - the web app owns every write into the catalogue. Used only by the probe path.",
+    "//MediaStorageConnectionString": "PREMIUM account holding song media. Read for the probe path, write for cover-art renditions ONLY - the web app is still the sole writer of every primary blob and of the database. Nothing here may touch a blob a SongMetadata row already points at.",
     "MediaStorageConnectionString": "UseDevelopmentStorage=true",
 
     "MediaProcessing:TranscodeQueueName": "audio-transcode-local",

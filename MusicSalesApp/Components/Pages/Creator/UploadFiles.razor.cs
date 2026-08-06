@@ -1286,6 +1286,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         AudioProcessingStep.Transcoding => "Converting to MP3...",
         AudioProcessingStep.Verifying => "Verifying the converted audio...",
         AudioProcessingStep.Uploading => "Saving the converted audio...",
+        AudioProcessingStep.RenderingArtwork => "Preparing artwork sizes...",
         AudioProcessingStep.Copying => "Storing your song...",
         AudioProcessingStep.SavingMetadata => "Adding it to your library...",
         AudioProcessingStep.GeneratingArtwork => "Preparing artwork...",

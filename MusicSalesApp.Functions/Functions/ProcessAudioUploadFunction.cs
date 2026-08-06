@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Functions.Audio;
+using MusicSalesApp.Functions.Images;
 using MusicSalesApp.Functions.Services;
 
 namespace MusicSalesApp.Functions.Functions;
@@ -20,17 +21,20 @@ public sealed class ProcessAudioUploadFunction
 {
     private readonly IFfmpegAudioProcessor _ffmpeg;
     private readonly IMediaBlobStore _blobStore;
+    private readonly ICoverArtRenditionGenerator _renditionGenerator;
     private readonly IMediaProcessingCallbackClient _callbackClient;
     private readonly ILogger<ProcessAudioUploadFunction> _logger;
 
     public ProcessAudioUploadFunction(
         IFfmpegAudioProcessor ffmpeg,
         IMediaBlobStore blobStore,
+        ICoverArtRenditionGenerator renditionGenerator,
         IMediaProcessingCallbackClient callbackClient,
         ILogger<ProcessAudioUploadFunction> logger)
     {
         _ffmpeg = ffmpeg;
         _blobStore = blobStore;
+        _renditionGenerator = renditionGenerator;
         _callbackClient = callbackClient;
         _logger = logger;
     }
@@ -46,6 +50,12 @@ public sealed class ProcessAudioUploadFunction
         var progress = new ProgressReporter(_callbackClient, request.JobId);
         var sourcePath = FfmpegAudioProcessor.BuildTempPath(request.SourceExtension, "upload-source");
         var playbackPath = FfmpegAudioProcessor.BuildTempPath(".mp3", "upload-playback");
+        // Not FfmpegAudioProcessor.BuildTempPath: that whitelists against audio extensions, so a
+        // .jpg would come back as .bin. The extension is cosmetic here anyway - SkiaSharp decodes by
+        // content - but a scratch file named for what it holds is worth the two lines.
+        var coverPath = Path.Combine(
+            Path.GetTempPath(),
+            $"upload-cover-{Guid.NewGuid():N}{NormalizeCoverExtension(request.CoverArtExtension)}");
 
         _logger.LogInformation(
             "Processing upload {JobId} ({FileName})",
@@ -176,6 +186,8 @@ public sealed class ProcessAudioUploadFunction
                 return;
             }
 
+            var renditions = await RenderCoverArtAsync(request, progress, coverPath, cancellationToken);
+
             await _callbackClient.PostTranscodeResultAsync(
                 new AudioTranscodeResult
                 {
@@ -183,7 +195,11 @@ public sealed class ProcessAudioUploadFunction
                     PlaybackBlobPath = sourceIsMp3 ? request.SourceBlobPath : request.PlaybackBlobPath,
                     DurationSeconds = duration,
                     Outcome = AudioProcessingOutcome.Playable,
-                    SourceWasAlreadyMp3 = sourceIsMp3
+                    SourceWasAlreadyMp3 = sourceIsMp3,
+                    CoverArtVariantWidths = renditions?.Widths,
+                    CoverArtWidth = renditions?.SourceWidth,
+                    CoverArtHeight = renditions?.SourceHeight,
+                    CoverArtDiagnosticCode = renditions?.DiagnosticCode
                 },
                 cancellationToken);
         }
@@ -195,7 +211,74 @@ public sealed class ProcessAudioUploadFunction
             // only 500 MB of local storage to work in.
             TempFileHelper.TryDelete(sourcePath, _logger);
             TempFileHelper.TryDelete(playbackPath, _logger);
+            TempFileHelper.TryDelete(coverPath, _logger);
         }
+    }
+
+    /// <summary>
+    /// Keeps a creator-supplied extension out of the scratch filename unless it is one we recognise.
+    /// </summary>
+    private static string NormalizeCoverExtension(string extension)
+    {
+        var normalized = (extension ?? string.Empty).ToLowerInvariant();
+        return MusicFileExtensions.ValidCoverArtExtensions.Contains(normalized) ? normalized : ".bin";
+    }
+
+    /// <summary>
+    /// Builds the cover art's WebP renditions, or returns null when the upload has no cover art.
+    ///
+    /// <para>
+    /// <b>Cannot fail the song.</b> Every outcome short of cancellation comes back as a result the
+    /// caller reports alongside a <c>Playable</c> verdict — an empty width set simply means the song
+    /// serves its full-size master, which is what every consumer did before renditions existed.
+    /// There is deliberately no image equivalent of the audio path's <c>Inconclusive</c>-and-throw:
+    /// retrying the message would re-run a transcode that already succeeded, costing minutes to
+    /// salvage a thumbnail.
+    /// </para>
+    /// </summary>
+    private async Task<CoverArtRenditionResult> RenderCoverArtAsync(
+        AudioTranscodeRequest request,
+        ProgressReporter progress,
+        string coverPath,
+        CancellationToken cancellationToken)
+    {
+        // Null rather than empty: "there was never any art" and "the art could not be rendered" are
+        // different answers, and the API branches on the difference when it records the width set.
+        if (string.IsNullOrWhiteSpace(request.CoverArtBlobPath))
+            return null;
+
+        await progress.ReportStepAsync(AudioProcessingStep.RenderingArtwork, cancellationToken: cancellationToken);
+
+        var result = await _renditionGenerator.GenerateAsync(
+            request.JobId,
+            request.CoverArtBlobPath,
+            request.CoverArtExtension,
+            coverPath,
+            new Progress<double>(percent => _ = progress.ReportStepPercentAsync(
+                AudioProcessingStep.RenderingArtwork,
+                percent,
+                cancellationToken)),
+            cancellationToken);
+
+        if (result.Widths.Count == 0)
+        {
+            _logger.LogWarning(
+                "No cover-art renditions were produced for job {JobId} ({DiagnosticCode}); "
+                + "the song will serve its full-size master",
+                request.JobId,
+                result.DiagnosticCode);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Wrote cover-art renditions {Widths} for job {JobId} from a {Width}x{Height} source",
+                string.Join(',', result.Widths),
+                request.JobId,
+                result.SourceWidth,
+                result.SourceHeight);
+        }
+
+        return result;
     }
 
     private async Task ReportFailureAsync(

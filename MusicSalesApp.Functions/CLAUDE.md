@@ -10,7 +10,7 @@ Every FFmpeg invocation in StreamTunes. Two queue triggers, no HTTP triggers, no
 
 | Function | Queue | Does |
 |---|---|---|
-| `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration. Posts live progress. |
+| `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration, plus the cover art's WebP renditions. Posts live progress. |
 | `ProbeAudio` | `audio-probe{-env}` | Decode an already-stored blob, produce nothing. For the media-integrity audit and nightly track-length repair. No progress — nobody is watching. |
 
 It exists because the Blazor app runs on SmarterASP shared hosting where every FFmpeg pass blocked a
@@ -26,10 +26,12 @@ Three processes, in order. Nothing here is a database write from this app — it
    enqueues. **Returns before the song exists.**
 2. **This app** (`ProcessAudioUploadFunction`) — downloads the source, decode-probes it (proves it
    plays *and* measures duration), transcodes to MP3 unless already MP3, sniffs the result,
-   decode-probes the result, uploads `playback.mp3` back to staging, POSTs `AudioTranscodeResult`.
+   decode-probes the result, uploads `playback.mp3` back to staging. Then, if the upload had cover
+   art, decodes it once and writes its WebP renditions straight into the media container. POSTs
+   `AudioTranscodeResult` carrying the duration *and* the rendition widths.
 3. **Web app** (`MediaProcessingCompletionService`) — copies staging → `musiccontainer{-env}/{guid}/`
-   (cross-account, see below), writes the `SongMetadata` row, generates the OG image and WebP
-   renditions, marks the job Completed, deletes staging.
+   (cross-account, see below), writes the `SongMetadata` row *including the rendition widths the
+   Function reported*, generates the OG image, marks the job Completed, deletes staging.
 
 `SongMetadata` is written **only on success**, which is why no catalogue, playlist or mobile-API
 query has to filter out half-built songs. In-flight state lives entirely in `SongUploadJob`.
@@ -47,6 +49,21 @@ messages, this app decodes, `AudioProbeResultHandler` interprets. An audit run c
   the queue retries on another instance. Blaming the upload here would quarantine good songs during
   an infrastructure blip.
 - Collapsing these two either condemns good files or retries corrupt ones until they poison.
+
+**The image path is deliberately NOT the same rule, and this asymmetry is load-bearing.** Cover-art
+rendition failures never fail the song and never throw: `CoverArtRenditionGenerator` returns an empty
+width set with a diagnostic code, and the song publishes with `Outcome = Playable`. There is no image
+equivalent of `Inconclusive → throw`.
+
+The reason is that the two failures cost different things. For audio, "the decoder could not run"
+means the song *cannot be published*, so retrying is the only way to save it. For images, "the
+encoder could not run" means the song publishes and serves its full-size master — a completely
+working song — and retrying the message would re-run a transcode that already succeeded, costing
+minutes to salvage a 40 KB thumbnail. Renditions are derived data that
+`ImageVariantBackfillService` can rebuild at any time; a song's audio is not.
+
+`ProcessAudioUploadImageFailureTests` pins this. If you are here because the two paths look
+inconsistent: they are, on purpose, and the test will tell you so.
 
 **Terminal callbacks throw on failure; progress callbacks never do.** `PostTranscodeResultAsync` and
 `PostProbeResultAsync` must throw on non-2xx so the queue retries — that is what stops a song being
@@ -66,6 +83,23 @@ Queue service at all — that is the only reason there are two. Queues and stagi
 account. Consequence: staging → media is a **cross-account copy needing a source SAS**, not a
 same-account server-side rename.
 
+**Staging is read/write. Media is read/write for derived artefacts only.** This app writes the WebP
+renditions of a song's cover art straight into the song's GUID folder, because it has the decoded
+bitmap in hand and shipping it back for the web app to re-download and re-decode would double the
+work. It writes **nothing else** — the playback MP3, the original audio, the cover-art master and the
+original cover art are all still copied in by `MediaProcessingCompletionService`, and this app still
+has no database access.
+
+So the rule is **"no primary blob, no row"** rather than "no write": nothing here may create,
+overwrite or delete a blob a `SongMetadata` row already points at. That is the real invariant the
+older "media is read-only" wording was standing in for. Two consequences worth knowing:
+
+- Renditions are written **before** the master is copied in and before the row exists. That is safe
+  because `MusicController`'s public whitelist resolves a rendition back to its master and then looks
+  that master up — with no row, the renditions are simply unreachable for the few seconds involved.
+- A permanently failed assembly therefore leaves up to four orphaned `.webp` files. Deliberately not
+  swept: the assembly `catch` leaves the job retryable and the redelivery rewrites them anyway.
+
 ## Traps specific to this project
 
 - **`WEBSITE_RUN_FROM_PACKAGE=1` mounts the package read-only.** Executing `ffmpeg.exe` from there is
@@ -84,8 +118,11 @@ same-account server-side rename.
   The upload cap is an admin setting (`AppSettingsService.GetMaxAudioUploadSizeMBAsync`, currently
   150 MB → ~170 MB peak). One file would have to approach ~400 MB to threaten the limit, and
   nothing enforces the relationship.
-- **`ffmpeg.exe` is ~95 MB of a ~112 MB deployment package.** Every deploy uploads ~40 MB compressed
-  and takes minutes. That is inherent to bundling the binary.
+- **`ffmpeg.exe` is ~95 MB of a ~144 MB deployment package**, and the three Windows SkiaSharp natives
+  are another ~32 MB. Every deploy takes minutes. That is inherent to bundling both binaries.
+  **`TrimUnusedSkiaSharpAssets` in the csproj is load-bearing** — without it the package is 412 MB,
+  because SkiaSharp ships a `.pdb` several times the size of each native plus a macOS `.dylib` this
+  app can never load. If the package size jumps, check that target first.
 - **Queue-trigger bindings resolve through the Functions *host*.** `%MediaProcessing:*QueueName%` and
   `Connection = "StagingStorageConnectionString"` are read before the worker's `IConfiguration`
   exists — which is why every setting lives in app settings / `local.settings.json` and there is no

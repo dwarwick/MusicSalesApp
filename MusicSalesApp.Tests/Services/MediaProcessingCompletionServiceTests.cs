@@ -28,7 +28,6 @@ public class MediaProcessingCompletionServiceTests
     private Mock<IBlobContainerFactory> _containers = null!;
     private Mock<ISongMetadataService> _metadata = null!;
     private Mock<IOpenGraphService> _openGraph = null!;
-    private Mock<IImageVariantCoordinator> _imageVariants = null!;
     private Mock<ISongUploadJobService> _jobService = null!;
     private RecordingProgressNotifier _progress = null!;
     private MediaProcessingCompletionService _service = null!;
@@ -43,7 +42,6 @@ public class MediaProcessingCompletionServiceTests
         _containers = new Mock<IBlobContainerFactory>();
         _metadata = new Mock<ISongMetadataService>();
         _openGraph = new Mock<IOpenGraphService>();
-        _imageVariants = new Mock<IImageVariantCoordinator>();
         _jobService = new Mock<ISongUploadJobService>();
         _progress = new RecordingProgressNotifier();
 
@@ -52,7 +50,6 @@ public class MediaProcessingCompletionServiceTests
             _containers.Object,
             _metadata.Object,
             _openGraph.Object,
-            _imageVariants.Object,
             _jobService.Object,
             _progress,
             Options.Create(new MediaProcessingOptions()),

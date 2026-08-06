@@ -33,13 +33,29 @@ public enum AudioProcessingStep
     /// <summary>The playback MP3 is being written back to the staging container.</summary>
     Uploading = 60,
 
+    /// <summary>
+    /// The Function is decoding the staged cover art and writing its WebP renditions straight into
+    /// the song's folder in the media container. Skipped entirely when the upload has no cover art.
+    ///
+    /// <para>
+    /// One step rather than four (download / decode / encode / upload) because every transition
+    /// persists a row update in <c>MediaProcessingController.Progress</c>, and the whole block is a
+    /// few seconds of work. The band carries per-rung progress instead.
+    /// </para>
+    /// </summary>
+    RenderingArtwork = 65,
+
     /// <summary>The API is copying the staged blobs into the song's GUID folder in the media container.</summary>
     Copying = 70,
 
     /// <summary>The API is writing the SongMetadata row.</summary>
     SavingMetadata = 80,
 
-    /// <summary>The API is generating the Open Graph sharing image and the WebP renditions.</summary>
+    /// <summary>
+    /// The API is generating the Open Graph sharing image. The WebP renditions are no longer built
+    /// here - the Function produces them at <see cref="RenderingArtwork"/>, from the bitmap it has
+    /// already decoded, rather than making the API re-download and re-decode the master.
+    /// </summary>
     GeneratingArtwork = 90,
 
     /// <summary>Terminal: the song is live.</summary>

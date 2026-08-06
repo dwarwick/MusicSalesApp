@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MusicSalesApp.Common\MusicSalesApp.Common.csproj" />
+    <!-- The rendition sizing and quality rules, shared with the web app so a cover art's ladder has
+         the same shape whether it was built here at upload or rebuilt there by an admin re-crop. -->
+    <ProjectReference Include="..\MusicSalesApp.Imaging\MusicSalesApp.Imaging.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -58,5 +61,22 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
   </ItemGroup>
+
+  <!--
+    The SkiaSharp package ships native binaries for every platform it supports, each with a debug
+    symbol file several times the size of the binary itself. Left alone they take this package from
+    ~112 MB to ~412 MB: 253 MB of .pdb plus a 15 MB macOS .dylib, none of which a Windows Consumption
+    Function can use. That is minutes added to every deploy for nothing.
+
+    win-arm64 is deliberately kept. Azure Functions has no ARM Windows SKU, but a developer on an ARM
+    Windows machine runs this locally, and 10 MB is not worth breaking that over.
+  -->
+  <Target Name="TrimUnusedSkiaSharpAssets" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish
+        Remove="@(ResolvedFileToPublish)"
+        Condition="'%(Filename)' == 'libSkiaSharp' And '%(Extension)' != '.dll'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

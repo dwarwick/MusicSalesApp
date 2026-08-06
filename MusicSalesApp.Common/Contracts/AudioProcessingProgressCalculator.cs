@@ -35,10 +35,21 @@ public static class AudioProcessingProgressCalculator
             [AudioProcessingStep.Analyzing] = (20d, 35d),
             [AudioProcessingStep.Transcoding] = (35d, 70d),
             [AudioProcessingStep.Verifying] = (70d, 75d),
-            [AudioProcessingStep.Uploading] = (75d, 85d),
-            [AudioProcessingStep.Copying] = (85d, 92d),
-            [AudioProcessingStep.SavingMetadata] = (92d, 95d),
-            [AudioProcessingStep.GeneratingArtwork] = (95d, 100d),
+            [AudioProcessingStep.Uploading] = (75d, 80d),
+
+            // The widest of the tail bands, because it is the most work in them: one download, one
+            // decode, then a resample, an encode and a cross-region PUT per rung. Its width is also
+            // load-bearing rather than cosmetic - ProgressReporter gates on whole percents, so a
+            // band narrower than one point per rung would swallow every per-rung update.
+            [AudioProcessingStep.RenderingArtwork] = (80d, 88d),
+
+            [AudioProcessingStep.Copying] = (88d, 93d),
+            [AudioProcessingStep.SavingMetadata] = (93d, 96d),
+
+            // Only the Open Graph share image now; the renditions moved to RenderingArtwork. Kept
+            // non-trivial anyway because it is the last band before Completed, and a bar that pauses
+            // at 96 reads better than one that pauses at 99.
+            [AudioProcessingStep.GeneratingArtwork] = (96d, 100d),
             [AudioProcessingStep.Completed] = (100d, 100d),
 
             // A failed song's bar stops where it was rather than snapping to 0 or 100, so the
