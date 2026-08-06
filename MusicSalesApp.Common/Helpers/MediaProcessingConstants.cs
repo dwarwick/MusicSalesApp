@@ -193,5 +193,24 @@ public static class MediaProcessingFailureCodes
     public const string ZeroDuration = "ZeroDuration";
     public const string DecoderUnavailable = "DecoderUnavailable";
     public const string DecoderTimeout = "DecoderTimeout";
+
+    /// <summary>
+    /// The reconciler swept a job that stopped reporting progress, or its enqueue never landed.
+    /// A guess, made from a timestamp - distinct from <see cref="PoisonedAfterRetries"/>, which is
+    /// Azure telling us for certain.
+    /// </summary>
     public const string Abandoned = "Abandoned";
+
+    /// <summary>
+    /// The queue message exhausted <c>maxDequeueCount</c> and landed in the poison queue, so no
+    /// further attempt will ever be made.
+    ///
+    /// <para>
+    /// Deliberately not folded into <see cref="Abandoned"/>. This one is authoritative and arrives
+    /// as an event; that one is inferred from a stale timestamp and can be wrong. Keeping them apart
+    /// is what makes it possible to tell, from a failed job alone, whether the pipeline really gave
+    /// up or the reconciler merely lost sight of it.
+    /// </para>
+    /// </summary>
+    public const string PoisonedAfterRetries = "PoisonedAfterRetries";
 }

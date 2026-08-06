@@ -18,18 +18,26 @@ public interface ISongUploadJobReconciler
 }
 
 /// <summary>
-/// The safety net under a pipeline that now spans two clouds.
+/// The last resort under a pipeline that spans two clouds - and only the last resort.
 ///
 /// <para>
-/// A queue message can exhaust its retries and land in the poison queue, or the Function instance
-/// holding it can die mid-transcode. Either way no callback ever arrives, and without this the
-/// creator would watch a progress bar that can never move and an audit run would sit Running
-/// forever - blocking every future run through the single-run lock.
+/// <b>A message that exhausts its retries is no longer this class's problem.</b> It lands in the
+/// poison queue, where <c>HandleTranscodePoisonFunction</c> reports it from the authoritative event,
+/// promptly and correctly. What is left here is the narrow set of cases where no such event will
+/// ever arrive: a queue purged by hand, an enqueue that reported success but lost its message, or a
+/// Function App stopped long enough that messages sit un-dequeued. Audit runs are swept the same way,
+/// so one does not sit Running forever and block every future run through the single-run lock.
 /// </para>
 ///
 /// <para>
-/// It keys off <see cref="SongUploadJob.StepUpdatedAt"/> rather than job age: a legitimately slow
-/// transcode keeps reporting steps, so it is not mistaken for a dead one.
+/// It keys off <see cref="SongUploadJob.StepUpdatedAt"/> rather than job age, so a legitimately slow
+/// transcode is not mistaken for a dead one. <b>That signal is weaker than it looks</b>, which is
+/// why this is a backstop with a two-hour timeout rather than the primary detector it used to be:
+/// liveness is refreshed only by the Function POSTing progress, and those posts swallow their own
+/// failures by design. A web app restarting mid-batch therefore looks exactly like a dead Function.
+/// When this ran at twenty minutes it would fail every song in flight during a deploy - telling
+/// creators their uploads had broken, and deleting the staging that the perfectly healthy Functions
+/// still working on them were about to need.
 /// </para>
 /// </summary>
 public sealed class SongUploadJobReconciler : ISongUploadJobReconciler

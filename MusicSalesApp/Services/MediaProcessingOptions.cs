@@ -53,10 +53,27 @@ public class MediaProcessingOptions
 
     /// <summary>
     /// How long a job may sit without its step advancing before the reconciler declares it dead.
-    /// Comfortably above the 10-minute Consumption execution ceiling so a slow-but-alive transcode
-    /// is never reaped mid-flight.
+    ///
+    /// <para>
+    /// <b>Generous on purpose, because the reconciler is no longer what reports failures.</b> The
+    /// poison-queue handler in the Function app does that, from the authoritative event, so this only
+    /// has to catch what will never poison at all: a queue purged by hand, an enqueue that reported
+    /// success but lost its message, or a Function App stopped long enough that messages sit
+    /// un-dequeued.
+    /// </para>
+    ///
+    /// <para>
+    /// It was 20 minutes when it was the <em>only</em> detector, justified as clearing the 10-minute
+    /// Consumption ceiling. That framing missed the real hazard: liveness here is refreshed only by
+    /// progress pings, which swallow their own failures, so a web app restarting mid-batch is
+    /// indistinguishable from a dead Function and every in-flight song got failed. This value must
+    /// therefore also stay clear of the worst case time to poison
+    /// (<c>maxDequeueCount</c> x <c>functionTimeout</c> = 3 x 10 min), or the reconciler can still
+    /// beat the handler to a verdict and reintroduce exactly that bug.
+    /// <c>PoisonHandlerBeatsTheReconcilerTests</c> pins the ordering.
+    /// </para>
     /// </summary>
-    public TimeSpan StalledJobTimeout { get; set; } = TimeSpan.FromMinutes(20);
+    public TimeSpan StalledJobTimeout { get; set; } = TimeSpan.FromHours(2);
 
     /// <summary>
     /// Lifetime of the read SAS minted over the staging container for a cross-account copy. Short,

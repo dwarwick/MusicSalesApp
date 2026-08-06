@@ -7,13 +7,14 @@ architecture, the invariants, and the traps.
 ## What this app is
 
 Every FFmpeg invocation in StreamTunes, plus the image work that used to run on the Blazor circuit.
-Three queue triggers, no HTTP triggers, no database access.
+Four queue triggers, no HTTP triggers, no database access.
 
 | Function | Queue | Does |
 |---|---|---|
 | `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration, plus the cover art's WebP renditions. Posts live progress. |
 | `ProbeAudio` | `audio-probe{-env}` | Decode an already-stored blob, produce nothing. For the media-integrity audit and nightly track-length repair. No progress — nobody is watching. |
 | `MatchCoverArt` | `cover-art-match{-env}` | Pair a batch of staged cover art with the audio dropped beside it, using vision OCR. Runs **before** any song exists. Posts live progress. |
+| `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Report an upload whose message exhausted `maxDequeueCount` as failed. See below — this is what lets the reconciler be a backstop. |
 
 It exists because the Blazor app runs on SmarterASP shared hosting where every FFmpeg pass blocked a
 request thread. A single WAV upload cost three passes before a byte reached Azure.
@@ -75,6 +76,22 @@ update must never re-run an entire transcode.
 **The Function reports facts; the web app judges.** A probe returns blob properties, detected
 container, duration, and the three-way verdict. Deciding Healthy / MetadataRepairable /
 ConfirmedUnplayable stays server-side so the audit's rules can change without redeploying this.
+
+**The poison queue is the authoritative failure signal, not a timestamp.** `HandleTranscodePoison`
+turns Azure's exhausted-retries event into a reported failure through the ordinary terminal callback,
+so `FailAsync` does the rest. This exists because the alternative was actively harmful:
+`SongUploadJobReconciler` infers death from a stale `StepUpdatedAt`, and that field is refreshed
+**only** by progress pings — which swallow their own failures by design, since a cosmetic ping must
+never fail a transcode. A web app restarting mid-batch is therefore indistinguishable from a dead
+Function, and at the old twenty-minute timeout it failed every song in flight during a deploy,
+deleting the staging that healthy Functions were still using.
+
+Consequence to preserve: **`StalledJobTimeout` (2 h, in the web app's `MediaProcessingOptions`) must
+stay well clear of the worst case time to poison** — `maxDequeueCount` x `functionTimeout`, i.e.
+3 x 10 min. If the reconciler can fire first, the whole arrangement collapses back into the bug.
+`PoisonHandlerBeatsTheReconcilerTests` pins it, because the relationship spans two files that never
+mention each other: a `TimeSpan` in the web app and two numbers in this app's `host.json`. Changing
+either of those numbers means rechecking that test.
 
 **Progress only moves forward.** `AudioProcessingStep` values are ordinals; a receiver discards
 anything at or below what it already recorded. `AudioProcessingProgressCalculator` in Common owns
