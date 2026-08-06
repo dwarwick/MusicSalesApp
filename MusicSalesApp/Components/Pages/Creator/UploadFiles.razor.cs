@@ -979,50 +979,78 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Processes upload items in chunks to avoid overwhelming the system.
-    /// Audio/cover art pairs are kept together within their chunks.
-    /// ChunkSize represents the maximum number of files (not pairs) to process concurrently.
+    /// Stages every upload to Azure, keeping at most <see cref="ChunkSize"/> <em>files</em> - not
+    /// pairs - in flight at once. A pair counts as two, so a song and its cover art are never split
+    /// across the boundary.
+    ///
+    /// <para>
+    /// A sliding window rather than fixed batches. This used to await <c>Task.WhenAll</c> over a
+    /// chunk before starting the next one, which made every chunk boundary a barrier: one slow song
+    /// held up the seven finished beside it, and the window sat mostly idle waiting for it. Here a
+    /// slot is reused the moment its upload finishes, so the concurrency limit is a real limit
+    /// rather than an average.
+    /// </para>
+    ///
+    /// <para>
+    /// The limit exists to bound concurrent network transfers, not CPU: staging is a streamed PUT
+    /// per file, and the decode/transcode/encode work that used to run here now runs in the Azure
+    /// Function.
+    /// </para>
     /// </summary>
     private async Task ProcessUploadsInChunksAsync(IEnumerable<PendingUpload> uploadItemsWithFiles)
     {
         var itemsList = uploadItemsWithFiles.ToList();
-        var currentIndex = 0;
-
-        while (currentIndex < itemsList.Count)
+        if (itemsList.Count == 0)
         {
-            // Build a chunk that respects the max file count
-            var chunk = new List<PendingUpload>();
-            var currentFileCount = 0;
+            return;
+        }
 
-            while (currentIndex < itemsList.Count && currentFileCount < ChunkSize)
+        // Counts files rather than items, so the window means the same thing it always did.
+        using var slots = new SemaphoreSlim(ChunkSize, ChunkSize);
+        var running = new List<Task>(itemsList.Count);
+
+        try
+        {
+            foreach (var pending in itemsList)
             {
-                var item = itemsList[currentIndex];
-                // Count files: 2 for pair (audio + cover art), 1 for audio only
-                var fileCount = item.CoverArtTempPath != null ? 2 : 1;
+                // An item wider than the whole window would wait forever for slots that can never
+                // all be free at once, so clamp it. Only reachable if ChunkSize is ever set below 2.
+                var cost = Math.Min(pending.CoverArtTempPath != null ? 2 : 1, ChunkSize);
 
-                // Check if adding this item would exceed the limit
-                // Always allow at least one item per chunk
-                if (currentFileCount + fileCount > ChunkSize && chunk.Count > 0)
+                // Acquired one at a time, which is safe only because this loop is the sole acquirer:
+                // nothing else can interleave and hold the slots this call is waiting for, and the
+                // uploads already running are guaranteed to release.
+                for (var i = 0; i < cost; i++)
                 {
-                    break;
+                    await slots.WaitAsync(_uploadCts.Token);
                 }
 
-                chunk.Add(item);
-                currentFileCount += fileCount;
-                currentIndex++;
+                running.Add(RunAsync(pending, cost));
             }
+        }
+        finally
+        {
+            // In a finally because cancellation aborts the loop above with uploads already in
+            // flight, and both cancellation paths - the navigate-away prompt and DisposeAsync -
+            // delete the staged temp files immediately afterwards. Returning before these settle
+            // would pull those files out from under a stream still reading them.
+            await Task.WhenAll(running);
+        }
 
-            // Start all uploads in this chunk concurrently
-            var chunkTasks = new List<Task>();
-            foreach (var pending in chunk)
+        async Task RunAsync(PendingUpload pending, int cost)
+        {
+            try
             {
-                chunkTasks.Add(pending.CoverArtTempPath != null
+                // Both of these already record their own failures against the row rather than
+                // throwing, so one bad song cannot tear down the rest of the batch.
+                await (pending.CoverArtTempPath != null
                     ? UploadFilePairAsync(pending)
                     : UploadAudioOnlyAsync(pending));
             }
-
-            // Wait for all uploads in this chunk to complete before starting the next chunk
-            await Task.WhenAll(chunkTasks);
+            finally
+            {
+                slots.Release(cost);
+            }
         }
     }
 
