@@ -1,47 +1,41 @@
 namespace MusicSalesApp.Services;
 
 /// <summary>
-/// Service for matching audio files with cover art image files using AI.
+/// Pairs audio files with the cover art uploaded beside them, by exact base-name comparison.
+///
+/// <para>
+/// <b>This is the fallback path.</b> The real matching — vision OCR to read the text off each cover,
+/// then one model call that pairs the whole batch — runs in the Azure Function, where the images are
+/// already staged and the calls do not occupy a Blazor circuit. This is what the upload page uses
+/// when that is unavailable: no queue configured, no answer inside the deadline, or an outright
+/// failure.
+/// </para>
+///
+/// <para>
+/// It stays here rather than moving with the rest because a fallback that lives in the thing it is a
+/// fallback for is no fallback at all. It is deterministic, free, and needs nothing configured.
+/// </para>
 /// </summary>
 public interface IFileMatchingService
 {
     /// <summary>
-    /// Uses AI to match audio files with their corresponding cover art image files
-    /// based on filename similarity, even when the names are not identical.
+    /// Pairs each audio file with an image whose normalized base name matches exactly, ignoring
+    /// extensions, case, underscore/hyphen spacing and a trailing <c>_mastered</c>.
     /// </summary>
-    /// <param name="audioFileNames">Original filenames of the audio files (e.g., "dark_night_mastered.mp3").</param>
-    /// <param name="imageFileNames">Original filenames of the image files (e.g., "DarkNight.jpg").</param>
+    /// <param name="audioFileNames">Original audio filenames, e.g. <c>dark_night_mastered.mp3</c>.</param>
+    /// <param name="imageFileNames">Original image filenames, e.g. <c>DarkNight.jpg</c>.</param>
     /// <returns>
-    /// A <see cref="FileMatchingResult"/> containing matched pairs (each with a normalized clean name)
-    /// and any image files that could not be matched to an audio file.
+    /// Every audio file, paired or not, plus the images that matched nothing. Audio files with no
+    /// match are included with a null <see cref="FilePair.ImageFileName"/> rather than dropped.
     /// </returns>
     Task<FileMatchingResult> MatchFilesAsync(
         IEnumerable<string> audioFileNames,
         IEnumerable<string> imageFileNames);
-
-    /// <summary>
-    /// Uses AI to match audio files with their corresponding cover art image files.
-    /// When image filenames look like GUIDs or other nonsense text (and the audio files do not),
-    /// the image bytes are used to extract text via vision OCR for better matching.
-    /// </summary>
-    /// <param name="audioFileNames">Original filenames of the audio files.</param>
-    /// <param name="imageFileNames">Original filenames of the image files.</param>
-    /// <param name="imageData">
-    /// Optional map of image filename → (raw bytes, MIME content type).
-    /// Provide this to enable vision-based OCR fallback for nonsense filenames.
-    /// </param>
-    /// <returns>
-    /// A <see cref="FileMatchingResult"/> containing matched pairs and unmatched image files.
-    /// </returns>
-    Task<FileMatchingResult> MatchFilesAsync(
-        IEnumerable<string> audioFileNames,
-        IEnumerable<string> imageFileNames,
-        IReadOnlyDictionary<string, (byte[] Data, string ContentType)> imageData);
 }
 
 
 /// <summary>
-/// Result of the AI file matching operation.
+/// Result of a file matching operation, from either the Function or the local fallback.
 /// </summary>
 public class FileMatchingResult
 {

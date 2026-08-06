@@ -42,6 +42,17 @@ public interface IMediaBlobStore
     /// <summary>Downloads a staged upload to a local path.</summary>
     Task DownloadStagedAsync(string blobPath, string destinationPath, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Reads a staged blob into memory, or null if it is missing.
+    ///
+    /// <para>
+    /// In memory rather than to disk because the only caller hands the bytes straight to an HTTP
+    /// request, and a temp file would exist only to be read back immediately. Bounded by the upload
+    /// page's own image size cap, and only a few are ever held at once.
+    /// </para>
+    /// </summary>
+    Task<byte[]> TryReadStagedAsync(string blobPath, CancellationToken cancellationToken = default);
+
     /// <summary>Uploads the produced playback MP3 back to staging.</summary>
     Task UploadStagedAsync(
         string blobPath,
@@ -110,6 +121,23 @@ public sealed class MediaBlobStore : IMediaBlobStore
         CancellationToken cancellationToken = default)
     {
         await _staging.Value.GetBlobClient(blobPath).DownloadToAsync(destinationPath, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<byte[]> TryReadStagedAsync(
+        string blobPath,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var buffer = new MemoryStream();
+            await _staging.Value.GetBlobClient(blobPath).DownloadToAsync(buffer, cancellationToken);
+            return buffer.ToArray();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
     }
 
     /// <inheritdoc />

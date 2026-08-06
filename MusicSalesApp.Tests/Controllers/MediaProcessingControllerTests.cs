@@ -26,6 +26,7 @@ public class MediaProcessingControllerTests
     private DbContextOptions<AppDbContext> _options = null!;
     private TestFactory _factory = null!;
     private RecordingProgressNotifier _progress = null!;
+    private RecordingMatchNotifier _matchNotifier = null!;
     private MediaProcessingController _controller = null!;
 
     [SetUp]
@@ -36,13 +37,102 @@ public class MediaProcessingControllerTests
             .Options;
         _factory = new TestFactory(_options);
         _progress = new RecordingProgressNotifier();
+        _matchNotifier = new RecordingMatchNotifier();
 
         _controller = new MediaProcessingController(
             Mock.Of<IMediaProcessingCompletionService>(),
             Mock.Of<IAudioProbeResultHandler>(),
             _progress,
+            _matchNotifier,
             _factory,
             Mock.Of<ILogger<MediaProcessingController>>());
+    }
+
+    [Test]
+    public async Task MatchComplete_BroadcastsThePairing()
+    {
+        var batchId = Guid.NewGuid();
+
+        var response = await _controller.MatchComplete(
+            new CoverArtMatchResult { BatchId = batchId, CreatorId = 7 },
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response, Is.InstanceOf<OkResult>());
+            Assert.That(_matchNotifier.Results, Has.Count.EqualTo(1));
+            Assert.That(_matchNotifier.Results[0].BatchId, Is.EqualTo(batchId));
+        });
+    }
+
+    [Test]
+    public async Task MatchComplete_WithoutABatchId_IsRejected()
+    {
+        var response = await _controller.MatchComplete(
+            new CoverArtMatchResult { CreatorId = 7 }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response, Is.InstanceOf<BadRequestObjectResult>());
+            Assert.That(_matchNotifier.Results, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task MatchProgress_IsRelayedWithoutTouchingTheDatabase()
+    {
+        // A match batch has no row at all - there is nothing to persist, nothing to compare a step
+        // against, and nothing a bad value could corrupt.
+        var response = await _controller.MatchProgress(
+            new CoverArtMatchProgress
+            {
+                BatchId = Guid.NewGuid(),
+                CreatorId = 7,
+                Step = CoverArtMatchStep.ReadingText,
+                ImagesProcessed = 2,
+                ImagesTotal = 5
+            },
+            CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response, Is.InstanceOf<OkResult>());
+            Assert.That(_matchNotifier.Progress, Has.Count.EqualTo(1));
+            Assert.That(_matchNotifier.Progress[0].ImagesProcessed, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task MatchProgress_WithoutABatchId_IsAcceptedAndDropped()
+    {
+        // Never a non-2xx for a cosmetic update: it would make the Function retry the whole message.
+        var response = await _controller.MatchProgress(
+            new CoverArtMatchProgress { CreatorId = 7 }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response, Is.InstanceOf<OkResult>());
+            Assert.That(_matchNotifier.Progress, Is.Empty);
+        });
+    }
+
+    /// <summary>Captures what would have gone out over SignalR.</summary>
+    private sealed class RecordingMatchNotifier : ICoverArtMatchNotifier
+    {
+        public List<CoverArtMatchResult> Results { get; } = [];
+        public List<CoverArtMatchProgress> Progress { get; } = [];
+
+        public Task NotifyProgressAsync(CoverArtMatchProgress progress, CancellationToken cancellationToken = default)
+        {
+            Progress.Add(progress);
+            return Task.CompletedTask;
+        }
+
+        public Task NotifyResultAsync(CoverArtMatchResult result, CancellationToken cancellationToken = default)
+        {
+            Results.Add(result);
+            return Task.CompletedTask;
+        }
     }
 
     [Test]

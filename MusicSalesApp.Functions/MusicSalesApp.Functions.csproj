@@ -7,6 +7,10 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Suppress OPENAI001: the OpenAI Responses API used for vision OCR is marked experimental but
+         is stable enough for production. Matches the same suppression on MusicSalesApp.csproj, which
+         still owns the fallback path. -->
+    <NoWarn>OPENAI001</NoWarn>
     <RootNamespace>MusicSalesApp.Functions</RootNamespace>
     <!-- Windows Consumption. The Linux Consumption plan does not support .NET 10 at all, and no
          premium/blob-only storage account offers the Queue service these triggers need. -->
@@ -42,6 +46,9 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
     <PackageReference Include="FFMpegCore" Version="5.4.0" />
+    <!-- Vision OCR and the cover-art pairing call. Same version as the web app, which keeps the
+         fallback path, so the two cannot drift on SDK behaviour. -->
+    <PackageReference Include="OpenAI" Version="2.12.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -327,7 +327,7 @@ elseif ($appAlreadyExisted) {
 # watch until the web app happens to enqueue something. Creating them here makes the provisioned
 # state self-evident and independent of deploy order. Both calls are idempotent.
 # ---------------------------------------------------------------------------
-foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"])) {
+foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"], $values["MediaProcessing:MatchQueueName"])) {
     if ($PSCmdlet.ShouldProcess("$stagingAccountName/$queueName", "Create queue")) {
         Invoke-Az @(
             "storage", "queue", "create",

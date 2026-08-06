@@ -14,11 +14,29 @@ public interface IMediaProcessingQueueClient
     /// <summary>True when a queue connection is configured. False disables the whole pipeline.</summary>
     bool IsConfigured { get; }
 
+    /// <summary>
+    /// True when the cover-art matching queue is available. Separate from <see cref="IsConfigured"/>
+    /// because matching is an enhancement the upload page degrades gracefully without — an
+    /// environment missing only this must still publish songs.
+    /// </summary>
+    bool IsCoverArtMatchConfigured { get; }
+
     /// <summary>Asks the Function to transcode one staged upload.</summary>
     Task EnqueueTranscodeAsync(AudioTranscodeRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>Asks the Function to decode-probe already-stored playback blobs.</summary>
     Task EnqueueProbesAsync(IEnumerable<AudioProbeRequest> requests, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks the Function to pair a batch of staged cover art with the audio uploaded beside it.
+    ///
+    /// <para>
+    /// Unlike the two above this happens before any song exists, and the creator's page is waiting
+    /// on the answer with a deadline. A failure here is not fatal — the caller matches on filenames
+    /// itself and the upload proceeds.
+    /// </para>
+    /// </summary>
+    Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -35,6 +53,7 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
 
     private readonly QueueClient? _transcodeQueue;
     private readonly QueueClient? _probeQueue;
+    private readonly QueueClient? _matchQueue;
     private readonly ILogger<MediaProcessingQueueClient> _logger;
 
     public MediaProcessingQueueClient(
@@ -56,10 +75,18 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
         var queueOptions = new QueueClientOptions { MessageEncoding = MessageEncoding };
         _transcodeQueue = new QueueClient(opts.StorageConnectionString, opts.TranscodeQueueName, queueOptions);
         _probeQueue = new QueueClient(opts.StorageConnectionString, opts.ProbeQueueName, queueOptions);
+        _matchQueue = new QueueClient(opts.StorageConnectionString, opts.MatchQueueName, queueOptions);
     }
 
     /// <inheritdoc />
     public bool IsConfigured => _transcodeQueue is not null && _probeQueue is not null;
+
+    /// <summary>
+    /// Separate from <see cref="IsConfigured"/> on purpose. Cover-art matching is an enhancement the
+    /// upload page degrades gracefully without, so an environment missing only this must not report
+    /// the whole pipeline as unconfigured and stop songs being published.
+    /// </summary>
+    public bool IsCoverArtMatchConfigured => _matchQueue is not null;
 
     /// <inheritdoc />
     public async Task EnqueueTranscodeAsync(
@@ -119,5 +146,30 @@ public sealed class MediaProcessingQueueClient : IMediaProcessingQueueClient
         }
 
         _logger.LogInformation("Enqueued {Count} audio probe(s)", materialized.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task EnqueueCoverArtMatchAsync(
+        CoverArtMatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_matchQueue is null)
+        {
+            throw new InvalidOperationException(
+                "Cover-art matching is not configured; AzureLowSpeed:StorageAccountConnectionString is missing.");
+        }
+
+        await _matchQueue.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        await _matchQueue.SendMessageAsync(
+            JsonSerializer.Serialize(request, SerializerOptions),
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Enqueued cover-art matching for batch {BatchId}: {AudioCount} audio file(s), {ImageCount} image(s)",
+            request.BatchId,
+            request.AudioFileNames?.Count ?? 0,
+            request.Images?.Count ?? 0);
     }
 }

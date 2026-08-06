@@ -223,6 +223,12 @@ public class ProcessAudioUploadImageFailureTests
         public Task PostProbeResultAsync(AudioProbeResult result, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public Task PostMatchResultAsync(CoverArtMatchResult result, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task PostMatchProgressAsync(CoverArtMatchProgress progress, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task PostProgressAsync(AudioProcessingProgress progress, CancellationToken cancellationToken = default)
         {
             lock (Progress) Progress.Add(progress);

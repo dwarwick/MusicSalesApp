@@ -22,6 +22,9 @@
 
     "MediaProcessing:TranscodeQueueName": "audio-transcode-local",
     "MediaProcessing:ProbeQueueName": "audio-probe-local",
+
+    "//MediaProcessing:MatchQueueName": "Cover-art pairing queue. Referenced as %...% in the trigger, so the HOST resolves it - if it is missing the trigger cannot bind and the WHOLE Function App fails to start, not just this function.",
+    "MediaProcessing:MatchQueueName": "cover-art-match-local",
     "MediaProcessing:StagingContainerName": "musicuploads-local",
     "MediaProcessing:MediaContainerName": "musiccontainer-local",
 
@@ -29,6 +32,9 @@
     "CallbackBaseUrl": "https://localhost:7217",
 
     "//MediaProcessingApiKey": "Must equal the top-level MediaProcessingApiKey in the web app's appsettings for the same environment.",
-    "MediaProcessingApiKey": ""
+    "MediaProcessingApiKey": "",
+
+    "//OpenAI:ApiKey": "OPTIONAL, unlike everything above. Powers the vision OCR and pairing call behind cover-art matching. Leave blank or at the placeholder and the Function pairs on filenames alone - a worse answer, not a broken one, and uploads still work.",
+    "OpenAI:ApiKey": "__REPLACE_WITH_OPENAI_API_KEY__"
   }
 }

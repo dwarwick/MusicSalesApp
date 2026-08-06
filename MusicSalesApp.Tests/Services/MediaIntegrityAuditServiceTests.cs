@@ -663,6 +663,7 @@ public class MediaIntegrityAuditServiceTests
         public List<AudioTranscodeRequest> Transcodes { get; } = [];
 
         public bool IsConfigured { get; set; } = true;
+        public bool IsCoverArtMatchConfigured => true;
 
         /// <summary>Makes the next probe enqueue throw, as a storage outage would.</summary>
         public bool FailNextProbeEnqueue { get; set; }
@@ -672,6 +673,9 @@ public class MediaIntegrityAuditServiceTests
             Transcodes.Add(request);
             return Task.CompletedTask;
         }
+
+        public Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task EnqueueProbesAsync(IEnumerable<AudioProbeRequest> requests, CancellationToken cancellationToken = default)
         {

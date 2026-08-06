@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Routing;
@@ -101,10 +101,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private bool _batchNotificationSent;
 
+    // Cover-art matching runs in the Azure Function and answers over SignalR, so the batch has to be
+    // findable when the reply lands on a different request entirely - same reason as _jobRows above.
+    // No database row backs any of this: a match batch exists only while this page is waiting, its
+    // staged images are swept by the container's lifecycle rule, and a lost reply costs a worse
+    // pairing rather than a lost song.
+    private readonly Dictionary<Guid, TaskCompletionSource<CoverArtMatchResult>> _matchWaiters = new();
+    private readonly object _matchWaitersLock = new();
+
     // Configuration for chunked uploads
     private const int MaxFilesAllowed = 50;
     private const int ChunkSize = 8;
-    private const int ImageOcrChunkSize = 4; // Max images buffered at once during the OCR matching phase
     private const string UploadFailedUserMessage = "There was an issue uploading your files. It is being investigated. Please try again later.";
     private static readonly TimeSpan InitialUploadProgressUpdateInterval = TimeSpan.FromSeconds(1);
 
@@ -216,6 +223,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             await LoadMaxAudioFileSizeAsync();
 
             UploadProgressHubClient.OnProgress += ApplyProgressAsync;
+            UploadProgressHubClient.OnMatchProgress += ApplyMatchProgressAsync;
+            UploadProgressHubClient.OnMatchResult += ApplyMatchResultAsync;
             await UploadProgressHubClient.StartAsync();
 
             // Songs queued on a previous visit are still being processed, so rebuild their rows
@@ -529,14 +538,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         }
 
+        // Receiving is only the first slice of this phase now: the images still have to be staged
+        // and paired before any song exists. Reporting 100 here was the old lie - the bar sat full
+        // with a static message for the whole of a matching run nobody could see.
         _initialUploadStatusMessage = "Files received. Matching cover art...";
-        _initialUploadBatchProgress = 100;
+        _initialUploadBatchProgress =
+            (int)CoverArtMatchProgressCalculator.ToOverallPercent(CoverArtMatchStep.Staging);
         await InvokeAsync(StateHasChanged);
 
-        // Process all image files in chunks of ImageOcrChunkSize (4).
-        // Each chunk: filename-only match first (no bytes), then OCR for any still-unmatched
-        // images in that chunk. At most ImageOcrChunkSize image bytes are in memory at once.
-        var matchingResult = await PerformChunkedMatchingAsync(
+        var matchingResult = await MatchCoverArtAsync(
             audioFilesByName.Keys.ToList(),
             coverArtFilesByName.Keys.ToList(),
             coverArtTempPaths);
@@ -1488,140 +1498,254 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Processes ALL image files in chunks of <see cref="ImageOcrChunkSize"/> (4).
-    /// For each chunk: (a) filename-only matching — no bytes read; then (b) for images still
-    /// unmatched in that chunk, read their bytes from temp files and attempt OCR matching.
-    /// At most <see cref="ImageOcrChunkSize"/> image byte arrays are in memory at any one time.
-    /// Bytes for unmatched images in each chunk become GC-eligible immediately after the chunk.
+    /// Stages the dropped cover art and asks the Azure Function to pair it with the audio.
+    ///
+    /// <para>
+    /// This used to run here, on the circuit: a vision call per image, serially, holding up to four
+    /// image byte arrays in memory on a shared-hosting web server, behind a static message with no
+    /// progress and no deadline. Chunking it in fours also capped how well it could match, because
+    /// the pairing call only ever saw four images at a time while its own one-image-per-song rules
+    /// only make sense across the whole batch.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Never throws, and never hangs.</b> A missing queue, a failed staging upload, an expired
+    /// deadline or a dead Function all end the same way — matching on filenames here — which is what
+    /// this page did before any of it existed. The batch always proceeds.
+    /// </para>
     /// </summary>
-    private async Task<FileMatchingResult> PerformChunkedMatchingAsync(
-            List<string> audioFileNames,
-            List<string> allImageFileNames,
-            Dictionary<string, string> coverArtTempPaths)
+    private async Task<FileMatchingResult> MatchCoverArtAsync(
+        List<string> audioFileNames,
+        List<string> imageFileNames,
+        Dictionary<string, string> coverArtTempPaths)
     {
-        var allPairs = new List<FilePair>();
-        var unmatchedImages = new List<string>();
-        var remainingAudioNames = audioFileNames.ToList();
-
-        for (int i = 0; i < allImageFileNames.Count; i += ImageOcrChunkSize)
+        // Nothing to pair, or nowhere to pair it. Both take the local path immediately rather than
+        // paying a round trip to learn the same answer.
+        if (imageFileNames.Count == 0
+            || audioFileNames.Count == 0
+            || _currentCreatorId is not { } creatorId
+            || !CoverArtMatchService.IsAvailable)
         {
-            if (!remainingAudioNames.Any())
-            {
-                // All audio already matched — remaining images are unmatched
-                unmatchedImages.AddRange(allImageFileNames.Skip(i));
-                break;
-            }
-
-            var imageChunk = allImageFileNames.Skip(i).Take(ImageOcrChunkSize).ToList();
-
-            // Step A: filename-only match for this chunk (no bytes read)
-            FileMatchingResult chunkResult;
-            try
-            {
-                chunkResult = await FileMatchingService.MatchFilesAsync(remainingAudioNames, imageChunk);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "UploadFiles: Filename matching failed for image chunk {ChunkIndex}.", i / ImageOcrChunkSize);
-                chunkResult = new FileMatchingResult
-                {
-                    Pairs = remainingAudioNames.Select(a => new FilePair
-                    {
-                        AudioFileName = a,
-                        ImageFileName = null,
-                        NormalizedName = MusicUploadService.GetNormalizedBaseName(a)
-                    }).ToList(),
-                    UnmatchedImageFiles = imageChunk
-                };
-            }
-
-            // Collect filename-matched pairs; remove matched audio from the remaining pool
-            foreach (var pair in chunkResult.Pairs.Where(p => p.ImageFileName != null))
-            {
-                allPairs.Add(pair);
-                remainingAudioNames.Remove(pair.AudioFileName);
-            }
-
-            // Step B: OCR for images still unmatched in this chunk (up to ImageOcrChunkSize bytes at once)
-            var stillUnmatched = chunkResult.UnmatchedImageFiles.ToList();
-            if (stillUnmatched.Any() && remainingAudioNames.Any())
-            {
-                var chunkTempPaths = stillUnmatched
-                    .Where(coverArtTempPaths.ContainsKey)
-                    .ToDictionary(f => f, f => coverArtTempPaths[f]);
-
-                if (chunkTempPaths.Any())
-                {
-                    var chunkData = await BufferCoverArtChunkAsync(chunkTempPaths);
-                    try
-                    {
-                        var ocrResult = await FileMatchingService.MatchFilesAsync(
-                            remainingAudioNames, stillUnmatched, chunkData);
-
-                        foreach (var pair in ocrResult.Pairs.Where(p => p.ImageFileName != null))
-                        {
-                            allPairs.Add(pair);
-                            remainingAudioNames.Remove(pair.AudioFileName);
-                        }
-                        unmatchedImages.AddRange(ocrResult.UnmatchedImageFiles);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning(ex, "UploadFiles: OCR matching failed for image chunk {ChunkIndex}; images will remain unmatched.", i / ImageOcrChunkSize);
-                        unmatchedImages.AddRange(stillUnmatched);
-                    }
-                    // Bytes for images in chunkData go out of scope → GC-eligible
-                }
-            }
-            else
-            {
-                unmatchedImages.AddRange(stillUnmatched);
-            }
+            return await FileMatchingService.MatchFilesAsync(audioFileNames, imageFileNames);
         }
 
-        // Audio files with no image match → audio-only pairs
-        foreach (var audio in remainingAudioNames)
+        var batchId = Guid.NewGuid();
+        var waiter = new TaskCompletionSource<CoverArtMatchResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        lock (_matchWaitersLock)
         {
-            allPairs.Add(new FilePair
-            {
-                AudioFileName = audio,
-                ImageFileName = null,
-                NormalizedName = MusicUploadService.GetNormalizedBaseName(audio)
-            });
+            _matchWaiters[batchId] = waiter;
         }
 
-        return new FileMatchingResult { Pairs = allPairs, UnmatchedImageFiles = unmatchedImages };
+        try
+        {
+            var candidates = imageFileNames
+                .Where(coverArtTempPaths.ContainsKey)
+                .Select(name => new CoverArtMatchCandidateSource(name, coverArtTempPaths[name]))
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                return await FileMatchingService.MatchFilesAsync(audioFileNames, imageFileNames);
+            }
+
+            await CoverArtMatchService.StageAndEnqueueAsync(
+                batchId,
+                creatorId,
+                audioFileNames,
+                candidates,
+                BuildMatchStagingProgress(),
+                _uploadCts.Token);
+
+            _initialUploadStatusMessage = "Matching cover art...";
+            _initialUploadBatchProgress = (int)CoverArtMatchProgressCalculator.ToMatchingPercent(
+                CoverArtMatchProgressCalculator.ToOverallPercent(CoverArtMatchStep.Queued));
+            await InvokeAsync(StateHasChanged);
+
+            var result = await AwaitMatchResultAsync(waiter.Task);
+
+            // Fire and forget: the pairing is already in hand, and the lifecycle rule on the staging
+            // container is the real backstop. Blocking the creator on a cleanup delete would be
+            // paying latency for something that cannot fail visibly.
+            _ = CoverArtMatchService.DeleteBatchAsync(batchId, CancellationToken.None);
+
+            if (result is null)
+            {
+                Logger.LogWarning(
+                    "UploadFiles: no cover-art pairing arrived for batch {BatchId} within {Timeout}; "
+                    + "matching on filenames instead.",
+                    batchId,
+                    MediaProcessingTimeouts.CoverArtMatch);
+                return await FileMatchingService.MatchFilesAsync(audioFileNames, imageFileNames);
+            }
+
+            if (result.UsedFallback)
+            {
+                Logger.LogInformation(
+                    "UploadFiles: batch {BatchId} was paired on filenames alone. {Diagnostic}",
+                    batchId,
+                    result.Diagnostic);
+            }
+
+            return ToFileMatchingResult(result, audioFileNames, imageFileNames);
+        }
+        catch (Exception ex)
+        {
+            // Includes cancellation of the staging upload. Falling back is right even then: the
+            // batch may still be uploaded, and this only decides which image goes with which song.
+            Logger.LogWarning(
+                ex, "UploadFiles: cover-art matching failed for batch {BatchId}; matching on filenames.", batchId);
+            _ = CoverArtMatchService.DeleteBatchAsync(batchId, CancellationToken.None);
+            return await FileMatchingService.MatchFilesAsync(audioFileNames, imageFileNames);
+        }
+        finally
+        {
+            lock (_matchWaitersLock)
+            {
+                _matchWaiters.Remove(batchId);
+            }
+        }
     }
 
     /// <summary>
-    /// Reads a subset of cover art temp files into memory for OCR matching.
-    /// Called once per OCR chunk — only <see cref="ImageOcrChunkSize"/> images at a time.
+    /// Waits for the pairing, or gives up. Returns null on a deadline the caller turns into a local
+    /// match — an expiry is a slower answer, never a failed upload.
     /// </summary>
-    private async Task<Dictionary<string, (byte[] Data, string ContentType)>> BufferCoverArtChunkAsync(
-        Dictionary<string, string> coverArtTempPaths)
+    private static async Task<CoverArtMatchResult> AwaitMatchResultAsync(Task<CoverArtMatchResult> waiter)
     {
-        var result = new Dictionary<string, (byte[] Data, string ContentType)>(StringComparer.OrdinalIgnoreCase);
+        var completed = await Task.WhenAny(
+            waiter,
+            Task.Delay(MediaProcessingTimeouts.CoverArtMatch));
 
-        foreach (var kvp in coverArtTempPaths)
+        return completed == waiter ? await waiter : null;
+    }
+
+    /// <summary>
+    /// Maps the Function's index-based pairing onto the filename-based shape the rest of this page
+    /// already works in.
+    ///
+    /// <para>
+    /// Indices are bounds-checked and claimed one-to-one on the way through. The Function does this
+    /// too, but the values crossed a process boundary to get here and this page feeds them straight
+    /// into which file gets uploaded as which song's art.
+    /// </para>
+    /// </summary>
+    private static FileMatchingResult ToFileMatchingResult(
+        CoverArtMatchResult result,
+        List<string> audioFileNames,
+        List<string> imageFileNames)
+    {
+        var mapped = new FileMatchingResult();
+        var claimedAudio = new HashSet<int>();
+        var claimedImages = new HashSet<int>();
+
+        foreach (var pair in result.Pairs ?? [])
         {
-            try
+            if (pair.AudioIndex < 0 || pair.AudioIndex >= audioFileNames.Count)
+                continue;
+            if (!claimedAudio.Add(pair.AudioIndex))
+                continue;
+
+            string imageFileName = null;
+            if (pair.ImageIndex is { } imageIndex
+                && imageIndex >= 0
+                && imageIndex < imageFileNames.Count
+                && claimedImages.Add(imageIndex))
             {
-                var bytes = await File.ReadAllBytesAsync(kvp.Value, _uploadCts.Token);
-                var extension = Path.GetExtension(kvp.Key).ToLowerInvariant();
-                var contentType = extension switch
-                {
-                    ".png" => "image/png",
-                    _ => "image/jpeg"
-                };
-                result[kvp.Key] = (bytes, contentType);
+                imageFileName = imageFileNames[imageIndex];
             }
-            catch (Exception ex)
+
+            mapped.Pairs.Add(new FilePair
             {
-                Logger.LogWarning(ex, "UploadFiles: Failed to read temp file for image '{FileName}' for OCR; it will be unmatched.", kvp.Key);
+                AudioFileName = audioFileNames[pair.AudioIndex],
+                ImageFileName = imageFileName,
+                NormalizedName = string.IsNullOrWhiteSpace(pair.NormalizedName)
+                    ? FileNameMatching.ToNormalizedName(audioFileNames[pair.AudioIndex])
+                    : pair.NormalizedName
+            });
+        }
+
+        // Any audio file the pairing left out still needs a row, or the creator would silently lose
+        // a song they selected.
+        for (var i = 0; i < audioFileNames.Count; i++)
+        {
+            if (claimedAudio.Contains(i))
+                continue;
+
+            mapped.Pairs.Add(new FilePair
+            {
+                AudioFileName = audioFileNames[i],
+                ImageFileName = null,
+                NormalizedName = FileNameMatching.ToNormalizedName(audioFileNames[i])
+            });
+        }
+
+        for (var i = 0; i < imageFileNames.Count; i++)
+        {
+            if (!claimedImages.Contains(i))
+                mapped.UnmatchedImageFiles.Add(imageFileNames[i]);
+        }
+
+        return mapped;
+    }
+
+    /// <summary>Feeds the image-staging upload into the receiving phase's middle band.</summary>
+    private IProgress<double> BuildMatchStagingProgress()
+        => new Progress<double>(percent =>
+        {
+            _initialUploadStatusMessage = "Preparing cover art...";
+            _initialUploadBatchProgress = (int)CoverArtMatchProgressCalculator.ToStagingImagesPercent(percent);
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+    /// <summary>
+    /// Renders live matching progress. Arrives over the same hub and creator group as song progress.
+    /// </summary>
+    private async Task ApplyMatchProgressAsync(CoverArtMatchProgress progress)
+    {
+        lock (_matchWaitersLock)
+        {
+            // Not ours - another tab of the same creator's account is matching its own batch.
+            if (!_matchWaiters.ContainsKey(progress.BatchId))
+                return;
+        }
+
+        _initialUploadStatusMessage = progress.Step switch
+        {
+            CoverArtMatchStep.ReadingText when progress.ImagesTotal > 0
+                => $"Matching cover art — read {progress.ImagesProcessed} of {progress.ImagesTotal} images",
+            CoverArtMatchStep.Pairing => "Matching cover art to your songs...",
+            _ => "Matching cover art..."
+        };
+
+        _initialUploadBatchProgress =
+            (int)CoverArtMatchProgressCalculator.ToMatchingPercent(progress.OverallPercent);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Releases the batch waiting on this pairing.
+    ///
+    /// <para>
+    /// <c>TrySetResult</c> rather than <c>SetResult</c>: the match callback throws on a non-2xx so
+    /// its queue redelivers, and with no database row behind a batch there is no free idempotency,
+    /// so a redelivery really can broadcast the same pairing twice. The second one must be a no-op
+    /// rather than an <see cref="InvalidOperationException"/> on the circuit.
+    /// </para>
+    /// </summary>
+    private Task ApplyMatchResultAsync(CoverArtMatchResult result)
+    {
+        lock (_matchWaitersLock)
+        {
+            if (_matchWaiters.TryGetValue(result.BatchId, out var waiter))
+            {
+                waiter.TrySetResult(result);
             }
         }
 
-        return result;
+        return Task.CompletedTask;
     }
 
     protected void ClearValidationError()
@@ -1761,6 +1885,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         _disposed = true;
 
         UploadProgressHubClient.OnProgress -= ApplyProgressAsync;
+        UploadProgressHubClient.OnMatchProgress -= ApplyMatchProgressAsync;
+        UploadProgressHubClient.OnMatchResult -= ApplyMatchResultAsync;
+
+        // A batch mid-match dies with the circuit, so release anything still awaiting a pairing
+        // rather than leaving the task to sit until its deadline against a page that is gone.
+        lock (_matchWaitersLock)
+        {
+            foreach (var waiter in _matchWaiters.Values)
+            {
+                waiter.TrySetCanceled();
+            }
+
+            _matchWaiters.Clear();
+        }
 
         // Exchanged rather than read-then-null: the poller nulls this field itself when it finishes,
         // so whichever of the two gets here first owns the disposal and the other sees null.

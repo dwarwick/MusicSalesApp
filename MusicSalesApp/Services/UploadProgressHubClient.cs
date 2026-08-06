@@ -18,6 +18,15 @@ public interface IUploadProgressHubClient : IAsyncDisposable
     /// <summary>Fired for each update. The payload's JobId identifies which song it belongs to.</summary>
     event Func<AudioProcessingProgress, Task>? OnProgress;
 
+    /// <summary>
+    /// Fired while a batch of dropped cover art is being read and paired, before any song job
+    /// exists. Shares this connection and this creator's group rather than a second hub.
+    /// </summary>
+    event Func<CoverArtMatchProgress, Task>? OnMatchProgress;
+
+    /// <summary>Fired once a cover-art batch has been paired. Identified by BatchId.</summary>
+    event Func<CoverArtMatchResult, Task>? OnMatchResult;
+
     /// <summary>Connects and joins this creator's group. Safe to call more than once.</summary>
     Task StartAsync();
 
@@ -33,6 +42,8 @@ public class UploadProgressHubClient : IUploadProgressHubClient
     private bool _isStarted;
 
     public event Func<AudioProcessingProgress, Task>? OnProgress;
+    public event Func<CoverArtMatchProgress, Task>? OnMatchProgress;
+    public event Func<CoverArtMatchResult, Task>? OnMatchResult;
 
     public bool IsConnected => _hubConnection.State == HubConnectionState.Connected;
 
@@ -70,6 +81,28 @@ public class UploadProgressHubClient : IUploadProgressHubClient
                 if (handler is not null)
                 {
                     await handler(progress);
+                }
+            });
+
+        _hubConnection.On<CoverArtMatchProgress>(
+            SignalRMethodNames.ReceiveCoverArtMatchProgress,
+            async progress =>
+            {
+                var handler = OnMatchProgress;
+                if (handler is not null)
+                {
+                    await handler(progress);
+                }
+            });
+
+        _hubConnection.On<CoverArtMatchResult>(
+            SignalRMethodNames.ReceiveCoverArtMatchResult,
+            async result =>
+            {
+                var handler = OnMatchResult;
+                if (handler is not null)
+                {
+                    await handler(result);
                 }
             });
 

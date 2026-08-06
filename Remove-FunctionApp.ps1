@@ -187,7 +187,7 @@ foreach ($container in @("azure-webjobs-hosts", "azure-webjobs-secrets")) {
 }
 
 if ($IncludeQueuesAndStaging) {
-    foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"])) {
+    foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"], $values["MediaProcessing:MatchQueueName"])) {
         foreach ($name in @($queueName, "$queueName-poison")) {
             if ($PSCmdlet.ShouldProcess("$stagingAccountName/$name", "Delete queue")) {
                 Write-Host "Deleting queue '$name'..."

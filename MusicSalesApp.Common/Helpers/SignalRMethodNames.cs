@@ -42,6 +42,18 @@ public static class SignalRMethodNames
     /// Payload: AudioProcessingProgress.
     /// </summary>
     public const string ReceiveUploadProgress = "ReceiveUploadProgress";
+
+    /// <summary>
+    /// Sent to one creator's group while their dropped cover art is being read and paired, before
+    /// any song job exists. Payload: CoverArtMatchProgress.
+    /// </summary>
+    public const string ReceiveCoverArtMatchProgress = "ReceiveCoverArtMatchProgress";
+
+    /// <summary>
+    /// Sent to one creator's group once a cover-art batch has been paired. Payload:
+    /// CoverArtMatchResult. This is what releases the upload page's waiting task.
+    /// </summary>
+    public const string ReceiveCoverArtMatchResult = "ReceiveCoverArtMatchResult";
 }
 
 /// <summary>

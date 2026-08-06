@@ -54,6 +54,9 @@ public sealed class FakeMediaBlobStore : IMediaBlobStore
         return Task.CompletedTask;
     }
 
+    public Task<byte[]> TryReadStagedAsync(string blobPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(StagedBlobs.TryGetValue(blobPath, out var bytes) ? bytes : null);
+
     public Task UploadStagedAsync(string blobPath, string sourcePath, string contentType, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 

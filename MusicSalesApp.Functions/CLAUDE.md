@@ -6,12 +6,14 @@ architecture, the invariants, and the traps.
 
 ## What this app is
 
-Every FFmpeg invocation in StreamTunes. Two queue triggers, no HTTP triggers, no database access.
+Every FFmpeg invocation in StreamTunes, plus the image work that used to run on the Blazor circuit.
+Three queue triggers, no HTTP triggers, no database access.
 
 | Function | Queue | Does |
 |---|---|---|
 | `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration, plus the cover art's WebP renditions. Posts live progress. |
 | `ProbeAudio` | `audio-probe{-env}` | Decode an already-stored blob, produce nothing. For the media-integrity audit and nightly track-length repair. No progress — nobody is watching. |
+| `MatchCoverArt` | `cover-art-match{-env}` | Pair a batch of staged cover art with the audio dropped beside it, using vision OCR. Runs **before** any song exists. Posts live progress. |
 
 It exists because the Blazor app runs on SmarterASP shared hosting where every FFmpeg pass blocked a
 request thread. A single WAV upload cost three passes before a byte reached Azure.
@@ -123,6 +125,14 @@ older "media is read-only" wording was standing in for. Two consequences worth k
   **`TrimUnusedSkiaSharpAssets` in the csproj is load-bearing** — without it the package is 412 MB,
   because SkiaSharp ships a `.pdb` several times the size of each native plus a macOS `.dylib` this
   app can never load. If the package size jumps, check that target first.
+- **Cover-art matching has no job row, deliberately.** A match batch exists only while the creator's
+  upload page is waiting on it: its staged images are swept by the container's 7-day lifecycle rule,
+  and a lost message costs a worse pairing rather than a lost song, because the page falls back to
+  exact base-name matching when its deadline expires. The consequence is that `match-complete` has
+  no free idempotency — a queue redelivery really does broadcast the same pairing twice — which is
+  why the page resolves its waiting task with `TrySetResult`. The batch's creator id also has to
+  round-trip through the message and back, and the receiving controller must use it for the SignalR
+  group name and nothing else.
 - **Queue-trigger bindings resolve through the Functions *host*.** `%MediaProcessing:*QueueName%` and
   `Connection = "StagingStorageConnectionString"` are read before the worker's `IConfiguration`
   exists — which is why every setting lives in app settings / `local.settings.json` and there is no
@@ -139,6 +149,13 @@ All in `../`, all dot-sourcing `AzureCli.ps1`.
 | `Remove-FunctionApp.ps1` | Tear an environment down to rehearse the above. |
 | `Sync-FunctionSettings.ps1` | Generate `local.settings.json` for local dev. Its only job. |
 | `Get-MediaProcessingSettings.ps1`, `AzureCli.ps1` | Dot-sourced helpers. |
+
+⚠️ **Two settings must be added by hand in the portal on the already-deployed Test and Production
+apps**, because of the settings rule below: `MediaProcessing:MatchQueueName` and `OpenAI:ApiKey`.
+The first is not optional — it is referenced as `%...%` from a trigger attribute, so without it the
+binding cannot resolve and the **whole Function App fails to start**, not just `MatchCoverArt`. Add
+both before publishing; the drift check reports them as missing, which is the safety net rather than
+the plan. `OpenAI:ApiKey` genuinely is optional: without it matching falls back to filenames.
 
 **Settings rule:** `Provision-FunctionApp.ps1` pushes app settings *only on the run that creates the
 app* — a new Function App has no connection strings, so its triggers cannot bind without them.
