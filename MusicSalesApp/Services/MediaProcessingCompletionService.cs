@@ -82,10 +82,32 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
             return;
         }
 
-        if (job.Status == SongUploadJobStatus.Completed)
+        if (job.Status is SongUploadJobStatus.Completed or SongUploadJobStatus.Failed)
         {
             // The retry path, not an error. Say nothing and return 200.
-            _logger.LogInformation("Completion callback replayed for already-completed job {JobId}", result.JobId);
+            //
+            // Failed has to be caught here as well as Completed. The reconciler declares a job dead
+            // on a stale StepUpdatedAt, and that timestamp is only refreshed by progress pings -
+            // which are fire-and-forget and swallow their own failures, so a site restart makes a
+            // perfectly healthy Function look stalled. When that Function then finishes and posts a
+            // Playable result, this used to fall through into a full assembly of a job the creator
+            // has already been told failed: either publishing it anyway behind their back, or - once
+            // FailAsync had deleted the staged source - throwing on the copy and burning every queue
+            // redelivery until the message poisoned.
+            _logger.LogInformation(
+                "Completion callback replayed for already-{Status} job {JobId}", job.Status, result.JobId);
+
+            // Whatever the Function wrote after the job was failed is unreferenced: staging may have
+            // been recreated by a retry that finished late, and any cover-art renditions were
+            // written straight into the media container before the row existed. Neither is swept by
+            // anything else - the media account has no lifecycle rule, and could not safely be given
+            // one, because its prefixes are the live catalogue.
+            await _jobService.DeleteStagedBlobsAsync(job, cancellationToken);
+            if (job.Status == SongUploadJobStatus.Failed)
+            {
+                await DeleteOrphanedRenditionsAsync(job, cancellationToken);
+            }
+
             return;
         }
 
@@ -339,6 +361,66 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
             cancellationToken);
 
         await _jobService.DeleteStagedBlobsAsync(job, cancellationToken);
+        await DeleteOrphanedRenditionsAsync(job, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes cover-art renditions the Function may have written for a job that will never publish.
+    ///
+    /// <para>
+    /// The Function writes renditions straight into the song's GUID folder in the media container,
+    /// before the master is copied in and before the <c>SongMetadata</c> row exists. That is safe
+    /// while the job is alive - the public whitelist resolves a rendition back to its master and
+    /// finds no row, so nothing is reachable - but once the job is terminally failed those blobs
+    /// have no owner and nothing else will ever remove them. Staging has a 7-day lifecycle rule;
+    /// the media account deliberately has none, because its prefixes are the live catalogue.
+    /// </para>
+    ///
+    /// <para>
+    /// Best effort throughout, and only ever touches paths derived from this job's own GUID. A song
+    /// that published normally never reaches here, so this cannot delete a live rendition.
+    /// </para>
+    /// </summary>
+    private async Task DeleteOrphanedRenditionsAsync(SongUploadJob job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.CoverArtExtension))
+        {
+            return;
+        }
+
+        try
+        {
+            var media = _containerFactory.GetMediaContainer();
+            if (media is null)
+            {
+                return;
+            }
+
+            var master = SongMediaPaths.CoverArt(job.MediaGuid, job.CoverArtExtension);
+
+            // The full ladder rather than a recorded width set: the row that would have recorded it
+            // was never written, and an attempt that failed part-way may have left any subset.
+            foreach (var path in ImageVariantPaths.VariantsFor(master, ImageVariantSizes.CoverArt))
+            {
+                try
+                {
+                    // Not the request token. A caller that timed out or hung up is exactly the case
+                    // that leaves renditions behind, and an already-cancelled token would skip every
+                    // delete - the same reasoning the assembly rollback uses.
+                    await media.GetBlobClient(path).DeleteIfExistsAsync(cancellationToken: CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex, "Could not delete orphaned rendition {Path} for job {JobId}", path, job.MediaGuid);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex, "Could not clean up orphaned renditions for job {JobId}", job.MediaGuid);
+        }
     }
 
     private string CreateStagingReadSasQuery(BlobContainerClient staging)

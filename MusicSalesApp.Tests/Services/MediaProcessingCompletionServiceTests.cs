@@ -147,6 +147,93 @@ public class MediaProcessingCompletionServiceTests
     }
 
     [Test]
+    public async Task APlayableResultForAnAlreadyFailedJob_DoesNotAssembleItAnyway()
+    {
+        // The reconciler declares a job dead on a stale StepUpdatedAt, and that timestamp is only
+        // refreshed by progress pings - which swallow their own failures, so a site restart makes a
+        // healthy Function look stalled. When that Function then finishes and posts a Playable
+        // result, assembling it would publish a song the creator has already been told failed.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Failed, AudioProcessingStep.Failed);
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 210
+        });
+
+        _metadata.Verify(
+            service => service.UpsertValidatedUploadAsync(It.IsAny<SongMetadata>()),
+            Times.Never);
+
+        await using var context = new AppDbContext(_options);
+        var job = await context.SongUploadJobs.SingleAsync();
+        Assert.That(job.Status, Is.EqualTo(SongUploadJobStatus.Failed), "A failed job must stay failed.");
+    }
+
+    [Test]
+    public async Task ALateResultForAFailedJob_CleansUpWhatTheFunctionLeftBehind()
+    {
+        // A retry that finished after the job was failed can recreate staging, and any cover-art
+        // renditions went straight into the media container before the row existed. Staging has a
+        // 7-day lifecycle rule; the media account has none and cannot safely be given one.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Failed, AudioProcessingStep.Failed, ".jpg");
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 210
+        });
+
+        Assert.Multiple(() =>
+        {
+            _jobService.Verify(
+                service => service.DeleteStagedBlobsAsync(It.IsAny<SongUploadJob>(), It.IsAny<CancellationToken>()),
+                Times.Once);
+
+            // Reaching for the media container is the observable edge of the rendition sweep - the
+            // deletes themselves go through a concrete Azure client this test cannot stand in for.
+            _containers.Verify(factory => factory.GetMediaContainer(), Times.Once);
+        });
+    }
+
+    [Test]
+    public async Task ALateResultForAFailedAudioOnlyJob_DoesNotReachForTheMediaContainer()
+    {
+        // No cover art means no renditions to orphan, and no reason to touch the media account.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Failed, AudioProcessingStep.Failed);
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 210
+        });
+
+        _containers.Verify(factory => factory.GetMediaContainer(), Times.Never);
+    }
+
+    [Test]
+    public async Task AReplayedCompletionForAPublishedJob_DoesNotTouchItsRenditions()
+    {
+        // The same guard covers Completed, where the renditions are live and referenced. Deleting
+        // them here would strip artwork off a perfectly good song.
+        var jobId = await AddJobAsync(SongUploadJobStatus.Completed, AudioProcessingStep.Completed, ".jpg");
+
+        await _service.CompleteAsync(new AudioTranscodeResult
+        {
+            JobId = jobId,
+            Outcome = AudioProcessingOutcome.Playable,
+            DurationSeconds = 210
+        });
+
+        // Cover art is present, so the sweep would run if the guard did not distinguish Completed
+        // from Failed - and it would strip the artwork off a perfectly good song.
+        _containers.Verify(factory => factory.GetMediaContainer(), Times.Never);
+    }
+
+    [Test]
     public async Task FailingAJob_LeavesTheBarWhereItGotToRatherThanResetting()
     {
         var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Transcoding);
@@ -215,7 +302,14 @@ public class MediaProcessingCompletionServiceTests
         });
     }
 
-    private async Task<Guid> AddJobAsync(SongUploadJobStatus status, AudioProcessingStep step)
+    /// <param name="coverArtExtension">
+    /// Set it to give the job cover art. Without it the rendition sweep short circuits at its first
+    /// guard, so any test asserting on that path would pass without exercising it.
+    /// </param>
+    private async Task<Guid> AddJobAsync(
+        SongUploadJobStatus status,
+        AudioProcessingStep step,
+        string coverArtExtension = null)
     {
         var jobId = Guid.NewGuid();
         await using var context = new AppDbContext(_options);
@@ -229,6 +323,11 @@ public class MediaProcessingCompletionServiceTests
             SourceExtension = ".wav",
             SourceContentType = "audio/wav",
             SourceFileSize = 1024,
+            CoverArtBlobPath = coverArtExtension is null
+                ? null
+                : MediaProcessingStagingPaths.Cover(jobId, coverArtExtension),
+            CoverArtFileName = coverArtExtension is null ? null : $"Song{coverArtExtension}",
+            CoverArtExtension = coverArtExtension,
             Status = status,
             Step = step,
             StepUpdatedAt = DateTime.UtcNow

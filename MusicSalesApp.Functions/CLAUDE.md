@@ -99,8 +99,12 @@ older "media is read-only" wording was standing in for. Two consequences worth k
 - Renditions are written **before** the master is copied in and before the row exists. That is safe
   because `MusicController`'s public whitelist resolves a rendition back to its master and then looks
   that master up — with no row, the renditions are simply unreachable for the few seconds involved.
-- A permanently failed assembly therefore leaves up to four orphaned `.webp` files. Deliberately not
-  swept: the assembly `catch` leaves the job retryable and the redelivery rewrites them anyway.
+- Renditions written for a job that never publishes would otherwise be orphaned **forever**. Staging
+  has a 7-day lifecycle rule; the media account has none and cannot safely be given one, because its
+  prefixes are the live catalogue. So `MediaProcessingCompletionService` sweeps them on the terminal
+  failure path (`FailAsync`, and the already-terminal guard in `CompleteAsync`). The assembly `catch`
+  still leaves them alone deliberately — that path keeps the job retryable, and the redelivery
+  rewrites the same paths anyway.
 
 ## Traps specific to this project
 
