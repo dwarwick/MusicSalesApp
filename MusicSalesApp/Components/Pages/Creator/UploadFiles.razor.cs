@@ -572,12 +572,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        // Receiving is only the first slice of this phase now: the images still have to be staged
-        // and paired before any song exists. Reporting 100 here was the old lie - the bar sat full
-        // with a static message for the whole of a matching run nobody could see.
+        // Receiving is only the first slice of this phase: the images still have to be staged and
+        // paired before any song exists. Reporting 100 here was the old lie - the bar sat full with a
+        // static message for the whole of a matching run nobody could see.
+        //
+        // Picks up where receiving left off. This used to assign ToOverallPercent(Staging), whose
+        // band *start* is 0, so the bar ran to 100 and then snapped back to nothing before jumping
+        // forward again. Every stage in this phase now goes through the same calculator.
         _initialUploadStatusMessage = "Files received. Matching cover art...";
-        _initialUploadBatchProgress =
-            (int)CoverArtMatchProgressCalculator.ToOverallPercent(CoverArtMatchStep.Staging);
+        _initialUploadBatchProgress = (int)CoverArtMatchProgressCalculator.ToStagingImagesPercent(0d);
         await InvokeAsync(StateHasChanged);
 
         var matchingResult = await MatchCoverArtAsync(
@@ -982,7 +985,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         progressItem.Progress = filePercent;
         progressItem.StatusMessage = statusText;
-        _initialUploadBatchProgress = batchPercent;
+
+        // Mapped onto the receiving phase's first band rather than assigned raw. Receiving is no
+        // longer the whole of this phase - staging the images and matching them follow it - so a raw
+        // 0-100 here reached 100 and then snapped back to 0 when the next stage set its own band.
+        _initialUploadBatchProgress = (int)CoverArtMatchProgressCalculator.ToReceivingPercent(batchPercent);
+
         _initialUploadStatusMessage = statusText == "Received"
             ? $"Received {progressItem.Name}"
             : $"Receiving {progressItem.Name}...";

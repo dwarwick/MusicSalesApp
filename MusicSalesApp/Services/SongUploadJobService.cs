@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Contracts;
@@ -45,6 +45,18 @@ public interface ISongUploadJobService
 
     /// <summary>Deletes a job's staged blobs. Safe to call twice.</summary>
     Task DeleteStagedBlobsAsync(SongUploadJob job, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a staging folder by media GUID, for a job whose row was never written.
+    ///
+    /// <para>
+    /// The row-based overload is the normal path, but a GUID can be minted and its folder written to
+    /// before <see cref="CreateAsync"/> commits anything - a validation failure after staging leaves
+    /// blobs that no <see cref="SongUploadJob"/> points at. Fabricating a throwaway row to reach the
+    /// other overload would be less honest than saying what this actually needs, which is the GUID.
+    /// </para>
+    /// </summary>
+    Task DeleteStagedBlobsAsync(Guid mediaGuid, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -55,6 +67,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
     private readonly IMediaProcessingQueueClient _queueClient;
     private readonly ISongMetadataService _metadataService;
     private readonly IMusicService _musicService;
+    private readonly IAppSettingsService _appSettings;
     private readonly ILogger<SongUploadJobService> _logger;
 
     public SongUploadJobService(
@@ -63,6 +76,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
         IMediaProcessingQueueClient queueClient,
         ISongMetadataService metadataService,
         IMusicService musicService,
+        IAppSettingsService appSettings,
         ILogger<SongUploadJobService> logger)
     {
         _contextFactory = contextFactory;
@@ -70,7 +84,37 @@ public sealed class SongUploadJobService : ISongUploadJobService
         _queueClient = queueClient;
         _metadataService = metadataService;
         _musicService = musicService;
+        _appSettings = appSettings;
         _logger = logger;
+    }
+
+    private const long BytesPerMegabyte = 1024L * 1024L;
+
+    /// <summary>
+    /// Rejects a stream larger than the admin cap, before it is staged.
+    /// </summary>
+    /// <remarks>
+    /// A non-seekable stream has no length to check and is let through rather than refused: every
+    /// caller today supplies a buffered file, and failing an upload because a length was unavailable
+    /// would trade a real upload for a hypothetical one. The Function still bounds what it will
+    /// process, and the staging lifecycle rule bounds what an oversized file can cost.
+    /// </remarks>
+    private static Task EnsureWithinSizeLimitAsync(Stream stream, string fileName, int maxSizeMB)
+    {
+        if (!stream.CanSeek || maxSizeMB <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var maxBytes = maxSizeMB * BytesPerMegabyte;
+        if (stream.Length > maxBytes)
+        {
+            throw new InvalidDataException(
+                $"'{fileName}' is {stream.Length / (double)BytesPerMegabyte:F1} MB, "
+                + $"which is larger than the {maxSizeMB} MB limit.");
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -127,6 +171,24 @@ public sealed class SongUploadJobService : ISongUploadJobService
             SongMediaPaths.OriginalAudio(mediaGuid, audioExtension),
             coverExtension is null ? null : SongMediaPaths.CoverArt(mediaGuid, coverExtension),
             request.CreatorId);
+
+        // Size gate. Until now the admin caps were enforced in exactly one place - the upload page's
+        // IBrowserFile.OpenReadStream(maxAllowedSize) - and nowhere on this side at all. There is no
+        // Kestrel or IIS body limit either, so any caller reaching this method directly could stage a
+        // file of any size. Checking here makes the cap a property of the pipeline rather than of one
+        // page, which matters increasingly as callers stop being that page.
+        await EnsureWithinSizeLimitAsync(
+            request.AudioStream,
+            request.AudioFileName,
+            await _appSettings.GetMaxAudioUploadSizeMBAsync());
+
+        if (request.CoverArtStream is not null && coverArtFileName is not null)
+        {
+            await EnsureWithinSizeLimitAsync(
+                request.CoverArtStream,
+                coverArtFileName,
+                await _appSettings.GetMaxImageUploadSizeMBAsync());
+        }
 
         // Cheap container sniff before anything reaches Azure. This is the header check only - no
         // FFmpeg - so it stays fast enough to run on the request thread. The real decode happens in
@@ -279,9 +341,27 @@ public sealed class SongUploadJobService : ISongUploadJobService
     }
 
     /// <inheritdoc />
-    public async Task DeleteStagedBlobsAsync(SongUploadJob job, CancellationToken cancellationToken = default)
+    public Task DeleteStagedBlobsAsync(SongUploadJob job, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(job);
+
+        // Deleted by folder prefix rather than from the job's three path columns, because those
+        // columns are not reliably populated at the moment cleanup runs. PlaybackBlobPath in
+        // particular is written by the Function's callback, so a caller holding a snapshot read
+        // before that - or a job that failed after the Function uploaded its MP3 - would skip the
+        // transcode and leak it. The folder is named for the job's GUID and holds nothing else.
+        //
+        // Which means the GUID is the whole input, and the row is only where this one reads it from.
+        return DeleteStagedBlobsAsync(job.MediaGuid, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteStagedBlobsAsync(Guid mediaGuid, CancellationToken cancellationToken = default)
+    {
+        if (mediaGuid == Guid.Empty)
+        {
+            return;
+        }
 
         var staging = _containerFactory.GetUploadStagingContainer();
         if (staging is null)
@@ -289,12 +369,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
             return;
         }
 
-        // Deleted by folder prefix rather than from the job's three path columns, because those
-        // columns are not reliably populated at the moment cleanup runs. PlaybackBlobPath in
-        // particular is written by the Function's callback, so a caller holding a snapshot read
-        // before that - or a job that failed after the Function uploaded its MP3 - would skip the
-        // transcode and leak it. The folder is named for the job's GUID and holds nothing else.
-        var prefix = $"{MediaProcessingStagingPaths.Folder(job.MediaGuid)}/";
+        var prefix = $"{MediaProcessingStagingPaths.Folder(mediaGuid)}/";
 
         try
         {
@@ -308,13 +383,13 @@ public sealed class SongUploadJobService : ISongUploadJobService
                 {
                     // Staging has a lifecycle rule that deletes anything left behind, so a failure
                     // here costs a few days of storage rather than correctness.
-                    _logger.LogWarning(ex, "Could not delete staged blob {Path} for job {JobId}", blob.Name, job.MediaGuid);
+                    _logger.LogWarning(ex, "Could not delete staged blob {Path} for job {JobId}", blob.Name, mediaGuid);
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not enumerate staged blobs for job {JobId}", job.MediaGuid);
+            _logger.LogWarning(ex, "Could not enumerate staged blobs for job {JobId}", mediaGuid);
         }
     }
 

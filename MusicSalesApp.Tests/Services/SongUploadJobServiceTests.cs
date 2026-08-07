@@ -28,6 +28,7 @@ public class SongUploadJobServiceTests
     private Mock<IBlobContainerFactory> _containers = null!;
     private Mock<ISongMetadataService> _metadata = null!;
     private Mock<IMusicService> _music = null!;
+    private Mock<IAppSettingsService> _appSettings = null!;
     private RecordingQueueClient _queue = null!;
     private SongUploadJobService _service = null!;
 
@@ -53,6 +54,12 @@ public class SongUploadJobServiceTests
         _music.Setup(service => service.IsValidAudioFileAsync(It.IsAny<Stream>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
+        // Generous by default so the existing tests still exercise the gate they were written for;
+        // the size tests below lower these deliberately.
+        _appSettings = new Mock<IAppSettingsService>();
+        _appSettings.Setup(settings => settings.GetMaxAudioUploadSizeMBAsync()).ReturnsAsync(100);
+        _appSettings.Setup(settings => settings.GetMaxImageUploadSizeMBAsync()).ReturnsAsync(20);
+
         _queue = new RecordingQueueClient();
 
         _service = new SongUploadJobService(
@@ -61,6 +68,7 @@ public class SongUploadJobServiceTests
             _queue,
             _metadata.Object,
             _music.Object,
+            _appSettings.Object,
             Mock.Of<ILogger<SongUploadJobService>>());
     }
 
@@ -90,6 +98,67 @@ public class SongUploadJobServiceTests
             AudioStream = audio,
             AudioFileName = "Song.mp3",
             SongTitle = new string('x', 201),
+            CreatorId = 1
+        }));
+
+        AssertNothingHappened();
+    }
+
+    [Test]
+    public void AudioOverTheAdminCap_IsRejectedBeforeAnythingIsStagedOrQueued()
+    {
+        // Until this gate existed the caps lived in exactly one place - the upload page's
+        // IBrowserFile.OpenReadStream(maxAllowedSize) - and this method checked nothing. There is no
+        // Kestrel or IIS body limit behind it either, so anything reaching here directly was
+        // unbounded.
+        _appSettings.Setup(settings => settings.GetMaxAudioUploadSizeMBAsync()).ReturnsAsync(1);
+        using var audio = new MemoryStream(new byte[2 * 1024 * 1024]);
+
+        var ex = Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateAsync(new SongUploadJobRequest
+        {
+            AudioStream = audio,
+            AudioFileName = "Song.mp3",
+            SongTitle = "Song",
+            CreatorId = 1
+        }));
+
+        Assert.That(ex!.Message, Does.Contain("1 MB"), "The creator should be told what the limit is.");
+        AssertNothingHappened();
+    }
+
+    [Test]
+    public void CoverArtOverTheAdminCap_IsRejected()
+    {
+        _appSettings.Setup(settings => settings.GetMaxImageUploadSizeMBAsync()).ReturnsAsync(1);
+        using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
+        using var cover = new MemoryStream(new byte[2 * 1024 * 1024]);
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateAsync(new SongUploadJobRequest
+        {
+            AudioStream = audio,
+            AudioFileName = "Song.mp3",
+            SongTitle = "Song",
+            CreatorId = 1,
+            CoverArtStream = cover,
+            CoverArtFileName = "Song.png"
+        }));
+
+        AssertNothingHappened();
+    }
+
+    [Test]
+    public void AFileWithinTheCap_ClearsTheSizeGate()
+    {
+        // Guards against a gate that rejects everything: this must fail later, on the null staging
+        // container, not on size. AssertNothingHappened still holds - nothing was queued.
+        _appSettings.Setup(settings => settings.GetMaxAudioUploadSizeMBAsync()).ReturnsAsync(100);
+        using var audio = new MemoryStream([(byte)'I', (byte)'D', (byte)'3']);
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateAsync(new SongUploadJobRequest
+        {
+            AudioStream = audio,
+            AudioFileName = "Song.mp3",
+            SongTitle = "Song",
             CreatorId = 1
         }));
 

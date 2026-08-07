@@ -234,6 +234,30 @@ public class MediaProcessingCompletionServiceTests
     }
 
     [Test]
+    public void AnUndecodableCover_IsNotWorthCopyingIntoTheCatalogue()
+    {
+        // Copying it would set ImageBlobPath to a master no browser can render - a song showing a
+        // permanently broken image rather than the default artwork.
+        Assert.That(
+            MediaProcessingCompletionService.CoverArtIsUsable(ImageVariantFailureCodes.DecodeFailed),
+            Is.False);
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase(ImageVariantFailureCodes.UploadFailed)]
+    [TestCase(ImageVariantFailureCodes.EncodeFailed)]
+    [TestCase(ImageVariantFailureCodes.SourceMissing)]
+    [TestCase(ImageVariantFailureCodes.Unexpected)]
+    public void EveryOtherOutcome_StillGetsItsArtwork(string diagnosticCode)
+    {
+        // These all mean the image decoded but some rendition did not get written. Those songs serve
+        // their full-size master perfectly well, so withholding the artwork would turn a cosmetic
+        // shortfall into a visible one.
+        Assert.That(MediaProcessingCompletionService.CoverArtIsUsable(diagnosticCode), Is.True);
+    }
+
+    [Test]
     public async Task FailingAJob_LeavesTheBarWhereItGotToRatherThanResetting()
     {
         var jobId = await AddJobAsync(SongUploadJobStatus.Processing, AudioProcessingStep.Transcoding);

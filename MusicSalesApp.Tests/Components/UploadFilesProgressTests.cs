@@ -125,6 +125,36 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void UploadFiles_RoutesEveryReceivingPhaseStageThroughTheCalculator()
+    {
+        // The receiving phase spans three stages that each write the same bar, and the calculator
+        // exists so they join up. Its own tests only prove the bands are contiguous - they cannot
+        // see whether the page actually uses them, and for a while it did not: the receive stage
+        // assigned a raw 0-100 and the next stage assigned a band whose start is 0, so the bar ran
+        // to full and snapped back to nothing in front of the creator.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Contain("CoverArtMatchProgressCalculator.ToReceivingPercent(batchPercent)"),
+                "The receive stage must map onto its band rather than assigning a raw percentage.");
+
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("_initialUploadBatchProgress = batchPercent"),
+                "A raw assignment bypasses the calculator and reintroduces the snap-back.");
+
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("ToOverallPercent(CoverArtMatchStep.Staging)"),
+                "That band starts at 0, so assigning it after receiving resets the bar. "
+                + "Use ToStagingImagesPercent, which continues from where receiving ended.");
+        });
+    }
+
+    [Test]
     public void UploadFiles_ReviewStepOffersAnEditableTitlePrefilledFromTheFileName()
     {
         var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");

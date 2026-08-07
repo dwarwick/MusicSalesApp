@@ -183,6 +183,16 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 copied.Add(mp3Path);
             }
 
+            if (!CoverArtIsUsable(result.CoverArtDiagnosticCode))
+            {
+                _logger.LogWarning(
+                    "Cover art for job {JobId} could not be decoded; publishing the song without artwork.",
+                    mediaGuid);
+
+                imagePath = null;
+                originalImagePath = null;
+            }
+
             if (imagePath is not null && originalImagePath is not null && !string.IsNullOrWhiteSpace(job.CoverArtBlobPath))
             {
                 await CopyAcrossAccountsAsync(
@@ -422,6 +432,36 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 ex, "Could not clean up orphaned renditions for job {JobId}", job.MediaGuid);
         }
     }
+
+    /// <summary>
+    /// Whether the cover art the Function looked at is worth copying into the catalogue.
+    ///
+    /// <para>
+    /// Only a decode failure disqualifies it. The Function reports that when SkiaSharp cannot read
+    /// the image at all, and copying it anyway would set <c>ImageBlobPath</c> to a master no browser
+    /// can render - a song showing a permanently broken image, and a sharing-image generation that
+    /// fails behind it. Publishing audio-only gives the creator the default artwork and a song that
+    /// works, which they can fix by uploading new art.
+    /// </para>
+    ///
+    /// <para>
+    /// Every other diagnostic means the image decoded but its renditions did not all get written -
+    /// <c>upload_failed</c>, <c>encode_failed</c>. Those songs serve their full-size master
+    /// perfectly well and must still get their artwork.
+    /// </para>
+    ///
+    /// <para>
+    /// Today the web app decode-validates before staging, so this is nearly unreachable. It exists
+    /// because that check is what moves to the Function once uploads go directly to storage, at
+    /// which point this is the only thing standing between a renamed <c>.txt</c> and a broken
+    /// catalogue entry.
+    /// </para>
+    /// </summary>
+    internal static bool CoverArtIsUsable(string diagnosticCode)
+        => !string.Equals(
+            diagnosticCode,
+            ImageVariantFailureCodes.DecodeFailed,
+            StringComparison.Ordinal);
 
     private string CreateStagingReadSasQuery(BlobContainerClient staging)
     {
