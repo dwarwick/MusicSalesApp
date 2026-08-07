@@ -424,7 +424,18 @@ if ($LASTEXITCODE -eq 0) {
     # lifecycle block documents below - an account with no CORS rules yet returns an empty array.
     foreach ($rule in @($parsedCors)) {
         $ruleOrigins = Get-JsonPath $rule @("AllowedOrigins")
-        if ($null -ne $ruleOrigins) { $existingOrigins += @($ruleOrigins) }
+        if ($null -eq $ruleOrigins) { continue }
+
+        # `az storage cors list` returns AllowedOrigins as a comma-delimited STRING, not the array
+        # the rest of its JSON would lead you to expect. Treating it as an array silently matches
+        # nothing, so every run looks like a fresh account and appends the rule again - and `cors
+        # add` appends, so the duplicates accumulate. Both shapes handled in case the CLI changes.
+        if ($ruleOrigins -is [string]) {
+            $existingOrigins += @($ruleOrigins -split ',' | ForEach-Object { $_.Trim() })
+        }
+        else {
+            $existingOrigins += @($ruleOrigins | ForEach-Object { "$_".Trim() })
+        }
     }
 }
 
