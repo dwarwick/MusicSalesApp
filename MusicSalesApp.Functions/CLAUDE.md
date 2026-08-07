@@ -14,7 +14,7 @@ Four queue triggers, no HTTP triggers, no database access.
 | `ProcessAudioUpload` | `audio-transcode{-env}` | One staged creator upload → playback MP3 + duration, plus the cover art's WebP renditions. Posts live progress. |
 | `ProbeAudio` | `audio-probe{-env}` | Decode an already-stored blob, produce nothing. For the media-integrity audit and nightly track-length repair. No progress — nobody is watching. |
 | `MatchCoverArt` | `cover-art-match{-env}` | Pair a batch of staged cover art with the audio dropped beside it, using vision OCR. Runs **before** any song exists. Posts live progress. |
-| `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Report an upload whose message exhausted `maxDequeueCount` as failed. See below — this is what lets the reconciler be a backstop. |
+| `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Report an upload whose message exhausted `maxDequeueCount` as failed. See below — this is what lets the reconciler be a backstop. **Its queue is created by `Provision-FunctionApp.ps1`, because a queue trigger does not create a missing queue.** |
 
 It exists because the Blazor app runs on SmarterASP shared hosting where every FFmpeg pass blocked a
 request thread. A single WAV upload cost three passes before a byte reached Azure.
