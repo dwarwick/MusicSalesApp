@@ -357,13 +357,112 @@ foreach ($queueName in $queuesToCreate) {
 }
 
 # ---------------------------------------------------------------------------
+# Staging container
+#
+# Created here as well as by the app. SongUploadJobService and CoverArtMatchService both call
+# CreateIfNotExistsAsync before writing, which is enough while the web server does the writing - but
+# a browser holding a write SAS has no such opportunity, and a missing container surfaces to it as an
+# opaque 404 with nothing server-side to log. Same argument as the queues above.
+# ---------------------------------------------------------------------------
+$stagingContainer = $values["MediaProcessing:StagingContainerName"]
+
+if ($PSCmdlet.ShouldProcess("$stagingAccountName/$stagingContainer", "Create container")) {
+    Invoke-Az @(
+        "storage", "container", "create",
+        "--name", $stagingContainer,
+        "--connection-string", $values["StagingStorageConnectionString"],
+        "--public-access", "off",
+        "--only-show-errors",
+        "--output", "none") | Out-Null
+    Write-Host "Container '$stagingContainer' is present (public access off)."
+}
+
+# ---------------------------------------------------------------------------
+# Blob CORS, so the browser can PUT directly to staging
+#
+# Without this a browser upload fails at the preflight with nothing in Serilog, Application Insights
+# or Azure - the request never reaches anything that logs.
+#
+# TWO THINGS TO UNDERSTAND BEFORE CHANGING THIS.
+#
+# It is account-and-service scoped, not container scoped. Test and Production share this storage
+# account, so enabling CORS for one enables it on the other's account in the same call. That is
+# acceptable because CORS is not authentication - every blob still requires a SAS and no container
+# has public access - but it does mean this step cannot be confined to one environment. The app-level
+# feature flag is what makes the rollouts independent.
+#
+# And `az storage cors add` APPENDS. Re-running without the check below duplicates the rule every
+# time. Deliberately no `cors clear`: that would wipe the other environment's rule, exactly the
+# hazard the lifecycle-rule merge below exists to avoid.
+# ---------------------------------------------------------------------------
+$callbackBase = ($values["CallbackBaseUrl"]).TrimEnd('/')
+$callbackUri = [Uri]$callbackBase
+
+# Not $host - that is an automatic variable holding the PowerShell host object.
+$originHost = $callbackUri.Host
+$corsOrigins = @("$($callbackUri.Scheme)://$originHost")
+if (-not $originHost.StartsWith("www.")) {
+    $corsOrigins += "$($callbackUri.Scheme)://www.$originHost"
+}
+
+# Local dev talks to the Test environment's account. Production gets no localhost origin: it would
+# buy nothing (a SAS is still required) and widens who can spend a leaked one.
+if ($Environment -ne "Production") {
+    $corsOrigins += @("https://localhost:7217", "http://localhost:5000", "https://localhost:5001")
+}
+
+$existingCorsJson = Invoke-Az @(
+    "storage", "cors", "list",
+    "--services", "b",
+    "--connection-string", $values["StagingStorageConnectionString"],
+    "--output", "json") -AllowFailure
+
+$existingOrigins = @()
+if ($LASTEXITCODE -eq 0) {
+    $parsedCors = ($existingCorsJson | Out-String) | ConvertFrom-Json
+    # Projected explicitly rather than via member enumeration, for the same Set-StrictMode reason the
+    # lifecycle block documents below - an account with no CORS rules yet returns an empty array.
+    foreach ($rule in @($parsedCors)) {
+        $ruleOrigins = Get-JsonPath $rule @("AllowedOrigins")
+        if ($null -ne $ruleOrigins) { $existingOrigins += @($ruleOrigins) }
+    }
+}
+
+$missingOrigins = @($corsOrigins | Where-Object { $existingOrigins -notcontains $_ })
+
+if ($missingOrigins.Count -eq 0) {
+    Write-Host "Blob CORS already allows $($corsOrigins -join ', ')."
+}
+elseif ($PSCmdlet.ShouldProcess($stagingAccountName, "Allow blob CORS from $($missingOrigins -join ', ')")) {
+    # Allowed and exposed headers are '*' deliberately, while origins never are. The Azure storage
+    # JS SDK's header set shifts between versions, and a missing allowed-header surfaces as the same
+    # opaque preflight failure as no CORS at all. Origins stay explicit because they are the part
+    # that actually decides who may spend a leaked SAS.
+    # Built as one array first: `Invoke-Az @(...) + $more` would call Invoke-Az with the first array
+    # and then try to add to its result.
+    $corsArgs = @(
+        "storage", "cors", "add",
+        "--services", "b",
+        "--methods", "PUT", "OPTIONS",
+        "--origins") + $missingOrigins + @(
+        "--allowed-headers", "*",
+        "--exposed-headers", "*",
+        "--max-age", "3600",
+        "--connection-string", $values["StagingStorageConnectionString"],
+        "--output", "none")
+
+    Invoke-Az $corsArgs | Out-Null
+
+    Write-Host "Blob CORS now allows $($missingOrigins -join ', ')."
+}
+
+# ---------------------------------------------------------------------------
 # Staging lifecycle rule
 #
 # A management policy is account-wide and holds ALL rules for the account, so this has to merge
 # rather than overwrite - Test and Production share one storage account, which means provisioning
 # the second environment must not wipe the first one's rule.
 # ---------------------------------------------------------------------------
-$stagingContainer = $values["MediaProcessing:StagingContainerName"]
 $ruleName = "delete-abandoned-$stagingContainer"
 
 $existingPolicyJson = Invoke-Az @(
@@ -430,6 +529,7 @@ elseif ($PSCmdlet.ShouldProcess($stagingAccountName, "Add a 7-day delete rule fo
 
 Write-Host ""
 Write-Host "Done. Next:" -ForegroundColor Cyan
-Write-Host "  1. Deploy the code:  pwsh ./Invoke-FunctionPublish.ps1 -FunctionAppName $FunctionAppName"
-Write-Host "  2. Deploy the web app and run the AddSongUploadJobs migration (.vscode publish task)."
+Write-Host "  1. Deploy the web app first (.vscode publish task), so it understands every step the"
+Write-Host "     Function can report before the Function starts reporting them."
+Write-Host "  2. Deploy the code:  pwsh ./Invoke-FunctionPublish.ps1 -FunctionAppName $FunctionAppName"
 Write-Host "  3. Upload a song and watch the progress bar."
