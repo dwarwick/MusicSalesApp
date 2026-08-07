@@ -37,6 +37,27 @@ public sealed class AudioTranscodeRequest
 
     /// <summary>Where the Function writes <c>{guid}/playback.mp3</c>.</summary>
     public string PlaybackBlobPath { get; set; }
+
+    /// <summary>
+    /// Path within the staging container of the raw cover art, e.g. <c>{guid}/cover.jpg</c>.
+    /// Null when the creator supplied none, and null on messages queued before renditions moved
+    /// into the Function - both mean "skip the image work", so no queue drain was needed.
+    /// </summary>
+    public string CoverArtBlobPath { get; set; }
+
+    /// <summary>
+    /// Lowercase, dot-prefixed, e.g. <c>.jpg</c>.
+    ///
+    /// <para>
+    /// The Function needs this to derive where the renditions go, because their paths hang off the
+    /// cover art's eventual path in the media container. It derives that through the same
+    /// <c>SongMediaPaths.CoverArt(JobId, …)</c> helper the API uses when it copies the master in -
+    /// deliberately not a second path computed by the web app and passed along, because the two
+    /// would have to stay byte-identical for the public media whitelist to resolve a rendition back
+    /// to its master.
+    /// </para>
+    /// </summary>
+    public string CoverArtExtension { get; set; }
 }
 
 /// <summary>
@@ -62,6 +83,31 @@ public sealed class AudioTranscodeResult
     public string FailureCode { get; set; }
 
     public string Diagnostic { get; set; }
+
+    /// <summary>
+    /// Rendition widths the Function wrote into the media container, ascending.
+    ///
+    /// <para>
+    /// The null/empty distinction is what the API branches on. <see langword="null"/> means there
+    /// was no cover art at all, so the song's recorded width set stays null. <b>Empty</b> means art
+    /// was present but no rendition could be produced - the song still publishes and serves its
+    /// full-size master, which is the behaviour that predates renditions entirely.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> CoverArtVariantWidths { get; set; }
+
+    /// <summary>Pixel width of the cover art as decoded. Null when absent or undecodable.</summary>
+    public int? CoverArtWidth { get; set; }
+
+    /// <summary>Pixel height of the cover art as decoded. Null when absent or undecodable.</summary>
+    public int? CoverArtHeight { get; set; }
+
+    /// <summary>
+    /// Why no widths were produced - a constant from <c>ImageVariantFailureCodes</c>. Diagnostic
+    /// only: never shown to the creator, and never a reason to fail the job. Renditions are derived
+    /// data the admin backfill can rebuild at any time.
+    /// </summary>
+    public string CoverArtDiagnosticCode { get; set; }
 }
 
 /// <summary>Which maintenance job a probe belongs to, so its result can be routed back.</summary>

@@ -150,6 +150,9 @@ public abstract class BlazorBase : ComponentBase
     protected IFileMatchingService FileMatchingService { get; set; } = default!;
 
     [Inject]
+    protected ICoverArtMatchService CoverArtMatchService { get; set; } = default!;
+
+    [Inject]
     protected IStreamPayoutService StreamPayoutService { get; set; } = default!;
 
     [Inject]

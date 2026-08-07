@@ -7,6 +7,8 @@ using Microsoft.Extensions.Hosting;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Functions;
 using MusicSalesApp.Functions.Audio;
+using MusicSalesApp.Functions.Images;
+using MusicSalesApp.Functions.Matching;
 using MusicSalesApp.Functions.Services;
 
 // No ConfigureFunctionsWebApplication: this app has no HTTP triggers. Both entry points are queue
@@ -30,6 +32,8 @@ builder.Services.Configure<FunctionOptions>(options =>
 
 builder.Services.AddSingleton<IMediaBlobStore, MediaBlobStore>();
 builder.Services.AddSingleton<IFfmpegAudioProcessor, FfmpegAudioProcessor>();
+builder.Services.AddSingleton<ICoverArtRenditionGenerator, CoverArtRenditionGenerator>();
+builder.Services.AddSingleton<IOpenAiFileMatcher, OpenAiFileMatcher>();
 
 builder.Services
     .AddHttpClient<IMediaProcessingCallbackClient, MediaProcessingCallbackClient>((provider, client) =>

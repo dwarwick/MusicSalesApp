@@ -21,9 +21,14 @@
     The queues are created here even though the application code would create them on first use
     (MediaProcessingQueueClient calls CreateIfNotExistsAsync before every send). Leaving it to the
     code means a freshly provisioned environment shows no queues in the portal until the web app
-    happens to enqueue something, which looks broken and depends on deploy order. The poison queues
-    and the staging container are still created on demand - by the Functions runtime and by
-    SongUploadJobService respectively.
+    happens to enqueue something, which looks broken and depends on deploy order.
+
+    The transcode POISON queue is created here for a sharper reason: HandleTranscodePoison triggers
+    on it, and a queue trigger does NOT create a queue that is absent - verified on Test, where the
+    listener started cleanly but the queue only appeared once created by hand. Left alone it would
+    spring into existence at the worst possible moment, the first time a real upload poisoned. The
+    remaining poison queues and the staging container are still created on demand, by the Functions
+    runtime and by SongUploadJobService respectively.
 
     Requires the Azure CLI. Signs you in interactively if you are not already.
 
@@ -327,7 +332,18 @@ elseif ($appAlreadyExisted) {
 # watch until the web app happens to enqueue something. Creating them here makes the provisioned
 # state self-evident and independent of deploy order. Both calls are idempotent.
 # ---------------------------------------------------------------------------
-foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"])) {
+$queuesToCreate = @(
+    $values["MediaProcessing:TranscodeQueueName"],
+    $values["MediaProcessing:ProbeQueueName"],
+    $values["MediaProcessing:MatchQueueName"],
+
+    # HandleTranscodePoison triggers on this one, and a queue trigger will not create it. Its name
+    # is the transcode queue's plus "-poison" - the same expression the trigger binds to - so the
+    # two cannot drift.
+    "$($values["MediaProcessing:TranscodeQueueName"])-poison"
+)
+
+foreach ($queueName in $queuesToCreate) {
     if ($PSCmdlet.ShouldProcess("$stagingAccountName/$queueName", "Create queue")) {
         Invoke-Az @(
             "storage", "queue", "create",

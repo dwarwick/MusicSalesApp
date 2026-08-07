@@ -27,6 +27,7 @@ public class MediaProcessingController : ControllerBase
     private readonly IMediaProcessingCompletionService _completionService;
     private readonly IAudioProbeResultHandler _probeResultHandler;
     private readonly IUploadProgressNotifier _progressNotifier;
+    private readonly ICoverArtMatchNotifier _matchNotifier;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MediaProcessingController> _logger;
 
@@ -40,12 +41,14 @@ public class MediaProcessingController : ControllerBase
         IMediaProcessingCompletionService completionService,
         IAudioProbeResultHandler probeResultHandler,
         IUploadProgressNotifier progressNotifier,
+        ICoverArtMatchNotifier matchNotifier,
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MediaProcessingController> logger)
     {
         _completionService = completionService;
         _probeResultHandler = probeResultHandler;
         _progressNotifier = progressNotifier;
+        _matchNotifier = matchNotifier;
         _contextFactory = contextFactory;
         _logger = logger;
     }
@@ -155,6 +158,61 @@ public class MediaProcessingController : ControllerBase
         }
 
         await _progressNotifier.NotifyAsync(job.CreatorId, progress, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// The terminal callback for one cover-art matching batch. Relays the pairing to the creator's
+    /// upload page, which is blocked waiting for it.
+    ///
+    /// <para>
+    /// Nothing is persisted, because a match batch has no row: it exists only while the page is
+    /// waiting, its staged images are swept by the container's lifecycle rule, and a lost message
+    /// costs a worse pairing rather than a lost song. The consequence is that this has no free
+    /// idempotency — a redelivery broadcasts twice — which is why the page resolves its waiting task
+    /// with <c>TrySetResult</c> and treats the second one as a no-op.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The creator id here came from the Function, which got it from the queue message this site
+    /// wrote.</b> It is used for the SignalR group name and nothing else, and this endpoint sits
+    /// behind the shared processing secret — so the worst a compromised key could do here is push a
+    /// bogus pairing into one creator's page, strictly less than <c>complete</c> already permits.
+    /// It is still the only place in this codebase where a caller-supplied creator id reaches a
+    /// group name, so do not widen what it is used for.
+    /// </para>
+    /// </summary>
+    [HttpPost("match-complete")]
+    public async Task<IActionResult> MatchComplete(
+        [FromBody] CoverArtMatchResult result,
+        CancellationToken cancellationToken)
+    {
+        if (result is null || result.BatchId == Guid.Empty)
+        {
+            return BadRequest(new { message = "A batch id is required." });
+        }
+
+        await _matchNotifier.NotifyResultAsync(result, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// A progress ping for a cover-art matching batch. Relayed straight through: with no row there
+    /// is nothing to persist, nothing to compare a step against, and nothing a bad value could
+    /// corrupt. Always 200, for the same reason the audio version is — a non-2xx would make the
+    /// Function retry a cosmetic update.
+    /// </summary>
+    [HttpPost("match-progress")]
+    public async Task<IActionResult> MatchProgress(
+        [FromBody] CoverArtMatchProgress progress,
+        CancellationToken cancellationToken)
+    {
+        if (progress is null || progress.BatchId == Guid.Empty)
+        {
+            return Ok();
+        }
+
+        await _matchNotifier.NotifyProgressAsync(progress, cancellationToken);
         return Ok();
     }
 }

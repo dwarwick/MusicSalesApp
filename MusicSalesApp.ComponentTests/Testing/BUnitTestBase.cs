@@ -68,6 +68,7 @@ public abstract class BUnitTestBase
     protected Mock<ISongStatusService> MockSongStatusService { get; private set; } = default!;
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
+    protected Mock<ICoverArtMatchService> MockCoverArtMatchService { get; private set; } = default!;
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<IReportedSongService> MockReportedSongService { get; private set; } = default!;
@@ -123,6 +124,7 @@ public abstract class BUnitTestBase
         MockSongStatusService = new Mock<ISongStatusService>();
         MockGenreService = new Mock<IGenreService>();
         MockFileMatchingService = new Mock<IFileMatchingService>();
+        MockCoverArtMatchService = new Mock<ICoverArtMatchService>();
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockTipService = new Mock<ITipService>();
         MockReportedSongService = new Mock<IReportedSongService>();
@@ -452,12 +454,10 @@ public abstract class BUnitTestBase
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>()))
             .ReturnsAsync(new FileMatchingResult());
-        MockFileMatchingService
-            .Setup(x => x.MatchFilesAsync(
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<IReadOnlyDictionary<string, (byte[] Data, string ContentType)>>()))
-            .ReturnsAsync(new FileMatchingResult());
+
+        // Defaults to unavailable so UploadFiles takes the local fallback path. The Function-backed
+        // path needs a live SignalR round trip to resolve its waiter, which bUnit cannot provide.
+        MockCoverArtMatchService.SetupGet(x => x.IsAvailable).Returns(false);
 
         // Setup default returns for IStreamPayoutService methods
         MockStreamPayoutService.Setup(x => x.GetPayoutHistoryAsync(It.IsAny<int>()))
@@ -534,6 +534,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<ISongStatusService>(MockSongStatusService.Object);
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
+        TestContext.Services.AddSingleton<ICoverArtMatchService>(MockCoverArtMatchService.Object);
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<IReportedSongService>(MockReportedSongService.Object);

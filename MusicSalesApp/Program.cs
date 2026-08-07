@@ -434,12 +434,15 @@ try
         options.StagingContainerName = storageSection["UploadStagingContainerName"];
         options.TranscodeQueueName = storageSection["TranscodeQueueName"] ?? MediaProcessingQueues.Transcode;
         options.ProbeQueueName = storageSection["ProbeQueueName"] ?? MediaProcessingQueues.Probe;
+        options.MatchQueueName = storageSection["MatchQueueName"] ?? MediaProcessingQueues.CoverArtMatch;
     });
     builder.Services.AddSingleton<IMediaProcessingQueueClient, MediaProcessingQueueClient>();
     builder.Services.AddScoped<ISongUploadJobService, SongUploadJobService>();
     builder.Services.AddScoped<IMediaProcessingCompletionService, MediaProcessingCompletionService>();
     builder.Services.AddScoped<IAudioProbeResultHandler, AudioProbeResultHandler>();
     builder.Services.AddScoped<IUploadProgressNotifier, UploadProgressNotifier>();
+    builder.Services.AddScoped<ICoverArtMatchNotifier, CoverArtMatchNotifier>();
+    builder.Services.AddScoped<ICoverArtMatchService, CoverArtMatchService>();
     builder.Services.AddScoped<ISongUploadJobReconciler, SongUploadJobReconciler>();
 
     // Reaches both the media and persona-image containers, which the single-container

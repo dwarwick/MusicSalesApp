@@ -18,6 +18,12 @@ public static class MediaProcessingQueues
     public const string Probe = "audio-probe";
 
     /// <summary>
+    /// Base name of the queue carrying <c>CoverArtMatchRequest</c> messages — the pre-pairing phase
+    /// that decides which staged image belongs to which upload, before any song job exists.
+    /// </summary>
+    public const string CoverArtMatch = "cover-art-match";
+
+    /// <summary>
     /// Azure Storage queue names must be lowercase alphanumeric with single hyphens, so the
     /// environment suffix follows the same convention the blob containers already use
     /// (<c>musiccontainer-dev</c>), keeping both readable in the portal side by side.
@@ -45,6 +51,7 @@ public static class MediaProcessingStagingPaths
     private const string SourceBaseName = "source";
     private const string CoverBaseName = "cover";
     private const string PlaybackName = "playback.mp3";
+    private const string MatchBatchPrefix = "batch";
 
     /// <summary>The raw audio exactly as the creator supplied it.</summary>
     public static string Source(Guid jobId, string extension)
@@ -64,6 +71,28 @@ public static class MediaProcessingStagingPaths
     /// </summary>
     public static string Folder(Guid jobId)
         => jobId.ToString("N", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The folder holding one pre-pairing image batch.
+    ///
+    /// <para>
+    /// Prefixed rather than sitting alongside the job folders, because it is not one: no song exists
+    /// yet, and the GUID here is the batch's, not a media GUID. The prefix keeps the two visually
+    /// distinct in the portal and stops <c>DeleteStagedBlobsAsync</c>, which deletes by
+    /// <c>{guid}/</c>, from ever seeing one.
+    /// </para>
+    /// </summary>
+    public static string MatchBatchFolder(Guid batchId)
+        => $"{MatchBatchPrefix}/{batchId.ToString("N", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// One candidate image inside a match batch, named by its position rather than by the creator's
+    /// filename — which is unconstrained and has no business in a blob path. The filename travels in
+    /// the queue message instead, where it is data rather than a path.
+    /// </summary>
+    public static string MatchBatchImage(Guid batchId, int index, string extension)
+        => $"{MatchBatchFolder(batchId)}/{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            + NormalizeExtension(extension);
 
     private static string NormalizeExtension(string extension)
     {
@@ -86,6 +115,12 @@ public static class MediaProcessingRoutes
     public const string ControllerRoute = "api/media-processing";
     public const string Complete = ControllerRoute + "/complete";
     public const string Progress = ControllerRoute + "/progress";
+
+    /// <summary>Where a finished cover-art pairing is posted. Terminal: throws on non-2xx.</summary>
+    public const string MatchComplete = ControllerRoute + "/match-complete";
+
+    /// <summary>Where cover-art matching progress is posted. Cosmetic: never throws.</summary>
+    public const string MatchProgress = ControllerRoute + "/match-progress";
 
     /// <summary>
     /// Header carrying the shared secret. Deliberately not <c>X-Api-Key</c>: that header is the
@@ -129,6 +164,20 @@ public static class MediaProcessingTimeouts
     /// site that has stopped answering must not cost a transcode several minutes per step.
     /// </summary>
     public static readonly TimeSpan ProgressCallback = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// How long the upload page waits for a cover-art pairing before giving up and matching on
+    /// filenames itself.
+    ///
+    /// <para>
+    /// Unlike the timeouts above this one is not split across two processes — it bounds a wait the
+    /// creator is actively watching. Generous enough for a full batch of vision calls, and well
+    /// inside the 10-minute Consumption ceiling so a Function that is merely slow still wins the
+    /// race. Expiring is not an error: the page falls back to exact base-name matching, which is
+    /// what it did before OpenAI was wired in at all.
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan CoverArtMatch = TimeSpan.FromMinutes(3);
 }
 
 /// <summary>
@@ -144,5 +193,24 @@ public static class MediaProcessingFailureCodes
     public const string ZeroDuration = "ZeroDuration";
     public const string DecoderUnavailable = "DecoderUnavailable";
     public const string DecoderTimeout = "DecoderTimeout";
+
+    /// <summary>
+    /// The reconciler swept a job that stopped reporting progress, or its enqueue never landed.
+    /// A guess, made from a timestamp - distinct from <see cref="PoisonedAfterRetries"/>, which is
+    /// Azure telling us for certain.
+    /// </summary>
     public const string Abandoned = "Abandoned";
+
+    /// <summary>
+    /// The queue message exhausted <c>maxDequeueCount</c> and landed in the poison queue, so no
+    /// further attempt will ever be made.
+    ///
+    /// <para>
+    /// Deliberately not folded into <see cref="Abandoned"/>. This one is authoritative and arrives
+    /// as an event; that one is inferred from a stale timestamp and can be wrong. Keeping them apart
+    /// is what makes it possible to tell, from a failed job alone, whether the pipeline really gave
+    /// up or the reconciler merely lost sight of it.
+    /// </para>
+    /// </summary>
+    public const string PoisonedAfterRetries = "PoisonedAfterRetries";
 }

@@ -38,6 +38,16 @@ public interface IMediaProcessingCallbackClient
     /// </para>
     /// </summary>
     Task PostProgressAsync(AudioProcessingProgress progress, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Posts a finished cover-art pairing. <b>Throws on failure</b>, like the two terminal callbacks
+    /// above: the creator's upload page is blocked waiting for this, so a redelivery is what stops
+    /// the batch falling back to filename matching over a transient blip.
+    /// </summary>
+    Task PostMatchResultAsync(CoverArtMatchResult result, CancellationToken cancellationToken = default);
+
+    /// <summary>Posts cover-art matching progress. <b>Never throws</b>, as with the audio version.</summary>
+    Task PostMatchProgressAsync(CoverArtMatchProgress progress, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -117,6 +127,53 @@ public sealed class MediaProcessingCallbackClient : IMediaProcessingCallbackClie
                 ex,
                 "Could not post progress for job {JobId} at step {Step}",
                 progress.JobId,
+                progress.Step);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task PostMatchResultAsync(
+        CoverArtMatchResult result,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            MediaProcessingRoutes.MatchComplete,
+            result,
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await SafeReadAsync(response, cancellationToken);
+            throw new HttpRequestException(
+                $"Match callback for batch {result.BatchId} failed: {(int)response.StatusCode} {body}");
+        }
+
+        _logger.LogInformation(
+            "Reported cover-art pairing for batch {BatchId} ({PairCount} pairs, fallback: {UsedFallback})",
+            result.BatchId,
+            result.Pairs?.Count ?? 0,
+            result.UsedFallback);
+    }
+
+    /// <inheritdoc />
+    public async Task PostMatchProgressAsync(
+        CoverArtMatchProgress progress,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(MediaProcessingTimeouts.ProgressCallback);
+
+            await _httpClient.PostAsJsonAsync(MediaProcessingRoutes.MatchProgress, progress, timeout.Token);
+        }
+        catch (Exception ex)
+        {
+            // Swallowed on purpose - see the interface docs.
+            _logger.LogDebug(
+                ex,
+                "Could not post match progress for batch {BatchId} at step {Step}",
+                progress.BatchId,
                 progress.Step);
         }
     }

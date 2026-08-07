@@ -241,6 +241,26 @@ namespace MusicSalesApp.Services
                     {
                         existing.ImageBlobPath = metadata.ImageBlobPath;
                     }
+
+                    // Cover-art fields reach this branch only on a retried assembly - a fresh upload
+                    // mints a new GUID and is always an insert. They were missing from this
+                    // whitelist, so a retry silently dropped them and left the song serving its
+                    // full-size master with no recorded widths.
+                    //
+                    // Each guarded so a null never wipes a good value, and CoverArtVariantVersion is
+                    // deliberately absent: it is a cache-busting counter that must never regress.
+                    if (!string.IsNullOrWhiteSpace(metadata.OriginalCoverArtBlobPath))
+                    {
+                        existing.OriginalCoverArtBlobPath = metadata.OriginalCoverArtBlobPath;
+                    }
+                    if (!string.IsNullOrWhiteSpace(metadata.OriginalCoverArtFileName))
+                    {
+                        existing.OriginalCoverArtFileName = metadata.OriginalCoverArtFileName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(metadata.CoverArtVariantWidths))
+                    {
+                        existing.CoverArtVariantWidths = metadata.CoverArtVariantWidths;
+                    }
                 }
                 else
                 {

@@ -226,7 +226,13 @@ public sealed class SongUploadJobService : ISongUploadJobService
                     SourceBlobPath = sourcePath,
                     SourceFileName = job.SourceFileName,
                     SourceExtension = audioExtension,
-                    PlaybackBlobPath = MediaProcessingStagingPaths.Playback(mediaGuid)
+                    PlaybackBlobPath = MediaProcessingStagingPaths.Playback(mediaGuid),
+
+                    // Both null for an audio-only upload, which is how the Function knows to skip
+                    // the image work entirely. It derives the rendition paths from the job GUID plus
+                    // this extension, through the same SongMediaPaths helper the assembly step uses.
+                    CoverArtBlobPath = coverPath,
+                    CoverArtExtension = coverExtension
                 },
                 cancellationToken);
         }

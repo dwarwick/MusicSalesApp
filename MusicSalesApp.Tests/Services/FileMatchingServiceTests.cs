@@ -1,245 +1,139 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Moq;
 using MusicSalesApp.Services;
 
 namespace MusicSalesApp.Tests.Services;
 
+/// <summary>
+/// The exact base-name fallback the upload page uses when the Azure Function cannot pair a batch —
+/// no queue configured, no answer inside the deadline, or an outright failure.
+///
+/// <para>
+/// Model-driven matching is not covered here because it no longer lives here: it runs in the
+/// Function, against a service these tests would have to fake wholesale to say anything about. What
+/// matters on this side is that the degraded path is correct and total — every audio file gets a
+/// row, every unmatched image is reported — because it is what stands between a model outage and a
+/// creator's batch failing.
+/// </para>
+/// </summary>
 [TestFixture]
 public class FileMatchingServiceTests
 {
-    private Mock<ILogger<FileMatchingService>> _mockLogger;
+    private FileMatchingService _service = null!;
 
     [SetUp]
-    public void Setup()
-    {
-        _mockLogger = new Mock<ILogger<FileMatchingService>>();
-    }
+    public void Setup() => _service = new FileMatchingService();
 
-    private FileMatchingService CreateService(string openAiApiKey = "__REPLACE_WITH_OPENAI_API_KEY__")
+    [Test]
+    public async Task NoImages_ReturnsEveryAudioFileWithNoImage()
     {
-        var configData = new Dictionary<string, string>
+        var result = await _service.MatchFilesAsync(
+            ["dark_night.mp3", "sunny_day.wav"], []);
+
+        Assert.Multiple(() =>
         {
-            ["OpenAI:ApiKey"] = openAiApiKey
-        };
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(configData!)
-            .Build();
-        return new FileMatchingService(configuration, _mockLogger.Object);
-    }
-
-    #region NormalizeBaseName Tests
-
-    [Test]
-    public void NormalizeBaseName_WithUnderscores_ReplacesWithSpaces()
-    {
-        var result = FileMatchingService.NormalizeBaseName("dark_night");
-        Assert.That(result, Is.EqualTo("Dark Night"));
+            Assert.That(result.Pairs, Has.Count.EqualTo(2));
+            Assert.That(result.Pairs.All(pair => pair.ImageFileName is null), Is.True);
+            Assert.That(result.UnmatchedImageFiles, Is.Empty);
+        });
     }
 
     [Test]
-    public void NormalizeBaseName_WithHyphens_ReplacesWithSpaces()
+    public async Task NoAudio_ReportsEveryImageAsUnmatched()
     {
-        var result = FileMatchingService.NormalizeBaseName("dark-night");
-        Assert.That(result, Is.EqualTo("Dark Night"));
+        var result = await _service.MatchFilesAsync([], ["dark_night.jpg"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Is.Empty);
+            Assert.That(result.UnmatchedImageFiles, Is.EqualTo(new[] { "dark_night.jpg" }));
+        });
     }
 
     [Test]
-    public void NormalizeBaseName_WithMixedSeparators_NormalizesCorrectly()
+    public async Task AnExactBaseNameMatch_IsPaired()
     {
-        var result = FileMatchingService.NormalizeBaseName("dark_night-sky");
-        Assert.That(result, Is.EqualTo("Dark Night Sky"));
+        var result = await _service.MatchFilesAsync(["dark_night.mp3"], ["dark_night.jpg"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Has.Count.EqualTo(1));
+            Assert.That(result.Pairs[0].AudioFileName, Is.EqualTo("dark_night.mp3"));
+            Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
+            Assert.That(result.Pairs[0].NormalizedName, Is.EqualTo("Dark Night"));
+            Assert.That(result.UnmatchedImageFiles, Is.Empty);
+        });
     }
 
     [Test]
-    public void NormalizeBaseName_AlreadySpaced_TitleCases()
+    public async Task MatchingIsCaseInsensitive()
     {
-        var result = FileMatchingService.NormalizeBaseName("dark night");
-        Assert.That(result, Is.EqualTo("Dark Night"));
-    }
+        var result = await _service.MatchFilesAsync(["DarkNight.mp3"], ["darknight.jpg"]);
 
-    [Test]
-    public void NormalizeBaseName_EmptyString_ReturnsEmpty()
-    {
-        var result = FileMatchingService.NormalizeBaseName(string.Empty);
-        Assert.That(result, Is.EqualTo(string.Empty));
-    }
-
-    [Test]
-    public void NormalizeBaseName_WithMultipleConsecutiveUnderscores_CollapsesSpaces()
-    {
-        var result = FileMatchingService.NormalizeBaseName("dark__night");
-        Assert.That(result, Is.EqualTo("Dark Night"));
-    }
-
-    [Test]
-    public void NormalizeBaseName_SingleWord_TitleCases()
-    {
-        var result = FileMatchingService.NormalizeBaseName("thriller");
-        Assert.That(result, Is.EqualTo("Thriller"));
-    }
-
-    [Test]
-    public void NormalizeBaseName_AllCapsWord_TitleCases()
-    {
-        var result = FileMatchingService.NormalizeBaseName("DARK_NIGHT");
-        Assert.That(result, Is.EqualTo("Dark Night"));
-    }
-
-    #endregion
-
-    #region MatchFilesAsync - No OpenAI (fallback) Tests
-
-    [Test]
-    public async Task MatchFilesAsync_NoImages_ReturnsAllAudioWithNullImage()
-    {
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night.mp3", "sunny_day.wav" };
-        var imageFiles = Array.Empty<string>();
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(2));
-        Assert.That(result.Pairs.All(p => p.ImageFileName == null), Is.True);
-        Assert.That(result.UnmatchedImageFiles, Is.Empty);
-    }
-
-    [Test]
-    public async Task MatchFilesAsync_NoAudio_ReturnsEmptyPairsWithAllImagesUnmatched()
-    {
-        var service = CreateService();
-        var audioFiles = Array.Empty<string>();
-        var imageFiles = new[] { "dark_night.jpg" };
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        Assert.That(result.Pairs, Is.Empty);
-        Assert.That(result.UnmatchedImageFiles, Has.Count.EqualTo(1));
-        Assert.That(result.UnmatchedImageFiles[0], Is.EqualTo("dark_night.jpg"));
-    }
-
-    [Test]
-    public async Task MatchFilesAsync_ExactMatchFallback_PairsCorrectly()
-    {
-        var service = CreateService(); // No OpenAI configured
-        var audioFiles = new[] { "dark_night.mp3" };
-        var imageFiles = new[] { "dark_night.jpg" };
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
-        Assert.That(result.Pairs[0].AudioFileName, Is.EqualTo("dark_night.mp3"));
-        Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
-        Assert.That(result.Pairs[0].NormalizedName, Is.EqualTo("Dark Night"));
-        Assert.That(result.UnmatchedImageFiles, Is.Empty);
-    }
-
-    [Test]
-    public async Task MatchFilesAsync_ExactMatchFallback_CaseInsensitive()
-    {
-        var service = CreateService();
-        var audioFiles = new[] { "DarkNight.mp3" };
-        var imageFiles = new[] { "darknight.jpg" };
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        // Fallback uses exact normalized base name match
-        // "DarkNight" (after removing extension) vs "darknight" — same when case-insensitive
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
         Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("darknight.jpg"));
     }
 
     [Test]
-    public async Task MatchFilesAsync_MasteredSuffixFallback_StripsAndMatches()
+    public async Task AMasteredSuffixIsIgnored()
     {
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night_mastered.mp3" };
-        var imageFiles = new[] { "dark_night.jpg" };
+        var result = await _service.MatchFilesAsync(["dark_night_mastered.mp3"], ["dark_night.jpg"]);
 
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
-        Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
-        Assert.That(result.Pairs[0].NormalizedName, Is.EqualTo("Dark Night"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
+            Assert.That(result.Pairs[0].NormalizedName, Is.EqualTo("Dark Night"));
+        });
     }
 
     [Test]
-    public async Task MatchFilesAsync_UnmatchedImageFallback_ReturnsInUnmatchedList()
+    public async Task AnImageMatchingNothing_IsReportedAsUnmatched()
     {
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night.mp3" };
-        var imageFiles = new[] { "dark_night.jpg", "unrelated_cover.png" };
+        var result = await _service.MatchFilesAsync(
+            ["dark_night.mp3"], ["dark_night.jpg", "unrelated_cover.png"]);
 
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
-        Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
-        Assert.That(result.UnmatchedImageFiles, Has.Count.EqualTo(1));
-        Assert.That(result.UnmatchedImageFiles[0], Is.EqualTo("unrelated_cover.png"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
+            Assert.That(result.UnmatchedImageFiles, Is.EqualTo(new[] { "unrelated_cover.png" }));
+        });
     }
 
     [Test]
-    public async Task MatchFilesAsync_AudioWithoutMatchFallback_HasNullImage()
+    public async Task AnAudioFileMatchingNothing_StillGetsARow()
     {
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night.mp3", "sunny_day.mp3" };
-        var imageFiles = new[] { "dark_night.jpg" };
+        // Dropping it would silently lose a song the creator selected.
+        var result = await _service.MatchFilesAsync(
+            ["dark_night.mp3", "sunny_day.mp3"], ["dark_night.jpg"]);
 
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
+        var unmatched = result.Pairs.Single(pair => pair.ImageFileName is null);
 
-        Assert.That(result.Pairs, Has.Count.EqualTo(2));
-        var unmatchedAudio = result.Pairs.FirstOrDefault(p => p.ImageFileName == null);
-        Assert.That(unmatchedAudio, Is.Not.Null);
-        Assert.That(unmatchedAudio.AudioFileName, Is.EqualTo("sunny_day.mp3"));
-        Assert.That(unmatchedAudio.NormalizedName, Is.EqualTo("Sunny Day"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Has.Count.EqualTo(2));
+            Assert.That(unmatched.AudioFileName, Is.EqualTo("sunny_day.mp3"));
+            Assert.That(unmatched.NormalizedName, Is.EqualTo("Sunny Day"));
+        });
     }
 
     [Test]
-    public async Task MatchFilesAsync_NormalizedNameUsesTitleCase_ForAllPairs()
+    public async Task OneImageIsNeverPairedWithTwoSongs()
     {
-        var service = CreateService();
-        var audioFiles = new[] { "my_awesome_song.mp3" };
-        var imageFiles = new[] { "my_awesome_song.jpg" };
+        // Two songs normalizing to the same name is a creator mistake, but pairing both with the
+        // same image would upload one file as two songs' art and leave the second row inconsistent.
+        var result = await _service.MatchFilesAsync(
+            ["dark_night.mp3", "dark-night.wav"], ["dark_night.jpg"]);
 
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles);
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Has.Count.EqualTo(2));
+            Assert.That(result.Pairs.Count(pair => pair.ImageFileName == "dark_night.jpg"), Is.EqualTo(1));
+            Assert.That(result.Pairs.Count(pair => pair.ImageFileName is null), Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task NormalizedNamesAreTitleCased()
+    {
+        var result = await _service.MatchFilesAsync(["my_awesome_song.mp3"], ["my_awesome_song.jpg"]);
 
         Assert.That(result.Pairs[0].NormalizedName, Is.EqualTo("My Awesome Song"));
     }
-
-    #endregion
-
-    #region MatchFilesAsync with imageData overload Tests
-
-    [Test]
-    public async Task MatchFilesAsync_WithImageDataNull_WorksLikeTwoParamOverload()
-    {
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night.mp3" };
-        var imageFiles = new[] { "dark_night.jpg" };
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles, null);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
-        Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("dark_night.jpg"));
-    }
-
-    [Test]
-    public async Task MatchFilesAsync_NonMatchingImageNoImageData_FallsBackToExactMatch()
-    {
-        // Without image data (no OCR), the exact base-name fallback is used.
-        // An image whose name has nothing in common with the audio file will not be matched.
-        var service = CreateService();
-        var audioFiles = new[] { "dark_night.mp3" };
-        var unmatchedImage = "completely_different_cover.jpg";
-        var imageFiles = new[] { unmatchedImage };
-
-        var result = await service.MatchFilesAsync(audioFiles, imageFiles, null);
-
-        Assert.That(result.Pairs, Has.Count.EqualTo(1));
-        Assert.That(result.Pairs[0].ImageFileName, Is.Null);
-        Assert.That(result.UnmatchedImageFiles, Has.Count.EqualTo(1));
-        Assert.That(result.UnmatchedImageFiles[0], Is.EqualTo(unmatchedImage));
-    }
-
-    #endregion
 }

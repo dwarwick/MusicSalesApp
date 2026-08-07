@@ -281,8 +281,16 @@ public class SongUploadJobServiceTests
     {
         public List<AudioTranscodeRequest> Transcodes { get; } = [];
         public List<AudioProbeRequest> Probes { get; } = [];
+        public List<CoverArtMatchRequest> Matches { get; } = [];
 
         public bool IsConfigured => true;
+        public bool IsCoverArtMatchConfigured => true;
+
+        public Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default)
+        {
+            Matches.Add(request);
+            return Task.CompletedTask;
+        }
 
         public Task EnqueueTranscodeAsync(AudioTranscodeRequest request, CancellationToken cancellationToken = default)
         {

@@ -12,8 +12,10 @@ public sealed class FunctionOptions
     public string StagingStorageConnectionString { get; set; }
 
     /// <summary>
-    /// Premium account holding song media. <b>Read-only from here</b> - the web app owns every
-    /// write into the catalogue. Used only by the probe path.
+    /// Premium account holding song media. Read by the probe path, and written by the cover-art
+    /// rendition pass — but <b>for derived artefacts only</b>. The web app remains the sole writer
+    /// of every primary blob and the sole writer of the database; nothing here may create, overwrite
+    /// or delete a blob a <c>SongMetadata</c> row already points at.
     /// </summary>
     public string MediaStorageConnectionString { get; set; }
 

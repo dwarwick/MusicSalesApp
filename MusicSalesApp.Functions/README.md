@@ -22,8 +22,15 @@ process in parallel and the web server never runs FFmpeg at all.
 
 | Function | Queue | Does |
 |---|---|---|
-| `ProcessAudioUpload` | `audio-transcode{-env}` | Transcodes one staged creator upload to MP3 and reports its duration. Posts live progress as it goes. |
+| `ProcessAudioUpload` | `audio-transcode{-env}` | Transcodes one staged creator upload to MP3, reports its duration, and writes the cover art's WebP renditions. Posts live progress as it goes. |
 | `ProbeAudio` | `audio-probe{-env}` | Decodes an already-stored playback blob without producing anything, for the audit and track-length repair jobs. No progress — nobody is watching. |
+| `MatchCoverArt` | `cover-art-match{-env}` | Reads the text off a batch of staged cover art and pairs it with the audio uploaded beside it, before any song exists. Posts live progress. |
+| `HandleTranscodePoison` | `audio-transcode{-env}-poison` | Reports an upload whose message exhausted `maxDequeueCount` as failed, so the creator is told promptly and its staging is cleaned. No settings of its own — the queue name is the transcode queue's plus `-poison`, and the host creates the queue on demand. |
+
+⚠️ **`MediaProcessing:MatchQueueName` and `OpenAI:ApiKey` must be added by hand in the portal on an
+already-deployed app** — provisioning only pushes settings on the run that creates it. The queue name
+is required (a trigger cannot bind without it, and the whole app fails to start); the OpenAI key is
+optional and its absence just falls matching back to filenames.
 
 Neither function touches the database. The site and its SQL Server are on shared hosting and are not
 reachable from here, so everything this app learns goes back through
@@ -41,7 +48,13 @@ the queues and the upload staging container are on the **Standard general-purpos
 never moves. This app therefore needs both connection strings:
 
 - `StagingStorageConnectionString` — Standard: queues, and reading/writing staged upload blobs.
-- `MediaStorageConnectionString` — Premium: read-only, for the probe path.
+- `MediaStorageConnectionString` — Premium: read for the probe path, and write for cover-art
+  renditions **only**. Every primary blob is still written by the web app. See CLAUDE.md's
+  "no primary blob, no row" invariant before adding any other write here.
+
+Both are the same account-key connection strings the web app already uses (see
+`Get-MediaProcessingSettings.ps1`), so no credential change was needed when renditions moved here —
+the constraint is enforced by the shape of `IMediaBlobStore`, not by the key.
 
 ## Hosting
 
@@ -236,7 +249,9 @@ change it in `appsettings.{Environment}.json` for the web app, then deploy the w
 For a first deployment to an environment, the Function goes first. The reverse leaves a window where
 creators can upload: jobs stage and enqueue with nothing to process them, and after
 `StalledJobTimeout` the reconciler marks them Failed and tells the creator their upload broke when
-nothing was wrong. A Function deployed early just polls an empty queue and costs nothing.
+nothing was wrong. A Function deployed early just polls an empty queue and costs nothing. (That
+timeout is two hours now rather than twenty minutes, so the window is far more forgiving than it
+was — but the ordering is still free, so keep to it.)
 
 Two apps rather than one, so a bad deploy cannot take down production processing and test at the
 same moment. There is no CI/CD in this repo; `.vscode/tasks.json` has both as tasks.

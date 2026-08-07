@@ -266,8 +266,12 @@ public class TrackLengthRepairServiceTests
         public List<AudioProbeRequest> Probes { get; } = [];
 
         public bool IsConfigured { get; set; } = true;
+        public bool IsCoverArtMatchConfigured => true;
 
         public Task EnqueueTranscodeAsync(AudioTranscodeRequest request, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task EnqueueCoverArtMatchAsync(CoverArtMatchRequest request, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
         public Task EnqueueProbesAsync(IEnumerable<AudioProbeRequest> requests, CancellationToken cancellationToken = default)

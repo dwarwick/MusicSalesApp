@@ -60,8 +60,10 @@ function Get-MediaProcessingSettings {
         return $Value
     }
 
-    # The premium account holding song media. The Function only ever READS this - the web app owns
-    # every write into the catalogue.
+    # The premium account holding song media. The Function reads this for the probe path and writes
+    # cover-art renditions into it - derived artefacts only. The web app is still the sole writer of
+    # every primary blob and of the database, so this is the same connection string either way and
+    # no credential change was needed when renditions moved into the Function.
     $mediaConnection = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "StorageAccountConnectionString") "Azure:StorageAccountConnectionString"
     $mediaContainer = Require-Setting (Get-MediaProcessingSettingValue $settings "Azure" "ContainerName") "Azure:ContainerName"
 
@@ -72,6 +74,7 @@ function Get-MediaProcessingSettings {
     $stagingContainer = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "UploadStagingContainerName") "AzureLowSpeed:UploadStagingContainerName"
     $transcodeQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "TranscodeQueueName") "AzureLowSpeed:TranscodeQueueName"
     $probeQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "ProbeQueueName") "AzureLowSpeed:ProbeQueueName"
+    $matchQueue = Require-Setting (Get-MediaProcessingSettingValue $settings "AzureLowSpeed" "MatchQueueName") "AzureLowSpeed:MatchQueueName"
 
     $apiKeyProperty = $settings.PSObject.Properties["MediaProcessingApiKey"]
     $apiKey = if ($null -ne $apiKeyProperty) { $apiKeyProperty.Value } else { $null }
@@ -83,13 +86,17 @@ function Get-MediaProcessingSettings {
         throw "'BaseUrl' is missing from $SettingsPath. The Function posts its results there."
     }
 
+    # Optional, unlike everything above. Without it the Function pairs cover art on filenames alone,
+    # which is a worse answer rather than a broken one - so a missing key must not stop provisioning.
+    $openAiKey = Get-MediaProcessingSettingValue $settings "OpenAI" "ApiKey"
+
     if ($mediaConnection -eq $stagingConnection) {
         Write-Warning ("Azure:StorageAccountConnectionString and AzureLowSpeed:StorageAccountConnectionString " +
             "are the same account. Media is expected to be on the premium account and the queues on " +
             "the standard one - check this is deliberate.")
     }
 
-    return [ordered]@{
+    $result = [ordered]@{
         "FUNCTIONS_WORKER_RUNTIME"             = "dotnet-isolated"
 
         # Functions runtime bookkeeping. Shares the standard account with the queues.
@@ -103,6 +110,7 @@ function Get-MediaProcessingSettings {
         # Referenced as %...% inside the QueueTrigger attributes. Same constraint.
         "MediaProcessing:TranscodeQueueName"   = $transcodeQueue
         "MediaProcessing:ProbeQueueName"       = $probeQueue
+        "MediaProcessing:MatchQueueName"       = $matchQueue
 
         "MediaProcessing:StagingContainerName" = $stagingContainer
         "MediaProcessing:MediaContainerName"   = $mediaContainer
@@ -110,4 +118,10 @@ function Get-MediaProcessingSettings {
         "CallbackBaseUrl"                      = $callbackBaseUrl
         "MediaProcessingApiKey"                = $apiKey
     }
+
+    if (-not [string]::IsNullOrWhiteSpace($openAiKey)) {
+        $result["OpenAI:ApiKey"] = $openAiKey
+    }
+
+    return $result
 }

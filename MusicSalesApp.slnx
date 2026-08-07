@@ -7,6 +7,7 @@
   <Project Path="MusicSalesApp.Common/MusicSalesApp.Common.csproj" />
   <Project Path="MusicSalesApp.ComponentTests/MusicSalesApp.ComponentTests.csproj" />
   <Project Path="MusicSalesApp.Functions/MusicSalesApp.Functions.csproj" />
+  <Project Path="MusicSalesApp.Imaging/MusicSalesApp.Imaging.csproj" />
   <Project Path="MusicSalesApp.Tests/MusicSalesApp.Tests.csproj" />
   <Project Path="MusicSalesApp/MusicSalesApp.csproj" />
 </Solution>

@@ -2,6 +2,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.Imaging;
 using SkiaSharp;
 
 namespace MusicSalesApp.Services;

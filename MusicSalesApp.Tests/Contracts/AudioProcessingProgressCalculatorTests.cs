@@ -21,6 +21,7 @@ public class AudioProcessingProgressCalculatorTests
         AudioProcessingStep.Transcoding,
         AudioProcessingStep.Verifying,
         AudioProcessingStep.Uploading,
+        AudioProcessingStep.RenderingArtwork,
         AudioProcessingStep.Copying,
         AudioProcessingStep.SavingMetadata,
         AudioProcessingStep.GeneratingArtwork,
@@ -71,6 +72,22 @@ public class AudioProcessingProgressCalculatorTests
                 previous = overall;
             }
         }
+    }
+
+    [Test]
+    public void RenderingArtwork_HasABandWideEnoughForPerRungProgress()
+    {
+        // ProgressReporter drops any post that would not move the bar by a whole percent, so a band
+        // narrower than one point per rung silently swallows every per-rung update and the step
+        // becomes a single jump. Pinned because the property is invisible in the band table itself
+        // and would be the first casualty of a future rebalance.
+        var width = AudioProcessingProgressCalculator.BandEnd(AudioProcessingStep.RenderingArtwork)
+            - AudioProcessingProgressCalculator.BandStart(AudioProcessingStep.RenderingArtwork);
+
+        Assert.That(
+            width,
+            Is.GreaterThanOrEqualTo(ImageVariantSizes.CoverArt.Count),
+            "RenderingArtwork's band is too narrow for one whole percent per rendition rung.");
     }
 
     [Test]
