@@ -81,6 +81,12 @@ public class AppSettingsService : IAppSettingsService
     public const int DefaultMaxImageUploadSizeMB = 20;
 
     /// <summary>
+    /// Whether the browser uploads straight to Azure instead of streaming through the web server.
+    /// Defaults off; see <see cref="AppSettingsService.IsDirectToStorageUploadEnabledAsync"/>.
+    /// </summary>
+    public const string DirectToStorageUploadEnabledKey = "DirectToStorageUploadEnabled";
+
+    /// <summary>
     /// The key used for storing the application version number.
     /// </summary>
     public const string AppVersionKey = "AppVersion";
@@ -290,6 +296,39 @@ public class AppSettingsService : IAppSettingsService
             MaxImageUploadSizeMBKey,
             sizeMB.ToString(),
             "Maximum image upload file size in MB");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsDirectToStorageUploadEnabledAsync()
+    {
+        var value = await GetSettingAsync(DirectToStorageUploadEnabledKey);
+
+        // Defaults OFF. This gates a rewrite of the most-used path on the creator side, on shared
+        // hosting with manual deploys, and the storage CORS it depends on is account-wide and shared
+        // between Test and Production - so this flag is the only thing that makes the two rollouts
+        // independent. An absent or unparseable row must never turn it on by accident.
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        if (bool.TryParse(value, out var enabled))
+        {
+            return enabled;
+        }
+
+        _logger.LogWarning(
+            "Invalid direct-to-storage upload flag in database: {Value}. Leaving it disabled.", value);
+        return false;
+    }
+
+    /// <inheritdoc />
+    public async Task SetDirectToStorageUploadEnabledAsync(bool enabled)
+    {
+        await SetSettingAsync(
+            DirectToStorageUploadEnabledKey,
+            enabled.ToString(),
+            "Upload creator files from the browser straight to Azure, bypassing the web server");
     }
 
     /// <inheritdoc />

@@ -93,6 +93,16 @@ public interface IAppSettingsService
     Task SetMaxImageUploadSizeMBAsync(int sizeMB);
 
     /// <summary>
+    /// Whether the creator upload page sends files straight from the browser to Azure, bypassing the
+    /// web server entirely.
+    /// </summary>
+    /// <returns><see langword="false"/> unless explicitly enabled, including on a malformed value.</returns>
+    Task<bool> IsDirectToStorageUploadEnabledAsync();
+
+    /// <summary>Turns browser-direct uploads on or off.</summary>
+    Task SetDirectToStorageUploadEnabledAsync(bool enabled);
+
+    /// <summary>
     /// Checks if Tax Bandits is currently in a maintenance window.
     /// Returns true if maintenance is enabled and the current UTC time falls within the start/end range.
     /// </summary>
