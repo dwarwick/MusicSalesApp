@@ -506,22 +506,56 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // The trade: a file that sniffs correctly but does not actually decode is no longer caught
         // here. It is caught in the Function, and the creator is told through the job's progress
         // row rather than an error on this page.
+        // Reported per file, and the image half runs off the circuit thread.
+        //
+        // Not a micro-optimisation: ImageContentMatchesExtension is synchronous and fully decodes
+        // each image into an uncompressed bitmap (width x height x 4 - a cap on the *file* size does
+        // not bound that). Run inline it blocks the circuit, so nothing renders and no progress is
+        // reported for the whole batch. A slow validation pass and a hung one then look identical
+        // from the browser: a bar frozen on the last received file, with nothing in the log because
+        // nothing threw.
         var invalidContentFiles = new List<string>();
+        var validated = 0;
+        var totalToValidate = audioFilesByName.Count + coverArtFilesByName.Count;
+
+        async Task ReportValidationProgressAsync(string fileName)
+        {
+            validated++;
+            _initialUploadStatusMessage = $"Checking {fileName} ({validated} of {totalToValidate})...";
+            await InvokeAsync(StateHasChanged);
+        }
+
         foreach (var file in audioFilesByName)
         {
-            await using var stream = File.OpenRead(audioTempPaths[file.Key]);
-            if (!AudioContainerSniffer.ContentMatchesExtension(stream, file.Key, out _))
+            // Header only - 64 bytes, no decode. Cheap enough to stay on this thread.
+            await using (var stream = File.OpenRead(audioTempPaths[file.Key]))
             {
-                invalidContentFiles.Add(file.Key);
+                if (!AudioContainerSniffer.ContentMatchesExtension(stream, file.Key, out _))
+                {
+                    invalidContentFiles.Add(file.Key);
+                }
             }
+
+            await ReportValidationProgressAsync(file.Key);
         }
+
         foreach (var file in coverArtFilesByName)
         {
-            await using var stream = File.OpenRead(coverArtTempPaths[file.Key]);
-            if (!MediaFileContentValidator.ImageContentMatchesExtension(stream, file.Key, out _))
+            var tempPath = coverArtTempPaths[file.Key];
+            var fileName = file.Key;
+
+            var decoded = await Task.Run(() =>
+            {
+                using var stream = File.OpenRead(tempPath);
+                return MediaFileContentValidator.ImageContentMatchesExtension(stream, fileName, out _);
+            }, _uploadCts.Token);
+
+            if (!decoded)
             {
                 invalidContentFiles.Add(file.Key);
             }
+
+            await ReportValidationProgressAsync(file.Key);
         }
         if (invalidContentFiles.Count > 0)
         {
