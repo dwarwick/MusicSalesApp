@@ -447,6 +447,7 @@ try
     // Singleton: it holds no per-request state, and its once-per-process container check is only
     // once-per-process if the instance is.
     builder.Services.AddSingleton<IUploadStagingSasService, UploadStagingSasService>();
+    builder.Services.AddScoped<IStagedBlobReader, StagedBlobReader>();
     builder.Services.AddScoped<ISongUploadJobReconciler, SongUploadJobReconciler>();
 
     // Reaches both the media and persona-image containers, which the single-container

@@ -27,10 +27,55 @@ public sealed class SongUploadJobRequest
 }
 
 /// <summary>
+/// What the caller supplies when the browser has already uploaded the bytes.
+///
+/// <para>
+/// No streams: the web server never sees this song's audio. The GUID is minted before the upload
+/// starts, because a destination path is needed before there is anything to record it against.
+/// </para>
+/// </summary>
+public sealed class StagedSongUploadRequest
+{
+    /// <summary>Minted server-side when the write token was issued; names the staging folder.</summary>
+    public required Guid MediaGuid { get; init; }
+
+    public required string AudioFileName { get; init; }
+    public required string SongTitle { get; init; }
+    public required int CreatorId { get; init; }
+    public string? AlbumName { get; init; }
+
+    public string? CoverArtFileName { get; init; }
+
+    /// <summary>
+    /// Where the matched cover image currently sits, under <c>batch/{batchId}/</c>.
+    ///
+    /// <para>
+    /// It cannot already be in the song's folder: which image belongs to which song is only known
+    /// after matching, which is after the images were uploaded. This service copies it across, which
+    /// is a same-account server-side operation and moves no bytes through the web host.
+    /// </para>
+    /// </summary>
+    public string? CoverArtStagedPath { get; init; }
+}
+
+/// <summary>
 /// Stages a creator's upload and hands it to the Azure Function for FFmpeg processing.
 /// </summary>
 public interface ISongUploadJobService
 {
+    /// <summary>
+    /// Records and enqueues a song whose audio the browser has already uploaded to staging.
+    ///
+    /// <para>
+    /// The same job as <see cref="CreateAsync"/> minus the transfer. Every check that only needs
+    /// metadata runs identically; the two that needed the bytes are done against the staged blob
+    /// instead - its length for the size cap, and a 64-byte ranged read for the container sniff.
+    /// </para>
+    /// </summary>
+    Task<SongUploadJob> CreateFromStagedAsync(
+        StagedSongUploadRequest request,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Validates, stages to blob storage, records a <see cref="SongUploadJob"/> and enqueues the
     /// transcode. Returns as soon as the message is queued; the song does not exist yet.
@@ -68,6 +113,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
     private readonly ISongMetadataService _metadataService;
     private readonly IMusicService _musicService;
     private readonly IAppSettingsService _appSettings;
+    private readonly IStagedBlobReader _stagedBlobs;
     private readonly ILogger<SongUploadJobService> _logger;
 
     public SongUploadJobService(
@@ -77,6 +123,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
         ISongMetadataService metadataService,
         IMusicService musicService,
         IAppSettingsService appSettings,
+        IStagedBlobReader stagedBlobs,
         ILogger<SongUploadJobService> logger)
     {
         _contextFactory = contextFactory;
@@ -85,6 +132,7 @@ public sealed class SongUploadJobService : ISongUploadJobService
         _metadataService = metadataService;
         _musicService = musicService;
         _appSettings = appSettings;
+        _stagedBlobs = stagedBlobs;
         _logger = logger;
     }
 
@@ -115,6 +163,128 @@ public sealed class SongUploadJobService : ISongUploadJobService
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task<SongUploadJob> CreateFromStagedAsync(
+        StagedSongUploadRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.MediaGuid == Guid.Empty)
+        {
+            throw new InvalidDataException("A media GUID is required for a staged upload.");
+        }
+
+        if (!MusicFileExtensions.IsAudioFile(request.AudioFileName))
+        {
+            throw new InvalidDataException($"'{request.AudioFileName}' does not have a supported audio extension.");
+        }
+
+        string? coverArtFileName = null;
+        if (!string.IsNullOrWhiteSpace(request.CoverArtStagedPath))
+        {
+            if (string.IsNullOrWhiteSpace(request.CoverArtFileName)
+                || !MusicFileExtensions.IsCoverArtFile(request.CoverArtFileName))
+            {
+                throw new InvalidDataException(
+                    $"'{request.CoverArtFileName}' does not have a supported cover-art extension.");
+            }
+
+            coverArtFileName = request.CoverArtFileName;
+        }
+
+        var songTitle = (request.SongTitle ?? string.Empty).Trim();
+        var titleErrors = SongTitleHelper.GetTitleValidationErrors(songTitle);
+        if (titleErrors.Count > 0)
+        {
+            throw new InvalidDataException(string.Join(" ", titleErrors));
+        }
+
+        var audioExtension = Path.GetExtension(request.AudioFileName).ToLowerInvariant();
+        var coverExtension = coverArtFileName is null
+            ? null
+            : Path.GetExtension(coverArtFileName).ToLowerInvariant();
+        var mediaGuid = request.MediaGuid;
+
+        // Runs here as well as when the token was minted. Minutes pass between those two moments now,
+        // and an admin art-replace or a second tab could claim these paths in between - dropping it
+        // here would turn an ownership check into a time-of-check/time-of-use gap.
+        await _metadataService.ValidateUploadTargetAsync(
+            SongMediaPaths.Playback(mediaGuid),
+            SongMediaPaths.OriginalAudio(mediaGuid, audioExtension),
+            coverExtension is null ? null : SongMediaPaths.CoverArt(mediaGuid, coverExtension),
+            request.CreatorId);
+
+        var sourcePath = MediaProcessingStagingPaths.Source(mediaGuid, audioExtension);
+
+        // Existence and size in one call. The browser enforced the cap too, but that is the creator's
+        // own machine telling us how big their file is - this is the first time anything we control
+        // has measured it, and it is the only remaining enforcement now that OpenReadStream is gone.
+        var audioLength = await _stagedBlobs.GetLengthAsync(sourcePath, cancellationToken);
+        if (audioLength is null)
+        {
+            throw new InvalidDataException(
+                $"'{request.AudioFileName}' was never fully uploaded. Please try adding it again.");
+        }
+
+        var maxAudioMB = await _appSettings.GetMaxAudioUploadSizeMBAsync();
+        if (maxAudioMB > 0 && audioLength > maxAudioMB * BytesPerMegabyte)
+        {
+            // Deleted rather than left: the row is never written, so nothing else will ever know this
+            // blob exists, and the lifecycle rule would sit on it for a week.
+            await DeleteStagedBlobsAsync(mediaGuid, CancellationToken.None);
+            throw new InvalidDataException(
+                $"'{request.AudioFileName}' is {audioLength.Value / (double)BytesPerMegabyte:F1} MB, "
+                + $"which is larger than the {maxAudioMB} MB limit.");
+        }
+
+        // 64 bytes, not 60 MB. Same header sniff the streamed path does, against the staged blob.
+        var header = await _stagedBlobs.ReadHeaderAsync(sourcePath, AudioHeaderByteCount, cancellationToken);
+        if (header is null || !IsAudioHeaderValid(header, request.AudioFileName))
+        {
+            await DeleteStagedBlobsAsync(mediaGuid, CancellationToken.None);
+            throw new InvalidDataException(
+                $"'{request.AudioFileName}' does not contain audio matching its extension.");
+        }
+
+        string? coverPath = null;
+        if (coverExtension is not null && request.CoverArtStagedPath is not null)
+        {
+            coverPath = MediaProcessingStagingPaths.Cover(mediaGuid, coverExtension);
+            await _stagedBlobs.CopyWithinStagingAsync(request.CoverArtStagedPath, coverPath, cancellationToken);
+        }
+
+        // No decode. That check moved to the Function, which already decodes this image to build its
+        // renditions and now skips the cover-art copy entirely when it cannot - so an undecodable
+        // image costs the song its artwork rather than the catalogue an unrenderable master.
+        var audioContentType = MusicFileExtensions.GetAudioContentType(audioExtension)
+            ?? throw new InvalidDataException("Unsupported original audio type.");
+
+        return await PersistAndEnqueueAsync(
+            mediaGuid,
+            request.CreatorId,
+            songTitle,
+            request.AlbumName,
+            sourcePath,
+            Path.GetFileName(request.AudioFileName),
+            audioExtension,
+            audioLength.Value,
+            audioContentType,
+            coverPath,
+            coverArtFileName is null ? null : Path.GetFileName(coverArtFileName),
+            coverExtension,
+            cancellationToken);
+    }
+
+    /// <summary>Bytes the container sniff needs. Matches what AudioContainerSniffer reads.</summary>
+    private const int AudioHeaderByteCount = 64;
+
+    private bool IsAudioHeaderValid(byte[] header, string fileName)
+    {
+        using var buffer = new MemoryStream(header);
+        return AudioContainerSniffer.ContentMatchesExtension(buffer, fileName, out _);
     }
 
     /// <inheritdoc />
@@ -252,21 +422,59 @@ public sealed class SongUploadJobService : ISongUploadJobService
                 cancellationToken);
         }
 
+        return await PersistAndEnqueueAsync(
+            mediaGuid,
+            request.CreatorId,
+            songTitle,
+            request.AlbumName,
+            sourcePath,
+            Path.GetFileName(request.AudioFileName),
+            audioExtension,
+            audioLength,
+            audioContentType,
+            coverPath,
+            coverArtFileName is null ? null : Path.GetFileName(coverArtFileName),
+            coverExtension,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes the job row and queues the transcode.
+    ///
+    /// <para>
+    /// Shared by both entry points deliberately. How the bytes got to staging differs; what a job
+    /// looks like and what the Function is told about it must not, or a song uploaded one way would
+    /// process differently from the same song uploaded the other.
+    /// </para>
+    /// </summary>
+    private async Task<SongUploadJob> PersistAndEnqueueAsync(
+        Guid mediaGuid,
+        int creatorId,
+        string songTitle,
+        string? albumName,
+        string sourcePath,
+        string sourceFileName,
+        string audioExtension,
+        long audioLength,
+        string audioContentType,
+        string? coverPath,
+        string? coverArtFileName,
+        string? coverExtension,
+        CancellationToken cancellationToken)
+    {
         var job = new SongUploadJob
         {
             MediaGuid = mediaGuid,
-            CreatorId = request.CreatorId,
+            CreatorId = creatorId,
             SongTitle = songTitle,
-            AlbumName = request.AlbumName ?? string.Empty,
+            AlbumName = albumName ?? string.Empty,
             SourceBlobPath = sourcePath,
-            SourceFileName = Path.GetFileName(request.AudioFileName),
+            SourceFileName = sourceFileName,
             SourceExtension = audioExtension,
             SourceFileSize = audioLength,
             SourceContentType = audioContentType,
             CoverArtBlobPath = coverPath,
-            CoverArtFileName = coverArtFileName is null
-                ? null
-                : Path.GetFileName(coverArtFileName),
+            CoverArtFileName = coverArtFileName,
             CoverArtExtension = coverExtension,
             Status = SongUploadJobStatus.Queued,
             Step = AudioProcessingStep.Queued,

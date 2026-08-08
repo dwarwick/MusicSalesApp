@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using MusicSalesApp.Common.Contracts;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -29,8 +30,41 @@ public class SongUploadJobServiceTests
     private Mock<ISongMetadataService> _metadata = null!;
     private Mock<IMusicService> _music = null!;
     private Mock<IAppSettingsService> _appSettings = null!;
+    private FakeStagedBlobReader _stagedBlobs = null!;
     private RecordingQueueClient _queue = null!;
     private SongUploadJobService _service = null!;
+
+    /// <summary>
+    /// Stands in for staging. BlobContainerClient cannot be usefully mocked, so without this seam
+    /// the size cap and header sniff on a staged upload - the only two checks left between a creator
+    /// and the catalogue once bytes stop passing through the server - would be untestable offline.
+    /// </summary>
+    private sealed class FakeStagedBlobReader : IStagedBlobReader
+    {
+        public Dictionary<string, byte[]> Blobs { get; } = new(StringComparer.Ordinal);
+        public List<(string Source, string Destination)> Copies { get; } = [];
+
+        /// <summary>Set to report a length without holding the bytes, for size-cap tests.</summary>
+        public Dictionary<string, long> Lengths { get; } = new(StringComparer.Ordinal);
+
+        public Task<long?> GetLengthAsync(string blobPath, CancellationToken cancellationToken = default)
+        {
+            if (Lengths.TryGetValue(blobPath, out var length)) return Task.FromResult<long?>(length);
+            if (Blobs.TryGetValue(blobPath, out var bytes)) return Task.FromResult<long?>(bytes.Length);
+            return Task.FromResult<long?>(null);
+        }
+
+        public Task<byte[]> ReadHeaderAsync(string blobPath, int byteCount, CancellationToken cancellationToken = default)
+            => Task.FromResult(Blobs.TryGetValue(blobPath, out var bytes)
+                ? bytes.Take(byteCount).ToArray()
+                : null);
+
+        public Task CopyWithinStagingAsync(string source, string destination, CancellationToken cancellationToken = default)
+        {
+            Copies.Add((source, destination));
+            return Task.CompletedTask;
+        }
+    }
 
     [SetUp]
     public void SetUp()
@@ -40,8 +74,11 @@ public class SongUploadJobServiceTests
             .Options;
         _factory = new TestFactory(_options);
 
-        // Null staging deliberately: every test here asserts a rejection that must happen *before*
-        // storage is touched, so reaching for the container at all would fail the test loudly.
+        // Null staging deliberately: the stream-based tests all assert a rejection that must happen
+        // *before* storage is touched, so reaching for the container at all would fail them loudly.
+        // The staged tests read their bytes through IStagedBlobReader instead, and reach for the
+        // container only to clean up after a rejection - which a null container turns into a no-op,
+        // leaving the call itself as the observable evidence that cleanup ran.
         _containers = new Mock<IBlobContainerFactory>();
         _containers.Setup(factory => factory.GetUploadStagingContainer()).Returns((Azure.Storage.Blobs.BlobContainerClient)null);
 
@@ -61,6 +98,7 @@ public class SongUploadJobServiceTests
         _appSettings.Setup(settings => settings.GetMaxImageUploadSizeMBAsync()).ReturnsAsync(20);
 
         _queue = new RecordingQueueClient();
+        _stagedBlobs = new FakeStagedBlobReader();
 
         _service = new SongUploadJobService(
             _factory,
@@ -69,6 +107,7 @@ public class SongUploadJobServiceTests
             _metadata.Object,
             _music.Object,
             _appSettings.Object,
+            _stagedBlobs,
             Mock.Of<ILogger<SongUploadJobService>>());
     }
 
@@ -164,6 +203,178 @@ public class SongUploadJobServiceTests
 
         AssertNothingHappened();
     }
+
+    #region Staged uploads - the browser already put the bytes in Azure
+
+    private static readonly Guid StagedGuid = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
+
+    private static readonly byte[] Mp3Header = [(byte)'I', (byte)'D', (byte)'3', 0, 0, 0, 0, 0];
+
+    private StagedSongUploadRequest StagedRequest(string coverStagedPath = null, string coverFileName = null)
+        => new()
+        {
+            MediaGuid = StagedGuid,
+            AudioFileName = "Song.mp3",
+            SongTitle = "Song",
+            CreatorId = 1,
+            CoverArtStagedPath = coverStagedPath,
+            CoverArtFileName = coverFileName
+        };
+
+    private void GivenStagedAudio(byte[] content = null)
+        => _stagedBlobs.Blobs[MediaProcessingStagingPaths.Source(StagedGuid, ".mp3")] = content ?? Mp3Header;
+
+    [Test]
+    public async Task AStagedUpload_IsRecordedAndQueuedWithoutTouchingAStream()
+    {
+        GivenStagedAudio();
+
+        var job = await _service.CreateFromStagedAsync(StagedRequest());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.MediaGuid, Is.EqualTo(StagedGuid), "The GUID is minted before the upload, not here.");
+            Assert.That(job.SourceBlobPath, Is.EqualTo(MediaProcessingStagingPaths.Source(StagedGuid, ".mp3")));
+            Assert.That(job.SourceFileSize, Is.EqualTo(Mp3Header.Length), "Size comes from the blob, not the caller.");
+            Assert.That(_queue.Transcodes, Has.Count.EqualTo(1));
+            Assert.That(_queue.Transcodes[0].JobId, Is.EqualTo(StagedGuid));
+        });
+    }
+
+    [Test]
+    public void AStagedUploadThatNeverFinished_IsRejected()
+    {
+        // No blob at all: the browser started and stopped. Queueing this would hand the Function a
+        // job whose source 404s, which it can only report as a failure minutes later.
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateFromStagedAsync(StagedRequest()));
+
+        Assert.That(_queue.Transcodes, Is.Empty);
+    }
+
+    [Test]
+    public void AStagedUploadOverTheCap_IsRejectedAndTheBlobIsDeleted()
+    {
+        // The browser enforced the cap too, but that is the creator's own machine reporting the size.
+        // This is the first measurement anything we control has made - and the only one left, now
+        // that OpenReadStream is out of the path.
+        _appSettings.Setup(settings => settings.GetMaxAudioUploadSizeMBAsync()).ReturnsAsync(1);
+        GivenStagedAudio();
+        _stagedBlobs.Lengths[MediaProcessingStagingPaths.Source(StagedGuid, ".mp3")] = 5 * 1024 * 1024;
+
+        var ex = Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateFromStagedAsync(StagedRequest()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex!.Message, Does.Contain("1 MB"));
+            Assert.That(_queue.Transcodes, Is.Empty);
+
+            // Rejecting without this would leave 5 MB in staging under a GUID no row references, so
+            // nothing would ever come back for it - the lifecycle rule would be the only sweeper.
+            _containers.Verify(factory => factory.GetUploadStagingContainer(), Times.Once);
+        });
+    }
+
+    [Test]
+    public void AStagedFileThatIsNotReallyAudio_IsRejected()
+    {
+        // Proven from 64 bytes rather than a download - the whole point of the ranged read.
+        GivenStagedAudio("this is not an mp3"u8.ToArray());
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateFromStagedAsync(StagedRequest()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_queue.Transcodes, Is.Empty);
+            _containers.Verify(factory => factory.GetUploadStagingContainer(), Times.Once);
+        });
+    }
+
+    [Test]
+    public async Task AMatchedCoverIsCopiedOutOfTheBatchFolderIntoTheSongsOwn()
+    {
+        // It could not have been uploaded there in the first place: which song an image belongs to
+        // is unknown until after matching, which is after the images are uploaded.
+        GivenStagedAudio();
+        var batchPath = MediaProcessingStagingPaths.MatchBatchImage(Guid.NewGuid(), 2, ".png");
+
+        var job = await _service.CreateFromStagedAsync(StagedRequest(batchPath, "Cover.png"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_stagedBlobs.Copies, Has.Count.EqualTo(1));
+            Assert.That(_stagedBlobs.Copies[0].Source, Is.EqualTo(batchPath));
+            Assert.That(
+                _stagedBlobs.Copies[0].Destination,
+                Is.EqualTo(MediaProcessingStagingPaths.Cover(StagedGuid, ".png")));
+            Assert.That(job.CoverArtBlobPath, Is.EqualTo(MediaProcessingStagingPaths.Cover(StagedGuid, ".png")));
+            Assert.That(_queue.Transcodes[0].CoverArtExtension, Is.EqualTo(".png"));
+        });
+    }
+
+    [Test]
+    public async Task AnAudioOnlyStagedUpload_CopiesNothingAndTellsTheFunctionSo()
+    {
+        GivenStagedAudio();
+
+        var job = await _service.CreateFromStagedAsync(StagedRequest());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_stagedBlobs.Copies, Is.Empty);
+            Assert.That(job.CoverArtBlobPath, Is.Null);
+            Assert.That(_queue.Transcodes[0].CoverArtBlobPath, Is.Null,
+                "Null is how the Function knows to skip the image work entirely.");
+        });
+    }
+
+    [Test]
+    public void AnEmptyGuid_IsRejected()
+    {
+        // The GUID names the staging folder, so an empty one would look at batch-sibling paths.
+        var request = new StagedSongUploadRequest
+        {
+            MediaGuid = Guid.Empty,
+            AudioFileName = "Song.mp3",
+            SongTitle = "Song",
+            CreatorId = 1
+        };
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateFromStagedAsync(request));
+    }
+
+    [Test]
+    public void AStagedUpload_StillRunsTheOwnershipCheck()
+    {
+        // It also ran when the write token was minted, but minutes pass in between and an admin
+        // art-replace or a second tab could claim these paths - dropping it here would turn an
+        // ownership check into a time-of-check/time-of-use gap.
+        GivenStagedAudio();
+        _metadata
+            .Setup(service => service.ValidateUploadTargetAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+            .ThrowsAsync(new UnauthorizedAccessException("belongs to another creator"));
+
+        Assert.ThrowsAsync<UnauthorizedAccessException>(() => _service.CreateFromStagedAsync(StagedRequest()));
+
+        Assert.That(_queue.Transcodes, Is.Empty);
+    }
+
+    [Test]
+    public void AStagedUploadWithABlankTitle_IsRejected()
+    {
+        GivenStagedAudio();
+        var request = new StagedSongUploadRequest
+        {
+            MediaGuid = StagedGuid,
+            AudioFileName = "Song.mp3",
+            SongTitle = "   ",
+            CreatorId = 1
+        };
+
+        Assert.ThrowsAsync<InvalidDataException>(() => _service.CreateFromStagedAsync(request));
+    }
+
+    #endregion
 
     [Test]
     public void UnsupportedAudioExtension_IsRejected()
