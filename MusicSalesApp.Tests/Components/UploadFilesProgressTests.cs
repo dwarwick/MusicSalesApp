@@ -155,6 +155,40 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void UploadFiles_DirectUploadIsOptionalAndFallsBackToTheServerPath()
+    {
+        // Two independent gates, both of which must fail closed. The flag defaults off, and a browser
+        // that cannot load the module leaves _uploadModule null - either way the page must still take
+        // the server-side path it has always used, so an environment without CORS, without the flag,
+        // or with a blocked script is slower rather than broken.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeBehind, Does.Contain("IsDirectToStorageUploadEnabledAsync()"));
+            Assert.That(
+                codeBehind,
+                Does.Contain("DirectUploadAvailable => _uploadModule is not null"),
+                "A failed module import must leave the page on the server-side path.");
+            Assert.That(
+                codeBehind,
+                Does.Contain("CoverArtMatchService.StageAndEnqueueAsync"),
+                "The server-side staging path must remain reachable as the fallback.");
+
+            // JS finds the live FileList through this class; without it the upload module has no
+            // files to read and every direct upload reports NoFileList.
+            Assert.That(markup, Does.Contain("direct-upload-input"));
+
+            // Cancelling a token cannot stop a transfer the server is not part of.
+            Assert.That(
+                codeBehind,
+                Does.Contain("AbortDirectUploadsAsync"),
+                "Disposal must tell the browser to stop, not just cancel a server-side token.");
+        });
+    }
+
+    [Test]
     public void UploadFiles_ReviewStepOffersAnEditableTitlePrefilledFromTheFileName()
     {
         var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");

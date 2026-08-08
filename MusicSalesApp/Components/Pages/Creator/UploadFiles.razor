@@ -26,9 +26,12 @@
     
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
+        @* direct-upload-input is how direct-upload.js finds the live FileList. Blazor's IBrowserFile
+           handles cannot be handed to JavaScript, and re-reading the DOM's own files is both simpler
+           and immune to the handle-invalidation traps documented in the code-behind. *@
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
-                   class="hidden-input"
+                   class="hidden-input direct-upload-input"
                    multiple />
 
         <div class="upload-content" style="display: @(_isUploading ? "none" : "block")">

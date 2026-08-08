@@ -109,6 +109,31 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private readonly Dictionary<Guid, TaskCompletionSource<CoverArtMatchResult>> _matchWaiters = new();
     private readonly object _matchWaitersLock = new();
 
+    // Filename -> position in the browser's FileList. The only handle JavaScript can use to reach a
+    // selected file; an IBrowserFile is a server-side reference JS has no way to address.
+    private readonly Dictionary<string, int> _browserFileIndexes = new(StringComparer.OrdinalIgnoreCase);
+
+    // Direct-to-storage upload state. Null until the module is imported on first render.
+    private IJSObjectReference _uploadModule;
+    private DotNetObjectReference<UploadFilesModel> _uploadCallbackRef;
+
+    private readonly Dictionary<string, TaskCompletionSource<IReadOnlyList<DirectUploadResult>>> _uploadPhases = new();
+    private readonly object _uploadPhasesLock = new();
+
+    /// <summary>What the browser reports back for one file it tried to upload.</summary>
+    /// <param name="Index">Position in the browser's FileList, echoed back so this can be matched up.</param>
+    /// <param name="ErrorCode">
+    /// Azure's own <c>x-ms-error-code</c> where there is one. Carried because the two failures that
+    /// matter most here - an expired token and storage CORS not allowing this site - are invisible in
+    /// every log the server owns, so if this does not surface them nothing does.
+    /// </param>
+    public sealed record DirectUploadResult(
+        int Index,
+        bool Ok,
+        int HttpStatus,
+        string ErrorCode,
+        string ErrorMessage);
+
     // Configuration for chunked uploads
     private const int MaxFilesAllowed = 50;
     private const int ChunkSize = 8;
@@ -226,6 +251,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             UploadProgressHubClient.OnMatchProgress += ApplyMatchProgressAsync;
             UploadProgressHubClient.OnMatchResult += ApplyMatchResultAsync;
             await UploadProgressHubClient.StartAsync();
+
+            await InitialiseDirectUploadAsync();
 
             // Songs queued on a previous visit are still being processed, so rebuild their rows
             // rather than showing an empty page while work is in flight.
@@ -432,13 +459,24 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         var audioFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
         var coverArtFilesByName = new Dictionary<string, IBrowserFile>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in files)
+        // Position in the browser's own FileList is recorded alongside the partition, because that is
+        // the only handle JavaScript can use: an IBrowserFile is a server-side reference into a list
+        // JS cannot address, so a direct upload has to say "the file at index 7" instead.
+        _browserFileIndexes.Clear();
+
+        for (var browserIndex = 0; browserIndex < files.Count; browserIndex++)
         {
+            var file = files[browserIndex];
             var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+
             if (ValidAudioExtensions.Contains(extension))
                 audioFilesByName[file.Name] = file;
             else if (ValidCoverArtExtensions.Contains(extension))
                 coverArtFilesByName[file.Name] = file;
+            else
+                continue;
+
+            _browserFileIndexes[file.Name] = browserIndex;
         }
 
         _initialUploadItems = BuildInitialUploadProgressFiles(audioFilesByName.Values, coverArtFilesByName.Values);
@@ -1540,6 +1578,188 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// Imports the upload module, if direct-to-storage is switched on for this environment.
+    ///
+    /// <para>
+    /// Best effort by design. A failed import leaves <see cref="_uploadModule"/> null and every
+    /// caller falls back to uploading through the circuit, which is exactly what this page did
+    /// before - so a browser that cannot load the module is slower, not broken.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Tells the browser to stop uploading, and releases the module and callback reference.
+    ///
+    /// <para>
+    /// Every failure here is swallowed: this runs on the way out, usually because the circuit is
+    /// already going away, and the JS call is expected to fail in exactly that case.
+    /// </para>
+    /// </summary>
+    private async Task AbortDirectUploadsAsync()
+    {
+        try
+        {
+            if (_uploadModule is not null)
+            {
+                await _uploadModule.InvokeVoidAsync("abortAll");
+                await _uploadModule.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not abort in-flight browser uploads.");
+        }
+        finally
+        {
+            _uploadModule = null;
+
+            lock (_uploadPhasesLock)
+            {
+                foreach (var waiter in _uploadPhases.Values)
+                {
+                    waiter.TrySetCanceled();
+                }
+
+                _uploadPhases.Clear();
+            }
+
+            _uploadCallbackRef?.Dispose();
+            _uploadCallbackRef = null;
+        }
+    }
+
+    private async Task InitialiseDirectUploadAsync()
+    {
+        try
+        {
+            if (!await AppSettingsService.IsDirectToStorageUploadEnabledAsync())
+            {
+                return;
+            }
+
+            if (!UploadStagingSasService.IsAvailable)
+            {
+                Logger.LogWarning(
+                    "Direct-to-storage upload is enabled but staging is not configured; "
+                    + "falling back to uploading through the web server.");
+                return;
+            }
+
+            _uploadCallbackRef = DotNetObjectReference.Create(this);
+            _uploadModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/direct-upload.js");
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load the direct-upload module; uploads will go through the server.");
+            _uploadModule = null;
+        }
+    }
+
+    /// <summary>True when the browser can upload straight to Azure for this batch.</summary>
+    private bool DirectUploadAvailable => _uploadModule is not null && _uploadCallbackRef is not null;
+
+    /// <summary>
+    /// Hands a set of files to the browser to upload, and waits for it to finish.
+    ///
+    /// <para>
+    /// The JS call itself returns immediately. It has to: Blazor's JSInteropDefaultCallTimeout is one
+    /// minute, so awaiting a 57 MB upload from C# would abandon a perfectly healthy transfer. The
+    /// long wait is on a <see cref="TaskCompletionSource"/> that the browser resolves through
+    /// <see cref="PhaseCompleted"/>.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<DirectUploadResult>> UploadDirectAsync(
+        string phaseId,
+        IReadOnlyList<object> items,
+        CancellationToken cancellationToken)
+    {
+        var waiter = new TaskCompletionSource<IReadOnlyList<DirectUploadResult>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        lock (_uploadPhasesLock)
+        {
+            _uploadPhases[phaseId] = waiter;
+        }
+
+        try
+        {
+            await _uploadModule!.InvokeVoidAsync(
+                "uploadFiles", cancellationToken, phaseId, items, ChunkSize, _uploadCallbackRef);
+
+            using var registration = cancellationToken.Register(() => waiter.TrySetCanceled(cancellationToken));
+            return await waiter.Task;
+        }
+        finally
+        {
+            lock (_uploadPhasesLock)
+            {
+                _uploadPhases.Remove(phaseId);
+            }
+        }
+    }
+
+    /// <summary>Batched upload progress from the browser. Fire-and-forget on both sides.</summary>
+    [JSInvokable]
+    public void ReportUploadProgress(string phaseId, int[] indexes, int[] percents)
+    {
+        if (indexes is null || percents is null)
+        {
+            return;
+        }
+
+        // Only the batch figure is driven here; the per-file rows in the receiving table are keyed by
+        // their own index and updated the same way the server-side path updated them.
+        var count = Math.Min(indexes.Length, percents.Length);
+        if (count == 0)
+        {
+            return;
+        }
+
+        var total = 0d;
+        for (var i = 0; i < count; i++)
+        {
+            total += Math.Clamp(percents[i], 0, 100);
+        }
+
+        _initialUploadBatchProgress =
+            (int)CoverArtMatchProgressCalculator.ToStagingImagesPercent(total / count);
+
+        // Not awaited, and synchronous by design - this is the high-frequency callback, and making
+        // the browser wait a circuit round trip per tick is what the throttling in the module exists
+        // to avoid in the first place.
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>One file finished, so the next stage for it can start without waiting for the rest.</summary>
+    [JSInvokable]
+    public Task FileUploaded(string phaseId, int index) => Task.CompletedTask;
+
+    /// <summary>
+    /// Releases the batch waiting on this phase.
+    ///
+    /// <para>
+    /// <c>TrySetResult</c>, not <c>SetResult</c>: a cancelled phase may already have been abandoned
+    /// by its waiter, and a late completion must be a no-op rather than an exception on the circuit.
+    /// </para>
+    /// </summary>
+    [JSInvokable]
+    public Task PhaseCompleted(string phaseId, DirectUploadResult[] results)
+    {
+        lock (_uploadPhasesLock)
+        {
+            if (_uploadPhases.TryGetValue(phaseId, out var waiter))
+            {
+                waiter.TrySetResult(results ?? []);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     /// Stages the dropped cover art and asks the Azure Function to pair it with the audio.
     ///
     /// <para>
@@ -1592,13 +1812,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 return await FileMatchingService.MatchFilesAsync(audioFileNames, imageFileNames);
             }
 
-            await CoverArtMatchService.StageAndEnqueueAsync(
-                batchId,
-                creatorId,
-                audioFileNames,
-                candidates,
-                BuildMatchStagingProgress(),
-                _uploadCts.Token);
+            if (DirectUploadAvailable)
+            {
+                await StageImagesFromBrowserAsync(batchId, creatorId, audioFileNames, imageFileNames);
+            }
+            else
+            {
+                await CoverArtMatchService.StageAndEnqueueAsync(
+                    batchId,
+                    creatorId,
+                    audioFileNames,
+                    candidates,
+                    BuildMatchStagingProgress(),
+                    _uploadCts.Token);
+            }
 
             _initialUploadStatusMessage = "Matching cover art...";
             _initialUploadBatchProgress = (int)CoverArtMatchProgressCalculator.ToMatchingPercent(
@@ -1648,6 +1875,83 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 _matchWaiters.Remove(batchId);
             }
         }
+    }
+
+    /// <summary>
+    /// Uploads the cover images from the browser straight into the batch folder, then enqueues the
+    /// pairing request.
+    ///
+    /// <para>
+    /// The destination is never chosen here or in the browser: the server mints one write token per
+    /// image, each scoped to a single blob whose path it derived itself. The browser is handed URLs,
+    /// not paths.
+    /// </para>
+    ///
+    /// <para>
+    /// Throws on failure, deliberately. The caller already treats any exception as "match on
+    /// filenames instead", so a storage problem degrades the pairing rather than failing the batch —
+    /// and the creator still gets their songs.
+    /// </para>
+    /// </summary>
+    private async Task StageImagesFromBrowserAsync(
+        Guid batchId,
+        int creatorId,
+        List<string> audioFileNames,
+        List<string> imageFileNames)
+    {
+        var targets = new List<CoverArtMatchCandidate>(imageFileNames.Count);
+        var items = new List<object>(imageFileNames.Count);
+
+        for (var index = 0; index < imageFileNames.Count; index++)
+        {
+            var fileName = imageFileNames[index];
+            if (!_browserFileIndexes.TryGetValue(fileName, out var browserIndex))
+            {
+                continue;
+            }
+
+            var target = await UploadStagingSasService.CreateMatchImageTargetAsync(
+                batchId, index, Path.GetExtension(fileName), _uploadCts.Token);
+
+            targets.Add(new CoverArtMatchCandidate
+            {
+                Index = index,
+                FileName = fileName,
+                BlobPath = target.BlobPath,
+                ContentType = target.ContentType
+            });
+
+            items.Add(new
+            {
+                index = browserIndex,
+                target = new { sasUri = target.SasUri.ToString(), contentType = target.ContentType }
+            });
+        }
+
+        if (items.Count == 0)
+        {
+            throw new InvalidOperationException("None of the selected cover art is still available in the browser.");
+        }
+
+        _initialUploadStatusMessage = "Preparing cover art...";
+        await InvokeAsync(StateHasChanged);
+
+        var results = await UploadDirectAsync($"images-{batchId:N}", items, _uploadCts.Token);
+
+        var failed = results.Where(result => !result.Ok).ToList();
+        if (failed.Count > 0)
+        {
+            // Surfaced rather than swallowed. A 403 here means the token expired; a null status with
+            // no error code almost always means storage CORS is not allowing this site - and neither
+            // appears in Serilog, Application Insights or Azure, because the request never reached
+            // anything of ours.
+            var first = failed[0];
+            throw new InvalidOperationException(
+                $"{failed.Count} cover image(s) could not be uploaded. "
+                + $"First failure: {first.ErrorCode} {first.ErrorMessage}");
+        }
+
+        await CoverArtMatchService.EnqueueAsync(batchId, creatorId, audioFileNames, targets, _uploadCts.Token);
     }
 
     /// <summary>
@@ -1929,6 +2233,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         UploadProgressHubClient.OnProgress -= ApplyProgressAsync;
         UploadProgressHubClient.OnMatchProgress -= ApplyMatchProgressAsync;
         UploadProgressHubClient.OnMatchResult -= ApplyMatchResultAsync;
+
+        // Cancelling the token no longer stops an upload: the bytes are moving from the browser to
+        // Azure and the server is not in that path at all. The browser has to be told, or it happily
+        // finishes transferring for a page that no longer exists.
+        await AbortDirectUploadsAsync();
 
         // A batch mid-match dies with the circuit, so release anything still awaiting a pairing
         // rather than leaving the task to sit until its deadline against a page that is gone.

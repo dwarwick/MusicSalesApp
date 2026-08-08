@@ -69,6 +69,7 @@ public abstract class BUnitTestBase
     protected Mock<IGenreService> MockGenreService { get; private set; } = default!;
     protected Mock<IFileMatchingService> MockFileMatchingService { get; private set; } = default!;
     protected Mock<ICoverArtMatchService> MockCoverArtMatchService { get; private set; } = default!;
+    protected Mock<IUploadStagingSasService> MockUploadStagingSasService { get; private set; } = default!;
     protected Mock<IStreamPayoutService> MockStreamPayoutService { get; private set; } = default!;
     protected Mock<ITipService> MockTipService { get; private set; } = default!;
     protected Mock<IReportedSongService> MockReportedSongService { get; private set; } = default!;
@@ -125,6 +126,7 @@ public abstract class BUnitTestBase
         MockGenreService = new Mock<IGenreService>();
         MockFileMatchingService = new Mock<IFileMatchingService>();
         MockCoverArtMatchService = new Mock<ICoverArtMatchService>();
+        MockUploadStagingSasService = new Mock<IUploadStagingSasService>();
         MockStreamPayoutService = new Mock<IStreamPayoutService>();
         MockTipService = new Mock<ITipService>();
         MockReportedSongService = new Mock<IReportedSongService>();
@@ -535,6 +537,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IGenreService>(MockGenreService.Object);
         TestContext.Services.AddSingleton<IFileMatchingService>(MockFileMatchingService.Object);
         TestContext.Services.AddSingleton<ICoverArtMatchService>(MockCoverArtMatchService.Object);
+        TestContext.Services.AddSingleton<IUploadStagingSasService>(MockUploadStagingSasService.Object);
         TestContext.Services.AddSingleton<IStreamPayoutService>(MockStreamPayoutService.Object);
         TestContext.Services.AddSingleton<ITipService>(MockTipService.Object);
         TestContext.Services.AddSingleton<IReportedSongService>(MockReportedSongService.Object);
