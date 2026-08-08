@@ -479,6 +479,30 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _browserFileIndexes[file.Name] = browserIndex;
         }
 
+        // Size is checked from the metadata the browser already reported, BEFORE any stream is
+        // opened. IBrowserFile.OpenReadStream(maxAllowedSize) throws IOException the moment a file
+        // exceeds the cap, and an IOException escaping this event handler takes the circuit down
+        // rather than rejecting one file - so the creator lost the whole batch to a crash instead of
+        // being told which file was too big.
+        var oversizedFiles = FindOversizedFiles(
+            audioFilesByName.Values, coverArtFilesByName.Values, _maxAudioFileSize, _maxImageFileSize);
+
+        if (oversizedFiles.Count > 0)
+        {
+            // Whole batch, matching how a corrupt or mislabelled file is handled below: the creator
+            // fixes the selection and re-drops it, rather than discovering half of it uploaded.
+            _validationErrorMessage =
+                "No files were uploaded. These files are larger than the current limit "
+                + $"({_maxAudioUploadSizeMBDisplay} MB for audio, {_maxImageUploadSizeMBDisplay} MB for cover art): "
+                + string.Join(", ", oversizedFiles);
+            _isUploading = false;
+            _initialUploadItems.Clear();
+            _initialUploadStatusMessage = string.Empty;
+            _initialUploadBatchProgress = 0;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         _initialUploadItems = BuildInitialUploadProgressFiles(audioFilesByName.Values, coverArtFilesByName.Values);
         var initialUploadItemsByName = _initialUploadItems.ToDictionary(f => f.Name, StringComparer.OrdinalIgnoreCase);
         var initialUploadProgress = new InitialUploadProgressState
@@ -518,8 +542,12 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 await BufferBrowserFileToTempFileAsync(kvp.Value, tempPath, _maxImageFileSize, initialUploadItem, initialUploadProgress);
             }
         }
-        catch (InvalidDataException ex)
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
         {
+            // IOException is caught alongside the incomplete-transfer case as a backstop. The size
+            // check above should mean OpenReadStream never trips its own limit, but anything else
+            // that faults mid-stream - a dropped circuit, a full temp disk - used to escape this
+            // handler entirely and kill the page rather than reporting a failed batch.
             Logger.LogWarning(ex, "UploadFiles: File transfer was incomplete.");
             _validationErrorMessage = "No files were uploaded. The upload was interrupted before it finished — please try again.";
             _isUploading = false;
@@ -923,6 +951,50 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
         _pendingTempFiles.Clear();
         _pendingUploads.Clear();
+    }
+
+    /// <summary>
+    /// Names the selected files that exceed their type's cap, from the sizes the browser already
+    /// reported.
+    ///
+    /// <para>
+    /// Deliberately reads <see cref="IBrowserFile.Size"/> rather than letting
+    /// <c>OpenReadStream(maxAllowedSize)</c> enforce the limit. That method throws
+    /// <see cref="IOException"/>, and an IOException escaping the file-selection event handler takes
+    /// the circuit down — so a creator who picked one file that was 2 MB too big lost the entire
+    /// batch to a crash, with nothing telling them which file or why.
+    /// </para>
+    ///
+    /// <para>
+    /// Static and parameterised so the rule is directly testable; the caps are runtime admin
+    /// settings, so the interesting cases are all boundary conditions rather than fixed numbers.
+    /// </para>
+    /// </summary>
+    internal static List<string> FindOversizedFiles(
+        IEnumerable<IBrowserFile> audioFiles,
+        IEnumerable<IBrowserFile> coverArtFiles,
+        long maxAudioBytes,
+        long maxImageBytes)
+    {
+        var oversized = new List<string>();
+
+        foreach (var file in audioFiles ?? [])
+        {
+            if (maxAudioBytes > 0 && file.Size > maxAudioBytes)
+            {
+                oversized.Add(file.Name);
+            }
+        }
+
+        foreach (var file in coverArtFiles ?? [])
+        {
+            if (maxImageBytes > 0 && file.Size > maxImageBytes)
+            {
+                oversized.Add(file.Name);
+            }
+        }
+
+        return oversized;
     }
 
     private List<InitialUploadProgressItem> BuildInitialUploadProgressFiles(

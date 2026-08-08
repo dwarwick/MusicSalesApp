@@ -155,6 +155,28 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void UploadFiles_NeverLetsAStreamFaultEscapeTheEventHandler()
+    {
+        // An exception escaping a Blazor event handler kills the circuit. The buffering loop caught
+        // only InvalidDataException, so IOException - which OpenReadStream throws the moment a file
+        // exceeds its cap - took the whole page down instead of reporting a rejected batch.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Contain("ex is InvalidDataException or IOException"),
+                "The buffering loop must catch IOException, not just InvalidDataException.");
+
+            Assert.That(
+                codeBehind,
+                Does.Contain("FindOversizedFiles("),
+                "Size must be checked from IBrowserFile.Size before any stream is opened.");
+        });
+    }
+
+    [Test]
     public void UploadFiles_DirectUploadIsOptionalAndFallsBackToTheServerPath()
     {
         // Two independent gates, both of which must fail closed. The flag defaults off, and a browser
