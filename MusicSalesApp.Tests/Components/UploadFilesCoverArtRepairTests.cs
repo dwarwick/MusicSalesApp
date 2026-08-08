@@ -324,6 +324,89 @@ public class UploadFilesCoverArtRepairTests
     }
 
     // -----------------------------------------------------------------
+    // When the batch stops for review, and when it does not.
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void ABatchWithNoArtworkAtAll_DoesNotPause()
+    {
+        // Nothing to pair, no pool to drag from - the step would be a confirmation dialog wearing a
+        // table, and audio-only batches are a normal way to use this page.
+        Assert.That(
+            UploadFilesModel.ShouldPauseForReview(
+                titlesNeedAttention: false, batchHasCoverArt: false, matchCoverArtBeforeUpload: true),
+            Is.False);
+    }
+
+    [Test]
+    public void ABatchWithArtwork_Pauses()
+    {
+        Assert.That(
+            UploadFilesModel.ShouldPauseForReview(
+                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: true),
+            Is.True);
+    }
+
+    [Test]
+    public void TurningTheCheckboxOff_SkipsThePauseEvenWithArtwork()
+    {
+        Assert.That(
+            UploadFilesModel.ShouldPauseForReview(
+                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
+            Is.False);
+    }
+
+    [Test]
+    public void ABrokenTitleStopsTheBatchWhateverElseIsTurnedOff()
+    {
+        // Not a preference. The upload would be rejected by the server, so skipping the step would
+        // trade one pause for a failed batch.
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                UploadFilesModel.ShouldPauseForReview(
+                    titlesNeedAttention: true, batchHasCoverArt: false, matchCoverArtBeforeUpload: false),
+                Is.True);
+
+            Assert.That(
+                UploadFilesModel.ShouldPauseForReview(
+                    titlesNeedAttention: true, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
+                Is.True);
+        });
+    }
+
+    [Test]
+    public void TheRepairInterfaceIsHiddenWhenTheCheckboxIsOff()
+    {
+        // "Do not show the interface at all" has to hold on the one path that still reaches the
+        // review step with the box unticked: a batch stopped for a broken title.
+        var page = new TestableUploadFiles();
+        page.GivenSong("One", "a.png");
+        page.GivenPooled("stray.png");
+        page.BeginReview();
+
+        Assert.That(page.CanRepair, Is.True);
+
+        page.DisableCoverArtMatching();
+
+        Assert.That(page.CanRepair, Is.False);
+    }
+
+    [Test]
+    public void TurningTheCheckboxOffMidGesture_PutsDownWhateverWasHeld()
+    {
+        // Otherwise the held image survives with nothing on screen to place it on, and the next
+        // batch starts holding a file from the last one.
+        var page = new TestableUploadFiles();
+        page.GivenPooled("stray.png");
+        page.Hold("stray.png");
+
+        page.DisableCoverArtMatching();
+
+        Assert.That(page.Held, Is.Null);
+    }
+
+    // -----------------------------------------------------------------
     // Thumbnails.
     // -----------------------------------------------------------------
 
@@ -400,5 +483,7 @@ public class UploadFilesCoverArtRepairTests
         public void Clear(UploadPairItem item) => ClearCoverArt(item);
 
         public void DropOnPool() => ReturnHeldCoverArtToPool();
+
+        public void DisableCoverArtMatching() => ApplyMatchCoverArtPreference(false);
     }
 }

@@ -23,7 +23,29 @@
 </SfMessage>
 
 <div class="container-fluid">
-    
+
+    @* Offered here, before any file is chosen, rather than at the review step. The point of turning
+       it off is to never see that step, and a switch you have to reach the interface to reach cannot
+       turn the interface off. Hidden once a batch is moving, when it can no longer change anything. *@
+    @if (!HideUploadBox)
+    {
+        <div class="form-check mb-3">
+            <input class="form-check-input"
+                   type="checkbox"
+                   id="match-cover-art-before-upload"
+                   checked="@_matchCoverArtBeforeUpload"
+                   @onchange="@(e => SetMatchCoverArtBeforeUploadAsync((bool)e.Value))" />
+            <label class="form-check-label" for="match-cover-art-before-upload">
+                Match cover art to songs before uploading
+                <small class="text-muted d-block">
+                    Pauses once your files are ready so you can check each pairing and drag artwork
+                    onto the right song. Cover art is still matched automatically either way, and
+                    batches with no artwork never pause.
+                </small>
+            </label>
+        </div>
+    }
+
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
         @* direct-upload-input is how direct-upload.js finds the live FileList. Blazor's IBrowserFile
@@ -750,6 +772,24 @@
             });
 
             window._coverArtPreviewUrls = urls;
+        },
+
+        // Upload preferences live in the browser rather than the database - they are habits, not
+        // account settings, and this way they cost no schema change and no round trip. Wrapped in
+        // try/catch because localStorage throws outright in private-browsing modes and when a site
+        // is blocked from storing data, and a preference is never worth failing a page over.
+        readPreference: function (key) {
+            try {
+                return window.localStorage.getItem(key);
+            } catch {
+                return null;
+            }
+        },
+
+        writePreference: function (key, value) {
+            try {
+                window.localStorage.setItem(key, value);
+            } catch { /* storage unavailable; the default applies next visit */ }
         },
 
         revokeCoverArtPreviews: function () {
