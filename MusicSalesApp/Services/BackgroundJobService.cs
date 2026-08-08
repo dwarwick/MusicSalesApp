@@ -103,6 +103,19 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.RunRecurringBackupAsync(),
                 "45 6 * * *");
 
+            // Sweep temp files left by a process that died mid-batch. 07:10 UTC sits clear of every
+            // other daily job (the last is 06:45), of the hourly ones (:00 and :20), and of the
+            // reconciler's */15, which fires at :00, :15, :30 and :45.
+            //
+            // Daily rather than at startup, which is the tempting choice because process start is the
+            // very event that orphans them: a file orphaned by a recycle is minutes old at the next
+            // start, so the age threshold that makes sweeping a shared directory safe correctly
+            // refuses to touch it. The sweep has to come back later.
+            RecurringJob.AddOrUpdate<ITempFileCleanupService>(
+                HangfireJobIds.CleanupOrphanedTempFiles,
+                service => service.CleanupOrphanedTempFilesAsync(),
+                "10 7 * * *");
+
             // Schedule nightly sitemap generation at 5 AM UTC
             // This runs after all other jobs to ensure sitemap reflects current state
             RecurringJob.AddOrUpdate<ISitemapService>(

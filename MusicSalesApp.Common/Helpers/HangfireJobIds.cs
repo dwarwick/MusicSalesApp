@@ -12,4 +12,10 @@ public static class HangfireJobIds
     /// Without it a poisoned queue message leaves a creator watching a progress bar forever.
     /// </summary>
     public const string ReconcileStalledMediaProcessing = "reconcile-stalled-media-processing";
+
+    /// <summary>
+    /// Deletes temp files left behind when a process died mid-upload. Nothing else sweeps a service
+    /// account's temp directory on Windows, so without this an orphan is permanent.
+    /// </summary>
+    public const string CleanupOrphanedTempFiles = "cleanup-orphaned-temp-files";
 }

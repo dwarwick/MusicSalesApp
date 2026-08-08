@@ -278,7 +278,11 @@
         {
             <div class="row mt-3">
                 <div class="col-12">
-                    <p class="text-muted"><strong>The following cover art files could not be matched to an audio file and were not uploaded:</strong></p>
+                    @* "were not uploaded" was true when every file reached the server first. On the
+                       direct path the browser has already sent these to storage by the time pairing
+                       runs, and they are discarded afterwards - so the old wording described the
+                       wrong step and contradicted the progress bar the creator just watched. *@
+                    <p class="text-muted"><strong>The following cover art files could not be matched to an audio file, so no song is using them:</strong></p>
                     <ul class="text-muted">
                         @foreach (var file in _unmatchedCoverArtFiles)
                         {
