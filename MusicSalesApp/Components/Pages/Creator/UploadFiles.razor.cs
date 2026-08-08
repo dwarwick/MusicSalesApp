@@ -83,19 +83,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// One reviewed song, waiting to be staged.
     ///
     /// <para>
-    /// The last three are two alternatives, not a set: on the server path the bytes are on this
-    /// machine and named by <see cref="AudioTempPath"/>/<see cref="CoverArtTempPath"/>; on the direct
-    /// path they never touch it, and what is carried instead is where the browser can find the audio
-    /// (<see cref="BrowserAudioIndex"/>) and where its already-uploaded cover art is sitting in
-    /// staging (<see cref="CoverArtStagedPath"/>).
+    /// Carries only the audio, and by two alternatives rather than a set: on the server path the
+    /// bytes are on this machine and named by <see cref="AudioTempPath"/>; on the direct path they
+    /// never touch it, and what is carried instead is where the browser can find them
+    /// (<see cref="BrowserAudioIndex"/>).
+    /// </para>
+    ///
+    /// <para>
+    /// Deliberately holds nothing about the cover art. The creator can re-pair artwork during the
+    /// review step, so a path captured when this was built would be stale by the time it is used -
+    /// the assignment lives on <see cref="UploadPairItem.CoverArtFileName"/>, which the UI binds to,
+    /// and the path is resolved from it at upload time.
     /// </para>
     /// </summary>
     private sealed record PendingUpload(
         UploadPairItem Item,
         string AudioTempPath,
-        string CoverArtTempPath,
-        int? BrowserAudioIndex = null,
-        string CoverArtStagedPath = null);
+        int? BrowserAudioIndex = null);
 
 
     // Creator ID - will be populated if the current user is a creator
@@ -145,6 +149,26 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // only on the direct path; the pairing arrives as filenames, and this is what turns one back into
     // the blob CreateFromStagedAsync copies into the song's own folder.
     private readonly Dictionary<string, string> _stagedImagePaths = new(StringComparer.OrdinalIgnoreCase);
+
+    // The other half of the same lookup, for the server path: cover art filename -> the temp file
+    // holding it. A field rather than a local because the creator can re-pair artwork at the review
+    // step, so the mapping has to outlive the method that built it.
+    private readonly Dictionary<string, string> _coverArtTempPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    // Cover art filename -> size, for the review table. Kept separately because after a re-pairing
+    // the row's image is no longer the one it was built with, and IBrowserFile is long gone by then.
+    private readonly Dictionary<string, long> _coverArtFileSizes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The cover image the creator is currently moving, or null.
+    ///
+    /// <para>
+    /// Serves both input methods. HTML5 drag-and-drop could carry this in its own dataTransfer, but
+    /// holding it here means the same state drives click-to-select, which is what makes the feature
+    /// work at all on a touch screen - where there is no drag event to listen for.
+    /// </para>
+    /// </summary>
+    private string _heldCoverArt;
 
     // The match batch whose staged images are still needed. On the direct path those images ARE the
     // cover art - nothing else holds a copy - so the folder cannot be swept until every song that
@@ -301,6 +325,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // Songs queued on a previous visit are still being processed, so rebuild their rows
             // rather than showing an empty page while work is in flight.
             await RestoreInFlightJobsAsync();
+        }
+
+        // Every render while reviewing, not just the first: re-pairing moves an image to a different
+        // element, and the element it lands on starts with no source.
+        if (_awaitingTitleConfirmation && CanRepairCoverArt)
+        {
+            await RefreshCoverArtPreviewsAsync();
         }
     }
 
@@ -508,6 +539,9 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         // JS cannot address, so a direct upload has to say "the file at index 7" instead.
         _browserFileIndexes.Clear();
         _stagedImagePaths.Clear();
+        _coverArtTempPaths.Clear();
+        _coverArtFileSizes.Clear();
+        _heldCoverArt = null;
 
         for (var browserIndex = 0; browserIndex < files.Count; browserIndex++)
         {
@@ -515,11 +549,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             var extension = Path.GetExtension(file.Name).ToLowerInvariant();
 
             if (ValidAudioExtensions.Contains(extension))
+            {
                 audioFilesByName[file.Name] = file;
+            }
             else if (ValidCoverArtExtensions.Contains(extension))
+            {
                 coverArtFilesByName[file.Name] = file;
+
+                // Recorded now, while IBrowserFile is still valid. The review step can move this
+                // image to a different song long after these references have gone stale.
+                _coverArtFileSizes[file.Name] = file.Size;
+            }
             else
+            {
                 continue;
+            }
 
             _browserFileIndexes[file.Name] = browserIndex;
         }
@@ -752,30 +796,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             if (audioFileMeta == null)
                 continue;
 
-            string coverArtTempPath = null;
-            string coverArtStagedPath = null;
-            string coverArtFileName = "(No cover art)";
-            long coverArtFileSize = 0;
-
-            if (!string.IsNullOrEmpty(pair.ImageFileName))
-            {
-                coverArtTempPaths.TryGetValue(pair.ImageFileName, out coverArtTempPath);
-                _stagedImagePaths.TryGetValue(pair.ImageFileName, out coverArtStagedPath);
-
-                // Metadata for display in the progress table
-                if (coverArtFilesByName.TryGetValue(pair.ImageFileName, out var metaFile))
-                {
-                    coverArtFileName = metaFile.Name;
-                    coverArtFileSize = metaFile.Size;
-                }
-            }
-
-            // On the direct path the cover art is already in Azure and only its blob path matters, so
-            // "has cover art" has to ask about that rather than about a temp file that was never the
-            // thing being uploaded.
-            var hasCoverArt = directAudioIndex is not null
-                ? coverArtStagedPath != null
-                : coverArtTempPath != null;
+            // The pairing is only a starting point now - the creator can move any of this at the
+            // review step - so the row records which image it was given and nothing about where that
+            // image lives. Reachability is asked at upload time instead, of whichever image the row
+            // is holding by then.
+            var matchedImage = pair.ImageFileName;
+            var isReachable = !string.IsNullOrEmpty(matchedImage)
+                && (directAudioIndex is not null
+                    ? _stagedImagePaths.ContainsKey(matchedImage)
+                    : coverArtTempPaths.ContainsKey(matchedImage));
 
             // The filename no longer determines storage. It only seeds the title, which the
             // creator can edit in the review step before anything is uploaded.
@@ -784,21 +813,22 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName),
                 AudioFileName = audioFileMeta.Name,
                 AudioFileSize = audioFileMeta.Size,
-                CoverArtFileName = coverArtFileName,
-                CoverArtFileSize = coverArtFileSize,
-                HasCoverArt = hasCoverArt,
                 Status = UploadStatus.Pending,
                 Progress = 0,
                 StatusMessage = "Pending"
             };
 
+            SetCoverArt(uploadItem, isReachable ? matchedImage : null);
+
+            // An image the matcher paired but nothing can reach is not "used" - it belongs in the
+            // pool, where the creator can at least see it and place it somewhere that works.
+            if (!string.IsNullOrEmpty(matchedImage) && !isReachable)
+            {
+                ReturnToPool(matchedImage);
+            }
+
             _uploadItems.Add(uploadItem);
-            uploadItemsWithFiles.Add(new PendingUpload(
-                uploadItem,
-                audioTempPath,
-                coverArtTempPath,
-                directAudioIndex,
-                coverArtStagedPath));
+            uploadItemsWithFiles.Add(new PendingUpload(uploadItem, audioTempPath, directAudioIndex));
         }
 
         // Receiving is over. The batch bar credits it in full from here, including through the
@@ -816,29 +846,33 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
 
         // Ownership of the buffered files transfers to the fields below, so this method's
-        // `finally` must no longer delete them.
+        // `finally` must no longer delete them. Clearing the locals is what signals that.
         _pendingUploads.AddRange(uploadItemsWithFiles);
         _pendingTempFiles.AddRange(audioTempPaths.Values);
         _pendingTempFiles.AddRange(coverArtTempPaths.Values);
+
+        // The cover-art mapping outlives the local, because the review step resolves paths from
+        // whichever image a row is holding *then* - which may not be the one it was built with.
+        foreach (var (fileName, tempPath) in coverArtTempPaths)
+        {
+            _coverArtTempPaths[fileName] = tempPath;
+        }
+
         audioTempPaths.Clear();
         coverArtTempPaths.Clear();
 
-        // Upload without asking when the titles taken from the filenames are all usable. The
-        // creator only has to intervene when one is blank, too long, or collides with another
-        // song - the cases where uploading first and fixing later would mean a failed upload.
-        if (await PendingTitlesNeedAttentionAsync())
-        {
-            _awaitingTitleConfirmation = true;
-            _isUploading = false;
-            await DisableBeforeUnloadAsync();
-            beforeUnloadEnabled = false;
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
+        // Always. This used to upload straight through whenever every title happened to be usable,
+        // which meant the one step where a creator could see what was about to be published only
+        // appeared when something was already wrong - and cover-art pairing, which is a guess and is
+        // wrong more often than a title is, could never be corrected at all. Titles are still checked
+        // here so anything broken is already highlighted when the step appears.
+        await PendingTitlesNeedAttentionAsync();
 
-        await InvokeAsync(StateHasChanged);
-        await RunPendingUploadsAsync();
+        _awaitingTitleConfirmation = true;
+        _isUploading = false;
+        await DisableBeforeUnloadAsync();
         beforeUnloadEnabled = false;
+        await InvokeAsync(StateHasChanged);
         }
         catch (JSException ex) when (
             ex.Message.Contains("There is no file with ID", StringComparison.OrdinalIgnoreCase) &&
@@ -888,6 +922,240 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 TempFileHelper.TryDelete(path, Logger);
         }
     }
+
+    // -----------------------------------------------------------------
+    // Cover-art re-pairing.
+    //
+    // Matching is a guess - OCR against a filename - and it gets two things wrong: it leaves an
+    // image unpaired, and it pairs the wrong one. Both used to be permanent by the time the creator
+    // saw them, and the second was invisible: the old notice listed the unmatched *image* but never
+    // said which *song* had ended up bare, so a creator with 24 tracks had to work that out.
+    //
+    // The invariant everything below maintains: every image selected in this batch is either
+    // assigned to exactly one row, or sitting in the pool. Never both, never neither.
+    // -----------------------------------------------------------------
+
+    /// <summary>True when this batch has cover art the creator can move around.</summary>
+    protected bool CanRepairCoverArt
+        => _awaitingTitleConfirmation
+            && (_unmatchedCoverArtFiles.Count > 0 || _uploadItems.Any(item => item.HasCoverArt));
+
+    /// <summary>The image the creator picked up, so the UI can highlight it and every drop target.</summary>
+    protected string HeldCoverArt => _heldCoverArt;
+
+    /// <summary>Songs that will publish with no artwork. Named so the creator does not have to infer it.</summary>
+    protected int SongsWithoutCoverArtCount => _uploadItems.Count(item => !item.HasCoverArt);
+
+    /// <summary>Size of a pooled image, for its chip.</summary>
+    protected long CoverArtSizeOf(string fileName)
+        => fileName is not null && _coverArtFileSizes.TryGetValue(fileName, out var size) ? size : 0;
+
+    /// <summary>
+    /// Picks an image up, or puts it down again if it was already held.
+    ///
+    /// <para>
+    /// Toggling matters for the click path: without it a creator who picks the wrong chip has no way
+    /// to cancel except by completing a placement they did not want.
+    /// </para>
+    /// </summary>
+    protected void HoldCoverArt(string fileName)
+        => _heldCoverArt = string.Equals(_heldCoverArt, fileName, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : fileName;
+
+    /// <summary>Puts down whatever is held without assigning it.</summary>
+    protected void ReleaseCoverArt() => _heldCoverArt = null;
+
+    /// <summary>
+    /// Assigns the held image to a song.
+    ///
+    /// <para>
+    /// One image per song, because that is what the pipeline enforces downstream:
+    /// <c>CreateFromStagedAsync</c> writes a single cover blob per media GUID, so two rows sharing an
+    /// assignment here would just mean the second one silently wins. Everything below is about where
+    /// the image being displaced goes instead of nowhere.
+    /// </para>
+    ///
+    /// <para>
+    /// Dragging between two songs that both have artwork <em>swaps</em> them rather than pushing one
+    /// into the pool. A creator dragging A's cover onto B is almost always fixing a pair the matcher
+    /// got backwards, and stranding B's cover would make them do the second half by hand.
+    /// </para>
+    /// </summary>
+    protected void AssignHeldCoverArt(UploadPairItem item)
+    {
+        if (item is null || _heldCoverArt is null)
+        {
+            return;
+        }
+
+        var incoming = _heldCoverArt;
+        _heldCoverArt = null;
+
+        // Already where it was going. Returning early rather than falling through, which would put
+        // the image back in the pool and then take it out again.
+        if (string.Equals(item.CoverArtFileName, incoming, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var displaced = item.CoverArtFileName;
+
+        // Null when it came straight from the pool.
+        var source = _uploadItems.FirstOrDefault(other =>
+            !ReferenceEquals(other, item)
+            && string.Equals(other.CoverArtFileName, incoming, StringComparison.OrdinalIgnoreCase));
+
+        _unmatchedCoverArtFiles.Remove(incoming);
+        SetCoverArt(item, incoming);
+
+        if (source is not null)
+        {
+            // The swap. When the target had nothing, this correctly leaves the source bare rather
+            // than handing it an empty string.
+            SetCoverArt(source, string.IsNullOrEmpty(displaced) ? null : displaced);
+        }
+        else if (!string.IsNullOrEmpty(displaced))
+        {
+            ReturnToPool(displaced);
+        }
+    }
+
+    /// <summary>
+    /// Drops the held image back into the pool, taking it off whichever song was using it.
+    ///
+    /// <para>
+    /// Exists so artwork can be removed from a song without first having somewhere else to put it -
+    /// dragging it back to the pool is the same gesture as dragging it onto another song, which is
+    /// not true of the row's own remove button.
+    /// </para>
+    /// </summary>
+    protected void ReturnHeldCoverArtToPool()
+    {
+        if (_heldCoverArt is null)
+        {
+            return;
+        }
+
+        var released = _heldCoverArt;
+        _heldCoverArt = null;
+
+        foreach (var item in _uploadItems)
+        {
+            if (string.Equals(item.CoverArtFileName, released, StringComparison.OrdinalIgnoreCase))
+            {
+                SetCoverArt(item, null);
+            }
+        }
+
+        ReturnToPool(released);
+    }
+
+    /// <summary>
+    /// A stable DOM id for one image's thumbnail.
+    ///
+    /// <para>
+    /// Derived from the filename rather than a counter, because the same image moves between the pool
+    /// and a row as the creator works: a positional id would point at a different picture after every
+    /// re-pairing, and the thumbnails would silently swap.
+    /// </para>
+    /// </summary>
+    internal static string PreviewElementId(string fileName)
+        => "cover-preview-" + Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(fileName ?? string.Empty)))[..16];
+
+    /// <summary>
+    /// Points every thumbnail at the browser's own copy of its file.
+    ///
+    /// <para>
+    /// Re-run on each render of the review step, because a re-pairing moves an image between elements
+    /// and the new element starts with no source. Cheap: creating an object URL does not read the
+    /// file, and the previous batch's URLs are revoked before new ones are handed out.
+    /// </para>
+    /// </summary>
+    private async Task RefreshCoverArtPreviewsAsync()
+    {
+        var pairs = new List<object>();
+
+        foreach (var fileName in _unmatchedCoverArtFiles)
+        {
+            if (_browserFileIndexes.TryGetValue(fileName, out var index))
+            {
+                pairs.Add(new { browserIndex = index, elementId = PreviewElementId(fileName) });
+            }
+        }
+
+        foreach (var item in _uploadItems.Where(row => row.HasCoverArt))
+        {
+            if (_browserFileIndexes.TryGetValue(item.CoverArtFileName, out var index))
+            {
+                pairs.Add(new { browserIndex = index, elementId = PreviewElementId(item.CoverArtFileName) });
+            }
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.showCoverArtPreviews", pairs);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            // Thumbnails are an aid, not the mechanism - the filename beside each one is what the
+            // creator is really pairing on, and it renders either way.
+            Logger.LogDebug(ex, "Could not render cover-art thumbnails.");
+        }
+    }
+
+    /// <summary>Returns a song's artwork to the pool, leaving the song to publish without any.</summary>
+    protected void ClearCoverArt(UploadPairItem item)
+    {
+        if (item is null || !item.HasCoverArt)
+        {
+            return;
+        }
+
+        var removed = item.CoverArtFileName;
+        SetCoverArt(item, null);
+        ReturnToPool(removed);
+    }
+
+    /// <summary>
+    /// Writes an assignment onto a row, keeping the three display fields consistent.
+    ///
+    /// <para>
+    /// <c>HasCoverArt</c> is set here rather than computed on the row, because rows restored from the
+    /// job table on a later visit have a cover but no filename to derive it from.
+    /// </para>
+    /// </summary>
+    private void SetCoverArt(UploadPairItem item, string fileName)
+    {
+        item.CoverArtFileName = fileName ?? string.Empty;
+        item.CoverArtFileSize = fileName is null ? 0 : CoverArtSizeOf(fileName);
+        item.HasCoverArt = fileName is not null;
+    }
+
+    private void ReturnToPool(string fileName)
+    {
+        if (!string.IsNullOrEmpty(fileName)
+            && !_unmatchedCoverArtFiles.Contains(fileName, StringComparer.OrdinalIgnoreCase))
+        {
+            _unmatchedCoverArtFiles.Add(fileName);
+        }
+    }
+
+    /// <summary>Where the assigned image lives on this machine, or null. Server path only.</summary>
+    private string ResolveCoverArtTempPath(UploadPairItem item)
+        => item.HasCoverArt && _coverArtTempPaths.TryGetValue(item.CoverArtFileName, out var path)
+            ? path
+            : null;
+
+    /// <summary>Where the assigned image already sits in staging, or null. Direct path only.</summary>
+    private string ResolveCoverArtStagedPath(UploadPairItem item)
+        => item.HasCoverArt && _stagedImagePaths.TryGetValue(item.CoverArtFileName, out var path)
+            ? path
+            : null;
 
     /// <summary>
     /// Checks the titles taken from the filenames and marks any that the creator has to fix.
@@ -1320,7 +1588,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 // all be free at once, so clamp it. Only reachable if the window is ever set below 2.
                 var cost = pending.BrowserAudioIndex is not null
                     ? 1
-                    : Math.Min(pending.CoverArtTempPath != null ? 2 : 1, window);
+                    : Math.Min(ResolveCoverArtTempPath(pending.Item) != null ? 2 : 1, window);
 
                 // Acquired one at a time, which is safe only because this loop is the sole acquirer:
                 // nothing else can interleave and hold the slots this call is waiting for, and the
@@ -1350,7 +1618,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 // so one bad song cannot tear down the rest of the batch.
                 await (pending.BrowserAudioIndex is not null
                     ? UploadFromBrowserAsync(pending)
-                    : pending.CoverArtTempPath != null
+                    : ResolveCoverArtTempPath(pending.Item) != null
                         ? UploadFilePairAsync(pending)
                         : UploadAudioOnlyAsync(pending));
             }
@@ -1712,7 +1980,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         const int bufferSize = 81920;
         var uploadItem = pending.Item;
         var audioTempPath = pending.AudioTempPath;
-        var coverArtTempPath = pending.CoverArtTempPath;
+
+        // Resolved now, not when the batch was built: the review step may have moved this song's
+        // artwork, or given it artwork it did not originally match.
+        var coverArtTempPath = ResolveCoverArtTempPath(uploadItem);
 
         try
         {
@@ -1853,6 +2124,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // the semaphore in ProcessUploadsInChunksAsync, so a song reaching CreateFromStagedAsync
             // does so the moment its own bytes land rather than waiting for its slowest sibling -
             // the same pipelining the server path gets from that loop.
+            // Resolved now, not when the batch was built: the review step may have moved this song's
+            // artwork, or given it artwork it did not originally match.
+            var coverArtStagedPath = ResolveCoverArtStagedPath(uploadItem);
+
             var browserIndex = pending.BrowserAudioIndex.Value;
             var results = await UploadDirectAsync(
                 $"audio-{mediaGuid:N}",
@@ -1896,8 +2171,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                     AudioFileName = uploadItem.AudioFileName,
                     SongTitle = uploadItem.SongTitle,
                     CreatorId = _currentCreatorId.Value,
-                    CoverArtFileName = pending.CoverArtStagedPath is null ? null : uploadItem.CoverArtFileName,
-                    CoverArtStagedPath = pending.CoverArtStagedPath
+                    CoverArtFileName = coverArtStagedPath is null ? null : uploadItem.CoverArtFileName,
+                    CoverArtStagedPath = coverArtStagedPath
                 },
                 _uploadCts.Token);
 
@@ -2624,7 +2899,16 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         };
     }
 
-    protected class UploadPairItem
+    /// <summary>
+    /// One row of the review/progress table.
+    ///
+    /// <para>
+    /// Public rather than protected because it is the unit the cover-art re-pairing commands operate
+    /// on, and those are worth testing directly - the invariant they maintain (every image assigned
+    /// exactly once, or pooled) is not observable from the rendered markup.
+    /// </para>
+    /// </summary>
+    public class UploadPairItem
     {
         /// <summary>
         /// The title to store. Seeded from the filename and editable in the review step before
@@ -2666,7 +2950,8 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         public AudioProcessingStep Step { get; set; } = AudioProcessingStep.Staging;
     }
 
-    protected enum UploadStatus
+    /// <summary>Public for the same reason as <see cref="UploadPairItem"/>, which exposes it.</summary>
+    public enum UploadStatus
     {
         Pending,
         Uploading,

@@ -224,6 +224,16 @@ public class UploadFilesProgressTests
         Assert.That(codeBehind, Does.Contain("SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName)"));
         Assert.That(codeBehind, Does.Contain("AudioFileName = audioFileMeta.Name"));
 
+        // The step is unconditional now. It used to appear only when a title was already broken,
+        // which meant the one place a creator could see what was about to be published was also the
+        // one place they only reached when something had gone wrong - and cover-art pairing, which
+        // is a guess, could never be corrected at all.
+        Assert.That(
+            codeBehind,
+            Does.Not.Contain("if (await PendingTitlesNeedAttentionAsync())\n        {\n            _awaitingTitleConfirmation = true;"),
+            "Reaching the review step must not depend on a title being wrong.");
+        Assert.That(markup, Does.Contain("Review Before Uploading"));
+
         // The storage path no longer comes from the creator's filename.
         Assert.That(codeBehind, Does.Not.Contain("UploadedAudioFileName"));
     }
