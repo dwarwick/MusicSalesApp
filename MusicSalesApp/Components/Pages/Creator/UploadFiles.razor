@@ -209,13 +209,17 @@
                              @ondrop="ReturnHeldCoverArtToPool">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <strong>
-                                    @if (_unmatchedCoverArtFiles.Any())
+                                    @if (!_unmatchedCoverArtFiles.Any())
                                     {
-                                        <text>Cover art not matched to a song</text>
+                                        <text>Drop here to remove this artwork from its song</text>
+                                    }
+                                    else if (HeldCoverArt != null)
+                                    {
+                                        <text>Drop @HeldCoverArt on a song below, or here to leave it unused</text>
                                     }
                                     else
                                     {
-                                        <text>Drop here to remove this artwork from its song</text>
+                                        <text>Cover art not matched to a song</text>
                                     }
                                 </strong>
                                 @if (HeldCoverArt != null)
@@ -613,8 +617,58 @@
 
 <script suppress-error="BL9992">
     (function () {
+        // These two listeners exist to stop the browser navigating away when a creator drops a file
+        // outside the upload box. They are on `document` in the bubble phase, so they run LAST and
+        // whatever they set wins.
+        //
+        // Which made them silently veto the cover-art re-pairing drags: dropEffect was forced to
+        // 'none' for anything outside .upload-box, so dragging a thumbnail onto a song showed the
+        // not-allowed cursor and refused the drop - and dropping it on the upload box instead was
+        // read as a brand-new file selection, discarding the whole reviewed batch.
+        //
+        // Both now ignore drags that started inside the page. Only a drag carrying files from the
+        // operating system is the browser-navigation hazard these were written for.
+        function isExternalFileDrag(e) {
+            if (window._streamTunesInternalDrag) {
+                return false;
+            }
+
+            var types = e.dataTransfer && e.dataTransfer.types;
+            return !!types && Array.prototype.indexOf.call(types, 'Files') !== -1;
+        }
+
+        // Belt and braces alongside the types check. Dragging an <img> gives text/html and
+        // text/uri-list rather than Files, so the check above is already correct - but this is the
+        // signal we control, and a browser quirk in the one we do not would break re-pairing again.
+        document.addEventListener('dragstart', function (e) {
+            var handle = e.target && e.target.closest
+                ? e.target.closest('.cover-art-chip, .cover-art-thumb-row')
+                : null;
+            window._streamTunesInternalDrag = !!handle;
+        }, true);
+
+        function endInternalDrag() {
+            window._streamTunesInternalDrag = false;
+        }
+
+        document.addEventListener('dragend', endInternalDrag, true);
+
+        // Deferred, not immediate. Both this and the real drop handler below are document-level
+        // bubble listeners, and this one was registered first - clearing the flag inline would clear
+        // it before the handler that needs to read it. The drop cleanup is only a backstop for the
+        // case where dragend never fires; letting the flag stick would block real file drops.
+        document.addEventListener('drop', function () {
+            window.setTimeout(endInternalDrag, 0);
+        });
+
         // Handle dragover: allow drops inside the upload box, prevent everywhere else
         document.addEventListener('dragover', function (e) {
+            if (!isExternalFileDrag(e)) {
+                // Someone else's drag. Leaving it entirely alone is what lets Blazor's own
+                // dragover handlers on the re-pairing targets decide whether a drop is allowed.
+                return;
+            }
+
             var uploadBox = e.target.closest('.upload-box');
             if (uploadBox) {
                 e.preventDefault();
@@ -679,6 +733,12 @@
         // first event's IBrowserFile references, so the guard below lets only one
         // change event for this exact dropped file set reach Blazor.
         document.addEventListener('drop', function (e) {
+            if (!isExternalFileDrag(e)) {
+                // A re-pairing drag. Forwarding it to the file input would read the creator's own
+                // artwork back as a new selection and discard the batch they were reviewing.
+                return;
+            }
+
             var uploadBox = e.target.closest('.upload-box');
             if (uploadBox && !uploadBox.classList.contains('upload-box-disabled')) {
                 e.preventDefault();

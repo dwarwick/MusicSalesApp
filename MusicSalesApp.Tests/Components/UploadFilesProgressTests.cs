@@ -274,6 +274,55 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void UploadFiles_PageLevelDragGuardIgnoresTheCreatorsOwnDrags()
+    {
+        // The guard exists so a file dropped outside the upload box does not navigate the browser
+        // away. It is document-level and bubble-phase, so it runs last and whatever it sets wins -
+        // which made it silently veto every cover-art re-pairing drag: dropEffect forced to 'none'
+        // outside .upload-box gave the not-allowed cursor, and dropping on the upload box instead
+        // was read as a new file selection and discarded the reviewed batch.
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                markup,
+                Does.Contain("function isExternalFileDrag"),
+                "The guard must be able to tell an OS file drag from a drag that started on the page.");
+
+            Assert.That(
+                markup,
+                Does.Contain("indexOf.call(types, 'Files')"),
+                "Only a drag carrying files from the operating system is the hazard this guards.");
+
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"if \(!isExternalFileDrag\(e\)\)").Count,
+                Is.EqualTo(2),
+                "Both the dragover and the drop handler have to skip internal drags.");
+
+            Assert.That(
+                markup,
+                Does.Contain("_streamTunesInternalDrag"),
+                "A flag we set ourselves backs up the types check.");
+        });
+    }
+
+    [Test]
+    public void UploadFiles_AbandoningABatchReleasesItsStagedCoverArt()
+    {
+        // Choosing files again is a normal way to change your mind. The temp files and rows were
+        // already released, but the images the browser had sent to Azure stayed behind with nothing
+        // referencing them - leaving the container's seven-day rule as the only thing that would
+        // ever remove them.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.That(
+            System.Text.RegularExpressions.Regex.Matches(codeBehind, @"await SweepPendingImageBatchAsync\(\);").Count,
+            Is.GreaterThanOrEqualTo(4),
+            "Expected the sweep from upload completion, cancel, navigation away, and re-selection.");
+    }
+
+    [Test]
     public void UploadFiles_BeforeUnloadInteropHandlesCanceledCircuit()
     {
         var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");

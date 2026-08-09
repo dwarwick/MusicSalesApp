@@ -513,8 +513,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
         // A batch still awaiting title review is abandoned by this new selection, so release the
         // files it was holding rather than leaking them on the server.
+        //
+        // Including its staged cover art. That folder used to survive here: the temp files went, the
+        // rows went, and the images the browser had already sent to Azure stayed behind with nothing
+        // left referencing them - so the only thing that would ever remove them was the container's
+        // seven-day rule. Choosing files again is a normal way to change your mind, not an edge case.
         _awaitingTitleConfirmation = false;
         CleanupPendingTempFiles();
+        await SweepPendingImageBatchAsync();
 
         // Clear previous validation errors
         ClearValidationError();
