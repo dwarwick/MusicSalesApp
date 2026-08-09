@@ -38,6 +38,23 @@ public interface ICoverArtMatchService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Enqueues a pairing request for images that are already in staging.
+    ///
+    /// <para>
+    /// The half of <see cref="StageAndEnqueueAsync"/> that remains when the browser did the
+    /// uploading. Kept separate rather than adding a flag, because "put these bytes somewhere" and
+    /// "ask the Function to pair them" are genuinely different jobs, and only the first one changes
+    /// when uploads move off the web server.
+    /// </para>
+    /// </summary>
+    Task EnqueueAsync(
+        Guid batchId,
+        int creatorId,
+        IReadOnlyList<string> audioFileNames,
+        IReadOnlyList<CoverArtMatchCandidate> candidates,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes a batch's staged images once the pairing is no longer needed.
     ///
     /// <para>
@@ -122,6 +139,20 @@ public sealed class CoverArtMatchService : ICoverArtMatchService
             // extra resolution would only cost render passes on the circuit.
             stagingProgress?.Report((index + 1) * 100d / images.Count);
         }
+
+        await EnqueueAsync(batchId, creatorId, audioFileNames, candidates, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task EnqueueAsync(
+        Guid batchId,
+        int creatorId,
+        IReadOnlyList<string> audioFileNames,
+        IReadOnlyList<CoverArtMatchCandidate> candidates,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(audioFileNames);
+        ArgumentNullException.ThrowIfNull(candidates);
 
         await _queueClient.EnqueueCoverArtMatchAsync(
             new CoverArtMatchRequest

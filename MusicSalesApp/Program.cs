@@ -443,6 +443,17 @@ try
     builder.Services.AddScoped<IUploadProgressNotifier, UploadProgressNotifier>();
     builder.Services.AddScoped<ICoverArtMatchNotifier, CoverArtMatchNotifier>();
     builder.Services.AddScoped<ICoverArtMatchService, CoverArtMatchService>();
+
+    // Singleton: it holds no per-request state, and its once-per-process container check is only
+    // once-per-process if the instance is.
+    builder.Services.AddSingleton<IUploadStagingSasService, UploadStagingSasService>();
+    builder.Services.AddScoped<IStagedBlobReader, StagedBlobReader>();
+
+    // Cleans up after a process that died mid-batch. Every temp file this app writes is deleted by
+    // the code that wrote it, but all of those paths need the process to survive - and an app-pool
+    // recycle skips them all, leaving files nothing else will ever look at. Scheduled daily in
+    // BackgroundJobService; see HangfireJobIds.CleanupOrphanedTempFiles.
+    builder.Services.AddScoped<ITempFileCleanupService, TempFileCleanupService>();
     builder.Services.AddScoped<ISongUploadJobReconciler, SongUploadJobReconciler>();
 
     // Reaches both the media and persona-image containers, which the single-container

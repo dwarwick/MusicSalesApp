@@ -51,10 +51,23 @@ public class UploadFilesProgressTests
     }
 
     [Test]
-    public void UploadBox_IsStillOfferedDuringTheTitleReviewPause()
+    public void UploadBox_IsHiddenDuringTheReviewStep()
     {
-        // Those rows exist but have never been staged, and choosing different files at the review
-        // step has always been a legitimate way to replace the batch.
+        // It used to stay, because dropping different files there replaced the batch. That cost far
+        // more than it was worth: a drop box under a table the creator is being asked to act on
+        // invites one accident, and the accident discards every title they edited and every pairing
+        // they fixed. It happened on the first real run - a cover image dragged towards the review
+        // table landed on the drop box and wiped the batch. Cancel is right there.
+        var page = new TestableUploadFiles { AwaitingReview = true };
+        page.AddUnstagedRow();
+
+        Assert.That(page.HideBox, Is.True);
+    }
+
+    [Test]
+    public void UploadBox_ComesBackAfterAReviewedBatchIsCancelled()
+    {
+        // Hiding it is only acceptable because leaving the review step brings it straight back.
         var page = new TestableUploadFiles();
         page.AddUnstagedRow();
 
@@ -82,6 +95,12 @@ public class UploadFilesProgressTests
         {
             get => _isUploading;
             init => _isUploading = value;
+        }
+
+        public bool AwaitingReview
+        {
+            get => _awaitingTitleConfirmation;
+            init => _awaitingTitleConfirmation = value;
         }
 
         public bool HideBox => HideUploadBox;
@@ -125,6 +144,92 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void UploadFiles_RoutesEveryReceivingPhaseStageThroughTheCalculator()
+    {
+        // The receiving phase spans three stages that each write the same bar, and the calculator
+        // exists so they join up. Its own tests only prove the bands are contiguous - they cannot
+        // see whether the page actually uses them, and for a while it did not: the receive stage
+        // assigned a raw 0-100 and the next stage assigned a band whose start is 0, so the bar ran
+        // to full and snapped back to nothing in front of the creator.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Contain("CoverArtMatchProgressCalculator.ToReceivingPercent(batchPercent)"),
+                "The receive stage must map onto its band rather than assigning a raw percentage.");
+
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("_initialUploadBatchProgress = batchPercent"),
+                "A raw assignment bypasses the calculator and reintroduces the snap-back.");
+
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("ToOverallPercent(CoverArtMatchStep.Staging)"),
+                "That band starts at 0, so assigning it after receiving resets the bar. "
+                + "Use ToStagingImagesPercent, which continues from where receiving ended.");
+        });
+    }
+
+    [Test]
+    public void UploadFiles_NeverLetsAStreamFaultEscapeTheEventHandler()
+    {
+        // An exception escaping a Blazor event handler kills the circuit. The buffering loop caught
+        // only InvalidDataException, so IOException - which OpenReadStream throws the moment a file
+        // exceeds its cap - took the whole page down instead of reporting a rejected batch.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Contain("ex is InvalidDataException or IOException"),
+                "The buffering loop must catch IOException, not just InvalidDataException.");
+
+            Assert.That(
+                codeBehind,
+                Does.Contain("FindOversizedFiles("),
+                "Size must be checked from IBrowserFile.Size before any stream is opened.");
+        });
+    }
+
+    [Test]
+    public void UploadFiles_DirectUploadIsOptionalAndFallsBackToTheServerPath()
+    {
+        // Two independent gates, both of which must fail closed. The flag defaults off, and a browser
+        // that cannot load the module leaves _uploadModule null - either way the page must still take
+        // the server-side path it has always used, so an environment without CORS, without the flag,
+        // or with a blocked script is slower rather than broken.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeBehind, Does.Contain("IsDirectToStorageUploadEnabledAsync()"));
+            Assert.That(
+                codeBehind,
+                Does.Contain("DirectUploadAvailable => _uploadModule is not null"),
+                "A failed module import must leave the page on the server-side path.");
+            Assert.That(
+                codeBehind,
+                Does.Contain("CoverArtMatchService.StageAndEnqueueAsync"),
+                "The server-side staging path must remain reachable as the fallback.");
+
+            // JS finds the live FileList through this class; without it the upload module has no
+            // files to read and every direct upload reports NoFileList.
+            Assert.That(markup, Does.Contain("direct-upload-input"));
+
+            // Cancelling a token cannot stop a transfer the server is not part of.
+            Assert.That(
+                codeBehind,
+                Does.Contain("AbortDirectUploadsAsync"),
+                "Disposal must tell the browser to stop, not just cancel a server-side token.");
+        });
+    }
+
+    [Test]
     public void UploadFiles_ReviewStepOffersAnEditableTitlePrefilledFromTheFileName()
     {
         var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
@@ -137,6 +242,16 @@ public class UploadFilesProgressTests
 
         Assert.That(codeBehind, Does.Contain("SongTitle = SongTitleHelper.FromFileName(pair.AudioFileName)"));
         Assert.That(codeBehind, Does.Contain("AudioFileName = audioFileMeta.Name"));
+
+        // The step is unconditional now. It used to appear only when a title was already broken,
+        // which meant the one place a creator could see what was about to be published was also the
+        // one place they only reached when something had gone wrong - and cover-art pairing, which
+        // is a guess, could never be corrected at all.
+        Assert.That(
+            codeBehind,
+            Does.Not.Contain("if (await PendingTitlesNeedAttentionAsync())\n        {\n            _awaitingTitleConfirmation = true;"),
+            "Reaching the review step must not depend on a title being wrong.");
+        Assert.That(markup, Does.Contain("Review Before Uploading"));
 
         // The storage path no longer comes from the creator's filename.
         Assert.That(codeBehind, Does.Not.Contain("UploadedAudioFileName"));
@@ -175,6 +290,108 @@ public class UploadFilesProgressTests
         // FfmpegAudioProcessorTests for where that behaviour lives now.
         Assert.That(codeBehind, Does.Contain("ContentMatchesExtension"));
         Assert.That(codeBehind, Does.Contain("MediaTransferValidator.RequireComplete"));
+    }
+
+    [Test]
+    public void TheReviewStepDoesNotLookLikeWorkInProgress()
+    {
+        // A creator sat on this step without realising the batch was waiting on them. Everything on
+        // screen said "working": a striped, animated progress bar, rows badged "Pending", and a
+        // message describing a state rather than asking for anything. The button was there and read
+        // as decoration.
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            // Flattened, because the class expression wraps across four lines and matching the raw
+            // text would fail on a reflow that changed nothing.
+            var flattened = System.Text.RegularExpressions.Regex.Replace(markup, @"\s+", " ");
+
+            Assert.That(
+                flattened,
+                Does.Contain("_awaitingTitleConfirmation ? \"bg-secondary\""),
+                "The batch bar must stop animating while the batch is waiting on the creator.");
+
+            Assert.That(
+                markup,
+                Does.Contain("Not uploaded"),
+                "\"Pending\" reads as queued behind work that is already running.");
+
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"OnClick=""StartUploadAsync""").Count,
+                Is.EqualTo(2),
+                "The upload button belongs above the table as well as below it - a fifty-row batch "
+                + "scrolls the only copy off screen.");
+        });
+    }
+
+    [Test]
+    public void TheProgressMessageNamesTheButtonItIsAskingFor()
+    {
+        // And names it from the same source the button renders from, so an edit to one cannot leave
+        // the instruction pointing at a button that says something else.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeBehind, Does.Contain("protected string UploadButtonLabel"));
+            Assert.That(codeBehind, Does.Contain("Nothing has been uploaded yet"));
+            Assert.That(codeBehind, Does.Contain("then choose "), "The message has to ask, not describe.");
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"@UploadButtonLabel").Count,
+                Is.EqualTo(2),
+                "Both buttons render from the label the message quotes.");
+        });
+    }
+
+    [Test]
+    public void UploadFiles_PageLevelDragGuardIgnoresTheCreatorsOwnDrags()
+    {
+        // The guard exists so a file dropped outside the upload box does not navigate the browser
+        // away. It is document-level and bubble-phase, so it runs last and whatever it sets wins -
+        // which made it silently veto every cover-art re-pairing drag: dropEffect forced to 'none'
+        // outside .upload-box gave the not-allowed cursor, and dropping on the upload box instead
+        // was read as a new file selection and discarded the reviewed batch.
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                markup,
+                Does.Contain("function isExternalFileDrag"),
+                "The guard must be able to tell an OS file drag from a drag that started on the page.");
+
+            Assert.That(
+                markup,
+                Does.Contain("indexOf.call(types, 'Files')"),
+                "Only a drag carrying files from the operating system is the hazard this guards.");
+
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"if \(!isExternalFileDrag\(e\)\)").Count,
+                Is.EqualTo(2),
+                "Both the dragover and the drop handler have to skip internal drags.");
+
+            Assert.That(
+                markup,
+                Does.Contain("_streamTunesInternalDrag"),
+                "A flag we set ourselves backs up the types check.");
+        });
+    }
+
+    [Test]
+    public void UploadFiles_AbandoningABatchReleasesItsStagedCoverArt()
+    {
+        // Choosing files again is a normal way to change your mind. The temp files and rows were
+        // already released, but the images the browser had sent to Azure stayed behind with nothing
+        // referencing them - leaving the container's seven-day rule as the only thing that would
+        // ever remove them.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+
+        Assert.That(
+            System.Text.RegularExpressions.Regex.Matches(codeBehind, @"await SweepPendingImageBatchAsync\(\);").Count,
+            Is.GreaterThanOrEqualTo(4),
+            "Expected the sweep from upload completion, cancel, navigation away, and re-selection.");
     }
 
     [Test]

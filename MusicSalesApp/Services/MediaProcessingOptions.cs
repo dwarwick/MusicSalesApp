@@ -81,6 +81,30 @@ public class MediaProcessingOptions
     /// </summary>
     public TimeSpan StagingSasLifetime { get; set; } = TimeSpan.FromMinutes(30);
 
+    /// <summary>
+    /// Lifetime of a write SAS handed to the browser for one direct upload.
+    ///
+    /// <para>
+    /// Minted per file immediately before that file starts, not per batch - a 24-file batch spans
+    /// the better part of an hour, and a per-batch token would force a multi-hour window onto files
+    /// that may never be uploaded at all. Thirty minutes comfortably covers one large file on a slow
+    /// connection, and a browser that outruns it renews rather than restarting.
+    /// </para>
+    /// </summary>
+    public TimeSpan StagingUploadSasLifetime { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// How far back a write SAS starts, absorbing clock skew between this host and Azure.
+    ///
+    /// <para>
+    /// The four read-SAS sites set no start time and are fine, because Azure itself consumes them or
+    /// a browser reads them seconds later. These are minted on shared hosting whose clock we do not
+    /// control and evaluated against the storage service's, where a few seconds fast means an
+    /// immediate 403 the creator can do nothing about.
+    /// </para>
+    /// </summary>
+    public TimeSpan StagingUploadSasClockSkew { get; set; } = TimeSpan.FromMinutes(5);
+
     /// <summary>True when enough is configured for the pipeline to run at all.</summary>
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(StorageConnectionString)

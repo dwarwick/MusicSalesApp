@@ -23,12 +23,42 @@
 </SfMessage>
 
 <div class="container-fluid">
-    
+
+    @* Stays visible through the review step, unlike the drop box. The setting is still live there -
+       unticking it takes the re-pairing interface away - and the review step is exactly where a
+       creator discovers they did not want it. Hiding it at that moment also made its state
+       unknowable, which turned "it paused anyway" into an unanswerable bug report. *@
+    @if (ShowMatchCoverArtChoice)
+    {
+        <div class="form-check mb-3">
+            <input class="form-check-input"
+                   type="checkbox"
+                   id="match-cover-art-before-upload"
+                   checked="@_matchCoverArtBeforeUpload"
+                   @onchange="@(e => SetMatchCoverArtBeforeUploadAsync((bool)e.Value))" />
+            <label class="form-check-label" for="match-cover-art-before-upload">
+                Match cover art to songs before uploading
+                <small class="text-muted d-block">
+                    Pauses once your files are ready so you can check each pairing and drag artwork
+                    onto the right song. Cover art is still matched automatically either way, and
+                    batches with no artwork never pause.
+                    @if (_awaitingTitleConfirmation)
+                    {
+                        <text>Unticking it now applies to your next batch.</text>
+                    }
+                </small>
+            </label>
+        </div>
+    }
+
     <label class="upload-box @(HideUploadBox ? "upload-box-disabled" : "") mb-2"
            style="display: @(HideUploadBox ? "none" : "flex")">
+        @* direct-upload-input is how direct-upload.js finds the live FileList. Blazor's IBrowserFile
+           handles cannot be handed to JavaScript, and re-reading the DOM's own files is both simpler
+           and immune to the handle-invalidation traps documented in the code-behind. *@
         <InputFile @ref="FileInput"
                    OnChange="HandleFileSelected"
-                   class="hidden-input"
+                   class="hidden-input direct-upload-input"
                    multiple />
 
         <div class="upload-content" style="display: @(_isUploading ? "none" : "block")">
@@ -75,8 +105,16 @@
                         <span class="text-muted small">@OverallProgressMessage</span>
                     </div>
                 }
+                @* Still and grey while the batch is waiting on the creator. A striped, animated bar
+                   is the universal "working, please wait" signal, and showing it during the review
+                   step told them to sit still at the exact moment they needed to act - which is
+                   what made the upload button easy to miss. *@
                 <div class="progress mb-4" style="height: 1.5rem;">
-                    <div class="progress-bar @(OverallProgressPercent >= 100 ? "bg-success" : "bg-primary progress-bar-striped progress-bar-animated")"
+                    <div class="progress-bar @(OverallProgressPercent >= 100
+                             ? "bg-success"
+                             : _awaitingTitleConfirmation
+                                 ? "bg-secondary"
+                                 : "bg-primary progress-bar-striped progress-bar-animated")"
                          role="progressbar"
                          style="width: @(OverallProgressPercent)%"
                          aria-valuenow="@OverallProgressPercent"
@@ -155,13 +193,95 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>@(_awaitingTitleConfirmation ? "Fix These Song Titles" : "Processing Progress")</h5>
+                @* The action sits above the table as well as below it. A batch can be fifty rows, so
+                   a button that only exists past the end of one is a button a creator scrolls away
+                   from and never comes back to - which is exactly what happened on the first run. *@
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="mb-0">@(_awaitingTitleConfirmation ? "Review Before Uploading" : "Processing Progress")</h5>
+                    @if (_awaitingTitleConfirmation)
+                    {
+                        <div class="d-flex gap-2">
+                            <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                                @UploadButtonLabel
+                            </SfButton>
+                            <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
+                        </div>
+                    }
+                </div>
                 @if (_awaitingTitleConfirmation)
                 {
-                    <p class="text-muted">
-                        Titles come from your filenames and normally upload without asking.
-                        These need a change first — nothing has been uploaded yet.
+                    <p class="text-muted mt-2">
+                        Titles come from your filenames and cover art is matched automatically.
+                        Check both below — your songs have not been published yet.
+                        @if (SongsWithoutCoverArtCount > 0)
+                        {
+                            <span class="d-block mt-1">
+                                <i class="fa-solid fa-circle-info"></i>
+                                @(SongsWithoutCoverArtCount == 1
+                                    ? "1 song has no cover art"
+                                    : $"{SongsWithoutCoverArtCount} songs have no cover art")
+                                and will use the default animation unless you add artwork.
+                            </span>
+                        }
                     </p>
+
+                    @* Shown only when it holds something, or while the creator is mid-gesture and
+                       needs somewhere to let go. An empty dashed box above a table where every
+                       pairing is already right announces a problem that does not exist. Also a drop
+                       target, so artwork can come off a song without needing somewhere else to go. *@
+                    @if (ShowCoverArtPool)
+                    {
+                        <div class="cover-art-pool @(HeldCoverArt != null ? "cover-art-pool-active" : "")"
+                             @ondragover:preventDefault="true"
+                             @ondrop="ReturnHeldCoverArtToPool">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>
+                                    @if (!_unmatchedCoverArtFiles.Any())
+                                    {
+                                        <text>Drop here to remove this artwork from its song</text>
+                                    }
+                                    else if (HeldCoverArt != null)
+                                    {
+                                        <text>Drop @HeldCoverArt on a song below, or here to leave it unused</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Cover art not matched to a song</text>
+                                    }
+                                </strong>
+                                @if (HeldCoverArt != null)
+                                {
+                                    <SfButton CssClass="e-small e-outline" OnClick="ReleaseCoverArt">Cancel</SfButton>
+                                }
+                            </div>
+
+                            @if (_unmatchedCoverArtFiles.Any())
+                            {
+                                <div class="cover-art-chips">
+                                    @foreach (var file in _unmatchedCoverArtFiles)
+                                    {
+                                        var isHeld = string.Equals(file, HeldCoverArt, StringComparison.OrdinalIgnoreCase);
+                                        <div class="cover-art-chip @(isHeld ? "cover-art-chip-held" : "")"
+                                             draggable="true"
+                                             role="button"
+                                             tabindex="0"
+                                             aria-pressed="@isHeld"
+                                             aria-label="@($"Cover art {file}. Select it, then choose a song.")"
+                                             @ondragstart="@(() => HoldCoverArt(file))"
+                                             @ondragend="ReleaseCoverArt"
+                                             @onclick="@(() => HoldCoverArt(file))">
+                                            <img id="@PreviewElementId(file)" alt="" class="cover-art-thumb" />
+                                            <div class="cover-art-chip-name" title="@file">@file</div>
+                                            <small class="text-muted">@FormatFileSize(CoverArtSizeOf(file))</small>
+                                        </div>
+                                    }
+                                </div>
+                                <small class="text-muted d-block mt-2">
+                                    Drag one onto a song, or tap it and then tap the song.
+                                </small>
+                            }
+                        </div>
+                    }
                 }
                 <div class="table-responsive">
                     <table class="table table-striped">
@@ -201,13 +321,65 @@
 
                                         <small class="text-muted">@FormatFileSize(item.AudioFileSize)</small>
                                     </td>
-                                    <td>
+                                    @* During review this cell is both a drop target and a drag source,
+                                       so a wrong pairing can be corrected in one gesture rather than
+                                       cleared and re-made. Once uploading starts it goes back to
+                                       being a plain read-only label. *@
+                                    <td style="min-width: 14rem;"
+                                        class="@(_awaitingTitleConfirmation && HeldCoverArt != null ? "cover-art-target" : "")"
+                                        @ondragover:preventDefault="@_awaitingTitleConfirmation"
+                                        @ondrop="@(() => AssignHeldCoverArt(item))"
+                                        @onclick="@(() => AssignHeldCoverArt(item))">
                                         @if (item.HasCoverArt)
                                         {
-                                            @item.CoverArtFileName
-                                            <br />
-
-                                            <small class="text-muted">@FormatFileSize(item.CoverArtFileSize)</small>
+                                            <div class="d-flex align-items-center gap-2">
+                                                @if (_awaitingTitleConfirmation)
+                                                {
+                                                    @* Tap picks it up as well as drag, so artwork can
+                                                       be moved between songs on a touch screen where
+                                                       there is no drag event at all. stopPropagation
+                                                       keeps the tap off the cell's own drop handler,
+                                                       which would put it straight back. *@
+                                                    <img id="@PreviewElementId(item.CoverArtFileName)"
+                                                         alt="@($"Cover art {item.CoverArtFileName}")"
+                                                         title="Drag or tap to move this artwork"
+                                                         class="cover-art-thumb cover-art-thumb-row @(string.Equals(item.CoverArtFileName, HeldCoverArt, StringComparison.OrdinalIgnoreCase) ? "cover-art-chip-held" : "")"
+                                                         draggable="true"
+                                                         @ondragstart="@(() => HoldCoverArt(item.CoverArtFileName))"
+                                                         @ondragend="ReleaseCoverArt"
+                                                         @onclick="@(() => HoldCoverArt(item.CoverArtFileName))"
+                                                         @onclick:stopPropagation="true" />
+                                                }
+                                                <div class="flex-grow-1 text-break">
+                                                    @item.CoverArtFileName
+                                                    <br />
+                                                    <small class="text-muted">@FormatFileSize(item.CoverArtFileSize)</small>
+                                                </div>
+                                                @if (_awaitingTitleConfirmation)
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-link text-muted p-0"
+                                                            title="Remove this cover art"
+                                                            aria-label="@($"Remove cover art from {item.SongTitle}")"
+                                                            @onclick="@(() => ClearCoverArt(item))"
+                                                            @onclick:stopPropagation="true">
+                                                        <i class="fa-solid fa-xmark"></i>
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                        else if (_awaitingTitleConfirmation)
+                                        {
+                                            <span class="cover-art-empty">
+                                                @if (HeldCoverArt != null)
+                                                {
+                                                    <text>Drop or tap to use @HeldCoverArt</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>No cover art — drag one here</text>
+                                                }
+                                            </span>
                                         }
                                         else
                                         {
@@ -215,7 +387,14 @@
                                         }
                                     </td>
                                     <td>
-                                        @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
+                                        @* "Pending" reads as queued - as though the batch were
+                                           already moving and this row's turn had not come. Nothing
+                                           is moving; it is waiting to be sent. *@
+                                        @if (_awaitingTitleConfirmation)
+                                        {
+                                            <span class="badge bg-secondary">Not uploaded</span>
+                                        }
+                                        else if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
                                         {
                                             <span class="badge bg-info">@item.StatusMessage</span>
                                         }
@@ -262,8 +441,8 @@
                 @if (_awaitingTitleConfirmation)
                 {
                     <div class="d-flex gap-2 mt-2">
-                        <SfButton CssClass="cta-primary" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
-                            Continue Upload
+                        <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                            @UploadButtonLabel
                         </SfButton>
                         <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
                     </div>
@@ -271,11 +450,18 @@
             </div>
         </div>
 
-        @if (_unmatchedCoverArtFiles.Any())
+        @* Only after the review step. While reviewing, these same files are the live pool above,
+           where the creator can still place them - listing them again as leftovers would contradict
+           the thing they are being asked to act on. *@
+        @if (!_awaitingTitleConfirmation && _unmatchedCoverArtFiles.Any())
         {
             <div class="row mt-3">
                 <div class="col-12">
-                    <p class="text-muted"><strong>The following cover art files could not be matched to an audio file and were not uploaded:</strong></p>
+                    @* "were not uploaded" was true when every file reached the server first. On the
+                       direct path the browser has already sent these to storage by the time pairing
+                       runs, and they are discarded afterwards - so the old wording described the
+                       wrong step and contradicted the progress bar the creator just watched. *@
+                    <p class="text-muted"><strong>These cover art files were left unused, so no song is using them:</strong></p>
                     <ul class="text-muted">
                         @foreach (var file in _unmatchedCoverArtFiles)
                         {
@@ -388,12 +574,135 @@
         .dropzone:hover {
             border-color: #888;
         }
+
+    .cover-art-pool {
+        border: 2px dashed #bbb;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Only while something is held, so the drop targets are obvious mid-gesture and invisible
+       otherwise - a page permanently outlined in dashed boxes reads as broken. */
+    .cover-art-pool-active {
+        border-color: #0d6efd;
+        background-color: rgba(13, 110, 253, 0.06);
+    }
+
+    .cover-art-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .cover-art-chip {
+        width: 7.5rem;
+        padding: 0.5rem;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        cursor: grab;
+        text-align: center;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cover-art-chip:hover {
+        border-color: #0d6efd;
+    }
+
+    .cover-art-chip-held {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+
+    .cover-art-chip-name {
+        font-size: 0.75rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .cover-art-thumb {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        border-radius: 4px;
+        background-color: rgba(127, 127, 127, 0.2);
+    }
+
+    .cover-art-thumb-row {
+        width: 3rem;
+        flex: 0 0 3rem;
+        cursor: grab;
+    }
+
+    .cover-art-target {
+        outline: 2px dashed #0d6efd;
+        outline-offset: -4px;
+        cursor: copy;
+    }
+
+    .cover-art-empty {
+        display: inline-block;
+        color: #6c757d;
+        font-style: italic;
+        font-size: 0.875rem;
+    }
 </style>
 
 <script suppress-error="BL9992">
     (function () {
+        // These two listeners exist to stop the browser navigating away when a creator drops a file
+        // outside the upload box. They are on `document` in the bubble phase, so they run LAST and
+        // whatever they set wins.
+        //
+        // Which made them silently veto the cover-art re-pairing drags: dropEffect was forced to
+        // 'none' for anything outside .upload-box, so dragging a thumbnail onto a song showed the
+        // not-allowed cursor and refused the drop - and dropping it on the upload box instead was
+        // read as a brand-new file selection, discarding the whole reviewed batch.
+        //
+        // Both now ignore drags that started inside the page. Only a drag carrying files from the
+        // operating system is the browser-navigation hazard these were written for.
+        function isExternalFileDrag(e) {
+            if (window._streamTunesInternalDrag) {
+                return false;
+            }
+
+            var types = e.dataTransfer && e.dataTransfer.types;
+            return !!types && Array.prototype.indexOf.call(types, 'Files') !== -1;
+        }
+
+        // Belt and braces alongside the types check. Dragging an <img> gives text/html and
+        // text/uri-list rather than Files, so the check above is already correct - but this is the
+        // signal we control, and a browser quirk in the one we do not would break re-pairing again.
+        document.addEventListener('dragstart', function (e) {
+            var handle = e.target && e.target.closest
+                ? e.target.closest('.cover-art-chip, .cover-art-thumb-row')
+                : null;
+            window._streamTunesInternalDrag = !!handle;
+        }, true);
+
+        function endInternalDrag() {
+            window._streamTunesInternalDrag = false;
+        }
+
+        document.addEventListener('dragend', endInternalDrag, true);
+
+        // Deferred, not immediate. Both this and the real drop handler below are document-level
+        // bubble listeners, and this one was registered first - clearing the flag inline would clear
+        // it before the handler that needs to read it. The drop cleanup is only a backstop for the
+        // case where dragend never fires; letting the flag stick would block real file drops.
+        document.addEventListener('drop', function () {
+            window.setTimeout(endInternalDrag, 0);
+        });
+
         // Handle dragover: allow drops inside the upload box, prevent everywhere else
         document.addEventListener('dragover', function (e) {
+            if (!isExternalFileDrag(e)) {
+                // Someone else's drag. Leaving it entirely alone is what lets Blazor's own
+                // dragover handlers on the re-pairing targets decide whether a drop is allowed.
+                return;
+            }
+
             var uploadBox = e.target.closest('.upload-box');
             if (uploadBox) {
                 e.preventDefault();
@@ -458,6 +767,12 @@
         // first event's IBrowserFile references, so the guard below lets only one
         // change event for this exact dropped file set reach Blazor.
         document.addEventListener('drop', function (e) {
+            if (!isExternalFileDrag(e)) {
+                // A re-pairing drag. Forwarding it to the file input would read the creator's own
+                // artwork back as a new selection and discard the batch they were reviewing.
+                return;
+            }
+
             var uploadBox = e.target.closest('.upload-box');
             if (uploadBox && !uploadBox.classList.contains('upload-box-disabled')) {
                 e.preventDefault();
@@ -513,6 +828,65 @@
                 window.removeEventListener('beforeunload', window._uploadBeforeUnloadHandler);
                 window._uploadBeforeUnloadHandler = null;
             }
+        },
+
+        // Thumbnails for the review step, drawn from the copy the browser already has.
+        //
+        // Not fetched from storage, which would need a read SAS - and the upload tokens are
+        // deliberately Create|Write only, so a leaked one cannot even read back what it wrote. This
+        // needs no token, no request and no server round trip: the file is sitting in the input's
+        // FileList, which is where the upload reads it from too.
+        //
+        // Object URLs pin their blob in memory until revoked, so every one handed out is tracked and
+        // released before the next batch.
+        showCoverArtPreviews: function (pairs) {
+            window.uploadFilesHelper.revokeCoverArtPreviews();
+
+            var input = document.querySelector('input[type=file].direct-upload-input');
+            var files = input ? input.files : null;
+            if (!files) {
+                return;
+            }
+
+            var urls = [];
+            (pairs || []).forEach(function (pair) {
+                var element = document.getElementById(pair.elementId);
+                var file = files[pair.browserIndex];
+                if (!element || !file) {
+                    return;
+                }
+
+                var url = URL.createObjectURL(file);
+                urls.push(url);
+                element.src = url;
+            });
+
+            window._coverArtPreviewUrls = urls;
+        },
+
+        // Upload preferences live in the browser rather than the database - they are habits, not
+        // account settings, and this way they cost no schema change and no round trip. Wrapped in
+        // try/catch because localStorage throws outright in private-browsing modes and when a site
+        // is blocked from storing data, and a preference is never worth failing a page over.
+        readPreference: function (key) {
+            try {
+                return window.localStorage.getItem(key);
+            } catch {
+                return null;
+            }
+        },
+
+        writePreference: function (key, value) {
+            try {
+                window.localStorage.setItem(key, value);
+            } catch { /* storage unavailable; the default applies next visit */ }
+        },
+
+        revokeCoverArtPreviews: function () {
+            (window._coverArtPreviewUrls || []).forEach(function (url) {
+                try { URL.revokeObjectURL(url); } catch { /* already gone */ }
+            });
+            window._coverArtPreviewUrls = [];
         }
     };
 </script>
