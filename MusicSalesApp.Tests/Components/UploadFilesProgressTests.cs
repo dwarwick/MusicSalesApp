@@ -293,6 +293,59 @@ public class UploadFilesProgressTests
     }
 
     [Test]
+    public void TheReviewStepDoesNotLookLikeWorkInProgress()
+    {
+        // A creator sat on this step without realising the batch was waiting on them. Everything on
+        // screen said "working": a striped, animated progress bar, rows badged "Pending", and a
+        // message describing a state rather than asking for anything. The button was there and read
+        // as decoration.
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            // Flattened, because the class expression wraps across four lines and matching the raw
+            // text would fail on a reflow that changed nothing.
+            var flattened = System.Text.RegularExpressions.Regex.Replace(markup, @"\s+", " ");
+
+            Assert.That(
+                flattened,
+                Does.Contain("_awaitingTitleConfirmation ? \"bg-secondary\""),
+                "The batch bar must stop animating while the batch is waiting on the creator.");
+
+            Assert.That(
+                markup,
+                Does.Contain("Not uploaded"),
+                "\"Pending\" reads as queued behind work that is already running.");
+
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"OnClick=""StartUploadAsync""").Count,
+                Is.EqualTo(2),
+                "The upload button belongs above the table as well as below it - a fifty-row batch "
+                + "scrolls the only copy off screen.");
+        });
+    }
+
+    [Test]
+    public void TheProgressMessageNamesTheButtonItIsAskingFor()
+    {
+        // And names it from the same source the button renders from, so an edit to one cannot leave
+        // the instruction pointing at a button that says something else.
+        var codeBehind = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs");
+        var markup = ReadProjectFile("MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeBehind, Does.Contain("protected string UploadButtonLabel"));
+            Assert.That(codeBehind, Does.Contain("Nothing has been uploaded yet"));
+            Assert.That(codeBehind, Does.Contain("then choose "), "The message has to ask, not describe.");
+            Assert.That(
+                System.Text.RegularExpressions.Regex.Matches(markup, @"@UploadButtonLabel").Count,
+                Is.EqualTo(2),
+                "Both buttons render from the label the message quotes.");
+        });
+    }
+
+    [Test]
     public void UploadFiles_PageLevelDragGuardIgnoresTheCreatorsOwnDrags()
     {
         // The guard exists so a file dropped outside the upload box does not navigate the browser

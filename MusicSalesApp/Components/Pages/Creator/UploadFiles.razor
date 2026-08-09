@@ -24,10 +24,11 @@
 
 <div class="container-fluid">
 
-    @* Offered here, before any file is chosen, rather than at the review step. The point of turning
-       it off is to never see that step, and a switch you have to reach the interface to reach cannot
-       turn the interface off. Hidden once a batch is moving, when it can no longer change anything. *@
-    @if (!HideUploadBox)
+    @* Stays visible through the review step, unlike the drop box. The setting is still live there -
+       unticking it takes the re-pairing interface away - and the review step is exactly where a
+       creator discovers they did not want it. Hiding it at that moment also made its state
+       unknowable, which turned "it paused anyway" into an unanswerable bug report. *@
+    @if (ShowMatchCoverArtChoice)
     {
         <div class="form-check mb-3">
             <input class="form-check-input"
@@ -41,6 +42,10 @@
                     Pauses once your files are ready so you can check each pairing and drag artwork
                     onto the right song. Cover art is still matched automatically either way, and
                     batches with no artwork never pause.
+                    @if (_awaitingTitleConfirmation)
+                    {
+                        <text>Unticking it now applies to your next batch.</text>
+                    }
                 </small>
             </label>
         </div>
@@ -100,8 +105,16 @@
                         <span class="text-muted small">@OverallProgressMessage</span>
                     </div>
                 }
+                @* Still and grey while the batch is waiting on the creator. A striped, animated bar
+                   is the universal "working, please wait" signal, and showing it during the review
+                   step told them to sit still at the exact moment they needed to act - which is
+                   what made the upload button easy to miss. *@
                 <div class="progress mb-4" style="height: 1.5rem;">
-                    <div class="progress-bar @(OverallProgressPercent >= 100 ? "bg-success" : "bg-primary progress-bar-striped progress-bar-animated")"
+                    <div class="progress-bar @(OverallProgressPercent >= 100
+                             ? "bg-success"
+                             : _awaitingTitleConfirmation
+                                 ? "bg-secondary"
+                                 : "bg-primary progress-bar-striped progress-bar-animated")"
                          role="progressbar"
                          style="width: @(OverallProgressPercent)%"
                          aria-valuenow="@OverallProgressPercent"
@@ -180,10 +193,24 @@
     {
         <div class="row mt-4">
             <div class="col-12">
-                <h5>@(_awaitingTitleConfirmation ? "Review Before Uploading" : "Processing Progress")</h5>
+                @* The action sits above the table as well as below it. A batch can be fifty rows, so
+                   a button that only exists past the end of one is a button a creator scrolls away
+                   from and never comes back to - which is exactly what happened on the first run. *@
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="mb-0">@(_awaitingTitleConfirmation ? "Review Before Uploading" : "Processing Progress")</h5>
+                    @if (_awaitingTitleConfirmation)
+                    {
+                        <div class="d-flex gap-2">
+                            <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                                @UploadButtonLabel
+                            </SfButton>
+                            <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
+                        </div>
+                    }
+                </div>
                 @if (_awaitingTitleConfirmation)
                 {
-                    <p class="text-muted">
+                    <p class="text-muted mt-2">
                         Titles come from your filenames and cover art is matched automatically.
                         Check both below — your songs have not been published yet.
                         @if (SongsWithoutCoverArtCount > 0)
@@ -360,7 +387,14 @@
                                         }
                                     </td>
                                     <td>
-                                        @if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
+                                        @* "Pending" reads as queued - as though the batch were
+                                           already moving and this row's turn had not come. Nothing
+                                           is moving; it is waiting to be sent. *@
+                                        @if (_awaitingTitleConfirmation)
+                                        {
+                                            <span class="badge bg-secondary">Not uploaded</span>
+                                        }
+                                        else if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
                                         {
                                             <span class="badge bg-info">@item.StatusMessage</span>
                                         }
@@ -407,8 +441,8 @@
                 @if (_awaitingTitleConfirmation)
                 {
                     <div class="d-flex gap-2 mt-2">
-                        <SfButton CssClass="cta-primary" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
-                            @(_uploadItems.Count == 1 ? "Upload 1 Song" : $"Upload {_uploadItems.Count} Songs")
+                        <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                            @UploadButtonLabel
                         </SfButton>
                         <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
                     </div>

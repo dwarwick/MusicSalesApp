@@ -299,6 +299,21 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         => _isUploading || _isProcessingFiles || _awaitingTitleConfirmation || IsBatchProcessing;
 
     /// <summary>
+    /// Whether the cover-art review choice is on screen.
+    ///
+    /// <para>
+    /// Everything the drop box hides for <em>except</em> the review step. Hiding it there was a
+    /// mistake with two costs: the setting is still live at that point - unticking it takes the
+    /// re-pairing interface away - and more importantly the review step is exactly where a creator
+    /// discovers they did not want it. Taking the switch off screen at the moment it becomes
+    /// relevant also made its state unknowable, which is how a report of "it paused anyway" became
+    /// impossible to tell apart from "the box was still ticked".
+    /// </para>
+    /// </summary>
+    protected bool ShowMatchCoverArtChoice
+        => !_isUploading && !_isProcessingFiles && !IsBatchProcessing;
+
+    /// <summary>
     /// Batch progress, 0-100. Terminal songs count as complete - a failed song will not progress
     /// further, and treating it as unfinished would strand this below 100 forever.
     /// </summary>
@@ -319,6 +334,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             return (int)AudioProcessingProgressCalculator.ToBatchPercent(receiving, songPercents);
         }
     }
+
+    /// <summary>
+    /// The upload button's text. Held in one place because the progress message names it, and an
+    /// instruction that names a button which says something else is worse than no instruction.
+    /// </summary>
+    protected string UploadButtonLabel
+        => _uploadItems.Count == 1 ? "Upload 1 Song" : $"Upload {_uploadItems.Count} Songs";
 
     /// <summary>Wording for the batch bar, so it says which half of the run is underway.</summary>
     protected string OverallProgressMessage
@@ -346,9 +368,13 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 // highlighted sends the creator hunting for a problem that does not exist.
                 var broken = _uploadItems.Count(item => item.TitleError != null);
 
+                // Names the button. "Ready to upload" described the state and left the creator
+                // waiting for something to happen - which the bar, striped and animated at the time,
+                // was actively encouraging.
                 return broken switch
                 {
-                    0 => "Ready to upload. Check the titles and cover art below.",
+                    0 => $"Nothing has been uploaded yet. Check the titles and cover art, then choose "
+                         + $"“{UploadButtonLabel}”.",
                     1 => "One title needs a change before this batch can upload.",
                     _ => $"{broken} titles need a change before this batch can upload."
                 };
