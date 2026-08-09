@@ -51,10 +51,23 @@ public class UploadFilesProgressTests
     }
 
     [Test]
-    public void UploadBox_IsStillOfferedDuringTheTitleReviewPause()
+    public void UploadBox_IsHiddenDuringTheReviewStep()
     {
-        // Those rows exist but have never been staged, and choosing different files at the review
-        // step has always been a legitimate way to replace the batch.
+        // It used to stay, because dropping different files there replaced the batch. That cost far
+        // more than it was worth: a drop box under a table the creator is being asked to act on
+        // invites one accident, and the accident discards every title they edited and every pairing
+        // they fixed. It happened on the first real run - a cover image dragged towards the review
+        // table landed on the drop box and wiped the batch. Cancel is right there.
+        var page = new TestableUploadFiles { AwaitingReview = true };
+        page.AddUnstagedRow();
+
+        Assert.That(page.HideBox, Is.True);
+    }
+
+    [Test]
+    public void UploadBox_ComesBackAfterAReviewedBatchIsCancelled()
+    {
+        // Hiding it is only acceptable because leaving the review step brings it straight back.
         var page = new TestableUploadFiles();
         page.AddUnstagedRow();
 
@@ -82,6 +95,12 @@ public class UploadFilesProgressTests
         {
             get => _isUploading;
             init => _isUploading = value;
+        }
+
+        public bool AwaitingReview
+        {
+            get => _awaitingTitleConfirmation;
+            init => _awaitingTitleConfirmation = value;
         }
 
         public bool HideBox => HideUploadBox;

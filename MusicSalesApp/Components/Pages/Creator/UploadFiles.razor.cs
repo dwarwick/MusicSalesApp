@@ -278,10 +278,25 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     /// <summary>
     /// Whether the drop box is out of the way: while files are being received, while they are being
-    /// inspected, and now for the whole of processing. It comes back once every song is terminal,
-    /// which is the same moment the batch bar reaches 100%.
+    /// inspected, while the creator is reviewing, and for the whole of processing. It comes back once
+    /// every song is terminal, which is the same moment the batch bar reaches 100%.
+    ///
+    /// <para>
+    /// The review step used to keep it, on the reasoning that dropping different files there was a
+    /// legitimate way to replace a batch. That was never worth what it cost. A drop box sitting under
+    /// a table the creator is being asked to act on invites exactly one accident, and the accident is
+    /// unrecoverable - it discards every title they edited and every pairing they fixed. It happened
+    /// on the first real run. Cancel is two inches away and says what it does.
+    /// </para>
+    ///
+    /// <para>
+    /// Hidden, not removed. The file input inside it is where the browser's FileList lives, and this
+    /// batch's audio is still read from it after the review step - taking the element out of the DOM
+    /// would strand the upload it is about to serve.
+    /// </para>
     /// </summary>
-    protected bool HideUploadBox => _isUploading || _isProcessingFiles || IsBatchProcessing;
+    protected bool HideUploadBox
+        => _isUploading || _isProcessingFiles || _awaitingTitleConfirmation || IsBatchProcessing;
 
     /// <summary>
     /// Batch progress, 0-100. Terminal songs count as complete - a failed song will not progress
