@@ -223,8 +223,13 @@ public sealed class SongUploadJobService : ISongUploadJobService
         // own machine telling us how big their file is - this is the first time anything we control
         // has measured it, and it is the only remaining enforcement now that OpenReadStream is gone.
         var audioLength = await _stagedBlobs.GetLengthAsync(sourcePath, cancellationToken);
-        if (audioLength is null)
+        if (audioLength is null || audioLength == 0)
         {
+            // Zero is treated as absent rather than falling through to the header sniff. A committed
+            // but empty blob is what an interrupted single-PUT leaves behind, and a ranged read of
+            // its first 64 bytes is answered with 416, not with an empty body - so the sniff below
+            // would fault instead of rejecting it, and the creator would get a raw Azure message.
+            await DeleteStagedBlobsAsync(mediaGuid, CancellationToken.None);
             throw new InvalidDataException(
                 $"'{request.AudioFileName}' was never fully uploaded. Please try adding it again.");
         }
@@ -252,8 +257,40 @@ public sealed class SongUploadJobService : ISongUploadJobService
         string? coverPath = null;
         if (coverExtension is not null && request.CoverArtStagedPath is not null)
         {
-            coverPath = MediaProcessingStagingPaths.Cover(mediaGuid, coverExtension);
-            await _stagedBlobs.CopyWithinStagingAsync(request.CoverArtStagedPath, coverPath, cancellationToken);
+            // The image gets the same treatment the audio just had, and for the same reason. The
+            // streamed path enforces this cap on the cover-art stream; without it here the direct
+            // path had no server-side image limit at all - the write token minted for a batch image
+            // is Create|Write with no size bound, so anything the browser was willing to PUT would
+            // be copied in and handed to the Function.
+            var coverLength = await _stagedBlobs.GetLengthAsync(request.CoverArtStagedPath, cancellationToken);
+            if (coverLength is null)
+            {
+                throw new InvalidDataException(
+                    $"'{coverArtFileName}' was never fully uploaded. Please try adding it again.");
+            }
+
+            var maxImageMB = await _appSettings.GetMaxImageUploadSizeMBAsync();
+            if (maxImageMB > 0 && coverLength > maxImageMB * BytesPerMegabyte)
+            {
+                // The song is not failed over its artwork. The audio is already staged and valid,
+                // and refusing the whole upload because a cover is too large would cost the creator
+                // the expensive half of the transfer for the cheap half's mistake.
+                _logger.LogWarning(
+                    "Cover art '{CoverArtFileName}' is {Size:F1} MB, over the {Max} MB limit. "
+                    + "Publishing {AudioFileName} without artwork.",
+                    coverArtFileName,
+                    coverLength.Value / (double)BytesPerMegabyte,
+                    maxImageMB,
+                    request.AudioFileName);
+
+                coverArtFileName = null;
+                coverExtension = null;
+            }
+            else
+            {
+                coverPath = MediaProcessingStagingPaths.Cover(mediaGuid, coverExtension);
+                await _stagedBlobs.CopyWithinStagingAsync(request.CoverArtStagedPath, coverPath, cancellationToken);
+            }
         }
 
         // No decode. That check moved to the Function, which already decodes this image to build its

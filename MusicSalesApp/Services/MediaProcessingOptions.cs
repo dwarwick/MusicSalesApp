@@ -88,7 +88,9 @@ public class MediaProcessingOptions
     /// Minted per file immediately before that file starts, not per batch - a 24-file batch spans
     /// the better part of an hour, and a per-batch token would force a multi-hour window onto files
     /// that may never be uploaded at all. Thirty minutes comfortably covers one large file on a slow
-    /// connection, and a browser that outruns it renews rather than restarting.
+    /// connection, and a browser that outruns it asks for a fresh token through
+    /// <c>UploadFilesModel.RenewUploadTarget</c> rather than losing the transfer - which matters,
+    /// because the admin audio cap defaults to 150 MB and half an hour of that is only ~700 kbit/s.
     /// </para>
     /// </summary>
     public TimeSpan StagingUploadSasLifetime { get; set; } = TimeSpan.FromMinutes(30);

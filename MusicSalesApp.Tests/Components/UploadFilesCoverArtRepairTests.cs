@@ -447,6 +447,73 @@ public class UploadFilesCoverArtRepairTests
     }
 
     // -----------------------------------------------------------------
+    // Ways the pool used to lose images.
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void DismissingAValidationErrorDuringReview_KeepsThePool()
+    {
+        // ClearValidationError empties the lists shown under the banner, and _unmatchedCoverArtFiles
+        // used to be one of them - it was a post-hoc report before re-pairing existed. StartUploadAsync
+        // calls it before re-checking titles, so a batch bounced back for a duplicate title arrived
+        // at the review step with every unplaced image silently gone.
+        var page = new TestableUploadFiles();
+        page.GivenSong("One");
+        page.GivenPooled("a.png", "b.png");
+
+        page.DismissValidationError();
+
+        Assert.That(page.Pool, Is.EqualTo(new[] { "a.png", "b.png" }));
+    }
+
+    [Test]
+    public void DismissingAValidationErrorAfterReview_StillClearsTheNotice()
+    {
+        // Once the batch is past re-pairing these really are just leftovers, and the banner's close
+        // button has to keep working.
+        var page = new TestableUploadFiles();
+        page.GivenPooled("a.png");
+        page.EndReview();
+
+        page.DismissValidationError();
+
+        Assert.That(page.Pool, Is.Empty);
+    }
+
+    [Test]
+    public void AnImageIsMatchedCaseInsensitivelyWhenLeavingThePool()
+    {
+        // Every dictionary a filename travels through here is OrdinalIgnoreCase, and so is the
+        // membership test in ReturnToPool - but List<string>.Remove is ordinal and case-sensitive.
+        // The mismatch left an image assigned to a song AND still listed as unmatched, so it could
+        // be handed to a second song, which the pipeline then resolves to one silent winner.
+        var page = new TestableUploadFiles();
+        var song = page.GivenSong("One");
+        page.GivenPooled("Cover.PNG");
+
+        page.Hold("cover.png");
+        page.Assign(song);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(song.CoverArtFileName, Is.EqualTo("cover.png"));
+            Assert.That(page.Pool, Is.Empty, "It cannot be assigned and pooled at the same time.");
+        });
+    }
+
+    [Test]
+    public void AnImageIsNotPooledTwiceUnderADifferentCasing()
+    {
+        var page = new TestableUploadFiles();
+        var song = page.GivenSong("One", "Cover.PNG");
+        page.GivenPooled("cover.png");
+
+        page.Clear(song);
+
+        Assert.That(page.Pool, Has.Count.EqualTo(1));
+    }
+
+    // -----------------------------------------------------------------
     // Thumbnails.
     // -----------------------------------------------------------------
 
@@ -526,5 +593,7 @@ public class UploadFilesCoverArtRepairTests
         public void DropOnPool() => ReturnHeldCoverArtToPool();
 
         public void DisableCoverArtMatching() => ApplyMatchCoverArtPreference(false);
+
+        public void DismissValidationError() => ClearValidationError();
     }
 }

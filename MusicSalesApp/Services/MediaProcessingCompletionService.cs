@@ -183,6 +183,15 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 copied.Add(mp3Path);
             }
 
+            // Everything the metadata could use to claim this song has artwork, cleared together.
+            // Nulling only the two paths left OriginalCoverArtFileName and CoverArtVariantWidths
+            // still being written - and an empty width CSV does not mean "no art", it means "art we
+            // could not render, serve the full-size master", a master that was never copied. Any
+            // consumer keying off the filename or the non-null CSV - the media-integrity audit, the
+            // admin art-replace screen - would see a song claiming artwork the container has not got.
+            var coverArtFileName = job.CoverArtFileName;
+            var coverArtVariantWidths = result.CoverArtVariantWidths;
+
             if (!CoverArtIsUsable(result.CoverArtDiagnosticCode))
             {
                 _logger.LogWarning(
@@ -191,6 +200,8 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
 
                 imagePath = null;
                 originalImagePath = null;
+                coverArtFileName = null;
+                coverArtVariantWidths = null;
             }
 
             if (imagePath is not null && originalImagePath is not null && !string.IsNullOrWhiteSpace(job.CoverArtBlobPath))
@@ -219,7 +230,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 OriginalAudioFileSize = job.SourceFileSize,
                 OriginalAudioContentType = job.SourceContentType,
                 OriginalCoverArtBlobPath = originalImagePath,
-                OriginalCoverArtFileName = job.CoverArtFileName,
+                OriginalCoverArtFileName = coverArtFileName,
 
                 // The Function already wrote these renditions into the GUID folder, straight from
                 // the bitmap it had decoded. Recording the width set here rather than re-deriving it
@@ -231,9 +242,9 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 // could not render", which serves the full-size master. Version is set explicitly
                 // because the coordinator call this replaced incremented 0 -> 1 on every upload, and
                 // CoverArtUrlBuilder emits the value unconditionally as ?v=.
-                CoverArtVariantWidths = result.CoverArtVariantWidths is null
+                CoverArtVariantWidths = coverArtVariantWidths is null
                     ? null
-                    : ImageVariantSizes.ToCsv(result.CoverArtVariantWidths),
+                    : ImageVariantSizes.ToCsv(coverArtVariantWidths),
                 CoverArtVariantVersion = 1,
 
                 FileExtension = ".mp3",

@@ -417,32 +417,45 @@ $existingCorsJson = Invoke-Az @(
     "--connection-string", $values["StagingStorageConnectionString"],
     "--output", "json") -AllowFailure
 
-$existingOrigins = @()
+# Both shapes handled: `az storage cors list` returns these as comma-delimited STRINGS, not the
+# arrays the rest of its JSON would lead you to expect.
+function ConvertTo-CorsList {
+    param($Value)
+    if ($null -eq $Value) { return @() }
+    if ($Value -is [string]) { return @($Value -split ',' | ForEach-Object { $_.Trim() }) }
+    return @($Value | ForEach-Object { "$_".Trim() })
+}
+
+# An origin only counts as already allowed if the rule granting it also permits the method and the
+# headers a browser PUT actually needs. Matching on origin alone made an unrelated rule - a GET-only
+# one added by hand, or by an older version of this script - report success and skip the PUT rule
+# entirely, so uploads failed with a bare TypeError that appears in no server-side log. That is the
+# exact failure this whole block exists to prevent, and a green provisioning run would have hidden it.
+$originsAllowedForPut = @()
 if ($LASTEXITCODE -eq 0) {
     $parsedCors = ($existingCorsJson | Out-String) | ConvertFrom-Json
     # Projected explicitly rather than via member enumeration, for the same Set-StrictMode reason the
     # lifecycle block documents below - an account with no CORS rules yet returns an empty array.
     foreach ($rule in @($parsedCors)) {
-        $ruleOrigins = Get-JsonPath $rule @("AllowedOrigins")
-        if ($null -eq $ruleOrigins) { continue }
+        $ruleOrigins = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedOrigins"))
+        if ($ruleOrigins.Count -eq 0) { continue }
 
-        # `az storage cors list` returns AllowedOrigins as a comma-delimited STRING, not the array
-        # the rest of its JSON would lead you to expect. Treating it as an array silently matches
-        # nothing, so every run looks like a fresh account and appends the rule again - and `cors
-        # add` appends, so the duplicates accumulate. Both shapes handled in case the CLI changes.
-        if ($ruleOrigins -is [string]) {
-            $existingOrigins += @($ruleOrigins -split ',' | ForEach-Object { $_.Trim() })
-        }
-        else {
-            $existingOrigins += @($ruleOrigins | ForEach-Object { "$_".Trim() })
+        $ruleMethods = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedMethods"))
+        $ruleHeaders = ConvertTo-CorsList (Get-JsonPath $rule @("AllowedHeaders"))
+
+        $allowsPut = @($ruleMethods | Where-Object { $_ -eq "PUT" }).Count -gt 0
+        $allowsHeaders = @($ruleHeaders | Where-Object { $_ -eq "*" }).Count -gt 0
+
+        if ($allowsPut -and $allowsHeaders) {
+            $originsAllowedForPut += $ruleOrigins
         }
     }
 }
 
-$missingOrigins = @($corsOrigins | Where-Object { $existingOrigins -notcontains $_ })
+$missingOrigins = @($corsOrigins | Where-Object { $originsAllowedForPut -notcontains $_ })
 
 if ($missingOrigins.Count -eq 0) {
-    Write-Host "Blob CORS already allows $($corsOrigins -join ', ')."
+    Write-Host "Blob CORS already allows PUT from $($corsOrigins -join ', ')."
 }
 elseif ($PSCmdlet.ShouldProcess($stagingAccountName, "Allow blob CORS from $($missingOrigins -join ', ')")) {
     # Allowed and exposed headers are '*' deliberately, while origins never are. The Azure storage

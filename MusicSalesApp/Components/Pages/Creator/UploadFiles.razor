@@ -30,24 +30,25 @@
        unknowable, which turned "it paused anyway" into an unanswerable bug report. *@
     @if (ShowMatchCoverArtChoice)
     {
-        <div class="form-check mb-3">
-            <input class="form-check-input"
-                   type="checkbox"
-                   id="match-cover-art-before-upload"
-                   checked="@_matchCoverArtBeforeUpload"
-                   @onchange="@(e => SetMatchCoverArtBeforeUploadAsync((bool)e.Value))" />
-            <label class="form-check-label" for="match-cover-art-before-upload">
-                Match cover art to songs before uploading
-                <small class="text-muted d-block">
-                    Pauses once your files are ready so you can check each pairing and drag artwork
-                    onto the right song. Cover art is still matched automatically either way, and
-                    batches with no artwork never pause.
-                    @if (_awaitingTitleConfirmation)
-                    {
-                        <text>Unticking it now applies to your next batch.</text>
-                    }
-                </small>
-            </label>
+        <div class="mb-3">
+            <SfCheckBox TChecked="bool"
+                        Label="Match cover art to songs before uploading"
+                        Checked="@_matchCoverArtBeforeUpload"
+                        ValueChange="@OnMatchCoverArtChanged" />
+            <small class="text-muted d-block ms-4 ps-1">
+                Pauses once your files are ready so you can check each pairing and drag artwork
+                onto the right song. Cover art is still matched automatically either way, and
+                batches with no artwork never pause.
+                @if (_awaitingTitleConfirmation)
+                {
+                    @* It does NOT wait for the next batch. Unticking it here removes the pairing
+                       controls from the batch on screen, and saying otherwise would strand any
+                       image the creator had not placed yet. *@
+                    <strong class="d-block mt-1">
+                        Unticking this now also removes the cover art controls from the batch below.
+                    </strong>
+                }
+            </small>
         </div>
     }
 
@@ -276,8 +277,15 @@
                                         </div>
                                     }
                                 </div>
+                                @* Wording from a creator who could not work out where to drop.
+                                   Names the column, names the gesture for both mouse and touch, and
+                                   tells them what to look for - the box only appears as a target,
+                                   so "look for the green dashed box" is the reliable landmark. *@
                                 <small class="text-muted d-block mt-2">
-                                    Drag one onto a song, or tap it and then tap the song.
+                                    Drag one image onto a song row in the <strong>Cover Art</strong> column,
+                                    or tap the image and then tap the song row's Cover Art column.
+                                    Look for the <span class="cover-art-hint-swatch">green dashed box</span>
+                                    on the song row — that is where you tap or drop.
                                 </small>
                             }
                         </div>
@@ -357,29 +365,35 @@
                                                 </div>
                                                 @if (_awaitingTitleConfirmation)
                                                 {
-                                                    <button type="button"
-                                                            class="btn btn-sm btn-link text-muted p-0"
-                                                            title="Remove this cover art"
-                                                            aria-label="@($"Remove cover art from {item.SongTitle}")"
-                                                            @onclick="@(() => ClearCoverArt(item))"
-                                                            @onclick:stopPropagation="true">
-                                                        <i class="fa-solid fa-xmark"></i>
-                                                    </button>
+                                                    <span @onclick:stopPropagation="true">
+                                                        <SfButton CssClass="e-small e-flat"
+                                                                  IconCss="fa-solid fa-xmark"
+                                                                  Content=""
+                                                                  title="Remove this cover art"
+                                                                  aria-label="@($"Remove cover art from {item.SongTitle}")"
+                                                                  OnClick="@(() => ClearCoverArt(item))" />
+                                                    </span>
                                                 }
                                             </div>
                                         }
                                         else if (_awaitingTitleConfirmation)
                                         {
-                                            <span class="cover-art-empty">
-                                                @if (HeldCoverArt != null)
-                                                {
-                                                    <text>Drop or tap to use @HeldCoverArt</text>
-                                                }
-                                                else
-                                                {
-                                                    <text>No cover art — drag one here</text>
-                                                }
-                                            </span>
+                                            @* An actual box with a label in it, not a line of grey
+                                               text. A creator looking for "where do I drop this"
+                                               needs a target they can see from across the table. *@
+                                            <div class="cover-art-dropzone">
+                                                <i class="fa-solid fa-image"></i>
+                                                <span>
+                                                    @if (HeldCoverArt != null)
+                                                    {
+                                                        <text>Tap or Drop @HeldCoverArt Here</text>
+                                                    }
+                                                    else
+                                                    {
+                                                        <text>Tap or Drop Cover Art Here</text>
+                                                    }
+                                                </span>
+                                            </div>
                                         }
                                         else
                                         {
@@ -635,17 +649,50 @@
         cursor: grab;
     }
 
+    /* Green, and named as green in the instructions above the table. A creator being told to look
+       for a landmark has to be able to find that exact landmark, so the two are edited together. */
+    .cover-art-dropzone {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 3.25rem;
+        padding: 0.5rem;
+        border: 2px dashed #198754;
+        border-radius: 6px;
+        color: #198754;
+        font-size: 0.8125rem;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    .cover-art-dropzone i {
+        font-size: 1rem;
+        opacity: 0.7;
+    }
+
+    /* Applied to every row's cell while an image is held, including rows that already have art -
+       re-pairing is allowed there too, and the target has to look like one. */
     .cover-art-target {
-        outline: 2px dashed #0d6efd;
+        outline: 2px dashed #198754;
         outline-offset: -4px;
+        background-color: rgba(25, 135, 84, 0.08);
         cursor: copy;
     }
 
-    .cover-art-empty {
-        display: inline-block;
-        color: #6c757d;
-        font-style: italic;
-        font-size: 0.875rem;
+    .cover-art-target .cover-art-dropzone {
+        border-color: #198754;
+        background-color: rgba(25, 135, 84, 0.12);
+        font-weight: 600;
+    }
+
+    /* Makes the phrase in the instructions look like the thing it is naming. */
+    .cover-art-hint-swatch {
+        border: 1px dashed #198754;
+        border-radius: 3px;
+        padding: 0 0.25rem;
+        color: #198754;
+        white-space: nowrap;
     }
 </style>
 

@@ -208,6 +208,65 @@ public class UploadFilesDirectAudioTests
     }
 
     [Test]
+    public void AFilenameTheBrowserCannotLocate_IsSkippedRatherThanDefaultingToTheFirstFile()
+    {
+        // The nastiest shape of bug this page can have: publishing one song's audio under another
+        // song's title, silently. TryGetValue leaves its out parameter at 0 on a miss, and 0 is a
+        // perfectly valid FileList position - so folding it straight into a nullable made the guard
+        // below it unreachable on the direct path, and any filename the matcher returned in a form
+        // the dictionary does not hold (re-cased, trimmed, normalised) uploaded FileList[0]'s bytes.
+        // The header sniff downstream cannot catch it either: those bytes are usually valid audio.
+        var codeBehind = ReadCodeBehind();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("int? directAudioIndex = receivesAudio ? null : browserAudioIndex;"),
+                "That form can never be null on the direct path, so the skip below it is dead code.");
+
+            Assert.That(
+                codeBehind,
+                Does.Contain("if (!receivesAudio\n                && _browserFileIndexes.TryGetValue")
+                    .Or.Contain("if (!receivesAudio\r\n                && _browserFileIndexes.TryGetValue"),
+                "The index must only be adopted when the lookup actually succeeded.");
+
+            Assert.That(
+                codeBehind,
+                Does.Contain("neither buffered on this server nor still present in the browser"),
+                "A skipped pairing must say so - silently dropping a song is its own failure.");
+        });
+    }
+
+    [Test]
+    public void AnExpiredWriteTokenIsRenewedRatherThanLosingTheTransfer()
+    {
+        // Three comments promised this and no code delivered it. It matters at the default admin cap:
+        // a token lives 30 minutes and the audio cap is 150 MB, so expiry mid-transfer needs only a
+        // slow-ish uplink - and the file was discarded at the moment it failed, after the creator had
+        // already spent the whole upload.
+        var codeBehind = ReadCodeBehind();
+        var js = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "wwwroot", "js", "direct-upload.js"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(codeBehind, Does.Contain("public async Task<RenewedUploadTarget> RenewUploadTarget(int index)"));
+            Assert.That(js, Does.Contain("invokeMethodAsync('RenewUploadTarget'"));
+
+            Assert.That(
+                codeBehind,
+                Does.Contain("_mintedUploadSlots"),
+                "Renewal must re-derive the path from what the server minted, never take one from JS.");
+
+            Assert.That(
+                js,
+                Does.Contain("result.httpStatus === 403"),
+                "Only an expired token is worth renewing for.");
+        });
+    }
+
+    [Test]
     public void TheBrowsersConcurrencyLimitIsLowerThanTheServers()
     {
         // Not the same number wearing two hats. ChunkSize bounds transfers leaving a datacentre;
