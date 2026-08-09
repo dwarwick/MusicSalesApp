@@ -285,7 +285,16 @@ public sealed class OpenAiFileMatcher : IOpenAiFileMatcher
                 return $"  {image.Index}: \"{image.FileName}\"{annotation}";
             }));
 
-        return $@"Match each audio file with the most similar image file based on their names and content.
+        // The opening sentence is load-bearing. This used to say "match each audio file with the most
+        // similar image file", which reads as an assignment problem: given three songs and three
+        // images with two obvious pairs, the model dutifully handed the leftover image to the
+        // leftover song. It produced exactly that in testing - a headshot named "david.JPG" paired
+        // with "All Around Me" on no evidence whatsoever. Leaving things unmatched has to be stated
+        // as the correct answer, not offered as a fallback near the end of a list of rules.
+        return $@"Decide which of these image files, if any, are the cover art for these audio files.
+
+This is NOT an assignment problem. There may be more images than songs, more songs than images, or
+images that belong to neither. Matching nothing is a perfectly good answer.
 
 Audio files (refer to these by their numeric index):
 {audioLines}
@@ -302,8 +311,19 @@ Rules:
 - Each audio file can match at most one image file.
 - Each image file can match at most one audio file.
 - For each match, provide a clean normalized song name with proper capitalization and single spaces between words.
-- If an audio file has no good match, include it with null image_index.
-- List the indices of any image files that could not be matched in unmatched_image_indices.
+
+Only match on positive evidence. A pair is a match when the image's name or its extracted content
+names the song - not when the two merely happen to be the last ones left.
+
+- NEVER match by elimination. That one audio file and one image file are both still unpaired is not
+  evidence that they belong together. If they were the only two files in the batch and their names
+  had nothing to do with each other, you would not pair them; being last changes nothing.
+- If you would struggle to explain to the creator why an image belongs to a song, it does not.
+- An audio file with no good match must be included with null image_index.
+- Every image file you did not match must be listed in unmatched_image_indices.
+
+A wrong match is worse than no match. The creator is shown the unmatched images and can pair them by
+hand in seconds, but a confident wrong pairing looks correct and gets published.
 
 Respond with JSON using the numeric indices (NOT the filenames):
 {{

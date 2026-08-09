@@ -302,6 +302,46 @@ public class UploadFilesCoverArtRepairTests
     }
 
     [Test]
+    public void AnEmptyPoolIsNotRendered()
+    {
+        // An empty dashed box above a table where every pairing is already right announces a problem
+        // that does not exist. Re-pairing is still fully available - the rows are the drag sources.
+        var page = new TestableUploadFiles();
+        page.GivenSong("One", "a.png");
+        page.BeginReview();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(page.CanRepair, Is.True, "The rows stay interactive.");
+            Assert.That(page.ShowPool, Is.False, "But there is nothing to show in the pool.");
+        });
+    }
+
+    [Test]
+    public void PickingUpASongsArtBringsThePoolBack_SoThereIsSomewhereToDropIt()
+    {
+        // The other half of hiding it: without this, artwork on a fully-matched batch could be picked
+        // up and then have nowhere to go.
+        var page = new TestableUploadFiles();
+        page.GivenSong("One", "a.png");
+        page.BeginReview();
+
+        page.Hold("a.png");
+
+        Assert.That(page.ShowPool, Is.True);
+    }
+
+    [Test]
+    public void ThePoolIsRenderedWheneverItHoldsSomething()
+    {
+        var page = new TestableUploadFiles();
+        page.GivenSong("One");
+        page.GivenPooled("stray.png");
+
+        Assert.That(page.ShowPool, Is.True);
+    }
+
+    [Test]
     public void ThereIsNothingToRepairInABatchWithNoArtworkAtAll()
     {
         var page = new TestableUploadFiles();
@@ -448,6 +488,7 @@ public class UploadFilesCoverArtRepairTests
         public IReadOnlyList<string> Pool => _unmatchedCoverArtFiles;
         public string Held => HeldCoverArt;
         public bool CanRepair => CanRepairCoverArt;
+        public bool ShowPool => ShowCoverArtPool;
         public int BareSongCount => SongsWithoutCoverArtCount;
 
         public UploadPairItem GivenSong(string title, string coverArt = null)

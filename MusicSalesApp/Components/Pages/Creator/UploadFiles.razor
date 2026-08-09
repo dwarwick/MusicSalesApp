@@ -198,10 +198,12 @@
                         }
                     </p>
 
-                    @if (CanRepairCoverArt)
+                    @* Shown only when it holds something, or while the creator is mid-gesture and
+                       needs somewhere to let go. An empty dashed box above a table where every
+                       pairing is already right announces a problem that does not exist. Also a drop
+                       target, so artwork can come off a song without needing somewhere else to go. *@
+                    @if (ShowCoverArtPool)
                     {
-                        @* Also a drop target, so artwork can be taken off a song without first having
-                           somewhere else to put it. *@
                         <div class="cover-art-pool @(HeldCoverArt != null ? "cover-art-pool-active" : "")"
                              @ondragover:preventDefault="true"
                              @ondrop="ReturnHeldCoverArtToPool">
@@ -213,7 +215,7 @@
                                     }
                                     else
                                     {
-                                        <text>All cover art is matched</text>
+                                        <text>Drop here to remove this artwork from its song</text>
                                     }
                                 </strong>
                                 @if (HeldCoverArt != null)
@@ -245,12 +247,6 @@
                                 </div>
                                 <small class="text-muted d-block mt-2">
                                     Drag one onto a song, or tap it and then tap the song.
-                                </small>
-                            }
-                            else
-                            {
-                                <small class="text-muted">
-                                    Drag a song's artwork here — or onto another song — to move it.
                                 </small>
                             }
                         </div>

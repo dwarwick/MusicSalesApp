@@ -326,7 +326,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             if (_awaitingTitleConfirmation)
             {
-                return "Waiting for you to fix the highlighted titles.";
+                // The step is no longer reached only when something is broken, so it can no longer
+                // claim something is. Saying "fix the highlighted titles" above a table with nothing
+                // highlighted sends the creator hunting for a problem that does not exist.
+                var broken = _uploadItems.Count(item => item.TitleError != null);
+
+                return broken switch
+                {
+                    0 => "Ready to upload. Check the titles and cover art below.",
+                    1 => "One title needs a change before this batch can upload.",
+                    _ => $"{broken} titles need a change before this batch can upload."
+                };
             }
 
             return $"Processing songs ({finished} of {_uploadItems.Count} finished)...";
@@ -979,6 +989,20 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         => _awaitingTitleConfirmation
             && _matchCoverArtBeforeUpload
             && (_unmatchedCoverArtFiles.Count > 0 || _uploadItems.Any(item => item.HasCoverArt));
+
+    /// <summary>
+    /// Whether the pool is worth the space it takes.
+    ///
+    /// <para>
+    /// Only when it holds something, or when the creator is mid-gesture and needs somewhere to let
+    /// go. An empty dashed box sitting above a table where every pairing is already correct reads as
+    /// a broken widget - it announces a problem that does not exist. Re-pairing stays fully available
+    /// either way: the rows themselves are the drag sources, and picking one up is what brings the
+    /// box back.
+    /// </para>
+    /// </summary>
+    protected bool ShowCoverArtPool
+        => CanRepairCoverArt && (_unmatchedCoverArtFiles.Count > 0 || _heldCoverArt is not null);
 
     /// <summary>
     /// Whether this batch stops for review before uploading.
