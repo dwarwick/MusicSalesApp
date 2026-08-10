@@ -901,16 +901,26 @@
         //
         // Object URLs pin their blob in memory until revoked, so every one handed out is tracked and
         // released before the next batch.
+        // Idempotent and self-healing, and it has to be both.
+        //
+        // .NET cannot tell whether a given <img> currently holds the right src - re-pairing destroys
+        // one element and creates another, and a re-render can replace one that was already correct.
+        // Deciding up there whether a refresh is "needed" got this wrong twice: thumbnails vanished
+        // on re-pairing, then vanished on first render. So the decision lives here, where the DOM can
+        // actually be looked at, and .NET simply calls on every render.
+        //
+        // Cheap because the check is a string compare per image. A URL is only created when an
+        // element does not already carry the right one, so nothing churns while a creator types.
         showCoverArtPreviews: function (pairs) {
-            window.uploadFilesHelper.revokeCoverArtPreviews();
-
             var input = document.querySelector('input[type=file].direct-upload-input');
             var files = input ? input.files : null;
             if (!files) {
                 return;
             }
 
-            var urls = [];
+            var held = window._coverArtPreviewUrls || {};
+            var next = {};
+
             (pairs || []).forEach(function (pair) {
                 var element = document.getElementById(pair.elementId);
                 var file = files[pair.browserIndex];
@@ -918,12 +928,25 @@
                     return;
                 }
 
-                var url = URL.createObjectURL(file);
-                urls.push(url);
-                element.src = url;
+                // Reuse the URL already minted for this image, wherever it has moved to. Creating a
+                // second one for the same blob would pin it in memory twice.
+                var url = held[pair.elementId] || URL.createObjectURL(file);
+                next[pair.elementId] = url;
+
+                if (element.src !== url) {
+                    element.src = url;
+                }
             });
 
-            window._coverArtPreviewUrls = urls;
+            // Anything no longer on screen - an image whose row went away - is released here rather
+            // than accumulating until the batch ends.
+            Object.keys(held).forEach(function (key) {
+                if (!next[key]) {
+                    try { URL.revokeObjectURL(held[key]); } catch { /* already gone */ }
+                }
+            });
+
+            window._coverArtPreviewUrls = next;
         },
 
         // Upload preferences live in the browser rather than the database - they are habits, not
@@ -945,10 +968,11 @@
         },
 
         revokeCoverArtPreviews: function () {
-            (window._coverArtPreviewUrls || []).forEach(function (url) {
-                try { URL.revokeObjectURL(url); } catch { /* already gone */ }
+            var held = window._coverArtPreviewUrls || {};
+            Object.keys(held).forEach(function (key) {
+                try { URL.revokeObjectURL(held[key]); } catch { /* already gone */ }
             });
-            window._coverArtPreviewUrls = [];
+            window._coverArtPreviewUrls = {};
         }
     };
 </script>

@@ -557,30 +557,37 @@ public class UploadFilesCoverArtRepairTests
     }
 
     [Test]
-    public void TheThumbnailRefreshIsKeyedOnWhereEachImageIs_NotJustWhichImagesExist()
+    public void WhetherAThumbnailNeedsRefreshingIsDecidedAgainstTheDom_NotFromCSharpState()
     {
-        // The bug this pins: thumbnails vanished the moment anything was removed or re-assigned, and
-        // only ever appeared on the first render.
+        // Two attempts at deciding this in C# were both wrong, and each broke thumbnails a different
+        // way. Keyed on which images exist, a re-pairing looked like no change - so the refresh was
+        // skipped while the move had already destroyed the img the src was set on. Keyed on where
+        // they are, the very first render of a one-song batch was skipped instead.
         //
-        // The refresh is skipped when its signature is unchanged, to stop it revoking and recreating
-        // every object URL on every keystroke. Built from the set of images alone, a re-pairing did
-        // not change that signature - the same files are still in the batch - so the refresh was
-        // skipped. But moving an image destroys the <img> it was in and creates a new one elsewhere,
-        // and the new element starts with no src.
+        // The fault was the premise: C# cannot see whether an <img> currently holds the right src.
+        // Re-pairing replaces elements, and so does an unrelated re-render. So .NET now sends the
+        // full set every render and the JS compares against the live DOM, minting a URL only when
+        // one is actually missing - which is also self-healing if an element is ever replaced.
         var codeBehind = ReadCodeBehind();
-        var flattened = System.Text.RegularExpressions.Regex.Replace(codeBehind, @"\s+", " ");
+        var markup = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor"));
 
         Assert.Multiple(() =>
         {
             Assert.That(
-                flattened,
-                Does.Contain("Append(\"P\").Append(slot)").And.Contain("Append(\"R\").Append(row)"),
-                "The signature must record each image's position, or a move looks like no change.");
+                codeBehind,
+                Does.Not.Contain("_coverArtPreviewSignature"),
+                "No C#-side guess about what the DOM is holding.");
 
             Assert.That(
-                flattened,
-                Does.Not.Contain("foreach (var item in _uploadItems.Where(row => row.HasCoverArt))"),
-                "Iterating only the rows that have art loses the row index the signature needs.");
+                markup,
+                Does.Contain("if (element.src !== url)"),
+                "The JS must compare against the element it is about to write to.");
+
+            Assert.That(
+                markup,
+                Does.Contain("held[pair.elementId] || URL.createObjectURL(file)"),
+                "A URL already minted for an image must be reused wherever that image moved to.");
         });
     }
 

@@ -198,10 +198,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private string _heldCoverArt;
 
-    // The image set the browser was last told to preview. Object URLs pin their blob in memory, so
-    // re-issuing them on every render costs real memory and a re-decode per image for nothing.
-    private string _coverArtPreviewSignature;
-
     // The match batch whose staged images are still needed. On the direct path those images ARE the
     // cover art - nothing else holds a copy - so the folder cannot be swept until every song that
     // matched one has been created.
@@ -1291,53 +1287,33 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private async Task RefreshCoverArtPreviewsAsync()
     {
+        // Every image on screen, every render, with no attempt to work out whether anything needs
+        // doing. Two goes at deciding that from here were both wrong - .NET cannot see whether a
+        // given <img> currently holds the right src, and re-pairing and re-rendering both replace
+        // elements behind its back. The JS side does the comparing, against the DOM, and only mints
+        // a URL when one is genuinely missing.
         var pairs = new List<object>();
 
-        // The signature records WHERE each image is, not merely which images exist.
-        //
-        // Keyed on the set alone, a re-pairing did not change it - the same files are still in the
-        // batch - so the refresh was skipped. But moving an image destroys the <img> it was in and
-        // creates a new one somewhere else, and that new element starts with no src. The result was
-        // a broken-image icon the moment anything was removed or re-assigned, with the thumbnails
-        // only ever appearing on the first render.
-        var signature = new System.Text.StringBuilder();
-
-        for (var slot = 0; slot < _unmatchedCoverArtFiles.Count; slot++)
+        foreach (var fileName in _unmatchedCoverArtFiles)
         {
-            var fileName = _unmatchedCoverArtFiles[slot];
             if (_browserFileIndexes.TryGetValue(fileName, out var index))
             {
                 pairs.Add(new { browserIndex = index, elementId = PreviewElementId(fileName) });
-                signature.Append("P").Append(slot).Append(':').Append(fileName).Append('|');
             }
         }
 
-        for (var row = 0; row < _uploadItems.Count; row++)
+        foreach (var item in _uploadItems)
         {
-            var item = _uploadItems[row];
-            if (!item.HasCoverArt)
-            {
-                continue;
-            }
-
-            if (_browserFileIndexes.TryGetValue(item.CoverArtFileName, out var index))
+            if (item.HasCoverArt && _browserFileIndexes.TryGetValue(item.CoverArtFileName, out var index))
             {
                 pairs.Add(new { browserIndex = index, elementId = PreviewElementId(item.CoverArtFileName) });
-                signature.Append("R").Append(row).Append(':').Append(item.CoverArtFileName).Append('|');
             }
         }
 
-        // Skipped only when nothing moved. This runs on every render of the review step - every
-        // keystroke in a title box, every hold and release - and each call revokes and recreates
-        // every object URL, reassigning each <img> src and forcing a re-decode. On a 24-image batch
-        // that was thousands of pointless URL churns across a review session.
-        var current = signature.ToString();
-        if (current == _coverArtPreviewSignature)
+        if (pairs.Count == 0)
         {
             return;
         }
-
-        _coverArtPreviewSignature = current;
 
         try
         {
@@ -1582,8 +1558,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private async Task ReleaseCoverArtPreviewsAsync()
     {
-        _coverArtPreviewSignature = null;
-
         try
         {
             await JS.InvokeVoidAsync("uploadFilesHelper.revokeCoverArtPreviews");
