@@ -18,6 +18,26 @@ public class FileMatchingService : IFileMatchingService
             return Task.FromResult(new FileMatchingResult { UnmatchedImageFiles = imageList });
         }
 
+        // One song and one image are a pair whatever they are called. Nothing else here would reach
+        // that conclusion: the rule below pairs on normalized base names, so "track-final.wav" and
+        // "artwork.png" - a perfectly ordinary pair of filenames - would leave the song bare and the
+        // image unmatched, for no reason a creator who selected exactly two files would recognise.
+        if (audioList.Count == 1 && imageList.Count == 1)
+        {
+            return Task.FromResult(new FileMatchingResult
+            {
+                Pairs =
+                [
+                    new FilePair
+                    {
+                        AudioFileName = audioList[0],
+                        ImageFileName = imageList[0],
+                        NormalizedName = FileNameMatching.ToNormalizedName(audioList[0])
+                    }
+                ]
+            });
+        }
+
         var result = new FileMatchingResult();
 
         // First filename wins a collision. Two images normalizing to the same name is a creator

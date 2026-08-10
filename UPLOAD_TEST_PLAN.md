@@ -28,6 +28,13 @@ Storage to watch while testing (staging is `musicuploads-dev` / `musicuploads`):
 | 1.3 | Audio only, checkbox **on** | **No review step.** `batchDirs` and `cover` never move; the Function is never asked to match |
 | 1.4 | Images + one that matches nothing (e.g. a photo of a person) | The odd image arrives **unmatched**, in the box above the table. It must not be force-paired |
 | 1.5 | One song whose title is blank or duplicates an existing song | Review step appears with that row highlighted, whatever the checkbox says |
+| 1.6 | **Exactly one audio + one image, with unrelated filenames** (e.g. `track-final-v3.wav` + `artwork.png`) | Paired **automatically**. Still pauses if the checkbox is on, so the title can be edited or the image removed |
+
+**1.6 never calls the model.** One song and one image is a pair whatever they are called, so asking
+would spend an OCR pass and ~25 seconds on a question with one possible answer — and could answer it
+*wrongly*, since the prompt is now firmly told not to pair on weak evidence. Watch that `cover-art-match`
+never moves and the pairing appears near-instantly. Filenames deliberately should **not** match, or the
+test proves nothing.
 
 **1.4 is the OpenAI prompt fix.** Before it, the matcher treated pairing as an assignment problem and
 handed the leftover image to the leftover song on no evidence at all.

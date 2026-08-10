@@ -23,6 +23,49 @@ public class FileMatchingServiceTests
     public void Setup() => _service = new FileMatchingService();
 
     [Test]
+    public async Task OneSongAndOneImage_ArePairedWhateverTheyAreCalled()
+    {
+        // A creator who selected exactly two files has already said what they mean. Base-name
+        // pairing would leave these two unmatched - an ordinary pair of filenames producing a bare
+        // song and an orphaned image, for a reason nobody would recognise as a reason.
+        var result = await _service.MatchFilesAsync(["track-final-v3.wav"], ["artwork.png"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Has.Count.EqualTo(1));
+            Assert.That(result.Pairs[0].AudioFileName, Is.EqualTo("track-final-v3.wav"));
+            Assert.That(result.Pairs[0].ImageFileName, Is.EqualTo("artwork.png"));
+            Assert.That(result.UnmatchedImageFiles, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task OneSongAndTwoImages_StillNeedTheNamesToAgree()
+    {
+        // The rule is "one and one", not "one song". With a choice to make, guessing is what paired
+        // a headshot with an unrelated track.
+        var result = await _service.MatchFilesAsync(["track.wav"], ["a.png", "b.png"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs[0].ImageFileName, Is.Null);
+            Assert.That(result.UnmatchedImageFiles, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task TwoSongsAndOneImage_StillNeedTheNamesToAgree()
+    {
+        var result = await _service.MatchFilesAsync(["first.wav", "second.wav"], ["artwork.png"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs.Where(pair => pair.ImageFileName is not null), Is.Empty);
+            Assert.That(result.UnmatchedImageFiles, Is.EqualTo(new[] { "artwork.png" }));
+        });
+    }
+
+    [Test]
     public async Task NoImages_ReturnsEveryAudioFileWithNoImage()
     {
         var result = await _service.MatchFilesAsync(

@@ -32,6 +32,47 @@ public class OpenAiFileMatcherFallbackTests
         };
 
     [Test]
+    public void OneSongAndOneImage_ArePairedWhateverTheyAreCalled()
+    {
+        // Base-name pairing would leave these unmatched, which is not an answer a creator who
+        // selected exactly two files would recognise. Nothing else in this method reaches it: the
+        // rule below needs the normalized names to agree.
+        var result = IOpenAiFileMatcher.FallbackMatch(
+            Request(["track-final-v3.wav"], ["artwork.png"]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs, Has.Count.EqualTo(1));
+            Assert.That(result.Pairs[0].ImageIndex, Is.Zero);
+            Assert.That(result.UnmatchedImageIndexes, Is.Empty);
+        });
+    }
+
+    [Test]
+    public void TwoSongsAndOneImage_StillNeedTheNamesToAgree()
+    {
+        // The rule is "one and one", not "one image". With a choice to make, guessing is exactly
+        // what produced a headshot paired with an unrelated track.
+        var result = IOpenAiFileMatcher.FallbackMatch(
+            Request(["first.wav", "second.wav"], ["artwork.png"]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Pairs.Where(pair => pair.ImageIndex is not null), Is.Empty);
+            Assert.That(result.UnmatchedImageIndexes, Is.EqualTo(new[] { 0 }));
+        });
+    }
+
+    [Test]
+    public void OneSongAndTwoImages_StillNeedTheNamesToAgree()
+    {
+        var result = IOpenAiFileMatcher.FallbackMatch(
+            Request(["track.wav"], ["a.png", "b.png"]));
+
+        Assert.That(result.Pairs[0].ImageIndex, Is.Null);
+    }
+
+    [Test]
     public void AnExactBaseNameMatch_IsPaired()
     {
         var result = IOpenAiFileMatcher.FallbackMatch(

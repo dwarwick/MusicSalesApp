@@ -2900,11 +2900,81 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// this page did before any of it existed. The batch always proceeds.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Pairs the only song with the only image, without asking anything to match them.
+    ///
+    /// <para>
+    /// The image still has to <em>reach storage</em> on the direct path, which is the whole subtlety
+    /// here: those staged blobs are the cover art itself, not merely evidence for a matcher, so
+    /// skipping the round trip must not also skip the upload. On the server path the artwork lives in
+    /// a temp file and the staged copy existed only for OCR, so nothing is uploaded at all.
+    /// </para>
+    ///
+    /// <para>
+    /// Never throws. A staging failure leaves the image unreachable, which the caller already handles
+    /// by offering it in the pool rather than losing the song.
+    /// </para>
+    /// </summary>
+    private async Task<FileMatchingResult> PairTheOnlyCandidatesAsync(string audioFileName, string imageFileName)
+    {
+        if (DirectUploadAvailable && _currentCreatorId is { } creatorId)
+        {
+            var batchId = Guid.NewGuid();
+
+            try
+            {
+                _initialUploadStatusMessage = "Preparing cover art...";
+                await InvokeAsync(StateHasChanged);
+
+                await StageImagesFromBrowserAsync(
+                    batchId, creatorId, [audioFileName], [imageFileName], requestMatching: false);
+
+                _pendingImageBatchId = batchId;
+            }
+            catch (Exception ex)
+            {
+                // Same outcome as a failed match: the song still uploads, and the image is offered
+                // in the pool instead of silently deciding the creator gets no artwork.
+                Logger.LogWarning(
+                    ex, "UploadFiles: could not stage the only cover image for batch {BatchId}.", batchId);
+
+                if (_stagedImagePaths.Count > 0)
+                {
+                    _pendingImageBatchId = batchId;
+                }
+                else
+                {
+                    _ = CoverArtMatchService.DeleteBatchAsync(batchId, CancellationToken.None);
+                }
+            }
+        }
+
+        // Deferred to the matcher rather than hand-built here, so the one-and-one rule lives in one
+        // place. This method's job is the routing decision - not asking the Function - and the
+        // pairing itself is the matcher's.
+        return await FileMatchingService.MatchFilesAsync([audioFileName], [imageFileName]);
+    }
+
     private async Task<FileMatchingResult> MatchCoverArtAsync(
         List<string> audioFileNames,
         List<string> imageFileNames,
         Dictionary<string, string> coverArtTempPaths)
     {
+        // One song and one image: they are a pair, and there is no evidence that could make that
+        // more or less true. Asking the model would spend an OCR pass and about twenty-five seconds
+        // to answer a question with one possible answer - and it could answer it *wrongly*, which is
+        // how a photo named "david.JPG" got refused a song it plainly belonged to once the prompt was
+        // told to stop guessing. Filenames are not consulted either: a creator who uploads exactly
+        // two files has already said what they mean.
+        //
+        // Ahead of the availability check on purpose, so this holds whether or not the Function is
+        // reachable. The creator still gets the review step if they asked for it - this decides the
+        // pairing, not whether they get to change it.
+        if (audioFileNames.Count == 1 && imageFileNames.Count == 1)
+        {
+            return await PairTheOnlyCandidatesAsync(audioFileNames[0], imageFileNames[0]);
+        }
+
         // Nothing to pair, or nowhere to pair it. Both take the local path immediately rather than
         // paying a round trip to learn the same answer.
         if (imageFileNames.Count == 0
@@ -3041,11 +3111,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// and the creator still gets their songs.
     /// </para>
     /// </summary>
+    /// <param name="requestMatching">
+    /// False when the pairing is already known and only the upload is wanted - a single song with a
+    /// single image. The blobs are still needed, because on this path they <em>are</em> the cover
+    /// art; only the queue message asking something to match them is skipped.
+    /// </param>
     private async Task StageImagesFromBrowserAsync(
         Guid batchId,
         int creatorId,
         List<string> audioFileNames,
-        List<string> imageFileNames)
+        List<string> imageFileNames,
+        bool requestMatching = true)
     {
         var targets = new List<CoverArtMatchCandidate>(imageFileNames.Count);
         var items = new List<object>(imageFileNames.Count);
@@ -3128,7 +3204,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _stagedImagePaths[target.FileName] = target.BlobPath;
         }
 
-        await CoverArtMatchService.EnqueueAsync(batchId, creatorId, audioFileNames, targets, _uploadCts.Token);
+        if (requestMatching)
+        {
+            await CoverArtMatchService.EnqueueAsync(batchId, creatorId, audioFileNames, targets, _uploadCts.Token);
+        }
     }
 
     /// <summary>
