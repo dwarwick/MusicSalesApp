@@ -123,6 +123,31 @@ else
                 </div>
             </div>
 
+            @* This is the rollback control for browser-direct uploads, so it lives where an admin
+               can reach it under pressure. Before this existed the only way to turn the feature off
+               was a hand-written UPDATE against the live database. *@
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Creator Upload Route</label>
+                    <div>
+                        <SfCheckBox TChecked="bool"
+                                    Label="Upload creator files straight from the browser to Azure"
+                                    @bind-Checked="_directToStorageUploadEnabled" />
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        On, a creator's audio goes from their browser to storage and never touches this
+                        web server — no temp disk, no transfer over the page's connection. Off, files are
+                        sent to this server first and forwarded, which is slower and was the cause of
+                        large batches appearing to stall.
+                        <strong class="d-block mt-1">
+                            Turning this off is the rollback if browser uploads start failing. It applies
+                            the next time a creator loads the upload page, so anyone already mid-batch
+                            keeps the route they started on.
+                        </strong>
+                    </small>
+                </div>
+            </div>
+
             <div class="alert alert-info">
                 <strong>Note:</strong> When you change these settings:
                 <ul class="mb-0">

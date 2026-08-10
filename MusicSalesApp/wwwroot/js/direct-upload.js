@@ -109,12 +109,11 @@ async function runPhase(phaseId, session, items, files, concurrency, dotNetRef) 
             const result = await uploadOne(phaseId, session, item, file, dotNetRef);
             results.push(result);
 
-            if (result.ok) {
-                // Reported per file rather than only at the end, so .NET can start the next stage for
-                // this song immediately instead of waiting for its slowest sibling.
-                try { await dotNetRef.invokeMethodAsync('FileUploaded', phaseId, item.index); }
-                catch { /* circuit gone; the phase result below is best effort anyway */ }
-            }
+            // Deliberately nothing here. There used to be a per-file 'FileUploaded' callback whose
+            // comment claimed it let .NET start the next stage early; the handler was an empty
+            // no-op, so every file paid a circuit round trip - awaited inside this worker loop, so
+            // it blocked the slot - for nothing. Pipelining is real but comes from elsewhere: each
+            // song is its own phase, and PhaseCompleted resolves as soon as that song's bytes land.
         }
     });
 

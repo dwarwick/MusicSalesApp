@@ -239,6 +239,26 @@ public class UploadFilesDirectAudioTests
     }
 
     [Test]
+    public void ThereIsNoPerFileCallbackBlockingTheUploadLoop()
+    {
+        // A 'FileUploaded' callback used to be awaited inside the JS worker loop, once per file,
+        // holding that upload slot for a circuit round trip. Its comment claimed it let .NET start
+        // the next stage early; the C# handler was an empty no-op. Pipelining is real but comes from
+        // each song being its own phase, resolved by PhaseCompleted.
+        var codeBehind = ReadCodeBehind();
+        var js = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "wwwroot", "js", "direct-upload.js"));
+
+        Assert.Multiple(() =>
+        {
+            // The invocation, not the name - the comment explaining its removal mentions it, and
+            // should keep being allowed to.
+            Assert.That(js, Does.Not.Contain("invokeMethodAsync('FileUploaded'"));
+            Assert.That(codeBehind, Does.Not.Contain("public Task FileUploaded("));
+        });
+    }
+
+    [Test]
     public void AnExpiredWriteTokenIsRenewedRatherThanLosingTheTransfer()
     {
         // Three comments promised this and no code delivered it. It matters at the default admin cap:

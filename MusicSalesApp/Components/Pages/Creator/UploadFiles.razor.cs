@@ -2845,9 +2845,6 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     // Browser FileList position -> what was minted for it. Cleared per phase.
     private readonly Dictionary<int, MintedUploadSlot> _mintedUploadSlots = new();
 
-    /// <summary>One file finished. The browser awaits this, so it stays cheap and does nothing.</summary>
-    [JSInvokable]
-    public Task FileUploaded(string phaseId, int index) => Task.CompletedTask;
 
     /// <summary>
     /// Releases the batch waiting on this phase.

@@ -30,6 +30,11 @@ public class AdminSettingsModel : BlazorBase
     protected int _originalMaxAudioUploadSizeMB = 100;
     protected int _maxImageUploadSizeMB = 20;
     protected int _originalMaxImageUploadSizeMB = 20;
+
+    // Defaults false to match AppSettingsService, so a load failure can never present the feature as
+    // on when it is not - or invite an admin to "turn off" something already off.
+    protected bool _directToStorageUploadEnabled;
+    protected bool _originalDirectToStorageUploadEnabled;
     protected string _appVersion = string.Empty;
     protected string _originalAppVersion = string.Empty;
 
@@ -92,6 +97,7 @@ public class AdminSettingsModel : BlazorBase
                                    || _streamQualifyingSeconds != _originalStreamQualifyingSeconds
                                    || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
+                                   || _directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled
                                    || _appVersion != _originalAppVersion;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
@@ -165,6 +171,9 @@ public class AdminSettingsModel : BlazorBase
 
         _maxImageUploadSizeMB = await AppSettingsService.GetMaxImageUploadSizeMBAsync();
         _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+
+        _directToStorageUploadEnabled = await AppSettingsService.IsDirectToStorageUploadEnabledAsync();
+        _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
 
         _appVersion = await AppSettingsService.GetAppVersionAsync() ?? string.Empty;
         _originalAppVersion = _appVersion;
@@ -639,6 +648,7 @@ public class AdminSettingsModel : BlazorBase
         _streamQualifyingSeconds = _originalStreamQualifyingSeconds;
         _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
+        _directToStorageUploadEnabled = _originalDirectToStorageUploadEnabled;
         _appVersion = _originalAppVersion;
         _validationErrors.Clear();
         _successMessage = null;
@@ -719,6 +729,18 @@ public class AdminSettingsModel : BlazorBase
             // Save the max image upload size
             await AppSettingsService.SetMaxImageUploadSizeMBAsync(_maxImageUploadSizeMB);
 
+            // Written only on a change, and logged loudly either way. This one is a rollout switch
+            // rather than a tuning value: knowing when it was flipped is what makes a later "uploads
+            // started failing at some point yesterday" answerable.
+            if (_directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled)
+            {
+                await AppSettingsService.SetDirectToStorageUploadEnabledAsync(_directToStorageUploadEnabled);
+
+                Logger.LogWarning(
+                    "Direct-to-storage creator uploads turned {State} by an administrator.",
+                    _directToStorageUploadEnabled ? "ON" : "OFF");
+            }
+
             // Save the app version (only if changed)
             if (_appVersion != _originalAppVersion)
             {
@@ -730,8 +752,9 @@ public class AdminSettingsModel : BlazorBase
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
+            _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
             _originalAppVersion = _appVersion;
-            _successMessage = $"Settings saved successfully. Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB";
+            _successMessage = $"Settings saved successfully. Stream pay rate: ${_streamPayRateDisplay.Value:F2} per 1000 streams, Stream qualifying seconds: {_streamQualifyingSeconds}, Max audio upload size: {_maxAudioUploadSizeMB} MB, Max image upload size: {_maxImageUploadSizeMB} MB, Browser-direct uploads: {(_directToStorageUploadEnabled ? "on" : "off")}";
 
             Logger.LogInformation("Settings updated - Stream pay rate: ${StreamRate} per 1000 streams, Stream qualifying seconds: {Seconds}, Max audio upload size: {MaxAudioMB} MB, Max image upload size: {MaxImageMB} MB",
                 _streamPayRateDisplay.Value, _streamQualifyingSeconds, _maxAudioUploadSizeMB, _maxImageUploadSizeMB);
