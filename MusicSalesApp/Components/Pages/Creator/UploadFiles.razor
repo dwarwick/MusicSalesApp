@@ -262,7 +262,12 @@
                                     @foreach (var file in _unmatchedCoverArtFiles)
                                     {
                                         var isHeld = string.Equals(file, HeldCoverArt, StringComparison.OrdinalIgnoreCase);
-                                        <div class="cover-art-chip @(isHeld ? "cover-art-chip-held" : "")"
+                                        @* Keyed by filename. The src on these is set from JS, which
+                                           Blazor knows nothing about - so without a key it would
+                                           reuse one image's element for another as the list changes
+                                           and carry the previous thumbnail across with it. *@
+                                        <div @key="file"
+                                             class="cover-art-chip @(isHeld ? "cover-art-chip-held" : "")"
                                              draggable="true"
                                              role="button"
                                              tabindex="0"
@@ -348,7 +353,8 @@
                                                        there is no drag event at all. stopPropagation
                                                        keeps the tap off the cell's own drop handler,
                                                        which would put it straight back. *@
-                                                    <img id="@PreviewElementId(item.CoverArtFileName)"
+                                                    <img @key="item.CoverArtFileName"
+                                                         id="@PreviewElementId(item.CoverArtFileName)"
                                                          alt="@($"Cover art {item.CoverArtFileName}")"
                                                          title="Drag or tap to move this artwork"
                                                          class="cover-art-thumb cover-art-thumb-row @(string.Equals(item.CoverArtFileName, HeldCoverArt, StringComparison.OrdinalIgnoreCase) ? "cover-art-chip-held" : "")"

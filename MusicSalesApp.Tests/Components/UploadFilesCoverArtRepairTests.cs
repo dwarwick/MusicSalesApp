@@ -557,6 +557,55 @@ public class UploadFilesCoverArtRepairTests
     }
 
     [Test]
+    public void TheThumbnailRefreshIsKeyedOnWhereEachImageIs_NotJustWhichImagesExist()
+    {
+        // The bug this pins: thumbnails vanished the moment anything was removed or re-assigned, and
+        // only ever appeared on the first render.
+        //
+        // The refresh is skipped when its signature is unchanged, to stop it revoking and recreating
+        // every object URL on every keystroke. Built from the set of images alone, a re-pairing did
+        // not change that signature - the same files are still in the batch - so the refresh was
+        // skipped. But moving an image destroys the <img> it was in and creates a new one elsewhere,
+        // and the new element starts with no src.
+        var codeBehind = ReadCodeBehind();
+        var flattened = System.Text.RegularExpressions.Regex.Replace(codeBehind, @"\s+", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                flattened,
+                Does.Contain("Append(\"P\").Append(slot)").And.Contain("Append(\"R\").Append(row)"),
+                "The signature must record each image's position, or a move looks like no change.");
+
+            Assert.That(
+                flattened,
+                Does.Not.Contain("foreach (var item in _uploadItems.Where(row => row.HasCoverArt))"),
+                "Iterating only the rows that have art loses the row index the signature needs.");
+        });
+    }
+
+    [Test]
+    public void ThumbnailElementsAreKeyedByFileName()
+    {
+        // Their src is set from JS, which Blazor knows nothing about. Unkeyed, it reuses one image's
+        // element for another as the lists change and carries the previous thumbnail across.
+        var markup = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor")),
+            @"\s+", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Does.Contain("<div @key=\"file\""), "The pool chips.");
+            Assert.That(markup, Does.Contain("<img @key=\"item.CoverArtFileName\""), "The row thumbnails.");
+        });
+    }
+
+    private static string ReadCodeBehind()
+        => File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs"));
+
+    [Test]
     public void AThumbnailIdIsAValidDomIdForAnyFileName()
     {
         var page = new TestableUploadFiles();
