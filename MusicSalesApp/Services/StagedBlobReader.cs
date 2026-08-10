@@ -88,7 +88,10 @@ public sealed class StagedBlobReader : IStagedBlobReader
             await response.Value.Content.CopyToAsync(buffer, cancellationToken);
             return buffer.ToArray();
         }
-        catch (RequestFailedException ex) when (ex.Status == 404)
+        // 416 is what a ranged read of an empty blob returns - the range is unsatisfiable because
+        // there are no bytes to satisfy it. Treated as "no header" alongside a missing blob, because
+        // to every caller they mean the same thing: there is nothing here to identify.
+        catch (RequestFailedException ex) when (ex.Status == 404 || ex.Status == 416)
         {
             return null;
         }

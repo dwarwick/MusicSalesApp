@@ -46,6 +46,37 @@ public interface IOpenAiFileMatcher
     /// </summary>
     static CoverArtMatchResult FallbackMatch(CoverArtMatchRequest request)
     {
+        // One song and one image are a pair whatever they are called - the same rule the web app's
+        // FileMatchingService applies, and these two must not disagree, because either can be the one
+        // that answers a given batch. Base-name pairing would leave "track-final.wav" and
+        // "artwork.png" unmatched, which is not an answer a creator would recognise.
+        var singleAudio = request.AudioFileNames?.Count == 1;
+        var singleImage = request.Images?.Count == 1;
+
+        if (singleAudio && singleImage)
+        {
+            return new CoverArtMatchResult
+            {
+                BatchId = request.BatchId,
+                CreatorId = request.CreatorId,
+                Pairs =
+                [
+                    new CoverArtMatchPair
+                    {
+                        AudioIndex = 0,
+                        ImageIndex = request.Images![0].Index,
+                        NormalizedName = FileNameMatching.ToNormalizedName(request.AudioFileNames![0])
+                    }
+                ],
+
+                // Both set explicitly. Every other return from this method populates them, and a
+                // caller that reads UnmatchedImageIndexes without a null check - the page's mapper
+                // does exactly that - would fault on an early return that quietly left it null.
+                UnmatchedImageIndexes = [],
+                UsedFallback = true
+            };
+        }
+
         var pairs = new List<CoverArtMatchPair>();
         var matchedImages = new HashSet<int>();
 
@@ -134,6 +165,21 @@ public sealed class OpenAiFileMatcher : IOpenAiFileMatcher
         CancellationToken cancellationToken = default)
     {
         var images = request.Images ?? [];
+
+        // One song and one image need no model. The web app already short-circuits this case before
+        // enqueueing, so reaching here means something else asked - and spending an OCR pass and a
+        // chat call on a question with one possible answer would be bad enough without the risk of
+        // getting it wrong: the prompt is now firmly told not to pair on weak evidence, which is
+        // exactly what it would see.
+        if (request.AudioFileNames?.Count == 1 && images.Count == 1)
+        {
+            _logger.LogInformation(
+                "Batch {BatchId} is one song and one image; pairing them without a model call.",
+                request.BatchId);
+
+            return IOpenAiFileMatcher.FallbackMatch(request);
+        }
+
         var extractedText = await ReadImageTextAsync(images, readImage, onImageRead, cancellationToken);
 
         var client = new OpenAIClient(_apiKey);

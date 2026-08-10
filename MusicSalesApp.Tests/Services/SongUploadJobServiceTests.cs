@@ -289,13 +289,22 @@ public class SongUploadJobServiceTests
         });
     }
 
+    /// <summary>Stages a batch image and returns its path, as the image phase would have left it.</summary>
+    private string GivenStagedCover(int sizeBytes = 4096)
+    {
+        var path = MediaProcessingStagingPaths.MatchBatchImage(Guid.NewGuid(), 2, ".png");
+        _stagedBlobs.Blobs[path] = new byte[Math.Min(sizeBytes, 1024)];
+        _stagedBlobs.Lengths[path] = sizeBytes;
+        return path;
+    }
+
     [Test]
     public async Task AMatchedCoverIsCopiedOutOfTheBatchFolderIntoTheSongsOwn()
     {
         // It could not have been uploaded there in the first place: which song an image belongs to
         // is unknown until after matching, which is after the images are uploaded.
         GivenStagedAudio();
-        var batchPath = MediaProcessingStagingPaths.MatchBatchImage(Guid.NewGuid(), 2, ".png");
+        var batchPath = GivenStagedCover();
 
         var job = await _service.CreateFromStagedAsync(StagedRequest(batchPath, "Cover.png"));
 
@@ -308,6 +317,74 @@ public class SongUploadJobServiceTests
                 Is.EqualTo(MediaProcessingStagingPaths.Cover(StagedGuid, ".png")));
             Assert.That(job.CoverArtBlobPath, Is.EqualTo(MediaProcessingStagingPaths.Cover(StagedGuid, ".png")));
             Assert.That(_queue.Transcodes[0].CoverArtExtension, Is.EqualTo(".png"));
+        });
+    }
+
+    [Test]
+    public async Task AnOversizedCoverCostsTheSongItsArtwork_NotTheUpload()
+    {
+        // The streamed path enforces this cap on the cover stream. The staged path had no image
+        // limit at all: the write token minted for a batch image is Create|Write with no size bound,
+        // so anything the browser was willing to PUT was copied in and handed to the Function.
+        //
+        // The song still publishes. Its audio is already staged and valid, and failing the expensive
+        // half of the transfer over the cheap half's mistake would be a poor trade.
+        _appSettings.Setup(settings => settings.GetMaxImageUploadSizeMBAsync()).ReturnsAsync(5);
+        GivenStagedAudio();
+        var batchPath = GivenStagedCover(sizeBytes: 40 * 1024 * 1024);
+
+        var job = await _service.CreateFromStagedAsync(StagedRequest(batchPath, "Huge.png"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_stagedBlobs.Copies, Is.Empty, "An over-cap image must not be copied in.");
+            Assert.That(job.CoverArtBlobPath, Is.Null);
+            Assert.That(_queue.Transcodes, Has.Count.EqualTo(1), "The song is still queued.");
+            Assert.That(_queue.Transcodes[0].CoverArtBlobPath, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task ACoverExactlyOnTheCap_IsAccepted()
+    {
+        _appSettings.Setup(settings => settings.GetMaxImageUploadSizeMBAsync()).ReturnsAsync(5);
+        GivenStagedAudio();
+        var batchPath = GivenStagedCover(sizeBytes: 5 * 1024 * 1024);
+
+        var job = await _service.CreateFromStagedAsync(StagedRequest(batchPath, "Exact.png"));
+
+        Assert.That(job.CoverArtBlobPath, Is.Not.Null, "The limit is inclusive, as it is for audio.");
+    }
+
+    [Test]
+    public void ACoverThatNeverFinishedUploading_IsRejected()
+    {
+        // Distinct from over-cap: nothing to copy at all. Queueing this would tell the Function to
+        // fetch a blob that 404s.
+        GivenStagedAudio();
+        var missing = MediaProcessingStagingPaths.MatchBatchImage(Guid.NewGuid(), 0, ".png");
+
+        Assert.ThrowsAsync<InvalidDataException>(
+            () => _service.CreateFromStagedAsync(StagedRequest(missing, "Gone.png")));
+    }
+
+    [Test]
+    public void AZeroLengthStagedUpload_IsRejectedAsIncomplete()
+    {
+        // What an interrupted single PUT leaves behind. The blob exists, so the "never uploaded"
+        // check passes on existence alone - and a ranged read of the first 64 bytes of an empty blob
+        // is answered with 416, not an empty body, so the header sniff faulted and the creator got a
+        // raw Azure message instead of being told the file was incomplete.
+        _stagedBlobs.Blobs[MediaProcessingStagingPaths.Source(StagedGuid, ".mp3")] = [];
+        _stagedBlobs.Lengths[MediaProcessingStagingPaths.Source(StagedGuid, ".mp3")] = 0;
+
+        var ex = Assert.ThrowsAsync<InvalidDataException>(
+            () => _service.CreateFromStagedAsync(StagedRequest()));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ex!.Message, Does.Contain("never fully uploaded"));
+            Assert.That(_queue.Transcodes, Is.Empty);
         });
     }
 

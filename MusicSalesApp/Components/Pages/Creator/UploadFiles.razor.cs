@@ -567,6 +567,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         ClearValidationError();
         _filesReceived = false;
         _uploadItems.Clear();
+
+        // Cleared with them, not left to accumulate. This is what MaybeNotifyBatchCompletedAsync
+        // reads, and _batchNotificationSent is reset per batch - so a second batch in the same visit
+        // used to email the creator a list containing the previous batch's songs as well as its own.
+        // Worse in the other direction: one row from an earlier batch left non-terminal, by a
+        // poisoned message or a lost callback, blocked the "is everything finished" guard forever and
+        // no later batch ever produced a notification at all.
+        lock (_jobRowsLock)
+        {
+            _jobRows.Clear();
+        }
         _initialUploadItems.Clear();
         _initialUploadStatusMessage = string.Empty;
         _initialUploadBatchProgress = 0;
@@ -593,7 +604,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
         
         // Reset upload tracking for this batch
-        _uploadCts = new CancellationTokenSource();
+        ResetUploadCancellation();
         _batchNotificationSent = false;
 
         try
@@ -872,11 +883,28 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             // the browser's own FileList. Either is enough to proceed; neither being present means
             // this pairing names a file nothing can reach, so it is skipped as before.
             audioTempPaths.TryGetValue(pair.AudioFileName, out var audioTempPath);
-            _browserFileIndexes.TryGetValue(pair.AudioFileName, out var browserAudioIndex);
 
-            int? directAudioIndex = receivesAudio ? null : browserAudioIndex;
+            // Deliberately not `TryGetValue(...) out var i` folded straight into a nullable. A miss
+            // leaves the out parameter at 0, which is a perfectly valid FileList position - so the
+            // guard below could never fire on the direct path, and a filename the matcher returned
+            // in a form this dictionary does not hold (re-cased, trimmed, normalised) would upload
+            // the FIRST selected file's bytes under this song's title. The header sniff downstream
+            // would not catch it either, because those bytes are usually still valid audio.
+            int? directAudioIndex = null;
+            if (!receivesAudio
+                && _browserFileIndexes.TryGetValue(pair.AudioFileName, out var browserAudioIndex))
+            {
+                directAudioIndex = browserAudioIndex;
+            }
+
             if (audioTempPath == null && directAudioIndex == null)
+            {
+                Logger.LogWarning(
+                    "UploadFiles: skipping '{AudioFileName}' - the pairing named a file that is "
+                    + "neither buffered on this server nor still present in the browser.",
+                    pair.AudioFileName);
                 continue;
+            }
 
             audioFilesByName.TryGetValue(pair.AudioFileName, out var audioFileMeta);
             if (audioFileMeta == null)
@@ -1100,6 +1128,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>Bridges Syncfusion's ValueChange event onto the preference.</summary>
+    protected Task OnMatchCoverArtChanged(Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> args)
+        => SetMatchCoverArtBeforeUploadAsync(args.Checked);
+
     protected async Task SetMatchCoverArtBeforeUploadAsync(bool enabled)
     {
         ApplyMatchCoverArtPreference(enabled);
@@ -1185,7 +1217,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             !ReferenceEquals(other, item)
             && string.Equals(other.CoverArtFileName, incoming, StringComparison.OrdinalIgnoreCase));
 
-        _unmatchedCoverArtFiles.Remove(incoming);
+        RemoveFromPool(incoming);
         SetCoverArt(item, incoming);
 
         if (source is not null)
@@ -1255,6 +1287,11 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private async Task RefreshCoverArtPreviewsAsync()
     {
+        // Every image on screen, every render, with no attempt to work out whether anything needs
+        // doing. Two goes at deciding that from here were both wrong - .NET cannot see whether a
+        // given <img> currently holds the right src, and re-pairing and re-rendering both replace
+        // elements behind its back. The JS side does the comparing, against the DOM, and only mints
+        // a URL when one is genuinely missing.
         var pairs = new List<object>();
 
         foreach (var fileName in _unmatchedCoverArtFiles)
@@ -1265,12 +1302,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             }
         }
 
-        foreach (var item in _uploadItems.Where(row => row.HasCoverArt))
+        foreach (var item in _uploadItems)
         {
-            if (_browserFileIndexes.TryGetValue(item.CoverArtFileName, out var index))
+            if (item.HasCoverArt && _browserFileIndexes.TryGetValue(item.CoverArtFileName, out var index))
             {
                 pairs.Add(new { browserIndex = index, elementId = PreviewElementId(item.CoverArtFileName) });
             }
+        }
+
+        if (pairs.Count == 0)
+        {
+            return;
         }
 
         try
@@ -1322,6 +1364,30 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         {
             _unmatchedCoverArtFiles.Add(fileName);
         }
+    }
+
+    /// <summary>
+    /// Takes an image out of the pool, matching the way everything else in this page compares
+    /// filenames.
+    ///
+    /// <para>
+    /// <c>List&lt;string&gt;.Remove</c> is ordinal and case-sensitive, while every dictionary the
+    /// filename travels through - <see cref="_browserFileIndexes"/>, <see cref="_stagedImagePaths"/>,
+    /// <see cref="_coverArtTempPaths"/> - is <c>OrdinalIgnoreCase</c>, as is the membership test in
+    /// <see cref="ReturnToPool"/>. Mixing the two breaks the invariant this whole area rests on: a
+    /// pool holding "Cover.PNG" and a held "cover.png" would remove nothing and then assign it,
+    /// leaving one image both pooled and owned, assignable to a second song.
+    /// </para>
+    /// </summary>
+    private void RemoveFromPool(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return;
+        }
+
+        _unmatchedCoverArtFiles.RemoveAll(
+            pooled => string.Equals(pooled, fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Where the assigned image lives on this machine, or null. Server path only.</summary>
@@ -1426,7 +1492,7 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     private async Task RunPendingUploadsAsync()
     {
         _isUploading = true;
-        _uploadCts = new CancellationTokenSource();
+        ResetUploadCancellation();
         _batchNotificationSent = false;
 
         var beforeUnloadEnabled = false;
@@ -1481,11 +1547,60 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// mattered. Idempotent, and called from every exit including cancel and disposal.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Releases the thumbnails' object URLs.
+    ///
+    /// <para>
+    /// Revocation used to happen only at the <em>start</em> of the next preview call, so leaving the
+    /// review step by any route - cancel, upload, unticking the checkbox - pinned every image's blob
+    /// in memory for the life of the page.
+    /// </para>
+    /// </summary>
+    private async Task ReleaseCoverArtPreviewsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("uploadFilesHelper.revokeCoverArtPreviews");
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not release cover-art thumbnails.");
+        }
+    }
+
+    /// <summary>
+    /// Replaces the upload cancellation source, disposing the one it supersedes.
+    ///
+    /// <para>
+    /// Each selection and each run used to allocate a fresh source and drop the previous reference,
+    /// so a creator who selected, cancelled and re-selected leaked one per cycle - each still holding
+    /// the registrations taken in <see cref="UploadDirectAsync"/>.
+    /// </para>
+    /// </summary>
+    private void ResetUploadCancellation()
+    {
+        var previous = _uploadCts;
+        _uploadCts = new CancellationTokenSource();
+
+        try
+        {
+            previous?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not dispose the previous upload cancellation source.");
+        }
+    }
+
     private async Task SweepPendingImageBatchAsync()
     {
         var batchId = _pendingImageBatchId;
         _pendingImageBatchId = null;
         _stagedImagePaths.Clear();
+
+        await ReleaseCoverArtPreviewsAsync();
 
         if (batchId is null)
         {
@@ -2296,8 +2411,18 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 AudioProcessingStep.Staging);
             await InvokeAsync(StateHasChanged);
 
+            var audioExtension = Path.GetExtension(uploadItem.AudioFileName);
             var target = await UploadStagingSasService.CreateAudioTargetAsync(
-                mediaGuid, Path.GetExtension(uploadItem.AudioFileName), _uploadCts.Token);
+                mediaGuid, audioExtension, _uploadCts.Token);
+
+            // Recorded so a token that expires part-way through a 150 MB transfer can be re-minted
+            // from the same inputs rather than costing the creator the whole upload.
+            lock (_uploadPhasesLock)
+            {
+                _mintedUploadSlots[pending.BrowserAudioIndex.Value] = new MintedUploadSlot(
+                    IsCoverArt: false, MediaGuid: mediaGuid, BatchId: Guid.Empty,
+                    ImageIndex: 0, Extension: audioExtension);
+            }
 
             // One phase per song, not one per batch. The window that decides how many run at once is
             // the semaphore in ProcessUploadsInChunksAsync, so a song reaching CreateFromStagedAsync
@@ -2640,9 +2765,75 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         return total / percentByIndex.Count;
     }
 
-    /// <summary>One file finished, so the next stage for it can start without waiting for the rest.</summary>
+    /// <summary>
+    /// Mints a replacement write token for one in-flight file.
+    ///
+    /// <para>
+    /// Called by the browser on a 403, which after a transfer has been running for a while means the
+    /// token expired rather than that anything is wrong. The audio cap is 150 MB and a token lives 30
+    /// minutes, so on a slow uplink this is reachable - and without it the file is discarded at the
+    /// moment it fails, after the creator has already spent the upload.
+    /// </para>
+    ///
+    /// <para>
+    /// Keyed by slot, never by path, exactly as the original mint is. The browser can say "the file
+    /// at index N" and nothing else; the path is re-derived here from what this page minted, so a
+    /// tampered page cannot ask for a token to somewhere of its choosing.
+    /// </para>
+    /// </summary>
     [JSInvokable]
-    public Task FileUploaded(string phaseId, int index) => Task.CompletedTask;
+    public async Task<RenewedUploadTarget> RenewUploadTarget(int index)
+    {
+        MintedUploadSlot slot;
+        lock (_uploadPhasesLock)
+        {
+            if (!_mintedUploadSlots.TryGetValue(index, out slot))
+            {
+                return null;
+            }
+        }
+
+        try
+        {
+            var target = slot.IsCoverArt
+                ? await UploadStagingSasService.CreateMatchImageTargetAsync(
+                    slot.BatchId, slot.ImageIndex, slot.Extension, _uploadCts.Token)
+                : await UploadStagingSasService.CreateAudioTargetAsync(
+                    slot.MediaGuid, slot.Extension, _uploadCts.Token);
+
+            Logger.LogInformation(
+                "Renewed the upload token for slot {Index}; the first one expired mid-transfer.", index);
+
+            return new RenewedUploadTarget(target.SasUri.ToString(), target.ContentType);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not renew the upload token for slot {Index}.", index);
+            return null;
+        }
+    }
+
+    /// <summary>What the browser needs to resume: a new URL for the same blob.</summary>
+    public sealed record RenewedUploadTarget(string SasUri, string ContentType);
+
+    /// <summary>
+    /// Everything needed to re-derive one file's destination, held server-side.
+    ///
+    /// <para>
+    /// The point of keeping this rather than the minted URL is that a renewal must reproduce the
+    /// path from inputs this page chose, not echo back something the browser handed it.
+    /// </para>
+    /// </summary>
+    private readonly record struct MintedUploadSlot(
+        bool IsCoverArt,
+        Guid MediaGuid,
+        Guid BatchId,
+        int ImageIndex,
+        string Extension);
+
+    // Browser FileList position -> what was minted for it. Cleared per phase.
+    private readonly Dictionary<int, MintedUploadSlot> _mintedUploadSlots = new();
+
 
     /// <summary>
     /// Releases the batch waiting on this phase.
@@ -2683,11 +2874,81 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// this page did before any of it existed. The batch always proceeds.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Pairs the only song with the only image, without asking anything to match them.
+    ///
+    /// <para>
+    /// The image still has to <em>reach storage</em> on the direct path, which is the whole subtlety
+    /// here: those staged blobs are the cover art itself, not merely evidence for a matcher, so
+    /// skipping the round trip must not also skip the upload. On the server path the artwork lives in
+    /// a temp file and the staged copy existed only for OCR, so nothing is uploaded at all.
+    /// </para>
+    ///
+    /// <para>
+    /// Never throws. A staging failure leaves the image unreachable, which the caller already handles
+    /// by offering it in the pool rather than losing the song.
+    /// </para>
+    /// </summary>
+    private async Task<FileMatchingResult> PairTheOnlyCandidatesAsync(string audioFileName, string imageFileName)
+    {
+        if (DirectUploadAvailable && _currentCreatorId is { } creatorId)
+        {
+            var batchId = Guid.NewGuid();
+
+            try
+            {
+                _initialUploadStatusMessage = "Preparing cover art...";
+                await InvokeAsync(StateHasChanged);
+
+                await StageImagesFromBrowserAsync(
+                    batchId, creatorId, [audioFileName], [imageFileName], requestMatching: false);
+
+                _pendingImageBatchId = batchId;
+            }
+            catch (Exception ex)
+            {
+                // Same outcome as a failed match: the song still uploads, and the image is offered
+                // in the pool instead of silently deciding the creator gets no artwork.
+                Logger.LogWarning(
+                    ex, "UploadFiles: could not stage the only cover image for batch {BatchId}.", batchId);
+
+                if (_stagedImagePaths.Count > 0)
+                {
+                    _pendingImageBatchId = batchId;
+                }
+                else
+                {
+                    _ = CoverArtMatchService.DeleteBatchAsync(batchId, CancellationToken.None);
+                }
+            }
+        }
+
+        // Deferred to the matcher rather than hand-built here, so the one-and-one rule lives in one
+        // place. This method's job is the routing decision - not asking the Function - and the
+        // pairing itself is the matcher's.
+        return await FileMatchingService.MatchFilesAsync([audioFileName], [imageFileName]);
+    }
+
     private async Task<FileMatchingResult> MatchCoverArtAsync(
         List<string> audioFileNames,
         List<string> imageFileNames,
         Dictionary<string, string> coverArtTempPaths)
     {
+        // One song and one image: they are a pair, and there is no evidence that could make that
+        // more or less true. Asking the model would spend an OCR pass and about twenty-five seconds
+        // to answer a question with one possible answer - and it could answer it *wrongly*, which is
+        // how a photo named "david.JPG" got refused a song it plainly belonged to once the prompt was
+        // told to stop guessing. Filenames are not consulted either: a creator who uploads exactly
+        // two files has already said what they mean.
+        //
+        // Ahead of the availability check on purpose, so this holds whether or not the Function is
+        // reachable. The creator still gets the review step if they asked for it - this decides the
+        // pairing, not whether they get to change it.
+        if (audioFileNames.Count == 1 && imageFileNames.Count == 1)
+        {
+            return await PairTheOnlyCandidatesAsync(audioFileNames[0], imageFileNames[0]);
+        }
+
         // Nothing to pair, or nowhere to pair it. Both take the local path immediately rather than
         // paying a round trip to learn the same answer.
         if (imageFileNames.Count == 0
@@ -2824,11 +3085,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     /// and the creator still gets their songs.
     /// </para>
     /// </summary>
+    /// <param name="requestMatching">
+    /// False when the pairing is already known and only the upload is wanted - a single song with a
+    /// single image. The blobs are still needed, because on this path they <em>are</em> the cover
+    /// art; only the queue message asking something to match them is skipped.
+    /// </param>
     private async Task StageImagesFromBrowserAsync(
         Guid batchId,
         int creatorId,
         List<string> audioFileNames,
-        List<string> imageFileNames)
+        List<string> imageFileNames,
+        bool requestMatching = true)
     {
         var targets = new List<CoverArtMatchCandidate>(imageFileNames.Count);
         var items = new List<object>(imageFileNames.Count);
@@ -2849,8 +3116,17 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
             imageProgress[browserIndex] = 0;
 
+            var extension = Path.GetExtension(fileName);
             var target = await UploadStagingSasService.CreateMatchImageTargetAsync(
-                batchId, index, Path.GetExtension(fileName), _uploadCts.Token);
+                batchId, index, extension, _uploadCts.Token);
+
+            // Recorded so a token that expires mid-transfer can be re-minted from the same inputs.
+            lock (_uploadPhasesLock)
+            {
+                _mintedUploadSlots[browserIndex] = new MintedUploadSlot(
+                    IsCoverArt: true, MediaGuid: Guid.Empty, BatchId: batchId,
+                    ImageIndex: index, Extension: extension);
+            }
 
             targets.Add(new CoverArtMatchCandidate
             {
@@ -2902,7 +3178,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             _stagedImagePaths[target.FileName] = target.BlobPath;
         }
 
-        await CoverArtMatchService.EnqueueAsync(batchId, creatorId, audioFileNames, targets, _uploadCts.Token);
+        if (requestMatching)
+        {
+            await CoverArtMatchService.EnqueueAsync(batchId, creatorId, audioFileNames, targets, _uploadCts.Token);
+        }
     }
 
     /// <summary>
@@ -3045,12 +3324,37 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Dismisses the validation banner and the file lists shown beneath it.
+    ///
+    /// <para>
+    /// <see cref="_unmatchedCoverArtFiles"/> is <em>not</em> among them any more. It stopped being a
+    /// post-hoc report when re-pairing arrived: during the review step it is the live pool of images
+    /// the creator can still place, and clearing it discards them for good. See
+    /// <see cref="ClearUnusedCoverArtNotice"/> for the case where it really is just a notice.
+    /// </para>
+    /// </summary>
     protected void ClearValidationError()
     {
         _validationErrorMessage = string.Empty;
         _unmatchedMp3Files.Clear();
-        _unmatchedCoverArtFiles.Clear();
         _duplicateSongFiles.Clear();
+
+        // Only once the batch is past the point of being re-paired. While the review step is open
+        // these are assignable images, not leftovers.
+        if (!_awaitingTitleConfirmation)
+        {
+            _unmatchedCoverArtFiles.Clear();
+        }
+    }
+
+    /// <summary>Drops the "left unused" list once the creator has seen it. Never during review.</summary>
+    protected void ClearUnusedCoverArtNotice()
+    {
+        if (!_awaitingTitleConfirmation)
+        {
+            _unmatchedCoverArtFiles.Clear();
+        }
     }
 
     protected string FormatFileSize(long bytes)

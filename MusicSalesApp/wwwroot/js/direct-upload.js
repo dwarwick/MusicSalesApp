@@ -109,12 +109,11 @@ async function runPhase(phaseId, session, items, files, concurrency, dotNetRef) 
             const result = await uploadOne(phaseId, session, item, file, dotNetRef);
             results.push(result);
 
-            if (result.ok) {
-                // Reported per file rather than only at the end, so .NET can start the next stage for
-                // this song immediately instead of waiting for its slowest sibling.
-                try { await dotNetRef.invokeMethodAsync('FileUploaded', phaseId, item.index); }
-                catch { /* circuit gone; the phase result below is best effort anyway */ }
-            }
+            // Deliberately nothing here. There used to be a per-file 'FileUploaded' callback whose
+            // comment claimed it let .NET start the next stage early; the handler was an empty
+            // no-op, so every file paid a circuit round trip - awaited inside this worker loop, so
+            // it blocked the slot - for nothing. Pipelining is real but comes from elsewhere: each
+            // song is its own phase, and PhaseCompleted resolves as soon as that song's bytes land.
         }
     });
 
@@ -131,15 +130,52 @@ async function runPhase(phaseId, session, items, files, concurrency, dotNetRef) 
     } catch { /* circuit gone */ }
 }
 
+/**
+ * Asks .NET for a fresh write token for this file, and swaps it into the item in place.
+ *
+ * A write token lives 30 minutes and is minted once, before the transfer starts. The admin audio cap
+ * is 150 MB - well over half an hour on a slow residential uplink - so expiry mid-transfer is a
+ * reachable state rather than a theoretical one, and without this the whole file is discarded at the
+ * moment it fails, having already been sent.
+ *
+ * Renewal is by SLOT, never by path: .NET holds the paths it minted and the browser can only say
+ * "the file at index N", exactly as with the original mint. Returns false when the circuit is gone
+ * or the server declines, and the caller then fails the file as before.
+ */
+async function renewTarget(item, dotNetRef) {
+    try {
+        const renewed = await dotNetRef.invokeMethodAsync('RenewUploadTarget', item.index);
+        if (!renewed || !renewed.sasUri) {
+            return false;
+        }
+
+        item.target = { sasUri: renewed.sasUri, contentType: renewed.contentType };
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function uploadOne(phaseId, session, item, file, dotNetRef) {
     const controller = new AbortController();
     session.controllers.set(item.index, controller);
 
     try {
-        if (file.size <= SINGLE_PUT_THRESHOLD) {
-            return await putWholeBlob(phaseId, session, item, file, controller, dotNetRef);
+        const attempt = () => file.size <= SINGLE_PUT_THRESHOLD
+            ? putWholeBlob(phaseId, session, item, file, controller, dotNetRef)
+            : putBlocks(phaseId, session, item, file, controller, dotNetRef);
+
+        const result = await attempt();
+
+        // One renewal, then one retry. A second 403 after a freshly minted token is not an expiry -
+        // it is a permission or configuration problem, and retrying it forever would hide that.
+        if (!result.ok && result.httpStatus === 403 && !session.aborted) {
+            if (await renewTarget(item, dotNetRef)) {
+                return await attempt();
+            }
         }
-        return await putBlocks(phaseId, session, item, file, controller, dotNetRef);
+
+        return result;
     } catch (e) {
         if (session.aborted) {
             return failure(item.index, 0, 'Aborted', 'Upload cancelled.');
@@ -225,8 +261,11 @@ async function putBlocks(phaseId, session, item, file, controller, dotNetRef) {
 }
 
 /**
- * Retries transient failures with backoff. A 403 is NOT retried here - it usually means the SAS
- * expired, and hammering an expired token wastes the creator's time; the .NET side renews instead.
+ * Retries transient failures with backoff.
+ *
+ * A 403 is not retried against the same URL - it means the write token expired, and hammering an
+ * expired token wastes the creator's time. It is handled one level up by asking .NET for a fresh
+ * one; `send` takes the current URL so the caller can swap it.
  */
 async function sendWithRetry(send, session) {
     let lastError = null;

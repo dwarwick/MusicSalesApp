@@ -447,6 +447,95 @@ public class UploadFilesCoverArtRepairTests
     }
 
     // -----------------------------------------------------------------
+    // Ways the pool used to lose images.
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void DismissingAValidationErrorDuringReview_KeepsThePool()
+    {
+        // ClearValidationError empties the lists shown under the banner, and _unmatchedCoverArtFiles
+        // used to be one of them - it was a post-hoc report before re-pairing existed. StartUploadAsync
+        // calls it before re-checking titles, so a batch bounced back for a duplicate title arrived
+        // at the review step with every unplaced image silently gone.
+        var page = new TestableUploadFiles();
+        page.GivenSong("One");
+        page.GivenPooled("a.png", "b.png");
+
+        page.DismissValidationError();
+
+        Assert.That(page.Pool, Is.EqualTo(new[] { "a.png", "b.png" }));
+    }
+
+    [Test]
+    public void DismissingAValidationErrorAfterReview_StillClearsTheNotice()
+    {
+        // Once the batch is past re-pairing these really are just leftovers, and the banner's close
+        // button has to keep working.
+        var page = new TestableUploadFiles();
+        page.GivenPooled("a.png");
+        page.EndReview();
+
+        page.DismissValidationError();
+
+        Assert.That(page.Pool, Is.Empty);
+    }
+
+    [Test]
+    public void AnImageIsMatchedCaseInsensitivelyWhenLeavingThePool()
+    {
+        // Every dictionary a filename travels through here is OrdinalIgnoreCase, and so is the
+        // membership test in ReturnToPool - but List<string>.Remove is ordinal and case-sensitive.
+        // The mismatch left an image assigned to a song AND still listed as unmatched, so it could
+        // be handed to a second song, which the pipeline then resolves to one silent winner.
+        var page = new TestableUploadFiles();
+        var song = page.GivenSong("One");
+        page.GivenPooled("Cover.PNG");
+
+        page.Hold("cover.png");
+        page.Assign(song);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(song.CoverArtFileName, Is.EqualTo("cover.png"));
+            Assert.That(page.Pool, Is.Empty, "It cannot be assigned and pooled at the same time.");
+        });
+    }
+
+    [Test]
+    public void AnImageIsNotPooledTwiceUnderADifferentCasing()
+    {
+        var page = new TestableUploadFiles();
+        var song = page.GivenSong("One", "Cover.PNG");
+        page.GivenPooled("cover.png");
+
+        page.Clear(song);
+
+        Assert.That(page.Pool, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void TheRemoveControlIsLabelled()
+    {
+        // It shipped as an icon-only SfButton with empty Content and rendered as nothing a creator
+        // could see or click. There is no icon-only button anywhere else in this application, and a
+        // creator who had already struggled to find the drop target was not going to find a bare x.
+        var markup = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor")),
+            @"\s+", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Does.Not.Contain("Content=\"\""), "An SfButton with no content has nothing to click.");
+            Assert.That(markup, Does.Contain("Content=\"Remove\""));
+            Assert.That(
+                markup,
+                Does.Contain("Tap or Drop Cover Art Here"),
+                "Every empty cell needs its own label, not just the instruction above the table.");
+        });
+    }
+
+    // -----------------------------------------------------------------
     // Thumbnails.
     // -----------------------------------------------------------------
 
@@ -468,6 +557,62 @@ public class UploadFilesCoverArtRepairTests
     }
 
     [Test]
+    public void WhetherAThumbnailNeedsRefreshingIsDecidedAgainstTheDom_NotFromCSharpState()
+    {
+        // Two attempts at deciding this in C# were both wrong, and each broke thumbnails a different
+        // way. Keyed on which images exist, a re-pairing looked like no change - so the refresh was
+        // skipped while the move had already destroyed the img the src was set on. Keyed on where
+        // they are, the very first render of a one-song batch was skipped instead.
+        //
+        // The fault was the premise: C# cannot see whether an <img> currently holds the right src.
+        // Re-pairing replaces elements, and so does an unrelated re-render. So .NET now sends the
+        // full set every render and the JS compares against the live DOM, minting a URL only when
+        // one is actually missing - which is also self-healing if an element is ever replaced.
+        var codeBehind = ReadCodeBehind();
+        var markup = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                codeBehind,
+                Does.Not.Contain("_coverArtPreviewSignature"),
+                "No C#-side guess about what the DOM is holding.");
+
+            Assert.That(
+                markup,
+                Does.Contain("if (element.src !== url)"),
+                "The JS must compare against the element it is about to write to.");
+
+            Assert.That(
+                markup,
+                Does.Contain("held[pair.elementId] || URL.createObjectURL(file)"),
+                "A URL already minted for an image must be reused wherever that image moved to.");
+        });
+    }
+
+    [Test]
+    public void ThumbnailElementsAreKeyedByFileName()
+    {
+        // Their src is set from JS, which Blazor knows nothing about. Unkeyed, it reuses one image's
+        // element for another as the lists change and carries the previous thumbnail across.
+        var markup = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor")),
+            @"\s+", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Does.Contain("<div @key=\"file\""), "The pool chips.");
+            Assert.That(markup, Does.Contain("<img @key=\"item.CoverArtFileName\""), "The row thumbnails.");
+        });
+    }
+
+    private static string ReadCodeBehind()
+        => File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor.cs"));
+
+    [Test]
     public void AThumbnailIdIsAValidDomIdForAnyFileName()
     {
         var page = new TestableUploadFiles();
@@ -476,6 +621,22 @@ public class UploadFilesCoverArtRepairTests
         var id = UploadFilesModel.PreviewElementId("my cover \"art\" (2)_final ✓.png");
 
         Assert.That(id, Does.Match("^cover-preview-[0-9A-F]+$"));
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MusicSalesApp", "MusicSalesApp.csproj")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 
     /// <summary>
@@ -526,5 +687,7 @@ public class UploadFilesCoverArtRepairTests
         public void DropOnPool() => ReturnHeldCoverArtToPool();
 
         public void DisableCoverArtMatching() => ApplyMatchCoverArtPreference(false);
+
+        public void DismissValidationError() => ClearValidationError();
     }
 }
