@@ -365,11 +365,14 @@
                                                 </div>
                                                 @if (_awaitingTitleConfirmation)
                                                 {
+                                                    @* Labelled, not a bare glyph. An icon-only
+                                                       SfButton rendered as nothing visible - there is
+                                                       no icon-only precedent anywhere in this app -
+                                                       and a creator who could not find the drop target
+                                                       was never going to find an unlabelled x either. *@
                                                     <span @onclick:stopPropagation="true">
-                                                        <SfButton CssClass="e-small e-flat"
-                                                                  IconCss="fa-solid fa-xmark"
-                                                                  Content=""
-                                                                  title="Remove this cover art"
+                                                        <SfButton CssClass="e-small e-outline cover-art-remove"
+                                                                  Content="Remove"
                                                                   aria-label="@($"Remove cover art from {item.SongTitle}")"
                                                                   OnClick="@(() => ClearCoverArt(item))" />
                                                     </span>
@@ -684,6 +687,12 @@
         border-color: #198754;
         background-color: rgba(25, 135, 84, 0.12);
         font-weight: 600;
+    }
+
+    .cover-art-remove {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 0.75rem;
     }
 
     /* Makes the phrase in the instructions look like the thing it is naming. */

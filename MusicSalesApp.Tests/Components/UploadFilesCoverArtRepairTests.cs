@@ -513,6 +513,28 @@ public class UploadFilesCoverArtRepairTests
         Assert.That(page.Pool, Has.Count.EqualTo(1));
     }
 
+    [Test]
+    public void TheRemoveControlIsLabelled()
+    {
+        // It shipped as an icon-only SfButton with empty Content and rendered as nothing a creator
+        // could see or click. There is no icon-only button anywhere else in this application, and a
+        // creator who had already struggled to find the drop target was not going to find a bare x.
+        var markup = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                GetRepositoryRoot(), "MusicSalesApp", "Components", "Pages", "Creator", "UploadFiles.razor")),
+            @"\s+", " ");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markup, Does.Not.Contain("Content=\"\""), "An SfButton with no content has nothing to click.");
+            Assert.That(markup, Does.Contain("Content=\"Remove\""));
+            Assert.That(
+                markup,
+                Does.Contain("Tap or Drop Cover Art Here"),
+                "Every empty cell needs its own label, not just the instruction above the table.");
+        });
+    }
+
     // -----------------------------------------------------------------
     // Thumbnails.
     // -----------------------------------------------------------------
@@ -543,6 +565,22 @@ public class UploadFilesCoverArtRepairTests
         var id = UploadFilesModel.PreviewElementId("my cover \"art\" (2)_final ✓.png");
 
         Assert.That(id, Does.Match("^cover-preview-[0-9A-F]+$"));
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory != null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "MusicSalesApp", "MusicSalesApp.csproj")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 
     /// <summary>
