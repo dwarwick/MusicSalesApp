@@ -42,4 +42,21 @@ internal static class SongMetadataQueryExtensions
     {
         return query.Where(VisibleLibrarySongsFilter);
     }
+
+    private static readonly Expression<Func<SongMetadata, bool>> CompleteProfileFilter =
+        song => song.ImageBlobPath != null &&
+                song.ImageBlobPath != string.Empty &&
+                song.Genre != null &&
+                song.Genre != string.Empty &&
+                song.PersonaId != null &&
+                song.Persona!.IsEnabled &&
+                song.Persona.Name != null &&
+                song.Persona.Name != string.Empty &&
+                song.Persona.ImageBlobPath != null &&
+                song.Persona.ImageBlobPath != string.Empty;
+
+    public static IQueryable<SongMetadata> WhereHasCompleteProfile(this IQueryable<SongMetadata> query)
+    {
+        return query.Where(CompleteProfileFilter);
+    }
 }

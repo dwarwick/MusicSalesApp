@@ -34,6 +34,7 @@ public class FeaturedSongRotationService : IFeaturedSongRotationService
         var selectedSongIds = await context.SongMetadata
             .Include(song => song.Creator)
             .WhereVisibleLibrarySongs()
+            .WhereHasCompleteProfile()
             .OrderBy(_ => Guid.NewGuid())
             .Take(FeaturedSongCount)
             .Select(song => song.Id)
