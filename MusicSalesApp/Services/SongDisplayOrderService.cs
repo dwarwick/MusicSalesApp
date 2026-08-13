@@ -27,6 +27,7 @@ public class SongDisplayOrderService : ISongDisplayOrderService
 
         var songs = await context.SongMetadata
             .Include(song => song.Creator)
+            .Include(song => song.Persona)
             .WhereVisibleLibrarySongs()
             .ToListAsync();
 
@@ -37,7 +38,9 @@ public class SongDisplayOrderService : ISongDisplayOrderService
         }
 
         var randomizedSongs = songs
-            .OrderBy(_ => Guid.NewGuid())
+            .GroupBy(song => song.GetProfileCompletenessPercent())
+            .OrderByDescending(tier => tier.Key)
+            .SelectMany(tier => tier.OrderBy(_ => Guid.NewGuid()))
             .ToList();
 
         var updatedAt = DateTime.UtcNow;
