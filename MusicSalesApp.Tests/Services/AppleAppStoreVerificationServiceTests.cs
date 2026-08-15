@@ -407,6 +407,160 @@ public class AppleAppStoreVerificationServiceTests
     }
 
     [Test]
+    public void ShouldRetryAgainstSandbox_IsTrue_WhenPointedAtProduction()
+    {
+        var result = AppleAppStoreVerificationService.ShouldRetryAgainstSandbox(
+            "https://api.storekit.itunes.apple.com",
+            "https://api.storekit-sandbox.itunes.apple.com");
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldRetryAgainstSandbox_IsFalse_WhenAlreadyPointedAtSandbox()
+    {
+        // Asking the same environment twice can only produce the same 404, so the test and
+        // development servers must not pay for a second round trip. A trailing slash is still the
+        // same host.
+        var result = AppleAppStoreVerificationService.ShouldRetryAgainstSandbox(
+            "https://api.storekit-sandbox.itunes.apple.com/",
+            "https://api.storekit-sandbox.itunes.apple.com");
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldRetryAgainstSandbox_IsFalse_WhenNoSandboxUrlIsConfigured()
+    {
+        var result = AppleAppStoreVerificationService.ShouldRetryAgainstSandbox(
+            "https://api.storekit.itunes.apple.com",
+            "   ");
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void VerifySubscriptionAsync_RetriesAgainstSandbox_WhenProductionDoesNotKnowTheTransaction()
+    {
+        // TestFlight builds and App Review both purchase in sandbox while talking to the production
+        // server, so production 404s on a perfectly valid transaction. Without the fallback every
+        // one of those purchases failed verification.
+        var requestedUris = new List<string>();
+        var service = CreateServiceForEnvironment(
+            "https://api.storekit.itunes.apple.com",
+            requestedUris,
+            request => request.RequestUri!.Host.Contains("sandbox", StringComparison.OrdinalIgnoreCase)
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                {
+                    Content = new StringContent("{\"errorCode\":4010002,\"errorMessage\":\"Invalid issuer\"}")
+                }
+                : new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        // Sandbox answers with a distinctive failure, which is how we know the retry reached it
+        // rather than stopping at the production 404.
+        var exception = Assert.ThrowsAsync<AppleAppStoreVerificationException>(
+            () => service.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Does.Contain("4010002 - Invalid issuer"));
+            Assert.That(requestedUris, Has.Count.EqualTo(2));
+            Assert.That(requestedUris[0], Does.StartWith("https://api.storekit.itunes.apple.com/"));
+            Assert.That(requestedUris[1], Does.StartWith("https://api.storekit-sandbox.itunes.apple.com/"));
+            Assert.That(requestedUris[1], Does.Contain("/inApps/v1/subscriptions/tx-123"));
+        });
+    }
+
+    [Test]
+    public void VerifySubscriptionAsync_ReportsNotFound_WhenNeitherEnvironmentKnowsTheTransaction()
+    {
+        var requestedUris = new List<string>();
+        var service = CreateServiceForEnvironment(
+            "https://api.storekit.itunes.apple.com",
+            requestedUris,
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var exception = Assert.ThrowsAsync<AppleAppStoreVerificationException>(
+            () => service.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Is.EqualTo("Apple App Store could not find this transaction for the configured app."));
+            Assert.That(requestedUris, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void VerifySubscriptionAsync_DoesNotRetry_WhenAlreadyPointedAtSandbox()
+    {
+        var requestedUris = new List<string>();
+        var service = CreateServiceForEnvironment(
+            "https://api.storekit-sandbox.itunes.apple.com",
+            requestedUris,
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var exception = Assert.ThrowsAsync<AppleAppStoreVerificationException>(
+            () => service.VerifySubscriptionAsync("tx-123", "streamtunes_monthly_sub_ios"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(exception!.Message, Is.EqualTo("Apple App Store could not find this transaction for the configured app."));
+            Assert.That(requestedUris, Has.Count.EqualTo(1));
+        });
+    }
+
+    /// <summary>
+    /// Builds a service pointed at <paramref name="apiBaseUrl"/> whose HTTP calls are answered by
+    /// <paramref name="respond"/>, recording every request URI so a test can assert which Apple
+    /// environments were actually asked.
+    /// </summary>
+    private static AppleAppStoreVerificationService CreateServiceForEnvironment(
+        string apiBaseUrl,
+        List<string> requestedUris,
+        Func<HttpRequestMessage, HttpResponseMessage> respond)
+    {
+        using var privateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string>
+            {
+                ["AppleAppStore:BundleId"] = "net.streamtunes.musicsalesapp.maui",
+                ["AppleAppStore:IssuerId"] = "issuer-id",
+                ["AppleAppStore:KeyId"] = "key-id",
+                ["AppleAppStore:PrivateKeyPem"] = privateKey.ExportPkcs8PrivateKeyPem(),
+                ["AppleAppStore:ApiBaseUrl"] = apiBaseUrl,
+                ["AppleAppStore:SandboxApiBaseUrl"] = "https://api.storekit-sandbox.itunes.apple.com"
+            })
+            .Build();
+
+        var handler = new Mock<HttpMessageHandler>();
+        handler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>((request, _) =>
+            {
+                requestedUris.Add(request.RequestUri!.ToString());
+                return Task.FromResult(respond(request));
+            });
+
+        var httpClientFactory = new Mock<IHttpClientFactory>();
+        httpClientFactory
+            .Setup(factory => factory.CreateClient(It.IsAny<string>()))
+            .Returns(new HttpClient(handler.Object));
+
+        var environment = new Mock<IHostEnvironment>();
+        environment.SetupGet(value => value.ContentRootPath).Returns("/tmp");
+
+        return new AppleAppStoreVerificationService(
+            configuration,
+            environment.Object,
+            httpClientFactory.Object,
+            NullLogger<AppleAppStoreVerificationService>.Instance);
+    }
+
+    [Test]
     public void ResolveSubscriptionPrice_UsesTheTransactionPrice_WhenAppleSendsOne()
     {
         var (price, currency) = AppleAppStoreVerificationService.ResolveSubscriptionPrice(
