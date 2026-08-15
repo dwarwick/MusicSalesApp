@@ -32,6 +32,7 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
     private readonly string _issuerId;
     private readonly string _keyId;
     private readonly string _apiBaseUrl;
+    private readonly string _sandboxApiBaseUrl;
     private readonly string _privateKeyPath;
     private readonly ECDsa _privateKey;
     private readonly string _initializationError;
@@ -531,17 +532,19 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
         _issuerId = configuration["AppleAppStore:IssuerId"];
         _keyId = configuration["AppleAppStore:KeyId"];
         _apiBaseUrl = configuration["AppleAppStore:ApiBaseUrl"] ?? "https://api.storekit.itunes.apple.com";
+        _sandboxApiBaseUrl = configuration["AppleAppStore:SandboxApiBaseUrl"] ?? "https://api.storekit-sandbox.itunes.apple.com";
 
         _privateKeyPath = ResolvePrivateKeyPath(configuration["AppleAppStore:PrivateKeyPath"], environment.ContentRootPath);
         var inlinePrivateKey = configuration["AppleAppStore:PrivateKeyPem"];
         _initializationError = DescribeCredentialConfigurationIssue(_privateKeyPath, inlinePrivateKey, _issuerId, _keyId, _bundleId);
 
         _logger.LogInformation(
-            "Initializing Apple App Store verification service. BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, ApiBaseUrl={ApiBaseUrl}, PrivateKeyPath={PrivateKeyPath}, PrivateKeyFileExists={PrivateKeyFileExists}, InlinePrivateKeyConfigured={InlinePrivateKeyConfigured}",
+            "Initializing Apple App Store verification service. BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, ApiBaseUrl={ApiBaseUrl}, SandboxApiBaseUrl={SandboxApiBaseUrl}, PrivateKeyPath={PrivateKeyPath}, PrivateKeyFileExists={PrivateKeyFileExists}, InlinePrivateKeyConfigured={InlinePrivateKeyConfigured}",
             _bundleId,
             _issuerId,
             _keyId,
             _apiBaseUrl,
+            _sandboxApiBaseUrl,
             _privateKeyPath ?? "<none>",
             !string.IsNullOrWhiteSpace(_privateKeyPath) && File.Exists(_privateKeyPath),
             !string.IsNullOrWhiteSpace(inlinePrivateKey));
@@ -594,26 +597,36 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             //
             // /inApps/v1/subscriptions/{id} accepts any transaction belonging to the subscription
             // and answers the question entitlement actually depends on: is it active right now.
-            var requestUri = $"{_apiBaseUrl.TrimEnd('/')}/inApps/v1/subscriptions/{Uri.EscapeDataString(transactionId)}";
             _logger.LogInformation(
-                "Starting Apple App Store subscription verification. TransactionId={TransactionId}, ProductId={ProductId}, RequestUri={RequestUri}, BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, PrivateKeyPath={PrivateKeyPath}",
+                "Starting Apple App Store subscription verification. TransactionId={TransactionId}, ProductId={ProductId}, ApiBaseUrl={ApiBaseUrl}, BundleId={BundleId}, IssuerId={IssuerId}, KeyId={KeyId}, PrivateKeyPath={PrivateKeyPath}",
                 transactionId,
                 productId,
-                requestUri,
+                _apiBaseUrl,
                 _bundleId,
                 _issuerId,
                 _keyId,
                 _privateKeyPath ?? "<none>");
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            var bearerToken = CreateBearerToken();
-            _logger.LogInformation("Created Apple App Store bearer token summary: {BearerTokenSummary}", DescribeBearerToken(bearerToken));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            var response = await SendSubscriptionStatusRequestAsync(_apiBaseUrl, transactionId);
 
-            var client = _httpClientFactory.CreateClient();
-            _logger.LogInformation("Sending Apple App Store verification request to {RequestUri}", requestUri);
-            var response = await client.SendAsync(request);
-            _logger.LogInformation("Apple App Store verification response received. StatusCode={StatusCode}", response.StatusCode);
+            // A transaction exists only in the environment it was bought in, and Apple keeps the two
+            // in separate namespaces. TestFlight builds and App Review both purchase in *sandbox*
+            // while talking to the production server, so production answers 404 for a transaction
+            // that is perfectly valid - which made every sandbox purchase fail verification.
+            //
+            // Apple's guidance is to ask production first and fall back to sandbox on 404. The order
+            // matters and must never be reversed: asking sandbox first would let a sandbox purchase
+            // satisfy a request that production could have answered for real.
+            if (response.StatusCode == HttpStatusCode.NotFound && ShouldRetryAgainstSandbox())
+            {
+                response.Dispose();
+                _logger.LogInformation(
+                    "Apple App Store did not recognise transaction {TransactionId} at {ApiBaseUrl}. Retrying against the sandbox environment at {SandboxApiBaseUrl}.",
+                    transactionId,
+                    _apiBaseUrl,
+                    _sandboxApiBaseUrl);
+                response = await SendSubscriptionStatusRequestAsync(_sandboxApiBaseUrl, transactionId);
+            }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -732,6 +745,51 @@ public class AppleAppStoreVerificationService : IAppleAppStoreVerificationServic
             _logger.LogError(ex, "Failed to verify Apple App Store subscription");
             throw new AppleAppStoreVerificationException("Apple App Store verification failed on the server.", ex);
         }
+    }
+
+    /// <summary>
+    /// Whether a 404 from the configured environment is worth a second look in sandbox. Pointless
+    /// when the server is already pointed at sandbox - the answer would be the same 404 - and
+    /// impossible when no sandbox URL is configured.
+    /// </summary>
+    internal static bool ShouldRetryAgainstSandbox(string apiBaseUrl, string sandboxApiBaseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(sandboxApiBaseUrl))
+        {
+            return false;
+        }
+
+        return !string.Equals(
+            apiBaseUrl?.TrimEnd('/'),
+            sandboxApiBaseUrl.TrimEnd('/'),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool ShouldRetryAgainstSandbox()
+        => ShouldRetryAgainstSandbox(_apiBaseUrl, _sandboxApiBaseUrl);
+
+    /// <summary>
+    /// Asks one Apple environment about a subscription. Split out so the same request can be replayed
+    /// against sandbox without duplicating the token and logging setup.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendSubscriptionStatusRequestAsync(string apiBaseUrl, string transactionId)
+    {
+        var requestUri = $"{apiBaseUrl.TrimEnd('/')}/inApps/v1/subscriptions/{Uri.EscapeDataString(transactionId)}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        var bearerToken = CreateBearerToken();
+        _logger.LogInformation("Created Apple App Store bearer token summary: {BearerTokenSummary}", DescribeBearerToken(bearerToken));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+
+        var client = _httpClientFactory.CreateClient();
+        _logger.LogInformation("Sending Apple App Store verification request to {RequestUri}", requestUri);
+        var response = await client.SendAsync(request);
+        _logger.LogInformation(
+            "Apple App Store verification response received. RequestUri={RequestUri}, StatusCode={StatusCode}",
+            requestUri,
+            response.StatusCode);
+
+        return response;
     }
 
     private string CreateBearerToken()
