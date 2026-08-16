@@ -111,6 +111,18 @@
                                         <SfButton OnClick="() => OpenLyricsEditor(song)" CssClass="e-btn e-small e-outline">
                                             <i class="bi bi-music-note-list me-1"></i> Lyrics
                                         </SfButton>
+
+                                        @* Only once there is something to tune. Before an alignment
+                                           lands the editor has nothing to show, and sending a creator
+                                           to a page that can only apologise is worse than not
+                                           offering it. *@
+                                        @if (HasTimingsToEdit(song))
+                                        {
+                                            <a class="e-btn e-small e-outline"
+                                               href="@AppPageRoutes.CreatorSongLyrics(int.Parse(song.Id))">
+                                                <i class="bi bi-sliders me-1"></i> Timing
+                                            </a>
+                                        }
                                     }
                                     <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger">
                                         <i class="bi bi-trash me-1"></i> Delete

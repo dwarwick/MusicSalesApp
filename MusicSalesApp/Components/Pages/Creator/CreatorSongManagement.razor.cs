@@ -156,6 +156,18 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// Whether this song has timings worth opening the editor for.
+    ///
+    /// <para>
+    /// Published and NeedsReview both qualify: NeedsReview is where every successful alignment now
+    /// lands and is exactly the state that needs a listen, and a Published song can still be
+    /// re-tuned. Pending has nothing yet and Failed has nothing usable.
+    /// </para>
+    /// </summary>
+    protected static bool HasTimingsToEdit(SongAdminViewModel song) =>
+        song.LyricsStatus is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
+
+    /// <summary>
     /// The confidence as a percentage with one decimal place.
     ///
     /// <para>

@@ -251,6 +251,31 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
             document.DurationMs);
     }
 
+    /// <summary>
+    /// Mark a word as selected.
+    /// </summary>
+    /// <remarks>
+    /// Applied as a class by the JS module rather than by re-rendering. Selection changes on every
+    /// click, and re-rendering a few thousand spans to move one outline would be a diff of the whole
+    /// panel each time.
+    /// </remarks>
+    public async Task HighlightSelectionAsync(int lineIndex, int wordIndex)
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("setSelectedWord", InstanceId, lineIndex, wordIndex);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit gone.
+        }
+    }
+
     /// <summary>Called from JS when a creator clicks a word in editor mode.</summary>
     [JSInvokable]
     public async Task WordClicked(int lineIndex, int wordIndex)

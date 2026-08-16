@@ -911,3 +911,13 @@ body {
     background-color: rgba(0, 0, 0, 0.65);
     color: #e6e6e6;
 }
+
+.lyrics-editor-help {
+    background-color: #1c1c1c;
+    border: 1px solid #2f2f2f;
+}
+
+.lyrics-editor-selection {
+    background-color: #1c1c1c;
+    border: 1px solid #2f2f2f;
+}

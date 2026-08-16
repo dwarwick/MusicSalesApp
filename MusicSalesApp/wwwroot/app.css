@@ -2948,3 +2948,85 @@ h1:focus {
     width: 15px;
     height: 15px;
 }
+
+/* ============================================================
+   Creator lyric timing editor
+   ============================================================ */
+
+.lyrics-editor-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.lyrics-editor-help {
+    margin-bottom: 16px;
+    border-radius: 6px;
+    padding: 10px 14px;
+}
+
+.lyrics-editor-help summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.lyrics-editor-help-body {
+    padding-top: 10px;
+    max-width: 70ch;
+}
+
+.lyrics-editor-help-body ol {
+    padding-left: 1.25rem;
+}
+
+.lyrics-editor-help-body li {
+    margin-bottom: 8px;
+}
+
+/* Scroller on the left, controls on the right, stacking on narrow screens. The scroller gets a
+   fixed height because that is what makes centring meaningful - it is the box the current line is
+   centred within. */
+.lyrics-editor-body {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.lyrics-editor-scroller {
+    flex: 1 1 420px;
+    height: 420px;
+    min-width: 280px;
+}
+
+.lyrics-editor-side {
+    flex: 0 1 320px;
+    min-width: 260px;
+}
+
+.lyrics-editor-rates {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.lyrics-editor-selection {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 6px;
+}
+
+.lyrics-editor-selected-word {
+    font-size: 15px;
+}
+
+.lyrics-editor-actions {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
