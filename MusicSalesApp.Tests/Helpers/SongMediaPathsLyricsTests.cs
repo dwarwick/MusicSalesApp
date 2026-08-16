@@ -130,4 +130,67 @@ public class SongMediaPathsLyricsTests
                 Does.StartWith(folder + "/"));
         });
     }
+
+    // -----------------------------------------------------------------
+    // The draft, which no listener may ever reach
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void TheDraftSitsBesideTheLiveTimingsUnderTheGuidScheme()
+    {
+        var guid = Guid.Parse("0bdb5d61-0880-4881-86df-764ff1a75d94");
+
+        var live = SongMediaPaths.ResolveLyricsTimingsTarget(1, guid, null);
+        var draft = SongMediaPaths.ResolveLyricsDraftTimingsTarget(1, guid, null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(draft, Does.EndWith("-lyrics.draft.json"));
+            Assert.That(draft, Is.Not.EqualTo(live));
+            Assert.That(
+                draft[..draft.LastIndexOf('/')],
+                Is.EqualTo(live[..live.LastIndexOf('/')]),
+                "Same folder - it is the same song's content.");
+        });
+    }
+
+    [Test]
+    public void TheDraftFollowsTheLegacySchemeToo()
+    {
+        var draft = SongMediaPaths.ResolveLyricsDraftTimingsTarget(42, null, "Night Drive/Night Drive.mp3");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(draft, Is.EqualTo("Night Drive/42-lyrics.draft.json"));
+            Assert.That(draft, Does.Not.Contain("Night Drive.mp3"), "No creator filename in a new path.");
+        });
+    }
+
+    [Test]
+    public void ADraftIsNotALyricsArtifactAsFarAsThePublicRoutesAreConcerned()
+    {
+        // THE most important assertion about the draft. IsLyricsArtifactPath is what MusicController
+        // uses to decide "look this up against the lyrics row"; anything it accepts becomes reachable
+        // subject to the row's status, and a draft has no status of its own to be gated by. If this
+        // ever returns true, a creator's half-finished tapping session becomes what listeners hear.
+        var guid = Guid.NewGuid();
+        var draft = SongMediaPaths.ResolveLyricsDraftTimingsTarget(1, guid, null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SongMediaPaths.IsLyricsArtifactPath(draft), Is.False);
+            Assert.That(
+                SongMediaPaths.IsLyricsArtifactPath(SongMediaPaths.ResolveLyricsTimingsTarget(1, guid, null)),
+                Is.True,
+                "...while the published timings still are.");
+        });
+    }
+
+    [TestCase("abc/abc-lyrics.draft.json")]
+    [TestCase("abc/abc-lyrics.DRAFT.JSON")]
+    [TestCase("42-lyrics.draft.json")]
+    public void NoCasingOrSchemeMakesADraftPubliclyRoutable(string path)
+    {
+        Assert.That(SongMediaPaths.IsLyricsArtifactPath(path), Is.False);
+    }
 }

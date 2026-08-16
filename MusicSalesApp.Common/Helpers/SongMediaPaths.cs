@@ -67,6 +67,18 @@ public static class SongMediaPaths
     /// <summary>The same timings as Enhanced LRC, for export and portability.</summary>
     public const string LyricsLrcExtension = ".lrc";
 
+    /// <summary>
+    /// The creator's work-in-progress timings, which no listener may ever see.
+    ///
+    /// <para>
+    /// A separate blob rather than a second copy of the live one, so a song that is already published
+    /// keeps serving its approved timings untouched while its creator experiments. It ends
+    /// <c>.draft.json</c> rather than <c>.json</c>, which is what keeps it out of
+    /// <see cref="IsLyricsArtifactPath"/> and therefore off every public route.
+    /// </para>
+    /// </summary>
+    public const string LyricsDraftTimingsExtension = ".draft.json";
+
     /// <summary>The folder that holds every blob belonging to <paramref name="mediaGuid"/>.</summary>
     public static string Folder(Guid mediaGuid) => Format(mediaGuid);
 
@@ -214,10 +226,10 @@ public static class SongMediaPaths
     /// </para>
     ///
     /// <para>
-    /// These blobs are deliberately <b>not</b> on <c>MusicController</c>'s public media whitelist, so
-    /// they are unreachable over HTTP and will 404 until the player phase adds a branch for them —
-    /// one that must gate on the lyrics row's published status rather than merely on the path
-    /// matching.
+    /// <c>MusicController</c> routes these through <c>ISongLyricsService.IsPubliclyReadableAsync</c>,
+    /// which gates on the lyrics row's status rather than on the path matching — published and
+    /// unpublished timings occupy the identical path, so the path can never be the authority. The
+    /// draft is excluded from that route entirely by its extension.
     /// </para>
     /// </summary>
     public static string ResolveLyricsTarget(
@@ -250,6 +262,10 @@ public static class SongMediaPaths
     /// <summary>The Enhanced LRC, under whichever naming scheme this song uses.</summary>
     public static string ResolveLyricsLrcTarget(int songId, Guid? mediaGuid, string? playbackBlobPath)
         => ResolveLyricsTarget(songId, mediaGuid, playbackBlobPath, LyricsLrcExtension);
+
+    /// <summary>The creator's draft timings, under whichever naming scheme this song uses.</summary>
+    public static string ResolveLyricsDraftTimingsTarget(int songId, Guid? mediaGuid, string? playbackBlobPath)
+        => ResolveLyricsTarget(songId, mediaGuid, playbackBlobPath, LyricsDraftTimingsExtension);
 
     /// <summary>
     /// Reads the media GUID out of a blob path, which is its first path segment.
@@ -292,6 +308,15 @@ public static class SongMediaPaths
             return false;
 
         var normalized = Normalize(blobPath);
+
+        // THE DRAFT IS REJECTED EXPLICITLY, even though the suffix test below already excludes it:
+        // "-lyrics.draft.json" does not end with "-lyrics.json", so this guard is redundant today.
+        // It is here because the day somebody loosens the matcher - to accept an extension they are
+        // adding, or to be "more permissive about casing" - the draft is what silently becomes
+        // publicly routable, and a creator's half-finished tapping session becomes what listeners
+        // hear. A redundant line and a red test is a cheap price for that not being possible.
+        if (normalized.EndsWith(LyricsSuffix + LyricsDraftTimingsExtension, StringComparison.OrdinalIgnoreCase))
+            return false;
 
         return normalized.EndsWith(LyricsSuffix + LyricsTimingsExtension, StringComparison.OrdinalIgnoreCase)
             || normalized.EndsWith(LyricsSuffix + LyricsLrcExtension, StringComparison.OrdinalIgnoreCase);

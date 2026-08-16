@@ -223,6 +223,15 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
         lyrics.LastJobId = job.JobId;
         lyrics.UpdatedAt = now;
 
+        // THE DRAFT IS DISCARDED, because it describes timings that no longer exist. A draft is a set
+        // of edits to a specific alignment - line four starts here, this word is 50 ms late - and a
+        // re-alignment has just replaced every one of those timings with new ones. Keeping it would
+        // silently reapply corrections to a document they were never made against, which is worse
+        // than losing them: the creator would open the editor to a song that had somehow got worse.
+        var staleDraft = lyrics.DraftTimingsBlobPath;
+        lyrics.DraftTimingsBlobPath = null;
+        lyrics.DraftUpdatedAt = null;
+
         // The paths never change, so nothing downstream would notice a re-alignment without this.
         lyrics.Version++;
 
@@ -254,6 +263,23 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
             classification.Message);
 
         await DeleteStagedOutputAsync(result.JobId, cancellationToken);
+
+        // After the save, and best-effort. A draft blob left behind is unreachable - nothing points
+        // at it any more - so failing the callback over it would trade a working alignment for a
+        // tidy container.
+        if (!string.IsNullOrWhiteSpace(staleDraft))
+        {
+            try
+            {
+                await _containerFactory.GetMediaContainer()
+                    .GetBlobClient(staleDraft)
+                    .DeleteIfExistsAsync(cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete the superseded draft timings {Path}.", staleDraft);
+            }
+        }
 
         _logger.LogInformation(
             "Stored lyrics timings for song {SongId} as {Status} (confidence {Confidence:0.00}).",

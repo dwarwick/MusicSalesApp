@@ -29,6 +29,55 @@ public sealed record LyricsSubmissionResult(LyricsSubmissionOutcome Outcome, Gui
     public bool Accepted => Outcome == LyricsSubmissionOutcome.Accepted;
 }
 
+/// <summary>Why an edit to a song's timings was or was not accepted.</summary>
+public enum LyricsEditOutcome
+{
+    Success,
+
+    /// <summary>No such song, or it has no lyrics record.</summary>
+    NotFound,
+
+    /// <summary>The caller does not own this song.</summary>
+    NotAllowed,
+
+    /// <summary>The song has no timings to edit or publish yet.</summary>
+    NoTimings,
+
+    /// <summary>The timings would not be safe to show a listener. See the problems.</summary>
+    Invalid
+}
+
+/// <summary>The result of saving, discarding or publishing a set of timings.</summary>
+/// <param name="Problems">
+/// Plain-English reasons a publish was refused, straight from
+/// <see cref="LyricsTimingsValidator.Validate"/>. Empty for every other outcome.
+/// </param>
+public sealed record LyricsEditResult(
+    LyricsEditOutcome Outcome,
+    string Message,
+    IReadOnlyList<string> Problems)
+{
+    public bool Success => Outcome == LyricsEditOutcome.Success;
+
+    public static LyricsEditResult Ok(string message) => new(LyricsEditOutcome.Success, message, []);
+
+    public static LyricsEditResult Fail(LyricsEditOutcome outcome, string message) =>
+        new(outcome, message, []);
+}
+
+/// <summary>The timings a creator is about to edit, and where they came from.</summary>
+/// <param name="Document">Null unless <paramref name="Outcome"/> is success.</param>
+/// <param name="IsDraft">
+/// Whether these are the creator's unpublished working copy rather than the aligner's output. The
+/// editor says so, because "you are looking at edits you made and never published" is a materially
+/// different thing to be looking at.
+/// </param>
+public sealed record LyricsEditableTimings(
+    LyricsEditOutcome Outcome,
+    LyricsTimingsDocument? Document,
+    bool IsDraft,
+    SongLyrics? Lyrics);
+
 /// <summary>
 /// What the creator's lyrics editor talks to: stores pasted lyrics and asks for them to be timed.
 /// </summary>
@@ -96,6 +145,51 @@ public interface ISongLyricsService
     /// Stops an attempt that is still running, and stops the orchestration behind it.
     /// </summary>
     Task<bool> CancelAsync(int songMetadataId, int creatorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The timings a creator should be editing: their unpublished draft if they have one, otherwise
+    /// whatever the aligner last produced.
+    ///
+    /// <para>
+    /// <b>Read here rather than fetched by the browser, because unpublished timings are not
+    /// reachable over HTTP at all.</b> <see cref="IsPubliclyReadableAsync"/> gates on
+    /// <see cref="SongLyricsStatus.Published"/>, and since alignment no longer publishes anything,
+    /// the state a creator most needs to preview is precisely the state that 404s. A read SAS would
+    /// route around that and should not: it is an unrevocable bearer URL to content nobody has
+    /// approved, and fetching it from the page would need CORS on the storage account that is not
+    /// configured.
+    /// </para>
+    /// </summary>
+    Task<LyricsEditableTimings> GetEditableTimingsAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Store the creator's work in progress, without changing anything a listener can see.
+    /// </summary>
+    Task<LyricsEditResult> SaveDraftAsync(
+        int songMetadataId,
+        int creatorId,
+        LyricsTimingsDocument document,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Release the current timings to listeners: validate, write them over the live artifacts,
+    /// regenerate the LRC, and bump the cache-busting version.
+    /// </summary>
+    Task<LyricsEditResult> PublishAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Throw the draft away and go back to the last aligned or published timings.
+    /// </summary>
+    Task<LyricsEditResult> DiscardDraftAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
@@ -417,4 +511,284 @@ public sealed class SongLyricsService : ISongLyricsService
 
     internal static int CountLines(string normalizedText)
         => string.IsNullOrEmpty(normalizedText) ? 0 : normalizedText.Count(c => c == '\n') + 1;
+
+    private const string TimingsContentType = "application/json; charset=utf-8";
+    private const string LrcContentType = "text/plain; charset=utf-8";
+
+    /// <inheritdoc />
+    public async Task<LyricsEditableTimings> GetEditableTimingsAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, song, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return new LyricsEditableTimings(failure.Value, null, false, null);
+        }
+
+        // The draft wins when there is one: it is what the creator was last working on, and showing
+        // them the aligner's output instead would silently discard their work the moment they saved.
+        var isDraft = !string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath);
+        var path = isDraft ? lyrics.DraftTimingsBlobPath : lyrics.TimingsBlobPath;
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return new LyricsEditableTimings(LyricsEditOutcome.NoTimings, null, false, lyrics);
+        }
+
+        var document = await ReadDocumentAsync(path);
+
+        if (document is null && isDraft)
+        {
+            // The draft blob is gone or unreadable. Falling back to the published timings beats
+            // showing the creator an error page for a file they never asked about - they lose the
+            // unsaved work either way, and this way they can carry on.
+            _logger.LogWarning(
+                "Draft timings for song {SongId} could not be read; falling back to the live ones.",
+                songMetadataId);
+
+            document = await ReadDocumentAsync(lyrics.TimingsBlobPath);
+            isDraft = false;
+        }
+
+        return document is null
+            ? new LyricsEditableTimings(LyricsEditOutcome.NoTimings, null, false, lyrics)
+            : new LyricsEditableTimings(LyricsEditOutcome.Success, document, isDraft, lyrics);
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> SaveDraftAsync(
+        int songMetadataId,
+        int creatorId,
+        LyricsTimingsDocument document,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, song, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return LyricsEditResult.Fail(failure.Value, "These lyrics could not be saved.");
+        }
+
+        // Repaired, not validated. A creator mid-way through a record pass has a document that
+        // briefly contradicts itself, and refusing to save that would lose their work for being
+        // untidy. Validation belongs at Publish, where it is the last gate before listeners.
+        LyricsTimingsValidator.Normalize(document);
+
+        var draftPath = string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath)
+            ? SongMediaPaths.ResolveLyricsDraftTimingsTarget(song!.Id, song.MediaGuid, song.Mp3BlobPath)
+            : lyrics.DraftTimingsBlobPath;
+
+        await UploadDocumentAsync(draftPath, document);
+
+        lyrics.DraftTimingsBlobPath = draftPath;
+        lyrics.DraftUpdatedAt = DateTime.UtcNow;
+        lyrics.UpdatedAt = lyrics.DraftUpdatedAt.Value;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        return LyricsEditResult.Ok("Saved. Listeners still see the last version you published.");
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> PublishAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, song, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return LyricsEditResult.Fail(failure.Value, "These lyrics could not be published.");
+        }
+
+        var source = string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath)
+            ? lyrics.TimingsBlobPath
+            : lyrics.DraftTimingsBlobPath;
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return LyricsEditResult.Fail(LyricsEditOutcome.NoTimings, "There are no timings to publish yet.");
+        }
+
+        var document = await ReadDocumentAsync(source);
+        if (document is null)
+        {
+            return LyricsEditResult.Fail(LyricsEditOutcome.NoTimings, "These timings could not be read.");
+        }
+
+        LyricsTimingsValidator.Normalize(document);
+
+        var problems = LyricsTimingsValidator.Validate(document);
+        if (problems.Count > 0)
+        {
+            return new LyricsEditResult(
+                LyricsEditOutcome.Invalid,
+                "These timings aren't ready to publish yet.",
+                problems);
+        }
+
+        var timingsPath = string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath)
+            ? SongMediaPaths.ResolveLyricsTimingsTarget(song!.Id, song.MediaGuid, song.Mp3BlobPath)
+            : lyrics.TimingsBlobPath;
+
+        var lrcPath = string.IsNullOrWhiteSpace(lyrics.LrcBlobPath)
+            ? SongMediaPaths.ResolveLyricsLrcTarget(song!.Id, song.MediaGuid, song.Mp3BlobPath)
+            : lyrics.LrcBlobPath;
+
+        await UploadDocumentAsync(timingsPath, document);
+
+        // The LRC is regenerated rather than left alone, because the Download .lrc button would
+        // otherwise keep handing out the timings from before this edit - two files describing the
+        // same song differently, with nothing anywhere to say which is current.
+        var lrc = LyricsLrcWriter.Write(
+            document,
+            SongTitleHelper.GetEffectiveTitle(song!.SongTitle, song.Mp3BlobPath, song.BlobPath),
+            song.GetEffectiveArtistNameFull());
+
+        await using (var lrcStream = new MemoryStream(Encoding.UTF8.GetBytes(lrc)))
+        {
+            await _storageService.UploadAsync(lrcPath, lrcStream, LrcContentType);
+        }
+
+        var now = DateTime.UtcNow;
+
+        lyrics.TimingsBlobPath = timingsPath;
+        lyrics.LrcBlobPath = lrcPath;
+        lyrics.Status = SongLyricsStatus.Published;
+        lyrics.PublishedAt = now;
+        lyrics.UpdatedAt = now;
+
+        // The draft is kept and stamped, not deleted, so re-opening the editor resumes from what was
+        // published rather than from whatever the aligner produced. Stamping it equal to PublishedAt
+        // is what clears the "unpublished changes" indicator.
+        lyrics.DraftUpdatedAt = now;
+
+        // The cache-buster. The blob path never changes between versions and the response carries
+        // an immutable, year-long cache header, so without this a re-publish is invisible to every
+        // browser that has already seen the song - permanently.
+        lyrics.Version++;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Creator {CreatorId} published lyric timings for song {SongId} at version {Version}.",
+            creatorId,
+            songMetadataId,
+            lyrics.Version);
+
+        return LyricsEditResult.Ok("Published. Listeners will see these timings from now on.");
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> DiscardDraftAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, _, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return LyricsEditResult.Fail(failure.Value, "That draft could not be discarded.");
+        }
+
+        if (string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath))
+        {
+            return LyricsEditResult.Ok("There were no unpublished changes.");
+        }
+
+        var path = lyrics.DraftTimingsBlobPath;
+
+        lyrics.DraftTimingsBlobPath = null;
+        lyrics.DraftUpdatedAt = null;
+        lyrics.UpdatedAt = DateTime.UtcNow;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        // The row is cleared first and the blob deleted after. The other order leaves a row pointing
+        // at a blob that is gone if the delete succeeds and the save then fails, which reads to the
+        // editor as a corrupt draft rather than no draft.
+        try
+        {
+            await _storageService.DeleteAsync(path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not delete the discarded draft blob {Path}.", path);
+        }
+
+        return LyricsEditResult.Ok("Your unpublished changes were discarded.");
+    }
+
+    /// <summary>
+    /// Load a song's lyrics row, refusing anyone who does not own the song.
+    ///
+    /// <para>
+    /// The ownership check is the same one <c>SubmitAsync</c> makes and for the same reason: the
+    /// route is gated on "is a creator", which is not the same claim as "owns this song".
+    /// </para>
+    /// </summary>
+    private static async Task<(SongLyrics? Lyrics, SongMetadata? Song, LyricsEditOutcome? Failure)> LoadOwnedAsync(
+        AppDbContext context,
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken)
+    {
+        var song = await context.SongMetadata
+            .FirstOrDefaultAsync(row => row.Id == songMetadataId, cancellationToken);
+
+        if (song is null)
+        {
+            return (null, null, LyricsEditOutcome.NotFound);
+        }
+
+        if (song.CreatorId != creatorId)
+        {
+            return (null, null, LyricsEditOutcome.NotAllowed);
+        }
+
+        var lyrics = await context.SongLyrics
+            .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
+
+        return lyrics is null
+            ? (null, song, LyricsEditOutcome.NotFound)
+            : (lyrics, song, null);
+    }
+
+    private async Task<LyricsTimingsDocument?> ReadDocumentAsync(string? blobPath)
+    {
+        if (string.IsNullOrWhiteSpace(blobPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            await using var stream = await _storageService.OpenReadAsync(blobPath);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            return LyricsTimingsSerializer.Deserialize(await reader.ReadToEndAsync());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read lyric timings from {Path}.", blobPath);
+            return null;
+        }
+    }
+
+    private async Task UploadDocumentAsync(string blobPath, LyricsTimingsDocument document)
+    {
+        var bytes = Encoding.UTF8.GetBytes(LyricsTimingsSerializer.Serialize(document));
+        await using var stream = new MemoryStream(bytes);
+        await _storageService.UploadAsync(blobPath, stream, TimingsContentType);
+    }
 }
