@@ -87,6 +87,26 @@ Write-Host "Function app  : $FunctionAppName"
 Write-Host "Resource group: $ResourceGroup"
 Write-Host "Task hub      : $taskHubName"
 
+# Does the OTHER environment's app still exist?
+#
+# Asked once, because more than one thing below is shared with it and the list is not obvious.
+# Test and Production resolve StagingStorageConnectionString to the same storage account, and
+# Provision-LyricsFunctionApp.ps1 names several resources with bare literals - no environment
+# suffix - so both apps end up pointed at the same 'lyrics-deployment' container and the same
+# 'lyrics-models'/'lyrics-tools' shares. Only the task hub is suffixed per environment, and only
+# because sharing THAT one corrupts orchestration state loudly rather than quietly.
+$otherEnvironment = if ($Environment -eq "Production") { "Test" } else { "Production" }
+$otherAppName = if ($otherEnvironment -eq "Production") { "streamtunes-lyrics-prod" } else { "streamtunes-lyrics-test" }
+
+$otherApp = Invoke-Az @(
+    "functionapp", "list",
+    "--query", "[?name=='$otherAppName'].name | [0]",
+    "--output", "tsv") -AllowFailure
+
+$otherAppExists = -not [string]::IsNullOrWhiteSpace(($otherApp | Out-String).Trim())
+
+Write-Host ("Sibling app   : {0} ({1})" -f $otherAppName, $(if ($otherAppExists) { "exists - shared resources will be kept" } else { "absent" }))
+
 # Read BEFORE the app is deleted - afterwards there is nothing left to ask.
 $contentShare = Invoke-Az @(
     "functionapp", "config", "appsettings", "list",
@@ -126,14 +146,34 @@ if (-not [string]::IsNullOrWhiteSpace($contentShare)) {
 # others. azure-webjobs-secrets holds the function keys, which means the blast radius is PRODUCTION
 # losing the keys its callbacks authenticate with.
 #
-# Only lyrics-deployment is genuinely ours: the provisioning script creates it for this app alone.
-foreach ($container in @("lyrics-deployment")) {
-    if ($PSCmdlet.ShouldProcess($container, "Delete container")) {
-        Invoke-Az @(
-            "storage", "container", "delete",
-            "--name", $container,
-            "--connection-string", $stagingConnection,
-            "--output", "none") -AllowFailure | Out-Null
+# AND 'lyrics-deployment' IS NOT OURS EITHER, which this comment used to claim it was.
+#
+# Provision-LyricsFunctionApp.ps1 sets $deploymentContainer = "lyrics-deployment" as a bare literal
+# and passes it as --deployment-storage-container-name for whichever environment is being
+# provisioned, against a storage account both environments share. So both Function apps keep their
+# Flex one-deploy package in this one container.
+#
+# It is the worst of the shared resources to delete, not the least. Flex Consumption scales to zero
+# and fetches that package from here on every cold start, so the surviving environment does not
+# degrade at the next deploy - it stops serving as soon as it has no warm instance, and recovery is
+# a full republish rather than something that re-downloads itself. The container name is also
+# briefly unusable after deletion, so re-provisioning immediately can fail too.
+#
+# Unlike the shares below, this ran unconditionally: no switch was needed to trigger it.
+if ($otherAppExists) {
+    Write-Warning ("SKIPPED the 'lyrics-deployment' container. '$otherAppName' ($otherEnvironment) " +
+        "stores its Flex deployment package in it too, and deleting it would stop that app serving " +
+        "on its next cold start.")
+}
+else {
+    foreach ($container in @("lyrics-deployment")) {
+        if ($PSCmdlet.ShouldProcess($container, "Delete container")) {
+            Invoke-Az @(
+                "storage", "container", "delete",
+                "--name", $container,
+                "--connection-string", $stagingConnection,
+                "--output", "none") -AllowFailure | Out-Null
+        }
     }
 }
 
@@ -175,15 +215,36 @@ else {
 }
 
 if ($IncludeSharedFiles) {
-    foreach ($share in @("lyrics-models", "lyrics-tools")) {
-        if ($PSCmdlet.ShouldProcess($share, "Delete Azure Files share")) {
-            Invoke-Az @(
-                "storage", "share", "delete",
-                "--name", $share, "--connection-string", $stagingConnection, "--output", "none") -AllowFailure | Out-Null
-        }
+    # THE SHARES ARE NOT THIS ENVIRONMENT'S. Provision-LyricsFunctionApp.ps1 names them with literals
+    # - "lyrics-models" and "lyrics-tools", no environment suffix - and Test and Production resolve
+    # StagingStorageConnectionString to the same account, so both apps mount the same two shares.
+    #
+    # Sharing them is deliberate and worth keeping: the weights are immutable and content-addressed by
+    # torch's and Demucs's own cache layouts, so Production inherits whatever Test downloads and no
+    # copy step exists to be forgotten at go-live. The task hub is suffixed precisely because it is
+    # the opposite case - shared orchestration state means two environments stealing each other's runs.
+    #
+    # But it makes THIS switch reach outside the environment being torn down. Deleting the shares
+    # while the other app is running pulls /mnt/models and /mnt/tools out from under it mid-alignment:
+    # ffmpeg vanishes and FFMPEG_BINARY points at nothing. Same shape as the azure-webjobs-secrets
+    # hazard above, one layer out - and recoverable rather than catastrophic, since Stage-LyricsMounts
+    # re-uploads ffmpeg and the weights re-download on next use.
+    if ($otherAppExists) {
+        Write-Warning ("SKIPPED the shared files. '$otherAppName' ($otherEnvironment) still exists and mounts " +
+            "the same 'lyrics-models' and 'lyrics-tools' shares, so deleting them here would break it. " +
+            "Delete them by hand if that is genuinely what you want.")
     }
+    else {
+        foreach ($share in @("lyrics-models", "lyrics-tools")) {
+            if ($PSCmdlet.ShouldProcess($share, "Delete Azure Files share")) {
+                Invoke-Az @(
+                    "storage", "share", "delete",
+                    "--name", $share, "--connection-string", $stagingConnection, "--output", "none") -AllowFailure | Out-Null
+            }
+        }
 
-    Write-Warning "Model weights and the ffmpeg build are gone; re-provisioning needs them uploaded again."
+        Write-Warning "Model weights and the ffmpeg build are gone; re-provisioning needs them uploaded again."
+    }
 }
 
 # Never touched, in either script: the storage accounts themselves, the audio pipeline's queues, the
