@@ -34,10 +34,10 @@ This app is also the **backend API for the sibling MAUI mobile app** (`../MusicS
 | Project | Purpose |
 |---|---|
 | `MusicSalesApp/` | The Blazor Server UI, Razor Pages, all API controllers, EF Core DbContext, services, SignalR hubs, Hangfire jobs. Deployed to smarterasp.net. |
-| `MusicSalesApp.Functions/` | Azure Functions (isolated, Windows Consumption) — **all FFmpeg work, plus the image work that used to run on the Blazor circuit**. Three queue triggers: transcode a creator upload (and build its cover-art renditions), decode-probe a stored blob for the maintenance jobs, and pair a batch of cover art with the audio dropped beside it. Owns `ffmpeg.exe`. See its README. |
+| `MusicSalesApp.Functions/` | Azure Functions (isolated, Windows Consumption) — **all FFmpeg work, plus the image work that used to run on the Blazor circuit**. Four queue triggers: transcode a creator upload (and build its cover-art renditions), decode-probe a stored blob for the maintenance jobs, pair a batch of cover art with the audio dropped beside it, and report an upload whose message reached the poison queue. Owns `ffmpeg.exe`. See its README. |
 | `MusicSalesApp.Imaging/` | The SkiaSharp rendition rules (`ImageVariantEncoder`), shared by the web app and the Function so a cover art's ladder has the same shape whichever built it. Deliberately **not** in `Common`, which the MAUI repo references and which must stay free of SkiaSharp. |
 | `MusicSalesApp.Common/` | Shared constants/helpers (`Helpers/*.cs` — `Roles`, `Permissions`, `SubscriptionStatuses`, `BillingSources`, `AuthStorageKeys`, etc.). Also referenced directly by the sibling MAUI repo. |
-| `MusicSalesApp.Tests/` | xUnit unit tests (Controllers, Services, Helpers, Middleware, Authorization). |
+| `MusicSalesApp.Tests/` | NUnit + Moq unit tests (Controllers, Services, Helpers, Middleware, Authorization). Uses EF Core InMemory and a hand-rolled `TestFactory : IDbContextFactory<AppDbContext>` re-declared per file. |
 | `MusicSalesApp.ComponentTests/` | bUnit Blazor component tests. |
 
 There's no separate Data/Identity/Infrastructure project — everything lives inside `MusicSalesApp/` by folder: `Data/AppDbContext.cs` (single EF Core context), `Models/`, `Services/` (~90 services, interface + impl pairs), `Controllers/` (18 API controllers), `Hubs/` (5 SignalR hubs), `Components/` (`Base/BlazorBase.cs` is the base class every page/component code-behind inherits from — see it for the full set of services injectable without `@inject`).

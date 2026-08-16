@@ -158,7 +158,17 @@ public class TempFileCleanupServiceTests
     // It is a scheduled job, so a failure must not surface as one.
     // -----------------------------------------------------------------
 
+    // Windows-only, and not an oversight. The behaviour under test is a *platform* guarantee: the
+    // sweep leaves a locked file alone because FileInfo.Delete throws a sharing violation, which is
+    // Windows semantics. POSIX unlink succeeds regardless of open handles, so on macOS or Linux the
+    // file is deleted and this assertion cannot hold.
+    //
+    // Gated rather than rewritten, because the site runs on SmarterASP - an IIS-based Windows host -
+    // so Windows is the only behaviour production ever sees, and there is no Unix path worth
+    // asserting instead. Left ungated it fails permanently on a Mac, which is worse than useless:
+    // a suite that is always one-red is a suite nobody reads carefully enough to notice two.
     [Test]
+    [Platform("Win")]
     public void AFileSomethingStillHasOpen_IsLeftAloneWithoutThrowing()
     {
         // A lock is itself evidence the file is not abandoned, whatever its timestamp says.
