@@ -70,6 +70,22 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected SongAdminViewModel _lyricsSong;
 
     protected bool _showLyricsDialog;
+
+    /// <summary>
+    /// Whether lyric timing is offered at all in this environment.
+    ///
+    /// <para>
+    /// Read once on load rather than per grid row: it is a configuration check, so the answer cannot
+    /// change between rows, and the grid renders it for every song.
+    /// </para>
+    ///
+    /// <para>
+    /// Used to hide the action entirely rather than to disable it. An environment with no lyrics
+    /// Function app configured is not a creator having done something wrong - offering a button that
+    /// can only explain why it does nothing is worse than not offering one.
+    /// </para>
+    /// </summary>
+    protected bool _lyricsAvailable;
     private bool _hasLoadedData = false;
     private string _currentUserEmail = string.Empty;
 
@@ -78,6 +94,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         if (firstRender && !_hasLoadedData)
         {
             _hasLoadedData = true;
+            _lyricsAvailable = LyricsService.IsAvailable;
             try
             {
                 // Load max image upload size from settings
