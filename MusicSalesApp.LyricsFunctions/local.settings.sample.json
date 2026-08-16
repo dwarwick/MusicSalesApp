@@ -45,9 +45,9 @@
     "//DEMUCS_SEGMENT": "Seconds per chunk. Peak memory scales with this, and an out-of-memory kill is a hard failure - the orchestration deliberately does not retry separation. Raise only with a measurement to back it up.",
     "DEMUCS_SEGMENT": "8",
 
-    "//threads": "Two, matching the cores a 4096 MB Flex instance gets. Left unset, torch spawns as many threads as it thinks it sees and spends the difference on contention.",
-    "OMP_NUM_THREADS": "2",
-    "MKL_NUM_THREADS": "2",
+    "//threads": "Four - measured from a deployed 4096 MB Flex instance, which reports 4 CPUs. Coupled to that instance size; a smaller one gets fewer cores and over-subscribing costs more in contention than it buys.",
+    "OMP_NUM_THREADS": "4",
+    "MKL_NUM_THREADS": "4",
 
     "PYTHONUNBUFFERED": "1"
   }

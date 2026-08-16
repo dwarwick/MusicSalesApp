@@ -137,10 +137,17 @@ function Get-LyricsProcessingSettings {
         # instance size fails the same way after spending the same minutes.
         "DEMUCS_SEGMENT"                       = "8"
 
-        # Two, matching the cores a 4096 MB Flex instance gets. Left unset, torch spawns as many
-        # threads as it thinks it sees and spends the difference on contention.
-        "OMP_NUM_THREADS"                      = "2"
-        "MKL_NUM_THREADS"                      = "2"
+        # Four, which is what a 4096 MB Flex instance actually reports - measured from the deployed
+        # app, not assumed. This was originally 2 on the guess that the top Flex tier allocated two
+        # cores; it does not, and Demucs is CPU-bound, so half the cores being paid for were sitting
+        # idle through the longest stage of every run.
+        #
+        # Coupled to -InstanceMemoryMb 4096 in Provision-LyricsFunctionApp.ps1. A smaller instance
+        # gets fewer cores, and over-subscribing them costs more in contention than it buys.
+        # Left unset entirely, torch sizes its own pool from what it thinks it sees, which in a
+        # container is usually the host's core count rather than the share this app is entitled to.
+        "OMP_NUM_THREADS"                      = "4"
+        "MKL_NUM_THREADS"                      = "4"
 
         "PYTHONUNBUFFERED"                     = "1"
     }

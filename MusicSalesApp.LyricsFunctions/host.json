@@ -1,6 +1,12 @@
 {
   "version": "2.0",
 
+  "//extensionBundle": "REQUIRED, and its absence is silent. A Python app has no project file to reference NuGet packages from, so every non-built-in binding comes from this bundle - including durableTask. Without it the host still INDEXES the functions (they show up in `az functionapp function list`) but cannot bind orchestrationTrigger, activityTrigger or durableClient, so the HTTP starter never reaches the dispatcher and every request to it 404s. Not 401, not 500 - a 404 that looks exactly like a wrong route. The C# Function app needs no equivalent because dotnet-isolated references its extensions directly.",
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.*, 5.0.0)"
+  },
+
   "//functionTimeout": "Set EXPLICITLY, not inherited. Flex Consumption enforces no ceiling of its own, so unlike the C# app's 10 minutes - which is the Windows Consumption limit and cannot be raised - this is a number somebody chose and can therefore be reviewed. It bounds one activity, and only align_lyrics can approach it: Demucs on two cores runs for single-digit minutes on a normal track and tens of minutes on a long one from a cold start. MusicSalesApp.Tests/Services/LyricsTimeoutChainTests.cs pins this against the web app's reconciler timeout - changing it means rechecking that test.",
   "functionTimeout": "01:00:00",
 
