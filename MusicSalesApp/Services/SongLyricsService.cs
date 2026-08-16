@@ -40,6 +40,21 @@ public interface ISongLyricsService
     /// <summary>The current lyrics state for a song, or null if it has never had any.</summary>
     Task<SongLyrics?> GetForSongAsync(int songMetadataId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The current lyrics state for many songs at once, keyed by song id, omitting songs that have
+    /// never had any.
+    ///
+    /// <para>
+    /// Exists so a grid can show a column without one query per row, the same reason
+    /// <c>SongLikeService.GetBulkLikeCountsAsync</c> does. Comparing confidence across songs is the
+    /// whole point of that column - the threshold it is read against is a judgement call that needs
+    /// several songs in view at once - so the per-song call would be issued N times or not at all.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<int, SongLyrics>> GetForSongsAsync(
+        IEnumerable<int> songMetadataIds,
+        CancellationToken cancellationToken = default);
+
     /// <summary>The attempt currently in flight for a song, if there is one.</summary>
     Task<LyricsAlignmentJob?> GetActiveJobAsync(int songMetadataId, CancellationToken cancellationToken = default);
 
@@ -120,6 +135,24 @@ public sealed class SongLyricsService : ISongLyricsService
         return await context.SongLyrics
             .AsNoTracking()
             .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<int, SongLyrics>> GetForSongsAsync(
+        IEnumerable<int> songMetadataIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = songMetadataIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<int, SongLyrics>();
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.SongLyrics
+            .AsNoTracking()
+            .Where(row => ids.Contains(row.SongMetadataId))
+            .ToDictionaryAsync(row => row.SongMetadataId, cancellationToken);
     }
 
     /// <inheritdoc />

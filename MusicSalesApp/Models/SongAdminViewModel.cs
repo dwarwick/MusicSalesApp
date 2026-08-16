@@ -92,4 +92,21 @@ public class SongAdminViewModel
     /// Whether this entry is an album (has an album name).
     /// </summary>
     public bool IsAlbum { get; set; }
+
+    /// <summary>
+    /// The song's lyric timing state, or null if lyrics have never been submitted for it.
+    /// </summary>
+    public SongLyricsStatus? LyricsStatus { get; set; }
+
+    /// <summary>
+    /// The composite confidence behind the current timings, 0-1, or null while pending or absent.
+    ///
+    /// <para>
+    /// Surfaced in the grid rather than only in the lyrics dialog because the number's only real use
+    /// is comparative: it is read against an admin-set threshold, and deciding where that threshold
+    /// belongs means looking at several songs together. One song at a time, through a dialog, is not
+    /// enough to judge it.
+    /// </para>
+    /// </summary>
+    public double? LyricsConfidence { get; set; }
 }

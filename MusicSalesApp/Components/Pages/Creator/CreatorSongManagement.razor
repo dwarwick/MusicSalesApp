@@ -228,6 +228,38 @@
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.NumberOfStreams)" HeaderText="Streams" Width="100" Format="N0"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.LikeCount)" HeaderText="Likes" Width="80" Format="N0"></GridColumn>
+                @if (_lyricsAvailable)
+                {
+                    @* Sorted on the confidence, not the status, because the reason to sort this column
+                       is to find the weakest alignments - which is also how the admin threshold gets
+                       chosen. Songs with no lyrics sort as null and fall to one end together. *@
+                    <GridColumn Field="@nameof(SongAdminViewModel.LyricsConfidence)" HeaderText="Lyrics" Width="130" AllowSorting="true">
+                        <Template>
+                            @{
+                                var song = (context as SongAdminViewModel);
+                                switch (song.LyricsStatus)
+                                {
+                                    case SongLyricsStatus.Published:
+                                        <span class="badge bg-success">@FormatLyricsConfidence(song.LyricsConfidence)</span>
+                                        break;
+                                    case SongLyricsStatus.NeedsReview:
+                                        <span class="badge bg-warning text-dark">@FormatLyricsConfidence(song.LyricsConfidence)</span>
+                                        <div><small class="text-muted">Needs review</small></div>
+                                        break;
+                                    case SongLyricsStatus.Failed:
+                                        <span class="badge bg-danger">Failed</span>
+                                        break;
+                                    case SongLyricsStatus.Pending:
+                                        <span class="badge bg-secondary">Timing&hellip;</span>
+                                        break;
+                                    default:
+                                        <span class="text-muted">&mdash;</span>
+                                        break;
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                }
                 <GridColumn Field="@nameof(SongAdminViewModel.IsEnabled)" HeaderText="Status" Width="120">
                     <Template>
                         @{

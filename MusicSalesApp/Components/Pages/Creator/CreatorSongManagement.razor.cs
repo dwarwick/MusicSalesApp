@@ -6,6 +6,7 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Grids;
+using System.Globalization;
 
 namespace MusicSalesApp.Components.Pages.Creator;
 
@@ -154,6 +155,20 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The confidence as a percentage with one decimal place.
+    ///
+    /// <para>
+    /// One decimal, unlike the lyrics dialog's whole-percent banner, because this column exists to
+    /// choose a threshold. Rounding 69.6% and 70.4% both to "70%" hides exactly the distinction
+    /// being made when the two fall either side of the bar.
+    /// </para>
+    /// </summary>
+    protected static string FormatLyricsConfidence(double? confidence) =>
+        confidence.HasValue
+            ? confidence.Value.ToString("P1", CultureInfo.CurrentCulture)
+            : "—";
+
     protected async Task LoadSongsAsync()
     {
         if (!_creatorId.HasValue)
@@ -201,6 +216,28 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             .ToList();
         var likeCounts = await SongLikeService.GetBulkLikeCountsAsync(songIds);
 
+        // Only asked for when lyric timing is configured at all. Where it is not, the Lyrics button
+        // is hidden and the column renders empty, so the query would be answering a question nobody
+        // can see the answer to.
+        //
+        // Failure here is swallowed deliberately. Lyric timing is supplementary to this page - the
+        // creator came to manage songs - so a lyrics lookup that throws must cost the column, not the
+        // song list. Without this the entire grid renders empty, including Edit and Delete, and the
+        // page reports no songs at all rather than songs without a confidence figure.
+        IReadOnlyDictionary<int, SongLyrics> lyrics = new Dictionary<int, SongLyrics>();
+
+        if (_lyricsAvailable)
+        {
+            try
+            {
+                lyrics = await LyricsService.GetForSongsAsync(songIds);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Could not load lyric timing status for the creator song grid.");
+            }
+        }
+
         foreach (var song in _songs)
         {
             // Generate persona image SAS URLs
@@ -223,6 +260,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             if (int.TryParse(song.Id, out var songId))
             {
                 song.LikeCount = likeCounts.GetValueOrDefault(songId, 0);
+
+                if (lyrics.TryGetValue(songId, out var songLyrics))
+                {
+                    song.LyricsStatus = songLyrics.Status;
+                    song.LyricsConfidence = songLyrics.Confidence;
+                }
             }
         }
     }

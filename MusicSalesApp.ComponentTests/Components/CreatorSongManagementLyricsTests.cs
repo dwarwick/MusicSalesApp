@@ -62,6 +62,8 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
             .ReturnsAsync((SongLyrics)null);
         MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((LyricsAlignmentJob)null);
+        MockLyricsService.Setup(x => x.GetForSongsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<int, SongLyrics>());
         MockUploadProgressHubClient.Setup(x => x.StartAsync()).Returns(Task.CompletedTask);
     }
 
@@ -131,5 +133,82 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
 
         MockUploadProgressHubClient.Verify(x => x.StartAsync(), Times.Never);
+    }
+
+    /// <summary>Stubs the bulk lookup with a single song's lyrics state.</summary>
+    private void GivenLyricsFor(SongLyricsStatus status, double? confidence)
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<int, SongLyrics>
+            {
+                [1] = new() { SongMetadataId = 1, Status = status, Confidence = confidence }
+            });
+    }
+
+    [Test]
+    public void TheConfidenceIsShownToOneDecimalPlace()
+    {
+        // To one decimal, unlike the dialog's whole-percent banner, because this column exists to
+        // choose the threshold it is read against - and 69.6% and 70.4% both rounding to "70%" hides
+        // exactly the distinction being made when they fall either side of the bar.
+        GivenLyricsFor(SongLyricsStatus.Published, 0.5208d);
+
+        var cut = TestContext.Render<CreatorSongManagement>();
+        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("52.1"));
+    }
+
+    [Test]
+    public void ASongHeldBackForReviewSaysSoAlongsideItsScore()
+    {
+        // The number alone does not say whether listeners can see the lyrics. Both halves matter:
+        // the score is what the threshold gets judged against, the status is the consequence.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.4123d);
+
+        var cut = TestContext.Render<CreatorSongManagement>();
+        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("41.2"));
+            Assert.That(cut.Markup, Does.Contain("Needs review"));
+        });
+    }
+
+    [Test]
+    public void ASongWithNoConfidenceYetStillRenders()
+    {
+        // Confidence is null for every song until an alignment completes, and null for a Failed one
+        // permanently. A column that formatted it unguarded would throw during the grid's render,
+        // which takes the whole song list with it - Edit and Delete included.
+        GivenLyricsFor(SongLyricsStatus.Pending, null);
+
+        var cut = TestContext.Render<CreatorSongManagement>();
+        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+
+        Assert.That(ButtonLabels(cut), Does.Contain("Edit"));
+    }
+
+    [Test]
+    public void AFailingLyricsLookupCostsTheColumnAndNotTheSongList()
+    {
+        // Lyric timing is supplementary to this page - the creator came to manage songs. When the
+        // lookup threw, LoadSongsAsync died with it and the grid rendered empty: no songs, no Edit,
+        // no Delete, and a page reporting the creator has nothing. Found by an existing test that
+        // stubbed every other lyrics call but not this one.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("the database is unreachable"));
+
+        var cut = TestContext.Render<CreatorSongManagement>();
+        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Night Drive"), "The song list must survive.");
+            Assert.That(ButtonLabels(cut), Does.Contain("Edit"));
+        });
     }
 }

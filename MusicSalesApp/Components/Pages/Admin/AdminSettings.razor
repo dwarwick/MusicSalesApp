@@ -121,6 +121,24 @@ else
                         Version number displayed in the navigation menu footer.
                     </small>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Lyric Timing Confidence (%) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_lyricsConfidenceThresholdPercent"
+                                     Format="N0"
+                                     Min="0"
+                                     Max="100"
+                                     Decimals="0"
+                                     Step="5"
+                                     Placeholder="Enter a percentage"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Below this score, timed lyrics are held as Needs Review and not shown to
+                        listeners (default 70). Sung vocals score lower than speech, so this may want
+                        lowering once a few songs have been timed &mdash; the creator's Lyrics dialog
+                        shows each song's score. Applies to the next song timed; it does not re-grade
+                        songs already timed.
+                    </small>
+                </div>
             </div>
 
             @* This is the rollback control for browser-direct uploads, so it lives where an admin
