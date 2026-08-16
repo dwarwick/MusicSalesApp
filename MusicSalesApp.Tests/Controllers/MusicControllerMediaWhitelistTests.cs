@@ -290,14 +290,29 @@ public class MusicControllerMediaWhitelistTests
     [Test]
     public async Task WithheldTimingsAre404()
     {
-        // The single most important assertion in this file. A low-confidence alignment sits at
-        // exactly the path a published one would, so nothing about the request distinguishes them -
-        // only the row does. Serving these would hand listeners the timings the pipeline judged not
-        // good enough to show, which is the entire purpose of having judged them.
+        // The single most important assertion in this file, and it matters more now than it did.
+        // Unpublished timings sit at exactly the path published ones would, so nothing about the
+        // request distinguishes them - only the row does. And since alignment no longer publishes
+        // anything, EVERY freshly aligned song is in this state until its creator has listened to it
+        // and pressed Publish. This route is what keeps that promise.
         _lyrics.Setup(s => s.IsPubliclyReadableAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         var result = await _controller.GetStreamUrl(LyricsTimings);
+
+        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+    }
+
+    [Test]
+    public async Task WithheldTimingsAre404OnTheStreamRouteAsWell()
+    {
+        // Both public routes consult the same gate, and both have to be asserted: GetStreamUrl mints
+        // a SAS and Stream proxies the bytes, so either one leaking is a leak. Testing only the first
+        // would leave the second free to regress silently.
+        _lyrics.Setup(s => s.IsPubliclyReadableAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _controller.Stream(LyricsTimings);
 
         Assert.That(result, Is.InstanceOf<NotFoundResult>());
     }

@@ -289,7 +289,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     }
 
     /// <summary>
-    /// Decides what a set of timings is worth: published, held for review, or not usable at all.
+    /// Decides what a set of timings is worth: held for the creator to review, or not usable at all.
     ///
     /// <para>
     /// Deliberately server-side and deliberately pure. The Function reports measurements and this
@@ -299,11 +299,18 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     /// </para>
     ///
     /// <para>
-    /// <b>Two gates, not one.</b> The confidence threshold is a quality gate: below it the timings
-    /// are held back but kept, because they may still be worth a look and are the starting point for
-    /// any correction. The structural checks are different in kind - a set of timings that runs
-    /// backwards, or that ends after the track does, is broken rather than imprecise, and no amount
-    /// of reviewing turns it into something a player could use.
+    /// <b>It cannot return <see cref="SongLyricsStatus.Published"/>, and that is deliberate.</b>
+    /// Publishing is the creator's decision, taken in the timing editor after they have heard the
+    /// result against their own song. What this method still decides is whether the timings are
+    /// <em>usable at all</em>: the structural checks below reject alignments that are broken rather
+    /// than imprecise - timings that run backwards, or end after the track does - and no amount of
+    /// listening turns those into something a player could use.
+    /// </para>
+    ///
+    /// <para>
+    /// The confidence threshold now only chooses which message the creator reads. It is advice about
+    /// where to spend attention, not a gate, so an admin moving it re-words what creators are told
+    /// without changing what any listener can see.
     /// </para>
     /// </summary>
     internal static LyricsClassification Classify(LyricsAlignmentResult result, double threshold)
@@ -350,18 +357,28 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
                 "Most lines could not be placed in the song, so the timings could not be used.");
         }
 
+        // NOTHING IS PUBLISHED HERE, at any confidence. Machine alignment of sung vocals lands
+        // 150-300 ms out on a good day, and a listener notices that immediately, so the last word
+        // belongs to the person whose song it is. The creator opens the timing editor, listens, taps
+        // anything that drifts, and presses Publish.
+        //
+        // The threshold survives as ADVICE rather than a gate: it decides which of these two messages
+        // the creator reads, and therefore whether they expect to do any work. That is the honest use
+        // of a number that was never able to answer "are these good enough to show to listeners" -
+        // it only ever answered "did the aligner think it did well".
         var confidence = result.Confidence ?? 0d;
-        if (confidence < threshold)
-        {
-            return new LyricsClassification(
+
+        return confidence < threshold
+            ? new LyricsClassification(
                 SongLyricsStatus.NeedsReview,
                 null,
-                $"We timed these lyrics but aren't confident in the result ({confidence:P0}). "
-                + "They won't be shown to listeners yet.");
-        }
-
-        return new LyricsClassification(
-            SongLyricsStatus.Published, null, $"Lyrics timed ({confidence:P0} confidence).");
+                $"We timed these lyrics, but we're not confident about this one ({confidence:P0}). "
+                + "Have a listen and expect to do some tapping before you publish.")
+            : new LyricsClassification(
+                SongLyricsStatus.NeedsReview,
+                null,
+                $"Timed with {confidence:P0} confidence. Have a listen, and press Publish when "
+                + "you're happy - they aren't visible to listeners yet.");
     }
 
     private async Task ApplyFailureAsync(

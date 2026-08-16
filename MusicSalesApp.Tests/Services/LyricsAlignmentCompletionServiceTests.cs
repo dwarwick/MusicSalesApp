@@ -77,10 +77,14 @@ public class LyricsAlignmentCompletionServiceTests
     }
 
     [Test]
-    public async Task AConfidentResultIsPublishedAndBumpsTheVersion()
+    public async Task AConfidentResultLandsForReviewAndBumpsTheVersion()
     {
         // The blob paths never change, so the version is the only thing telling anything downstream
         // that the timings were replaced.
+        //
+        // Note the starting state: a song that was ALREADY published, re-aligned. It drops back to
+        // NeedsReview, because the new timings are not the ones the creator approved - the approval
+        // was for the file these have just overwritten.
         var jobId = await AddJobAsync();
         await AddLyricsAsync(SongLyricsStatus.Published, version: 4);
 
@@ -92,7 +96,7 @@ public class LyricsAlignmentCompletionServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(lyrics.Status, Is.EqualTo(SongLyricsStatus.Published));
+            Assert.That(lyrics.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
             Assert.That(lyrics.Version, Is.EqualTo(5));
             Assert.That(lyrics.Confidence, Is.EqualTo(0.93d).Within(0.001));
             Assert.That(lyrics.LastJobId, Is.EqualTo(jobId));

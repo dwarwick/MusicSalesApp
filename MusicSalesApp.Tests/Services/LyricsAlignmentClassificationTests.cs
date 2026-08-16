@@ -28,16 +28,55 @@ public class LyricsAlignmentClassificationTests
     private const double Threshold = 0.7d;
 
     [Test]
-    public void AConfidentWellFormedResultIsPublished()
+    public void EvenAVeryConfidentResultWaitsForTheCreator()
     {
+        // Alignment cannot publish, at any score. Machine alignment of sung vocals lands 150-300 ms
+        // out on a good day and a listener notices at once, so the last word belongs to the person
+        // whose song it is.
         var result = GoodResult(confidence: 0.91d);
 
         var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
 
         Assert.Multiple(() =>
         {
-            Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.Published));
-            Assert.That(classification.FailureCode, Is.Null);
+            Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
+            Assert.That(classification.FailureCode, Is.Null, "Waiting for review is not a failure.");
+        });
+    }
+
+    [Test]
+    public void NothingIsEverPublishedByTheAlignmentPipeline()
+    {
+        // The whole safety story of this change, asserted across the range rather than at a point:
+        // there must be no confidence at all - including a perfect 1.0 - that puts timings in front
+        // of a listener without the creator having heard them.
+        foreach (var confidence in new[] { 0d, 0.25d, 0.5d, 0.7d, 0.99d, 1.0d })
+        {
+            var classification = LyricsAlignmentCompletionService.Classify(
+                GoodResult(confidence), Threshold);
+
+            Assert.That(
+                classification.Status,
+                Is.Not.EqualTo(SongLyricsStatus.Published),
+                $"Confidence {confidence} must not publish.");
+        }
+    }
+
+    [Test]
+    public void TheThresholdChangesTheWordingRatherThanTheOutcome()
+    {
+        // What "advisory" has to mean. Both land in the same state; only the greeting differs, so an
+        // admin moving the threshold re-words what creators are told and changes nothing a listener
+        // can see.
+        var above = LyricsAlignmentCompletionService.Classify(GoodResult(0.91d), Threshold);
+        var below = LyricsAlignmentCompletionService.Classify(GoodResult(0.42d), Threshold);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(above.Status, Is.EqualTo(below.Status));
+            Assert.That(above.Message, Is.Not.EqualTo(below.Message));
+            Assert.That(below.Message, Does.Contain("tapping"));
+            Assert.That(above.Message, Does.Contain("Publish"));
         });
     }
 
@@ -59,14 +98,18 @@ public class LyricsAlignmentClassificationTests
     }
 
     [Test]
-    public void ConfidenceExactlyAtTheThresholdPublishes()
+    public void ConfidenceExactlyAtTheThresholdReadsAsTheConfidentMessage()
     {
         // The threshold is admin-tunable, so somebody will eventually set it to the exact value a
         // song scored. "At least this confident" is the intended reading.
         var classification = LyricsAlignmentCompletionService.Classify(
             GoodResult(confidence: Threshold), Threshold);
 
-        Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.Published));
+        Assert.Multiple(() =>
+        {
+            Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
+            Assert.That(classification.Message, Does.Contain("Publish"));
+        });
     }
 
     [Test]
@@ -147,7 +190,7 @@ public class LyricsAlignmentClassificationTests
 
         var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
 
-        Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.Published));
+        Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview), "Tolerated, not failed.");
     }
 
     [Test]
@@ -198,7 +241,7 @@ public class LyricsAlignmentClassificationTests
 
         var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
 
-        Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.Published));
+        Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview), "Not a failure.");
     }
 
     private static LyricsAlignmentResult GoodResult(double? confidence) => new()

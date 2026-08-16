@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace MusicSalesApp.Models;
 
@@ -11,13 +12,26 @@ public enum SongLyricsStatus
     Pending = 0,
 
     /// <summary>
-    /// Timings cleared the confidence threshold. <b>The only status a player may read from.</b>
+    /// The creator has heard these timings and released them. <b>The only status a player may read
+    /// from</b>, and the only one a creator can put a song into.
+    ///
+    /// <para>
+    /// Alignment never produces this. It is reached solely by a creator pressing Publish in the
+    /// timing editor, because machine alignment of sung vocals is 150-300 ms out on a good day and a
+    /// listener notices immediately.
+    /// </para>
     /// </summary>
     Published = 1,
 
     /// <summary>
-    /// Timings exist but did not clear the threshold, or failed a structural check that reviewing
-    /// could plausibly fix. Kept and shown to the creator, withheld from listeners.
+    /// Timings exist and are waiting for the creator to hear them. Kept, shown to the creator,
+    /// withheld from listeners.
+    ///
+    /// <para>
+    /// Every successful alignment lands here, whatever it scored. The confidence figure decides only
+    /// how the creator is greeted - "have a listen" against "expect to do some tapping" - so the
+    /// state does not carry a verdict that an admin moving the threshold would leave stale.
+    /// </para>
     /// </summary>
     NeedsReview = 2,
 
@@ -93,6 +107,41 @@ public class SongLyrics
     /// show the right failure message without scanning the job table.
     /// </summary>
     public Guid? LastJobId { get; set; }
+
+    /// <summary>
+    /// Path within the media container of the creator's work-in-progress timings, if they have any.
+    ///
+    /// <para>
+    /// <b>A separate blob from <see cref="TimingsBlobPath"/> so a song that is already live keeps
+    /// serving its published timings untouched while its creator experiments.</b> Without the split,
+    /// a creator halfway through re-tapping a chorus would be broadcasting that half-finished state
+    /// to every listener, with no way back except re-running the whole alignment.
+    /// </para>
+    ///
+    /// <para>
+    /// Deliberately a path rather than the JSON itself: the document is tens of kilobytes, and
+    /// <c>GetForSongsAsync</c> materialises whole entities to render the creator's song grid.
+    /// </para>
+    /// </summary>
+    [MaxLength(500)]
+    public string DraftTimingsBlobPath { get; set; }
+
+    /// <summary>When the creator last saved a draft. Null if they have never edited these timings.</summary>
+    public DateTime? DraftUpdatedAt { get; set; }
+
+    /// <summary>When the creator last released timings to listeners. Null if they never have.</summary>
+    /// <remarks>
+    /// Compared against <see cref="DraftUpdatedAt"/> to answer "does this song have unpublished
+    /// changes?", which is why neither is a boolean: a flag would have to be cleared correctly on
+    /// every publish, discard and re-alignment, whereas a pair of timestamps cannot fall out of step.
+    /// </remarks>
+    public DateTime? PublishedAt { get; set; }
+
+    /// <summary>Whether the creator has edits they have not released yet.</summary>
+    /// <remarks>Derived from the two timestamps, so there is no column behind it.</remarks>
+    [NotMapped]
+    public bool HasUnpublishedChanges =>
+        DraftUpdatedAt.HasValue && (!PublishedAt.HasValue || DraftUpdatedAt > PublishedAt);
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
