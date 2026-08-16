@@ -58,12 +58,26 @@ _logger = logging.getLogger(__name__)
 #: approximately right beats a bar that does not move for twenty minutes.
 _SEPARATION_ESTIMATE_SECONDS = 480
 
+#: Every code this app can raise, used to recover one from a re-wrapped exception's message.
+_ALL_FAILURE_CODES = tuple(
+    value for name, value in vars(LyricsAlignmentFailureCodes).items()
+    if not name.startswith("_") and isinstance(value, str)
+)
+
 
 class LyricsPipelineError(Exception):
-    """A failure with a code the web app already knows how to describe to a creator."""
+    """A failure with a code the web app already knows how to describe to a creator.
+
+    The code is stamped into the message text as a ``[Code]`` prefix, and that is not cosmetic: it is
+    the only part of this exception that survives the activity -> orchestrator boundary.  Durable
+    re-wraps whatever an activity raises, so ``self.code`` is gone by the time the orchestrator's
+    except block runs and only the message text remains.  Without the prefix every failure - a
+    missing audio blob, unusable lyrics, a Demucs crash - reaches the creator as the same generic
+    "lyric timing failed".
+    """
 
     def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
+        super().__init__(f"[{code}] {message}")
         self.code = code
 
 
@@ -129,10 +143,15 @@ def align_lyrics_orchestrator(context: df.DurableOrchestrationContext):
     try:
         result = yield context.call_activity("align_lyrics", job)
     except Exception as error:  # noqa: BLE001 - the whole point of this handler.
+        # getattr(error, "code") does NOT survive here. Durable re-wraps whatever an activity raises
+        # into a generic exception before the orchestrator sees it, so a LyricsPipelineError arrives
+        # as a plain Exception with its attributes gone and only its message intact. Reading the code
+        # back out of the message is what keeps "we could not isolate the vocals" from degrading into
+        # a generic "lyric timing failed" by the time it reaches the creator.
         failure = {
             "jobId": job.get("jobId"),
             "outcome": _outcome_for(error),
-            "failureCode": getattr(error, "code", LyricsAlignmentFailureCodes.ORCHESTRATION_FAILED),
+            "failureCode": _recover_failure_code(error),
             "diagnostic": str(error)[:2000],
             "isMonotonic": True,
         }
@@ -144,13 +163,35 @@ def align_lyrics_orchestrator(context: df.DurableOrchestrationContext):
     return result
 
 
+def _recover_failure_code(error: Exception) -> str:
+    """Read a LyricsPipelineError's code back out of the re-wrapped exception's text.
+
+    Crude, and the alternative is worse: threading a structured result back through the activity
+    return value means the orchestrator can no longer tell a failure from a success by whether it
+    threw, which is the one thing Durable's retry policies key off.
+    """
+    code = getattr(error, "code", None)
+    if code:
+        return code
+
+    # Matched bracketed, never bare. A diagnostic quoting Demucs stderr is free text that can
+    # contain anything, and a bare substring test would let the word "AlignmentFailed" appearing in
+    # a stack trace relabel an unrelated failure.
+    text = str(error)
+    for known in _ALL_FAILURE_CODES:
+        if f"[{known}]" in text:
+            return known
+
+    return LyricsAlignmentFailureCodes.ORCHESTRATION_FAILED
+
+
 def _outcome_for(error: Exception) -> str:
     """Bad input versus a pipeline that could not run - the same three-way split the audio pipeline uses.
 
     ``Unusable`` means the creator must be told and there is no point trying again unchanged.
     ``Inconclusive`` means the tooling failed rather than the submission, which is worth a Re-run.
     """
-    code = getattr(error, "code", None)
+    code = _recover_failure_code(error)
 
     unusable = {
         LyricsAlignmentFailureCodes.LYRICS_TEXT_EMPTY,
@@ -205,9 +246,13 @@ def align_lyrics(job: dict) -> dict:
                 "This song's audio could not be read.",
             )
 
+        # Separate FIRST, then prepare the aligner's copy from the stem. The order is the contract:
+        # Demucs wants 44.1 kHz stereo and the aligner wants 16 kHz mono, and the silence map has to
+        # be measured on the isolated vocal or it finds nothing an instrumental break looks like.
         try:
-            prepared = prep_audio.prepare(
-                options.ffmpeg_binary, source_path, os.path.join(work_dir, "prepared.wav")
+            mix_path = os.path.join(work_dir, "mix.wav")
+            duration_ms = prep_audio.decode_for_separation(
+                options.ffmpeg_binary, source_path, mix_path
             )
         except Exception as error:  # noqa: BLE001
             raise LyricsPipelineError(
@@ -228,18 +273,37 @@ def align_lyrics(job: dict) -> dict:
                 vocal_path = separate_vocals.separate(
                     options.demucs_model,
                     options.demucs_segment,
-                    prepared.wav_path,
+                    mix_path,
                     os.path.join(work_dir, "stems"),
+                    ffmpeg=options.ffmpeg_binary,
+                    duration_ms=duration_ms,
+                    chunk_seconds=options.demucs_chunk_seconds,
+                    margin_seconds=options.demucs_chunk_margin_seconds,
                 )
             except Exception as error:  # noqa: BLE001
                 raise LyricsPipelineError(
                     LyricsAlignmentFailureCodes.SEPARATION_FAILED, str(error)
                 ) from error
 
+        # The 44.1 kHz mix has done its job and is the largest thing on a small local disk.
+        try:
+            os.remove(mix_path)
+        except OSError:
+            pass
+
+        try:
+            prepared = prep_audio.prepare_for_alignment(
+                options.ffmpeg_binary, vocal_path, os.path.join(work_dir, "aligner.wav")
+            )
+        except Exception as error:  # noqa: BLE001
+            raise LyricsPipelineError(
+                LyricsAlignmentFailureCodes.PREPARATION_FAILED, str(error)
+            ) from error
+
         reporter.report(LyricsAlignmentStep.ALIGNING, "Matching the words to the vocal.")
 
         try:
-            aligned_raw = force_align.align(vocal_path, [token.norm for token in tokens])
+            aligned_raw = force_align.align(prepared.wav_path, [token.norm for token in tokens])
         except Exception as error:  # noqa: BLE001
             raise LyricsPipelineError(
                 LyricsAlignmentFailureCodes.ALIGNMENT_FAILED, str(error)
@@ -263,7 +327,13 @@ def align_lyrics(job: dict) -> dict:
                 SilenceWindow(start_ms=window["startMs"], end_ms=window["endMs"])
                 for window in prepared.silences
             ],
-            duration_ms=prepared.duration_ms,
+            # The DECODE's duration, not the prepared vocal's. These timings are played back against
+            # the original MP3, so that is the timeline they have to be clamped to. The vocal stem is
+            # reassembled from separated chunks and can land a few milliseconds short of the source;
+            # small enough not to matter on its own, but it is the source's length that is correct
+            # here, and it is free to use it. The web app's structural gate compares LastWordEndMs
+            # against this figure, so the two must describe the same timeline.
+            duration_ms=duration_ms or prepared.duration_ms,
         )
 
         if output.stats.matched_token_count == 0:

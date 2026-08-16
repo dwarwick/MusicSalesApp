@@ -34,6 +34,19 @@ class TestSectionMarkers:
         for marker in ("(x2)", "[2x]", "x3"):
             assert is_section_marker(marker), marker
 
+    def test_qualified_markers_are_recognised(self):
+        # Found on a real submission. Unbracketed matching used to require the line to be nothing but
+        # the keyword, so both of these went to the aligner as though somebody sang them - each took
+        # several seconds of the timeline and showed up to a listener as a lyric line.
+        for marker in (
+            "Final Chorus",
+            "Anthem Hook Section",
+            "Last Verse",
+            "Repeat Chorus",
+            "Second Pre-Chorus",
+        ):
+            assert is_section_marker(marker), marker
+
     def test_real_lyrics_are_not_mistaken_for_markers(self):
         # The costly direction of this mistake: a sung line dropped from the token stream can never
         # be timed, and the listener sees it stay dark while it is being sung.
@@ -42,6 +55,19 @@ class TestSectionMarkers:
             "we built a bridge across the water",
             "solo dancer in the rain",
             "verse after verse she waited",
+        ):
+            assert not is_section_marker(line), line
+
+    def test_widening_the_bare_match_did_not_widen_it_too_far(self):
+        # Admitting "Final Chorus" means admitting multi-word bare lines, which is exactly the door
+        # the single-keyword rule was holding shut. These are the cases that walk through it: a
+        # section word in ordinary prose, and a qualifier naming no section at all.
+        for line in (
+            "Bridge over troubled water",
+            "Final answer",
+            "Last part",
+            "Hook me in closer",
+            "intro to a longer story",
         ):
             assert not is_section_marker(line), line
 

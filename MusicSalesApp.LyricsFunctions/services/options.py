@@ -56,7 +56,25 @@ class FunctionOptions:
 
     #: Segment length in seconds for Demucs. Set explicitly because peak memory scales with it, and
     #: an out-of-memory kill fails the activity with no retry behind it.
+    #:
+    #: Bounded ABOVE by the model, not only by memory. The default htdemucs is a hybrid transformer,
+    #: and Demucs refuses to run one past the segment it was trained for - 7.8 seconds - with a FATAL
+    #: rather than a warning or a silent clamp. Anything over that fails 100% of the time, and does so
+    #: only after downloading the weights, so it reads as an expensive infrastructure problem rather
+    #: than a one-character config error.
     demucs_segment: int
+
+    #: Seconds of audio separated per Demucs invocation. Demucs' peak memory tracks the length of
+    #: the whole track - it holds full-length tensors for all four sources - and Flex Consumption
+    #: allows no instance larger than 4096 MB, so a long track has to be broken up or it is killed
+    #: outright. Measured: 29 s separates comfortably on a 4 GB instance, 3 min 41 s does not.
+    demucs_chunk_seconds: int
+
+    #: Extra seconds separated either side of each chunk and then thrown away. The model gets real
+    #: audio as context across every boundary instead of silence, and only the interior it was most
+    #: confident about is kept. Zero would leave an audible seam at each join, which the aligner
+    #: reads as a consonant.
+    demucs_chunk_margin_seconds: int
 
     @staticmethod
     def load() -> "FunctionOptions":
@@ -69,5 +87,7 @@ class FunctionOptions:
             media_processing_api_key=_required("MediaProcessingApiKey"),
             ffmpeg_binary=_optional("FFMPEG_BINARY", "ffmpeg"),
             demucs_model=_optional("DEMUCS_MODEL", "htdemucs"),
-            demucs_segment=int(_optional("DEMUCS_SEGMENT", "8")),
+            demucs_segment=int(_optional("DEMUCS_SEGMENT", "7")),
+            demucs_chunk_seconds=int(_optional("DEMUCS_CHUNK_SECONDS", "30")),
+            demucs_chunk_margin_seconds=int(_optional("DEMUCS_CHUNK_MARGIN_SECONDS", "5")),
         )

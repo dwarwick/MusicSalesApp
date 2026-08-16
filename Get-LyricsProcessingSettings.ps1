@@ -135,7 +135,27 @@ function Get-LyricsProcessingSettings {
         # Peak Demucs memory scales with segment length, and an out-of-memory kill is a hard failure:
         # the orchestrator deliberately does not retry separation, because a retry at the same
         # instance size fails the same way after spending the same minutes.
-        "DEMUCS_SEGMENT"                       = "8"
+        #
+        # SEVEN, AND IT CANNOT GO ABOVE 7.8. htdemucs is a hybrid TRANSFORMER, and a transformer
+        # cannot be run at a longer segment than it was trained for - Demucs refuses outright with
+        # "FATAL: Cannot use a Transformer model with a longer segment than it was trained for.
+        # Maximum segment is: 7.8". This setting was 8 and every alignment died there, after paying
+        # for the model download first. Note the direction is the opposite of the memory concern
+        # above: too LARGE fails instantly and always, too small only costs a little quality.
+        # Raising it needs a non-transformer model (mdx_extra and friends have no such cap).
+        "DEMUCS_SEGMENT"                       = "7"
+
+        # Demucs' peak memory is driven by the length of the WHOLE TRACK, not by the segment above:
+        # it holds full-length tensors for all four sources. Flex Consumption accepts only 512, 2048
+        # and 4096 MB - 8192 is rejected by name - so there is no bigger instance to escape to, and a
+        # long track has to be separated in pieces or it is SIGKILLed part way through with no
+        # traceback. Measured on this 4096 MB app: a 29 s clip separates comfortably, the 3 min 41 s
+        # track it was cut from does not, and halving DEMUCS_SEGMENT changed nothing either way.
+        #
+        # The margin is separated either side of each chunk and then discarded, so the model sees real
+        # audio as context across every boundary rather than silence.
+        "DEMUCS_CHUNK_SECONDS"                 = "30"
+        "DEMUCS_CHUNK_MARGIN_SECONDS"          = "5"
 
         # Four, which is what a 4096 MB Flex instance actually reports - measured from the deployed
         # app, not assumed. This was originally 2 on the guess that the top Flex tier allocated two

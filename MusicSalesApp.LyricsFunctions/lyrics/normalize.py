@@ -90,9 +90,29 @@ _BRACKETED_MARKER = re.compile(
     rf"^\s*[\[\(][^\]\)]*\b{_SECTION_KEYWORDS}\b[^\]\)]*[\]\)]\s*$", re.IGNORECASE
 )
 
-# Unbracketed, so the only safe reading is a line that is nothing BUT the keyword, optionally
-# numbered and optionally colon-terminated: "Chorus", "Verse 2", "Bridge:".
-_BARE_MARKER = re.compile(rf"^\s*{_SECTION_KEYWORDS}(?:\s*\d+)?\s*:?\s*$", re.IGNORECASE)
+# Unbracketed, so the reading has to be conservative. Requiring the line to be nothing BUT the
+# keyword - "Chorus", "Verse 2", "Bridge:" - is safe and misses the very common qualified forms:
+# a real submission carried "Final Chorus" and "Anthem Hook Section", both of which were then handed
+# to the aligner as though somebody sang them. Each consumed several seconds of the timeline and
+# appeared to a listener as a lyric line.
+#
+# So instead of loosening the keyword match - which is what reintroduces "chorus of angels singing" -
+# the line must be SHORT and made ENTIRELY of words from this vocabulary, at least one of them an
+# actual section keyword. "Final Chorus" and "Anthem Hook Section" pass; "chorus of angels singing"
+# fails on "of", and "solo dancer in the rain" fails on length before anything else is considered.
+_SECTION_MODIFIERS = (
+    r"(?:final|last|first|second|third|fourth|main|alt|alternate|repeat|reprise|part|section"
+    r"|anthem|opening|closing|ending|extended|double|big|end)"
+)
+
+_BARE_MARKER_WORD = re.compile(
+    rf"^(?:{_SECTION_KEYWORDS}|{_SECTION_MODIFIERS}|\d+|[ivx]+)$", re.IGNORECASE
+)
+
+_BARE_MARKER_KEYWORD = re.compile(rf"^{_SECTION_KEYWORDS}$", re.IGNORECASE)
+
+#: Beyond this many words a line is prose, whatever it is made of.
+_MAX_BARE_MARKER_WORDS = 4
 
 # Repeat annotations - "(x2)", "[2x]" - are instructions to the reader, not words.
 _REPEAT_MARKER = re.compile(r"^[\[\(]?\s*[x×]\s*\d+\s*[\]\)]?$|^[\[\(]?\s*\d+\s*[x×]\s*[\]\)]?$", re.IGNORECASE)
@@ -153,9 +173,27 @@ def is_section_marker(line: str) -> bool:
         return False
     return bool(
         _BRACKETED_MARKER.match(stripped)
-        or _BARE_MARKER.match(stripped)
+        or _is_bare_marker(stripped)
         or _REPEAT_MARKER.match(stripped)
     )
+
+
+def _is_bare_marker(stripped: str) -> bool:
+    """An unbracketed annotation: short, and every word drawn from the section vocabulary."""
+    text = stripped.rstrip(":").strip()
+    if not text:
+        return False
+
+    words = [word for word in _WORD_SPLIT.split(text) if word]
+    if not words or len(words) > _MAX_BARE_MARKER_WORDS:
+        return False
+
+    # At least one real section word, so "Final Part" or "Last Section" - which name no section -
+    # are left as lyrics rather than guessed at.
+    if not any(_BARE_MARKER_KEYWORD.match(word) for word in words):
+        return False
+
+    return all(_BARE_MARKER_WORD.match(word) for word in words)
 
 
 def tokenize_lyrics(text: str) -> tuple[list[LyricLine], list[LyricToken]]:
