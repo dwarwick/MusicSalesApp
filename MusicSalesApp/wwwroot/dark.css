@@ -874,3 +874,40 @@ body {
 .lyrics-dialog-progress-label {
     color: #dee2e6;
 }
+
+/* ============================================================
+   Scrolling lyrics - dark
+   ============================================================ */
+
+.lyrics-scroller {
+    background-color: #121212;
+    color: #8a8a8a;
+}
+
+.lyrics-scroller-empty {
+    color: #6f6f6f;
+}
+
+/* The line being sung lifts out of the surrounding dimness; everything else stays quiet so the eye
+   is drawn to one place rather than reading the whole panel at once. */
+.lyrics-line--active {
+    color: #e6e6e6;
+}
+
+.lyrics-word--active {
+    color: #1db954;
+}
+
+.lyrics-word--selected {
+    background-color: rgba(29, 185, 84, 0.22);
+    outline: 1px solid #1db954;
+}
+
+.lyrics-line--untimed {
+    color: #6f6f6f;
+}
+
+.lyrics-toggle-button {
+    background-color: rgba(0, 0, 0, 0.65);
+    color: #e6e6e6;
+}

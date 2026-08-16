@@ -2801,3 +2801,150 @@ h1:focus {
     margin: 0;
     padding-left: 1.25rem;
 }
+
+/* ============================================================
+   Scrolling lyrics
+   ============================================================
+   Layout and animation only; colours live in light.css / dark.css.
+
+   The box is FIXED HEIGHT and CLIPPED, and the track inside it is moved with a transform. It is
+   never scrolled: scrollIntoView would drag every scrollable ancestor along with it - the library
+   grid, the player page - every time a song moved to the next line.
+
+   The track's vertical padding is half the box, so the first and last lines can reach the middle.
+   Without it the opening line sits at the top until the song is a few lines in. */
+
+.lyrics-scroller {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+}
+
+.lyrics-scroller-track {
+    padding-block: 50%;
+    transform: translate3d(0, 0, 0);
+    transition: transform 320ms ease-out;
+    will-change: transform;
+}
+
+.lyrics-scroller-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 12px;
+    text-align: center;
+}
+
+.lyrics-line {
+    padding: 2px 10px;
+    line-height: 1.35;
+    transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.lyrics-word {
+    transition: color 120ms linear;
+}
+
+/* The sung word. Deliberately a colour change and nothing that reflows - a transform or a font-size
+   change here would move every following word on the line, sixty times a second. */
+.lyrics-word--active {
+    font-weight: 600;
+}
+
+.lyrics-word--selected {
+    border-radius: 3px;
+    outline-offset: 1px;
+}
+
+/* Section markers and blank lines. Present because they are part of how the artist laid the song
+   out, but never highlighted and never scrolled to - they have no time. */
+.lyrics-line--untimed {
+    font-style: italic;
+    opacity: 0.55;
+}
+
+/* --- Card: smallest type, in place of a 210px cover --- */
+.lyrics-scroller--card {
+    font-size: 11px;
+}
+
+.lyrics-scroller--card .lyrics-line {
+    padding: 1px 6px;
+}
+
+/* --- Player page: in place of the hero art --- */
+.lyrics-scroller--player {
+    font-size: 14px;
+}
+
+/* --- Editor: the creator is reading and clicking these, so they get the most room --- */
+.lyrics-scroller--editor {
+    font-size: 17px;
+}
+
+.lyrics-scroller--editor .lyrics-line {
+    padding: 4px 12px;
+}
+
+.lyrics-scroller--editor .lyrics-word {
+    cursor: pointer;
+    padding: 0 1px;
+}
+
+/* Somebody who has asked for less motion should not be given a panel that glides every few seconds.
+   The highlight still moves; only the easing stops. */
+@media (prefers-reduced-motion: reduce) {
+    .lyrics-scroller-track {
+        transition-duration: 0s;
+    }
+
+    .lyrics-line {
+        transition-duration: 0s;
+    }
+}
+
+/* The scroller sitting where the cover art was. Absolute inside .player-art-shell, which is already
+   position:relative and overflow:hidden, so the swap costs no layout change at all. */
+.lyrics-scroller-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+}
+
+/* Kept in the DOM rather than removed, so the animation loop and element cache survive a toggle.
+   visibility:hidden rather than display:none for the same reason - offsetTop has to keep working,
+   or the first line after a toggle would centre against a zero-height box. */
+.is-hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.lyrics-toggle-button {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 3;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.lyrics-toggle-button:hover {
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+.lyrics-toggle-icon {
+    width: 15px;
+    height: 15px;
+}
