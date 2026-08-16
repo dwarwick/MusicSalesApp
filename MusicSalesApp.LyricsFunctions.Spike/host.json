@@ -1,10 +1,14 @@
 {
   "version": "2.0",
   "//": "Bare on purpose. No Durable, no queues, no storage bindings - so a failure to deploy or start can only mean one thing: the Python package itself.",
-  "functionTimeout": "00:10:00",
+  "functionTimeout": "00:30:00",
   "logging": {
     "applicationInsights": {
-      "samplingSettings": { "isEnabled": true, "excludedTypes": "Request;Exception" }
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request;Exception"
+      }
     }
-  }
+  },
+  "//functionTimeout": "Raised from 10 minutes for /api/stage: the model weights are well over a gigabyte and the download runs inside the request."
 }

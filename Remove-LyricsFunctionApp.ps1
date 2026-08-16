@@ -66,16 +66,21 @@ $stagingConnection = $values["StagingStorageConnectionString"]
 $taskHubName = $values["LyricsTaskHubName"]
 
 if ([string]::IsNullOrWhiteSpace($ResourceGroup)) {
-    $show = Invoke-Az @(
-        "functionapp", "show",
-        "--name", $FunctionAppName, "--output", "json") -AllowFailure
+    # `functionapp list` filtered by name, NOT `functionapp show`. show REQUIRES --resource-group,
+    # which is the very thing being looked up - and it fails with "(--resource-group | --ids) are
+    # required", which behind -AllowFailure was being read as "the app does not exist". The teardown
+    # then reported nothing to remove and exited cleanly while the app was still running.
+    $ResourceGroup = Invoke-Az @(
+        "functionapp", "list",
+        "--query", "[?name=='$FunctionAppName'].resourceGroup | [0]",
+        "--output", "tsv") -AllowFailure
 
-    if ($LASTEXITCODE -ne 0) {
+    $ResourceGroup = ($ResourceGroup | Out-String).Trim()
+
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ResourceGroup)) {
         Write-Host "$FunctionAppName does not exist in subscription '$($account.name)'. Nothing to remove." -ForegroundColor Yellow
         return
     }
-
-    $ResourceGroup = (Get-JsonPath ($show | ConvertFrom-Json) @("resourceGroup"))
 }
 
 Write-Host "Function app  : $FunctionAppName"
@@ -113,8 +118,16 @@ if (-not [string]::IsNullOrWhiteSpace($contentShare)) {
     }
 }
 
-# Functions runtime bookkeeping, and the Flex deployment container.
-foreach ($container in @("azure-webjobs-hosts", "azure-webjobs-secrets", "lyrics-deployment")) {
+# DO NOT add azure-webjobs-hosts or azure-webjobs-secrets here.
+#
+# They look like this app's leftovers and are not. Every Function App pointed at a storage account
+# shares them, and all of streamtunes-media-test, streamtunes-media-prod and this app use
+# musicsalesstorageaccount - so deleting them during one environment's teardown reaches into the
+# others. azure-webjobs-secrets holds the function keys, which means the blast radius is PRODUCTION
+# losing the keys its callbacks authenticate with.
+#
+# Only lyrics-deployment is genuinely ours: the provisioning script creates it for this app alone.
+foreach ($container in @("lyrics-deployment")) {
     if ($PSCmdlet.ShouldProcess($container, "Delete container")) {
         Invoke-Az @(
             "storage", "container", "delete",

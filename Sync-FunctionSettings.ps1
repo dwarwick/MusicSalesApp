@@ -105,8 +105,12 @@ if ($PSCmdlet.ShouldProcess($OutputPath, "Write Function app settings for '$Envi
     $json = $document | ConvertTo-Json -Depth 5
     Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
     Write-Host "Wrote $OutputPath ($Environment, $AppKind)."
-    Write-Host "  Media   : $($values['MediaProcessing:MediaContainerName'])"
-    Write-Host "  Staging : $($values['MediaProcessing:StagingContainerName'])"
+    # The two apps name these differently: Flex Consumption rejects a setting name containing a
+    # colon, so the Python app uses the Linux `__` separator.
+    $prefix = if ($AppKind -eq "Lyrics") { "MediaProcessing__" } else { "MediaProcessing:" }
+
+    Write-Host "  Media   : $($values["${prefix}MediaContainerName"])"
+    Write-Host "  Staging : $($values["${prefix}StagingContainerName"])"
 
     if ($AppKind -eq "Lyrics") {
         # No queues: this app is started over HTTP so its Durable starter can hand back the

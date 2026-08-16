@@ -1,9 +1,16 @@
 """Settings, read once at import.
 
 Mirrors ``MusicSalesApp.Functions/FunctionOptions.cs``, including its naming split: connection
-strings and callback settings are top level, container names live under ``MediaProcessing:``.  The
-names match deliberately so ``Get-MediaProcessingSettings.ps1`` can serve both Function apps without
-maintaining two vocabularies for the same values.
+strings and callback settings are top level, container names are grouped under a
+``MediaProcessing__`` prefix.
+
+Double underscore rather than the colon the C# app uses, because Flex Consumption rejects an app
+setting whose name contains a colon - the whole settings push fails, not just that entry. ``__`` is
+the documented separator on Linux App Service, and nothing here binds hierarchically anyway: these
+are read as flat environment variables.
+
+Everything else keeps the same name the C# app uses, so one settings helper can serve both Function
+apps without maintaining two vocabularies for the same values.
 """
 
 from __future__ import annotations
@@ -56,8 +63,8 @@ class FunctionOptions:
         return FunctionOptions(
             staging_connection_string=_required("StagingStorageConnectionString"),
             media_connection_string=_required("MediaStorageConnectionString"),
-            staging_container=_required("MediaProcessing:StagingContainerName"),
-            media_container=_required("MediaProcessing:MediaContainerName"),
+            staging_container=_required("MediaProcessing__StagingContainerName"),
+            media_container=_required("MediaProcessing__MediaContainerName"),
             callback_base_url=_required("CallbackBaseUrl").rstrip("/"),
             media_processing_api_key=_required("MediaProcessingApiKey"),
             ffmpeg_binary=_optional("FFMPEG_BINARY", "ffmpeg"),

@@ -109,8 +109,13 @@ function Get-LyricsProcessingSettings {
         "StagingStorageConnectionString"       = $stagingConnection
         "MediaStorageConnectionString"         = $mediaConnection
 
-        "MediaProcessing:StagingContainerName" = $stagingContainer
-        "MediaProcessing:MediaContainerName"   = $mediaContainer
+        # Double underscore, not the colon the C# Function app uses for the same two values.
+        # Flex Consumption REJECTS an app setting whose name contains a colon outright - not a
+        # warning, the whole `appsettings set` call fails - and `__` is the documented separator on
+        # Linux App Service. The Python app reads these as flat environment variables anyway, so the
+        # colon was only ever there to mirror the .NET app's hierarchical config binding.
+        "MediaProcessing__StagingContainerName" = $stagingContainer
+        "MediaProcessing__MediaContainerName"   = $mediaContainer
 
         # Referenced as %LyricsTaskHubName% from host.json, so the HOST resolves it before the worker
         # starts. Missing, the whole app fails to start - the same trap MediaProcessing:MatchQueueName

@@ -24,8 +24,8 @@
     "//LyricsTaskHubName": "Referenced as %...% from host.json, so the HOST resolves it before the worker starts - if it is missing the app fails to start. MUST differ between Test and Production: both share one storage account, so a shared hub name would have the two environments stealing each other's orchestrations.",
     "LyricsTaskHubName": "LyricsAlignHubLocal",
 
-    "MediaProcessing:StagingContainerName": "musicuploads-local",
-    "MediaProcessing:MediaContainerName": "musiccontainer-local",
+    "MediaProcessing__StagingContainerName": "musicuploads-local",
+    "MediaProcessing__MediaContainerName": "musiccontainer-local",
 
     "//CallbackBaseUrl": "Where results are posted. Must match the environment the containers belong to.",
     "CallbackBaseUrl": "https://localhost:7173",

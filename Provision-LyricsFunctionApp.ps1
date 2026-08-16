@@ -145,6 +145,11 @@ if (-not $SkipAppInsights) {
         "--app", $AppInsightsName, "--resource-group", $ResourceGroup, "--output", "json") -AllowFailure
 
     if ($LASTEXITCODE -ne 0) {
+        # A failed `show` leaves the CLI's error text in $existing, not JSON. Clearing it matters
+        # under -WhatIf, where the create below does not run and that text would otherwise be handed
+        # to ConvertFrom-Json - turning a dry run into a crash.
+        $existing = $null
+
         if ($PSCmdlet.ShouldProcess($AppInsightsName, "Create Application Insights")) {
             $existing = Invoke-Az @(
                 "monitor", "app-insights", "component", "create",
@@ -157,7 +162,14 @@ if (-not $SkipAppInsights) {
     }
 
     if ($existing) {
-        $appInsightsConnectionString = (Get-JsonPath ($existing | ConvertFrom-Json) @("connectionString"))
+        # Defensive: the CLI's output shape is state-dependent, which is the reason AzureCli.ps1
+        # carries Get-JsonPath at all. Telemetry is not worth failing a provisioning run over.
+        try {
+            $appInsightsConnectionString = (Get-JsonPath ($existing | ConvertFrom-Json) @("connectionString"))
+        }
+        catch {
+            Write-Warning "Could not read the Application Insights connection string; continuing without it."
+        }
     }
 }
 
@@ -218,8 +230,19 @@ else {
 # ---------------------------------------------------------------------------
 $shouldApplySettings = $ApplySettings -or (-not $appAlreadyExisted)
 
+# Flex Consumption REJECTS these as app settings - it does not merely ignore them, it fails the
+# whole `appsettings set` call with "invalid ... please remove or rename it". On Flex the worker
+# runtime and its version are site properties, fixed by --runtime/--runtime-version at create time,
+# so there is nothing for an app setting to say.
+#
+# They stay in the shared settings hashtable regardless, because local.settings.json genuinely needs
+# FUNCTIONS_WORKER_RUNTIME for `func start` - it is only the Azure push that must not carry them.
+$flexRejectedSettings = @("FUNCTIONS_WORKER_RUNTIME", "FUNCTIONS_EXTENSION_VERSION")
+
 if ($shouldApplySettings) {
-    $settingPairs = $values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+    $settingPairs = $values.GetEnumerator() |
+        Where-Object { $flexRejectedSettings -notcontains $_.Key } |
+        ForEach-Object { "$($_.Key)=$($_.Value)" }
 
     # NOTE: WEBSITE_RUN_FROM_PACKAGE is deliberately absent. Provision-FunctionApp.ps1 appends it
     # unconditionally at this exact point, and copying that line across breaks Flex - it has its own
@@ -244,7 +267,12 @@ else {
 
     if ($LASTEXITCODE -eq 0) {
         $currentNames = ($current | ConvertFrom-Json) | ForEach-Object { $_.name }
-        $missing = $values.Keys | Where-Object { $currentNames -notcontains $_ }
+
+        # The rejected pair is never pushed, so reporting it as drift would mean every run of this
+        # script warns about two settings that must not exist.
+        $missing = $values.Keys |
+            Where-Object { $flexRejectedSettings -notcontains $_ } |
+            Where-Object { $currentNames -notcontains $_ }
 
         if ($missing) {
             Write-Warning ("Settings present in appsettings.$Environment.json but missing on the app: " +
@@ -284,13 +312,37 @@ $stagingKey = (Invoke-Az @(
     "--query", "[0].value", "--output", "tsv") -AllowFailure)
 
 if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($stagingKey)) {
+    # Existing mounts first, so a re-run does not report a false failure. `add` refuses an id that is
+    # already configured, which is success from this script's point of view - the header promises
+    # idempotence, and warning about a mount that is present would train everyone to ignore the
+    # warning that matters.
+    $existingMountIds = @()
+    $mountList = Invoke-Az @(
+        "webapp", "config", "storage-account", "list",
+        "--name", $FunctionAppName, "--resource-group", $ResourceGroup, "--output", "json") -AllowFailure
+
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($mountList)) {
+        try { $existingMountIds = ($mountList | ConvertFrom-Json) | ForEach-Object { $_.name } }
+        catch { $existingMountIds = @() }
+    }
+
     foreach ($mount in @(
             @{ Id = "models"; Share = $modelShare; Path = "/mnt/models" },
             @{ Id = "tools"; Share = $toolShare; Path = "/mnt/tools" })) {
 
+        if ($existingMountIds -contains $mount.Id) {
+            Write-Host "  $($mount.Path) already mounted." -ForegroundColor DarkGray
+            continue
+        }
+
         if ($PSCmdlet.ShouldProcess($mount.Path, "Mount Azure Files share")) {
+            # `webapp`, NOT `functionapp`: the Azure CLI has no
+            # `az functionapp config storage-account` command at all, and asking for one fails with
+            # "'storage-account' is misspelled or not recognized" - which, behind -AllowFailure, is
+            # indistinguishable from success. A function app is a web app underneath and this is the
+            # command that actually configures the mount.
             Invoke-Az @(
-                "functionapp", "config", "storage-account", "add",
+                "webapp", "config", "storage-account", "add",
                 "--name", $FunctionAppName,
                 "--resource-group", $ResourceGroup,
                 "--custom-id", $mount.Id,
@@ -300,6 +352,16 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($stagingKey)) {
                 "--access-key", $stagingKey,
                 "--mount-path", $mount.Path,
                 "--output", "none") -AllowFailure | Out-Null
+
+            if ($LASTEXITCODE -ne 0) {
+                # Loud, because everything downstream depends on it. Without the mounts the app
+                # starts, deploys and then downloads well over a gigabyte of model weights on every
+                # cold instance - a degradation that shows up as mysterious slowness rather than as
+                # an error, which is exactly the failure this warning exists to pre-empt.
+                Write-Warning ("Could not mount '$($mount.Share)' at $($mount.Path). The app will " +
+                    "run, but ffmpeg and the model weights will not be there. Check with: " +
+                    "az webapp config storage-account list --name $FunctionAppName --resource-group $ResourceGroup")
+            }
         }
     }
 }
