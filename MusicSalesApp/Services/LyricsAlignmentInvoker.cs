@@ -56,17 +56,20 @@ public sealed class LyricsAlignmentInvoker : ILyricsAlignmentInvoker
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IDurableTaskClient _durableTaskClient;
     private readonly ILyricsAlignmentNotifier _notifier;
+    private readonly ILyricsAlignmentCompletionService _completionService;
     private readonly ILogger<LyricsAlignmentInvoker> _logger;
 
     public LyricsAlignmentInvoker(
         IDbContextFactory<AppDbContext> contextFactory,
         IDurableTaskClient durableTaskClient,
         ILyricsAlignmentNotifier notifier,
+        ILyricsAlignmentCompletionService completionService,
         ILogger<LyricsAlignmentInvoker> logger)
     {
         _contextFactory = contextFactory;
         _durableTaskClient = durableTaskClient;
         _notifier = notifier;
+        _completionService = completionService;
         _logger = logger;
     }
 
@@ -110,9 +113,11 @@ public sealed class LyricsAlignmentInvoker : ILyricsAlignmentInvoker
 
         if (job.SongMetadata is null || string.IsNullOrWhiteSpace(job.SongMetadata.Mp3BlobPath))
         {
-            await FailAsync(
-                dbContext,
-                job,
+            _logger.LogWarning(
+                "Lyrics alignment job {JobId} failed before starting: no playable audio.", jobId);
+
+            await _completionService.FailAsync(
+                job.JobId,
                 LyricsAlignmentFailureCodes.AudioBlobMissing,
                 "This song has no playable audio to align against.");
             return;
@@ -154,9 +159,12 @@ public sealed class LyricsAlignmentInvoker : ILyricsAlignmentInvoker
         // the creator's bar frozen until the reconciler notices ninety minutes later.
         if (IsFinalAttempt(context))
         {
-            await FailAsync(
-                dbContext,
-                job,
+            _logger.LogWarning(
+                "Lyrics alignment job {JobId} failed before starting: the starter was unreachable "
+                + "on the final attempt.", jobId);
+
+            await _completionService.FailAsync(
+                job.JobId,
                 LyricsAlignmentFailureCodes.StarterUnreachable,
                 "Lyric timing is temporarily unavailable. Please try again shortly.");
             return;
@@ -190,38 +198,5 @@ public sealed class LyricsAlignmentInvoker : ILyricsAlignmentInvoker
         {
             return false;
         }
-    }
-
-    private async Task FailAsync(
-        AppDbContext dbContext,
-        LyricsAlignmentJob job,
-        string failureCode,
-        string message)
-    {
-        _logger.LogWarning(
-            "Lyrics alignment job {JobId} failed before starting: {FailureCode}", job.JobId, failureCode);
-
-        job.Status = LyricsAlignmentJobStatus.Failed;
-        job.Step = LyricsAlignmentStep.Failed;
-        job.StepUpdatedAt = DateTime.UtcNow;
-        job.CompletedAt = DateTime.UtcNow;
-        job.FailureCode = failureCode;
-        job.FailureMessage = message;
-
-        var lyrics = await dbContext.SongLyrics
-            .FirstOrDefaultAsync(row => row.SongMetadataId == job.SongMetadataId);
-
-        // Only a pending row is moved to Failed. If a previous alignment had published timings they
-        // are still perfectly good, and a failed re-run must not take them away.
-        if (lyrics is not null && lyrics.Status == SongLyricsStatus.Pending)
-        {
-            lyrics.Status = SongLyricsStatus.Failed;
-            lyrics.LastJobId = job.JobId;
-            lyrics.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await dbContext.SaveChangesAsync();
-
-        await _notifier.NotifyStepAsync(job.CreatorId, job.JobId, LyricsAlignmentStep.Failed, message);
     }
 }

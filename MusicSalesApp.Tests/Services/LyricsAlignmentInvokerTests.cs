@@ -27,6 +27,7 @@ public class LyricsAlignmentInvokerTests
     private TestFactory _factory = null!;
     private Mock<IDurableTaskClient> _durable = null!;
     private RecordingNotifier _notifier = null!;
+    private Mock<ILyricsAlignmentCompletionService> _completion = null!;
     private LyricsAlignmentInvoker _invoker = null!;
 
     [SetUp]
@@ -38,11 +39,13 @@ public class LyricsAlignmentInvokerTests
         _factory = new TestFactory(_options);
         _durable = new Mock<IDurableTaskClient>();
         _notifier = new RecordingNotifier();
+        _completion = new Mock<ILyricsAlignmentCompletionService>();
 
         _invoker = new LyricsAlignmentInvoker(
             _factory,
             _durable.Object,
             _notifier,
+            _completion.Object,
             Mock.Of<ILogger<LyricsAlignmentInvoker>>());
     }
 
@@ -153,26 +156,89 @@ public class LyricsAlignmentInvokerTests
     }
 
     [Test]
-    public async Task AnAttemptForASongWithNoAudioFailsWithoutCallingAzure()
+    public async Task AnAttemptForASongWithNoAudioFailsThroughTheSharedFunnelWithoutCallingAzure()
     {
+        // This used to close the job itself, in a private copy of the completion service's failure
+        // logic. Two consequences of that duplication: anything hooked into the real funnel - the
+        // reconciler's view of the world, and now the creator's completion email - never saw this
+        // failure at all, and the "don't demote already-published timings" guard existed twice and
+        // could drift.
         var jobId = await AddJobAsync(withAudio: false);
 
         await _invoker.InvokeAsync(jobId, context: null);
 
-        await using var context = new AppDbContext(_options);
-        var job = await context.LyricsAlignmentJobs.SingleAsync();
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(job.Status, Is.EqualTo(LyricsAlignmentJobStatus.Failed));
-            Assert.That(job.FailureCode, Is.EqualTo(LyricsAlignmentFailureCodes.AudioBlobMissing));
-        });
+        _completion.Verify(
+            service => service.FailAsync(
+                jobId,
+                LyricsAlignmentFailureCodes.AudioBlobMissing,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
 
         _durable.Verify(
             client => client.StartAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<LyricsAlignmentRequest>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public void AFailedStartWithRetriesRemainingDoesNotCloseTheJob()
+    {
+        // The counterpart to the delegation above. While Hangfire still has attempts left the
+        // invoker throws rather than failing the job, so the funnel must stay untouched - closing it
+        // here would turn a Function app restart into a permanent failure the creator has to redo.
+        //
+        // The opposite branch, StarterUnreachable on the final attempt, is not reachable from a test:
+        // it is gated on Hangfire's RetryCount job parameter, and a PerformContext needs a real
+        // JobStorage and IStorageConnection to construct. It is the same three-line delegation as the
+        // no-audio path above.
+        var jobId = AddJobAsync().GetAwaiter().GetResult();
+
+        _durable
+            .Setup(client => client.StartAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<LyricsAlignmentRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DurableStartOutcome(false, null, "Connection refused."));
+
+        Assert.ThrowsAsync<InvalidOperationException>(
+            () => _invoker.InvokeAsync(jobId, context: null));
+
+        _completion.Verify(
+            service => service.FailAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task ASuccessfulStartNeverTouchesTheFailureFunnel()
+    {
+        var jobId = await AddJobAsync();
+        _durable
+            .Setup(client => client.StartAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<LyricsAlignmentRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DurableStartOutcome(
+                true,
+                new DurableFunctionTask { Id = 5, InstanceId = "abc" },
+                null));
+
+        await _invoker.InvokeAsync(jobId, context: null);
+
+        _completion.Verify(
+            service => service.FailAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
     }
