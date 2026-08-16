@@ -3030,3 +3030,23 @@ h1:focus {
     gap: 8px;
     align-items: center;
 }
+
+.lyrics-editor-record {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    transition: box-shadow 200ms ease;
+}
+
+/* Unmistakably armed. A creator who does not realise recording is live will press space expecting
+   play/pause and re-time a line by accident. */
+.lyrics-editor-record.is-recording {
+    box-shadow: 0 0 0 2px #dc3545;
+}
+
+.lyrics-editor-next-line {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 15px;
+}

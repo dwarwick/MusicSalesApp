@@ -39,6 +39,71 @@ export function init(audio, dotNetRef, progressBar, volumeBar) {
 
     state.progressBar = progressBar;
     state.volumeBar = volumeBar;
+    state.recording = false;
+
+    /*
+     * KEYBOARD HANDLING LIVES HERE, NOT IN BLAZOR, AND THAT IS THE WHOLE POINT OF TAP-ALONG.
+     *
+     * An @onkeydown on a Server circuit is a network round trip before any C# runs. At 120-250 ms
+     * that is not a small inaccuracy - it is most of a syllable, and it varies with the connection,
+     * so the creator would be calibrating against their own latency rather than against the song.
+     *
+     * What matters is that `audio.currentTime` is read in the SAME handler that saw the keypress.
+     * Once that number exists, how long it takes to reach .NET is irrelevant.
+     */
+    on(document, 'keydown', (event) => {
+        // Never steal a key from something the creator is typing into.
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT'
+            || active.tagName === 'TEXTAREA'
+            || active.isContentEditable)) {
+            return;
+        }
+
+        if (event.code === 'Space') {
+            // Without this the page scrolls, and any focused button fires again - so the creator's
+            // first tap would also press whatever they clicked to start recording.
+            event.preventDefault();
+
+            if (state.recording) {
+                dotNetRef.invokeMethodAsync('RecordLineTap', audio.currentTime * 1000);
+            } else {
+                audio.paused ? play(audio) : pause(audio);
+            }
+            return;
+        }
+
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            dotNetRef.invokeMethodAsync('NudgeSelectedFromKeyboard', event.key === 'ArrowLeft' ? -1 : 1);
+            return;
+        }
+
+        if (event.key === 'Escape' && state.recording) {
+            event.preventDefault();
+            dotNetRef.invokeMethodAsync('StopRecordingFromKeyboard');
+        }
+    });
+
+    // The on-screen Tap button, delegated so it works whenever the button appears and disappears
+    // with record mode. Same reasoning as the key: the moment is read here, in the handler that saw
+    // the click, so the trip to .NET afterwards costs nothing in accuracy.
+    on(document, 'click', (event) => {
+        if (!state.recording) {
+            return;
+        }
+
+        if (event.target.closest('[data-tap-now]')) {
+            dotNetRef.invokeMethodAsync('RecordLineTap', audio.currentTime * 1000);
+        }
+    });
+}
+
+/** Arm or disarm the tap pass. Held in JS so the keydown handler need not ask .NET what mode it is in. */
+export function setRecording(recording) {
+    if (state) {
+        state.recording = recording;
+    }
 }
 
 export function play(audio) {

@@ -169,6 +169,45 @@ else
                     </div>
                 </div>
 
+                @* Tap-along. The prompt shows the line the next press applies to, because "press
+                   space at the start of each line" is unfollowable if you cannot see which line the
+                   editor thinks you are on. *@
+                <div class="lyrics-editor-record @(_isRecording ? "is-recording" : "")">
+                    @if (!_isRecording)
+                    {
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="StartRecording">
+                            ● Start tapping
+                        </button>
+                        <p class="text-muted mt-2 mb-0">
+                            Plays from where you are now. Press the <strong>space bar</strong> as each
+                            line begins &mdash; you only need to do the part that's wrong.
+                        </p>
+                    }
+                    else
+                    {
+                        <div class="lyrics-editor-next-line">
+                            <span class="text-muted">Next line</span>
+                            <strong>@NextLineToTap</strong>
+                        </div>
+
+                        @* The same action as the space bar, for touch - and for anybody who would
+                           rather press a button than trust a keyboard shortcut.
+
+                           NO @onclick, deliberately. A Blazor click handler would capture the moment
+                           on the SERVER, a round trip after the press, making this button measurably
+                           worse than the space bar at the one thing it exists to do. JS picks it up
+                           by the data attribute and reads the audio clock in the click handler
+                           itself, exactly as it does for the key. *@
+                        <button type="button" class="btn btn-danger btn-lg w-100 mt-2" data-tap-now>
+                            Tap
+                        </button>
+
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" @onclick="StopRecording">
+                            Stop tapping (Esc)
+                        </button>
+                    }
+                </div>
+
                 <div class="lyrics-editor-selection">
                     @if (_selected is null)
                     {

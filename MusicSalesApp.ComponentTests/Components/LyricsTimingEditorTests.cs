@@ -343,4 +343,172 @@ public class LyricsTimingEditorTests : BUnitTestBase
             Assert.That(cut.Markup, Does.Not.Contain("monotonic"));
         });
     }
+
+    // -----------------------------------------------------------------
+    // Tap-along
+    // -----------------------------------------------------------------
+
+    private static LyricsTimingsDocument ThreeLines() => new()
+    {
+        SongId = SongId,
+        DurationMs = 240_000,
+        Lines =
+        [
+            new LyricsTimedLine { Text = "[Verse]" },
+            new LyricsTimedLine
+            {
+                Text = "first",
+                StartMs = 10_000,
+                EndMs = 12_000,
+                Words = [new LyricsTimedWord { Text = "first", StartMs = 10_000, EndMs = 12_000 }]
+            },
+            new LyricsTimedLine
+            {
+                Text = "second",
+                StartMs = 20_000,
+                EndMs = 22_000,
+                Words = [new LyricsTimedWord { Text = "second", StartMs = 20_000, EndMs = 22_000 }]
+            },
+            new LyricsTimedLine
+            {
+                Text = "third",
+                StartMs = 30_000,
+                EndMs = 32_000,
+                Words = [new LyricsTimedWord { Text = "third", StartMs = 30_000, EndMs = 32_000 }]
+            }
+        ]
+    };
+
+    private LyricsTimingEditorModel Model(IRenderedComponent<LyricsTimingEditor> cut) => cut.Instance;
+
+    [Test]
+    public async Task StartingATapPassBeginsAtTheFirstLineAheadOfThePlayhead()
+    {
+        // Not at the top of the song. Alignment usually drifts in one section, and the instructions
+        // promise "just the part that's wrong" - so a creator seeks to the chorus, arms, and taps.
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).UpdateTime(15d));
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+
+        Assert.That(cut.Markup, Does.Contain("second"), "The first line after 15 s.");
+    }
+
+    [Test]
+    public async Task ATapMovesThatLineToTheTappedMomentAndAdvances()
+    {
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(11_500));
+
+        var document = Model(cut).EditedDocument!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(document.Lines[1].StartMs, Is.EqualTo(11_500), "The tapped line moved.");
+            Assert.That(cut.Markup, Does.Contain("second"), "And the prompt advanced.");
+        });
+    }
+
+    [Test]
+    public async Task TappingEndsThePreviousLineSoTwoDoNotOverlap()
+    {
+        // The property that makes one pass down a song coherent. Without it every earlier line keeps
+        // running underneath the one being tapped and two light up at once.
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(11_000));
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(18_000));
+
+        var document = Model(cut).EditedDocument!;
+
+        Assert.That(document.Lines[1].EndMs, Is.LessThanOrEqualTo(18_000));
+    }
+
+    [Test]
+    public async Task TheTapPassSkipsSectionMarkers()
+    {
+        // Nobody sings "[Verse]". Stopping on one would leave the creator waiting for a cue that
+        // never comes, mid-pass, with the song still playing.
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+
+        Assert.That(cut.Markup, Does.Not.Contain("Next line</span><strong>[Verse]"));
+    }
+
+    [Test]
+    public async Task TheLastTapEndsThePassRatherThanLeavingItArmed()
+    {
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(11_000));
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(21_000));
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(31_000));
+
+        Assert.That(cut.Markup, Does.Contain("Start tapping"), "Back to the disarmed state.");
+    }
+
+    [Test]
+    public async Task ATapIsUndoable()
+    {
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(11_500));
+        await cut.InvokeAsync(() => Model(cut).Undo());
+
+        Assert.That(Model(cut).EditedDocument!.Lines[1].StartMs, Is.EqualTo(10_000));
+    }
+
+    [Test]
+    public async Task TapsAreIgnoredWhenThePassIsNotArmed()
+    {
+        // The space bar is play/pause when not recording, and JS gates on its own flag - but a stray
+        // invocation must not silently re-time a line either.
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(50_000));
+
+        Assert.That(Model(cut).EditedDocument!.Lines[1].StartMs, Is.EqualTo(10_000));
+    }
+
+    [Test]
+    public async Task StoppingDisarmsTheKeyboard()
+    {
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).StopRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(50_000));
+
+        Assert.That(Model(cut).EditedDocument!.Lines[1].StartMs, Is.EqualTo(10_000));
+    }
+
+    [Test]
+    public void TheTapButtonHasNoBlazorClickHandler()
+    {
+        // Deliberate: a Blazor click would capture the moment on the SERVER, a round trip after the
+        // press, making the button measurably worse than the space bar at its only job. JS reads the
+        // audio clock in the click handler itself, found by this data attribute.
+        GivenTimings(document: ThreeLines());
+        var cut = Render();
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Start tapping")).Click();
+
+        var tap = cut.Find("[data-tap-now]");
+
+        Assert.That(tap.HasAttribute("data-tap-now"), Is.True);
+    }
 }

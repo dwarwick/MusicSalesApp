@@ -66,6 +66,13 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected double _duration;
     protected double _playbackRate = 1d;
 
+    protected bool _isRecording;
+
+    /// <summary>
+    /// The line the next tap will re-time, or -1 when there is nothing left to tap.
+    /// </summary>
+    protected int _recordLineIndex = -1;
+
     protected LyricsWordSelection? _selected;
     protected string _selectedText = string.Empty;
     protected long _selectedStartMs;
@@ -77,6 +84,16 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected string _bannerClass = "alert-secondary";
     protected string _bannerMessage = string.Empty;
     protected bool _helpOpen = true;
+
+    /// <summary>
+    /// The document as edited so far.
+    /// </summary>
+    /// <remarks>
+    /// Exposed to the test assembly only. A tap pass is asserted on the timings it produces - that a
+    /// line moved to the tapped moment, that the previous line was ended, that undo restored it - and
+    /// none of that is visible in rendered markup, which shows words rather than milliseconds.
+    /// </remarks>
+    internal LyricsTimingsDocument? EditedDocument => _document;
 
     private readonly Stack<(int LineIndex, LyricsTimedLine Before)> _undo = new();
     protected bool _canUndo => _undo.Count > 0;
@@ -345,7 +362,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    protected void Undo()
+    protected internal void Undo()
     {
         if (_document is null || _undo.Count == 0) return;
 
@@ -354,7 +371,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         AfterEdit(markDirty: true);
     }
 
-    protected void ResetAll()
+    protected internal void ResetAll()
     {
         if (_pristine is null) return;
 
@@ -393,6 +410,140 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
         await _module.InvokeVoidAsync("seekToMs", _audioElement, startMs);
         await _module.InvokeVoidAsync("play", _audioElement);
+    }
+
+
+    // -----------------------------------------------------------------
+    // Tap-along
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Arm the tap pass, starting from wherever the song currently is.
+    ///
+    /// <para>
+    /// Deliberately not from the top. Alignment usually drifts in one section rather than uniformly,
+    /// and the instructions promise "you don't have to do the whole song — just the part that's
+    /// wrong", so a creator can seek to the chorus, press this, and tap from there.
+    /// </para>
+    /// </summary>
+    protected internal async Task StartRecording()
+    {
+        if (_document is null) return;
+
+        _recordLineIndex = FindNextTimedLineFrom((long)(_currentTime * 1000));
+
+        if (_recordLineIndex < 0)
+        {
+            _statusMessage = "There are no more lines after this point to tap.";
+            return;
+        }
+
+        _isRecording = true;
+        _statusMessage = null;
+
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("setRecording", true);
+
+            // Playing is the point - a tap pass against a stopped song would be tapping to silence.
+            await _module.InvokeVoidAsync("play", _audioElement);
+        }
+    }
+
+    protected internal async Task StopRecording()
+    {
+        _isRecording = false;
+        _recordLineIndex = -1;
+
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("setRecording", false);
+        }
+
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task StopRecordingFromKeyboard() => await StopRecording();
+
+    /// <summary>
+    /// One tap: this line starts now, and the pass moves to the next.
+    /// </summary>
+    /// <param name="atMs">
+    /// Read from the audio element inside the keydown handler that saw the press, so it is the moment
+    /// the creator heard - not the moment the message reached the server.
+    /// </param>
+    [JSInvokable]
+    public async Task RecordLineTap(double atMs)
+    {
+        if (!_isRecording || _document is null || _recordLineIndex < 0)
+        {
+            return;
+        }
+
+        PushUndo(_recordLineIndex);
+        LyricsTimingEdits.RetimeLine(_document, _recordLineIndex, (long)atMs);
+
+        // RetimeLine also ends the PREVIOUS line here, which is what makes one pass down the song
+        // produce a coherent result instead of every earlier line still running underneath.
+        _recordLineIndex = FindNextTimedLineAfter(_recordLineIndex);
+
+        if (_recordLineIndex < 0)
+        {
+            await StopRecording();
+            _statusMessage = "That's the last line. Have a listen, then publish when you're happy.";
+        }
+
+        AfterEdit();
+    }
+
+    /// <summary>The first timed line starting at or after <paramref name="fromMs"/>.</summary>
+    private int FindNextTimedLineFrom(long fromMs)
+    {
+        if (_document is null) return -1;
+
+        for (var i = 0; i < _document.Lines.Count; i++)
+        {
+            var line = _document.Lines[i];
+            if (line.IsTimed && line.StartMs >= fromMs)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The next timed line after <paramref name="lineIndex"/>, skipping section markers.</summary>
+    private int FindNextTimedLineAfter(int lineIndex)
+    {
+        if (_document is null) return -1;
+
+        for (var i = lineIndex + 1; i < _document.Lines.Count; i++)
+        {
+            // Untimed lines are markers and blanks. Nobody sings them, so nobody taps them - stopping
+            // on one would leave the creator waiting for a cue that never comes.
+            if (_document.Lines[i].IsTimed)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The line the creator should be tapping next, for the on-screen prompt.</summary>
+    protected string NextLineToTap =>
+        _document is not null && _recordLineIndex >= 0 && _recordLineIndex < _document.Lines.Count
+            ? _document.Lines[_recordLineIndex].Text
+            : string.Empty;
+
+    /// <summary>Arrow-key nudge of the selected word. Direction only; the step is fixed.</summary>
+    [JSInvokable]
+    public Task NudgeSelectedFromKeyboard(int direction)
+    {
+        NudgeSelected(direction < 0 ? -NudgeMs : NudgeMs);
+        return Task.CompletedTask;
     }
 
     // -----------------------------------------------------------------
