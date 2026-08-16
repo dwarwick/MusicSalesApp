@@ -92,38 +92,50 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
         if (user is null)
         {
-            _error = "You need to be signed in to edit lyric timing.";
-            _loading = false;
+            SendHome();
             return;
         }
 
         var creator = await CreatorService.GetCreatorByUserIdAsync(user.Id);
         if (creator is null)
         {
-            _error = "Only creators can edit lyric timing.";
-            _loading = false;
+            SendHome();
             return;
         }
 
         _creatorId = creator.Id;
 
-        // The ownership check happens in the service, against the song's own row. The page's policy
-        // says "is a creator", which is emphatically not the claim "owns this song".
+        // THE SONG ID COMES FROM THE URL, so this is the whole authorisation story for this page.
+        // The route's policy establishes "is a creator", which is not the claim "owns song 412" -
+        // and the id is a small integer somebody can trivially change in the address bar.
+        //
+        // The check itself is made inside the service, against the song's own CreatorId, following
+        // SubmitAsync: the destination is derived from the song's record rather than from anything
+        // the caller supplied, so an authenticated creator cannot reach another's work by asking
+        // nicely.
         var editable = await LyricsService.GetEditableTimingsAsync(SongId, creator.Id);
 
         switch (editable.Outcome)
         {
             case LyricsEditOutcome.NotAllowed:
-                _error = "That song belongs to a different creator.";
-                _loading = false;
-                return;
-
             case LyricsEditOutcome.NotFound:
-                _error = "That song could not be found.";
-                _loading = false;
+                // Both go home, and they go home the SAME way on purpose. Telling somebody "that
+                // song belongs to a different creator" confirms it exists and is owned - which is
+                // enough to walk the id space and learn how many songs the site has and which ones
+                // are real. Refusing identically for "not yours" and "not a song" leaves nothing to
+                // learn from trying.
+                Logger.LogWarning(
+                    "Creator {CreatorId} was refused the timing editor for song {SongId} ({Outcome}).",
+                    creator.Id,
+                    SongId,
+                    editable.Outcome);
+
+                SendHome();
                 return;
 
             case LyricsEditOutcome.NoTimings:
+                // Not a refusal - they own this song, it simply has nothing timed yet. Saying so is
+                // useful, and reveals nothing they did not already know about their own song.
                 _error = "This song has no lyric timings yet. Paste its lyrics from your song list "
                          + "and we'll time them for you.";
                 _loading = false;
@@ -146,6 +158,16 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
         _loading = false;
     }
+
+    /// <summary>
+    /// Leave, without saying why.
+    /// </summary>
+    /// <remarks>
+    /// <c>forceLoad: false</c> so it stays a client-side navigation - a full reload would work but
+    /// costs a round trip and a flash of white for something that is not an error the user needs to
+    /// dwell on. The reason is logged rather than displayed.
+    /// </remarks>
+    private void SendHome() => NavigationManager.NavigateTo(AppPageRoutes.Home, forceLoad: false);
 
     /// <summary>
     /// The greeting, coloured by confidence against the admin threshold.

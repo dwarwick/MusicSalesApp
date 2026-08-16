@@ -1,6 +1,7 @@
 #nullable enable
 using System.Security.Claims;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Moq;
@@ -114,26 +115,46 @@ public class LyricsTimingEditorTests : BUnitTestBase
     // Who is allowed in
     // -----------------------------------------------------------------
 
-    [Test]
-    public void ASongBelongingToAnotherCreatorIsRefused()
+    [TestCase(LyricsEditOutcome.NotAllowed)]
+    [TestCase(LyricsEditOutcome.NotFound)]
+    public void ASongTheyDoNotOwnSendsThemHomeWithoutAnEditor(LyricsEditOutcome outcome)
     {
-        // The route's policy says "is a creator", which is not the claim "owns this song". The
-        // service makes the real check against the song's own row; this asserts the page honours it
-        // rather than rendering an editor over somebody else's work.
-        GivenTimings(LyricsEditOutcome.NotAllowed);
+        // The song id comes from the URL and is a small integer, so this is the whole authorisation
+        // story for the page - the route's policy only establishes "is a creator", not "owns song
+        // 412". The service makes the real check against the song's own CreatorId; this asserts the
+        // page acts on it rather than rendering an editor over somebody else's work.
+        GivenTimings(outcome);
 
-        var cut = Render();
+        var navigation = TestContext.Services.GetRequiredService<NavigationManager>();
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("belongs to a different creator"));
-            Assert.That(cut.FindAll(".lyrics-scroller"), Is.Empty);
-        });
+        TestContext.Render<LyricsTimingEditor>(pb => pb.Add(p => p.SongId, SongId));
+
+        Assert.That(new Uri(navigation.Uri).AbsolutePath, Is.EqualTo("/"));
     }
 
     [Test]
-    public void ASongWithNoTimingsExplainsHowToGetSome()
+    public void NotYoursAndNotASongAreRefusedIdentically()
     {
+        // Deliberately indistinguishable. Telling somebody "that song belongs to a different
+        // creator" confirms it exists and is owned, which is enough to walk the id space and learn
+        // which ids are real. Refusing both the same way leaves nothing to learn from trying.
+        GivenTimings(LyricsEditOutcome.NotAllowed);
+        var navigation = TestContext.Services.GetRequiredService<NavigationManager>();
+        TestContext.Render<LyricsTimingEditor>(pb => pb.Add(p => p.SongId, SongId));
+        var refusedNotYours = navigation.Uri;
+
+        GivenTimings(LyricsEditOutcome.NotFound);
+        TestContext.Render<LyricsTimingEditor>(pb => pb.Add(p => p.SongId, SongId));
+        var refusedNotFound = navigation.Uri;
+
+        Assert.That(refusedNotYours, Is.EqualTo(refusedNotFound));
+    }
+
+    [Test]
+    public void ASongTheyDoOwnWithNoTimingsStaysAndExplainsHowToGetSome()
+    {
+        // Not a refusal - they own it, it simply has nothing timed yet. Redirecting here would be
+        // unhelpful, and the message reveals nothing they did not already know about their own song.
         GivenTimings(LyricsEditOutcome.NoTimings);
 
         var cut = Render();
@@ -270,10 +291,17 @@ public class LyricsTimingEditorTests : BUnitTestBase
 
         var cut = Render();
 
+        // Asserted on the banner rather than the whole page, and on words rather than digits: the
+        // scroller's instance id is a GUID, so "does the markup contain 70" is true roughly one run
+        // in eight regardless of what the banner says.
+        var banner = cut.Find("[role=status]").TextContent;
+
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("weren't confident"));
-            Assert.That(cut.Markup, Does.Not.Contain("70"), "The threshold is an admin knob, not creator-facing.");
+            Assert.That(banner, Does.Contain("weren't confident"));
+            Assert.That(banner, Does.Not.Contain("%"), "The score is an admin's calibration, not a creator's problem.");
+            Assert.That(banner, Does.Not.Contain("threshold").IgnoreCase);
+            Assert.That(banner, Does.Not.Contain("confidence").IgnoreCase, "No jargon in the greeting.");
         });
     }
 
