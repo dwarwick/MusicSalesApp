@@ -326,7 +326,13 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
 
         // A little overshoot is normal - a final syllable can ring past the last decoded sample - so
         // this tolerates 5% rather than demanding the timings end inside the track exactly.
-        if (result.DurationMs > 0 && result.LastWordEndMs > result.DurationMs * 1.05)
+        //
+        // The tolerance is shared with the editor's publish-time validator rather than written twice.
+        // The two ask the same question at opposite ends of the feature, and if they disagreed the
+        // result would be a document the pipeline accepted and the editor then refused to publish -
+        // a song stuck in review with nothing visibly wrong with it.
+        if (result.DurationMs > 0
+            && result.LastWordEndMs > result.DurationMs * LyricsTimingsValidator.DurationOvershootTolerance)
         {
             return new LyricsClassification(
                 SongLyricsStatus.Failed,
