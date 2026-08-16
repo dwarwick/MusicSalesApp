@@ -71,6 +71,26 @@ public class AppSettingsService : IAppSettingsService
     public const int DefaultMaxAudioUploadSizeMB = 100;
 
     /// <summary>
+    /// The key used for storing the minimum confidence at which lyric timings are shown to
+    /// listeners, 0-1.
+    /// </summary>
+    public const string LyricsConfidenceThresholdKey = "LyricsConfidenceThreshold";
+
+    /// <summary>
+    /// Default minimum confidence for publishing lyric timings.
+    ///
+    /// <para>
+    /// Admin-tunable rather than a constant in the alignment pipeline, and that placement is the
+    /// point: the Function reports a score, this application decides what the score is worth. Sung
+    /// vocals are genuinely hard - even good pipelines land 150-300 ms average word-onset error, and
+    /// worse on melisma, harmonies and dense mixes - so the right threshold is something to be found
+    /// by looking at real songs, not guessed once and compiled into the slowest component in the
+    /// system to redeploy.
+    /// </para>
+    /// </summary>
+    public const double DefaultLyricsConfidenceThreshold = 0.7d;
+
+    /// <summary>
     /// The key used for storing the maximum image upload file size in MB.
     /// </summary>
     public const string MaxImageUploadSizeMBKey = "MaxImageUploadSizeMB";
@@ -259,6 +279,40 @@ public class AppSettingsService : IAppSettingsService
 
         _logger.LogWarning("Invalid max audio upload size value in database: {Value}. Using default.", value);
         return DefaultMaxAudioUploadSizeMB;
+    }
+
+    /// <inheritdoc />
+    public async Task<double> GetLyricsConfidenceThresholdAsync()
+    {
+        var value = await GetSettingAsync(LyricsConfidenceThresholdKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultLyricsConfidenceThreshold;
+        }
+
+        if (double.TryParse(
+                value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var threshold)
+            && threshold is >= 0d and <= 1d)
+        {
+            return threshold;
+        }
+
+        _logger.LogWarning(
+            "Invalid lyrics confidence threshold in database: {Value}. Using default.", value);
+        return DefaultLyricsConfidenceThreshold;
+    }
+
+    /// <inheritdoc />
+    public async Task SetLyricsConfidenceThresholdAsync(double threshold)
+    {
+        await SetSettingAsync(
+            LyricsConfidenceThresholdKey,
+            Math.Clamp(threshold, 0d, 1d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "Minimum confidence at which lyric timings are shown to listeners");
     }
 
     /// <inheritdoc />

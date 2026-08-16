@@ -76,6 +76,45 @@ public class MediaProcessingOptions
     public TimeSpan StalledJobTimeout { get; set; } = TimeSpan.FromHours(2);
 
     /// <summary>
+    /// How long a lyrics-alignment attempt may sit without its step advancing before the reconciler
+    /// looks into it.
+    ///
+    /// <para>
+    /// <b>Shorter than <see cref="StalledJobTimeout"/>, not longer, and the inversion is the point.</b>
+    /// That one is generous because when it fires it can only guess, so guessing early is dangerous.
+    /// This one is the trigger for a <em>question</em>: lyrics alignment runs as a Durable
+    /// orchestration started over HTTP, so its instance id is recorded, and the reconciler asks Azure
+    /// what actually happened rather than inferring death from a stale timestamp. Asking early costs
+    /// nothing and answers three cases the audio pipeline cannot distinguish at all - failed,
+    /// cancelled, and finished-but-the-callback-was-lost.
+    /// </para>
+    ///
+    /// <para>
+    /// It still has to clear the worst case honestly, because a run that is merely slow must not be
+    /// interrupted: roughly fifty minutes of orchestration (bounded by the Function app's own
+    /// <c>functionTimeout</c>), plus the orchestrator's failure-reporting retry window, plus the
+    /// terminal callback's own timeout - a little over an hour. Ninety minutes leaves headroom for a
+    /// cold start without letting a genuinely dead attempt sit unresolved all day.
+    /// </para>
+    /// </summary>
+    public TimeSpan LyricsStalledJobTimeout { get; set; } = TimeSpan.FromMinutes(90);
+
+    /// <summary>
+    /// How long a lyrics attempt the reconciler cannot get an answer about is left alone before it
+    /// is written off.
+    ///
+    /// <para>
+    /// Separate from <see cref="LyricsStalledJobTimeout"/> because it covers a different situation.
+    /// "Azure says it failed" is a verdict and acts immediately; "we could not ask Azure" is not a
+    /// verdict at all, and treating it as one would fail healthy runs during an outage - exactly the
+    /// bug the audio pipeline's history is a record of. So an unanswerable attempt is retried on
+    /// every sweep and only written off once it has been unanswerable for far longer than any run
+    /// could legitimately take.
+    /// </para>
+    /// </summary>
+    public TimeSpan LyricsUnreachableJobTimeout { get; set; } = TimeSpan.FromHours(6);
+
+    /// <summary>
     /// Lifetime of the read SAS minted over the staging container for a cross-account copy. Short,
     /// because it is created per assembly and used immediately.
     /// </summary>

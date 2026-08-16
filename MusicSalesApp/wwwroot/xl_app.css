@@ -1009,3 +1009,12 @@
     width: 20px;
     height: 20px;
 }
+
+/* Lyric timing dialog: spacing and sizing. */
+.lyrics-dialog-field { gap: 0.25rem; margin-top: 0.75rem; }
+.lyrics-dialog-textarea textarea { min-height: 260px; font-size: 0.95rem; line-height: 1.5; }
+.lyrics-dialog-counter { font-size: 0.8rem; margin-top: 0.25rem; }
+.lyrics-dialog-hint { font-size: 0.8rem; margin-top: 0.5rem; }
+.lyrics-dialog-progress { gap: 0.35rem; margin: 0.75rem 0; }
+.lyrics-dialog-progress-label { font-size: 0.85rem; }
+.lyrics-dialog-footer { gap: 0.5rem; }

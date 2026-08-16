@@ -97,6 +97,71 @@
             "group": "build"
         },
         {
+            "label": "Sync Lyrics Function settings (Test)",
+            "detail": "Writes MusicSalesApp.LyricsFunctions/local.settings.json from appsettings.Test.json, pointing local runs at davidtest.dev. Overrides the Azure mount paths with local equivalents.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Sync-FunctionSettings.ps1",
+                "-Environment",
+                "Test",
+                "-AppKind",
+                "Lyrics"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Publish Lyrics Functions to test (davidtest)",
+            "detail": "Publishes the Python lyrics-alignment Function app to streamtunes-lyrics-test. Builds remotely: the wheels have to be built for the Linux worker, and torch is not something to cross-ship from a dev machine.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Invoke-FunctionPublish.ps1",
+                "-FunctionAppName",
+                "streamtunes-lyrics-test",
+                "-Runtime",
+                "python"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Provision Lyrics Functions infrastructure (test)",
+            "detail": "Creates or verifies streamtunes-lyrics-test (Python, Linux, Flex Consumption) and prints the function key the web app needs.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Provision-LyricsFunctionApp.ps1",
+                "-Environment",
+                "Test"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Check Lyrics Functions settings drift (test)",
+            "detail": "Reports app settings present in appsettings.Test.json but missing on streamtunes-lyrics-test. Key names only, never values.",
+            "type": "shell",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}/Provision-LyricsFunctionApp.ps1",
+                "-Environment",
+                "Test",
+                "-WhatIf"
+            ],
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
             "label": "Publish Functions to production (streamtunes)",
             "detail": "Publishes the FFmpeg audio-processing Function app to streamtunes-media-prod. Resolves func.exe directly, so a stale PATH right after installing Core Tools does not look like 'not installed'.",
             "type": "shell",

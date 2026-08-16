@@ -1,0 +1,33 @@
+{
+  "version": "2.0",
+
+  "//functionTimeout": "Set EXPLICITLY, not inherited. Flex Consumption enforces no ceiling of its own, so unlike the C# app's 10 minutes - which is the Windows Consumption limit and cannot be raised - this is a number somebody chose and can therefore be reviewed. It bounds one activity, and only align_lyrics can approach it: Demucs on two cores runs for single-digit minutes on a normal track and tens of minutes on a long one from a cold start. MusicSalesApp.Tests/Services/LyricsTimeoutChainTests.cs pins this against the web app's reconciler timeout - changing it means rechecking that test.",
+  "functionTimeout": "01:00:00",
+
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request;Exception"
+      }
+    }
+  },
+
+  "extensions": {
+    "durableTask": {
+      "//hubName": "Per-environment, and this is a live hazard rather than hygiene. Test and Production share the same Standard storage account - which is why the provisioning script MERGES its lifecycle rule rather than replacing it - so a literal hub name here would put both environments on one task hub, where they would steal each other's orchestrations. Set LyricsTaskHubName in each app's settings.",
+      "hubName": "%LyricsTaskHubName%",
+
+      "//maxConcurrentActivityFunctions": "The Durable equivalent of the C# app's batchSize:1, and just as load-bearing. The default lets several activities run per instance; for Demucs that means several separations sharing one 4 GB instance's memory, and an out-of-memory kill fails an activity the orchestrator deliberately does not retry.",
+      "maxConcurrentActivityFunctions": 1,
+
+      "//maxConcurrentOrchestratorFunctions": "Orchestrators are cheap replay loops that dispatch and wait, so they do not need the same restraint.",
+      "maxConcurrentOrchestratorFunctions": 5,
+
+      "storageProvider": {
+        "//connectionStringName": "The task hub's own tables, queues and lease container. Pointed at the STANDARD account: the media account is Premium and offers no Queue service at all, which is the reason there are two accounts in the first place.",
+        "connectionStringName": "StagingStorageConnectionString"
+      }
+    }
+  }
+}

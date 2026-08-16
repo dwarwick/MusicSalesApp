@@ -857,3 +857,20 @@ body {
     border-color: #c6c6c6 !important;
     color: #1f1f1f !important;
 }
+
+/* Lyric timing dialog - see light.css for why the counter changes colour. */
+.lyrics-dialog-counter {
+    color: #adb5bd;
+}
+
+.lyrics-dialog-counter.is-over {
+    color: #ea868f;
+}
+
+.lyrics-dialog-hint {
+    color: #adb5bd;
+}
+
+.lyrics-dialog-progress-label {
+    color: #dee2e6;
+}

@@ -39,6 +39,7 @@ This app is also the **backend API for the sibling MAUI mobile app** (`../MusicS
 | `MusicSalesApp.Common/` | Shared constants/helpers (`Helpers/*.cs` — `Roles`, `Permissions`, `SubscriptionStatuses`, `BillingSources`, `AuthStorageKeys`, etc.). Also referenced directly by the sibling MAUI repo. |
 | `MusicSalesApp.Tests/` | NUnit + Moq unit tests (Controllers, Services, Helpers, Middleware, Authorization). Uses EF Core InMemory and a hand-rolled `TestFactory : IDbContextFactory<AppDbContext>` re-declared per file. |
 | `MusicSalesApp.ComponentTests/` | bUnit Blazor component tests. |
+| `MusicSalesApp.LyricsFunctions/` | **Python** Azure Functions (Linux, Flex Consumption) — Durable orchestration that aligns pasted lyrics to a song's audio: Demucs vocal separation, forced alignment, then token-to-line mapping. Outside the solution: a Function app is pinned to one language runtime, and this one is PyTorch. Invoked over HTTP rather than a queue so its orchestration instance id comes back. Tests run under `pytest`, not `dotnet test`. |
 
 There's no separate Data/Identity/Infrastructure project — everything lives inside `MusicSalesApp/` by folder: `Data/AppDbContext.cs` (single EF Core context), `Models/`, `Services/` (~90 services, interface + impl pairs), `Controllers/` (18 API controllers), `Hubs/` (5 SignalR hubs), `Components/` (`Base/BlazorBase.cs` is the base class every page/component code-behind inherits from — see it for the full set of services injectable without `@inject`).
 

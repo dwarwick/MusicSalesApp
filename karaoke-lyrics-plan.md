@@ -208,7 +208,7 @@ shifts to Container Apps and it's better to learn that on day one.
 ```
 
 A distinct task hub name is required — sharing a hub with anything else produces confusing,
-hard-to-diagnose failures.
+hard-to-diagnose failures. Make sure we also have a dev hub.
 
 ---
 

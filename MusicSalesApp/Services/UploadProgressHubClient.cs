@@ -24,6 +24,19 @@ public interface IUploadProgressHubClient : IAsyncDisposable
     /// </summary>
     event Func<CoverArtMatchProgress, Task>? OnMatchProgress;
 
+    /// <summary>
+    /// Fired for each lyrics-alignment update. The payload's JobId identifies which attempt it
+    /// belongs to - an attempt, not a song, because a song can be re-aligned any number of times.
+    ///
+    /// <para>
+    /// Rides this client rather than a second one for the same reason it rides the same hub: the
+    /// connection, its cookie forwarding and its re-join-on-reconnect are already solved here, and
+    /// a second connection would have to solve all three again to deliver the same creator's
+    /// progress over the same circuit.
+    /// </para>
+    /// </summary>
+    event Func<LyricsAlignmentProgress, Task>? OnLyricsProgress;
+
     /// <summary>Fired once a cover-art batch has been paired. Identified by BatchId.</summary>
     event Func<CoverArtMatchResult, Task>? OnMatchResult;
 
@@ -44,6 +57,7 @@ public class UploadProgressHubClient : IUploadProgressHubClient
     public event Func<AudioProcessingProgress, Task>? OnProgress;
     public event Func<CoverArtMatchProgress, Task>? OnMatchProgress;
     public event Func<CoverArtMatchResult, Task>? OnMatchResult;
+    public event Func<LyricsAlignmentProgress, Task>? OnLyricsProgress;
 
     public bool IsConnected => _hubConnection.State == HubConnectionState.Connected;
 
@@ -89,6 +103,17 @@ public class UploadProgressHubClient : IUploadProgressHubClient
             async progress =>
             {
                 var handler = OnMatchProgress;
+                if (handler is not null)
+                {
+                    await handler(progress);
+                }
+            });
+
+        _hubConnection.On<LyricsAlignmentProgress>(
+            SignalRMethodNames.ReceiveLyricsAlignmentProgress,
+            async progress =>
+            {
+                var handler = OnLyricsProgress;
                 if (handler is not null)
                 {
                     await handler(progress);

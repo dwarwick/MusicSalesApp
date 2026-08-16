@@ -870,3 +870,21 @@ body {
     border-color: #c6c6c6 !important;
     color: #1f1f1f !important;
 }
+
+/* Lyric timing dialog. The counter is quiet until it is not: over the limit it
+   turns into the reason the Submit button is disabled, so it has to be findable. */
+.lyrics-dialog-counter {
+    color: #6c757d;
+}
+
+.lyrics-dialog-counter.is-over {
+    color: #b02a37;
+}
+
+.lyrics-dialog-hint {
+    color: #6c757d;
+}
+
+.lyrics-dialog-progress-label {
+    color: #495057;
+}

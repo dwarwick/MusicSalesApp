@@ -1,0 +1,8 @@
+.venv/
+.pytest_cache/
+__pycache__/
+tests/
+*.pyc
+local.settings.json
+README.md
+CLAUDE.md

@@ -28,6 +28,8 @@ public class MediaProcessingController : ControllerBase
     private readonly IAudioProbeResultHandler _probeResultHandler;
     private readonly IUploadProgressNotifier _progressNotifier;
     private readonly ICoverArtMatchNotifier _matchNotifier;
+    private readonly ILyricsAlignmentCompletionService _lyricsCompletionService;
+    private readonly ILyricsAlignmentNotifier _lyricsNotifier;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MediaProcessingController> _logger;
 
@@ -42,6 +44,8 @@ public class MediaProcessingController : ControllerBase
         IAudioProbeResultHandler probeResultHandler,
         IUploadProgressNotifier progressNotifier,
         ICoverArtMatchNotifier matchNotifier,
+        ILyricsAlignmentCompletionService lyricsCompletionService,
+        ILyricsAlignmentNotifier lyricsNotifier,
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MediaProcessingController> logger)
     {
@@ -49,6 +53,8 @@ public class MediaProcessingController : ControllerBase
         _probeResultHandler = probeResultHandler;
         _progressNotifier = progressNotifier;
         _matchNotifier = matchNotifier;
+        _lyricsCompletionService = lyricsCompletionService;
+        _lyricsNotifier = lyricsNotifier;
         _contextFactory = contextFactory;
         _logger = logger;
     }
@@ -158,6 +164,103 @@ public class MediaProcessingController : ControllerBase
         }
 
         await _progressNotifier.NotifyAsync(job.CreatorId, progress, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// The terminal callback for one lyrics-alignment attempt. Stores the timings, or records why
+    /// there are none.
+    ///
+    /// <para>
+    /// Same contract as <see cref="Complete"/>: a non-2xx makes the Function throw and retry, so only
+    /// genuinely retryable problems should produce one. Note the caller here is a different Function
+    /// app in a different language, sharing this controller and this secret because it is the same
+    /// kind of caller - a trusted background worker with no user behind it.
+    /// </para>
+    /// </summary>
+    [HttpPost("lyrics-complete")]
+    public async Task<IActionResult> LyricsComplete(
+        [FromBody] LyricsAlignmentResult result,
+        CancellationToken cancellationToken)
+    {
+        if (result is null || result.JobId == Guid.Empty)
+        {
+            return BadRequest(new { message = "A job id is required." });
+        }
+
+        await _lyricsCompletionService.CompleteAsync(result, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// A lyrics progress ping. Best effort in both directions, exactly like <see cref="Progress"/>.
+    /// </summary>
+    [HttpPost("lyrics-progress")]
+    public async Task<IActionResult> LyricsProgress(
+        [FromBody] LyricsAlignmentProgress progress,
+        CancellationToken cancellationToken)
+    {
+        if (progress is null || progress.JobId == Guid.Empty)
+        {
+            return BadRequest(new { message = "A job id is required." });
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var job = await context.LyricsAlignmentJobs.FirstOrDefaultAsync(
+            row => row.JobId == progress.JobId,
+            cancellationToken);
+
+        if (job is null)
+        {
+            // A ping for an attempt that has been cleaned up. Normal, not an error - and answering
+            // anything but 200 would make the Function retry a cosmetic update.
+            return Ok();
+        }
+
+        if (LyricsAlignmentProgressCalculator.IsTerminal(job.Step))
+        {
+            // A late ping arriving after the attempt already finished, failed or was cancelled.
+            // Dropping it is what stops a finished bar from jumping backwards.
+            return Ok();
+        }
+
+        var isAdvance = LyricsAlignmentProgressCalculator.IsAdvance(job.Step, progress.Step);
+
+        // Any ping at all proves the orchestration is still working, whatever step it names - and
+        // that matters more here than in the audio pipeline. Vocal separation runs for minutes with
+        // no natural progress signal, so the activity heartbeats on a timer rather than advancing;
+        // without refreshing liveness on a non-advancing ping, every one of those would leave
+        // StepUpdatedAt frozen and the reconciler would start asking about a perfectly healthy run.
+        //
+        // Throttled so this stays a step-transition-frequency write rather than a
+        // heartbeat-frequency one.
+        var liveness = DateTime.UtcNow;
+        var livenessIsStale = liveness - job.StepUpdatedAt > LivenessRefreshInterval;
+
+        if (isAdvance)
+        {
+            job.Step = progress.Step;
+            job.Status = LyricsAlignmentJobStatus.Processing;
+            job.StepUpdatedAt = liveness;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        else if (livenessIsStale)
+        {
+            job.StepUpdatedAt = liveness;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!isAdvance && progress.Step < job.Step)
+        {
+            _logger.LogDebug(
+                "Ignoring stale lyrics progress for job {JobId}: {Incoming} is behind {Current}",
+                progress.JobId,
+                progress.Step,
+                job.Step);
+            return Ok();
+        }
+
+        await _lyricsNotifier.NotifyAsync(job.CreatorId, progress, cancellationToken);
         return Ok();
     }
 

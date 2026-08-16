@@ -1,0 +1,106 @@
+@using MusicSalesApp.Models
+@using MusicSalesApp.Services
+@inherits LyricsEditorDialogModel
+
+<SfDialog @bind-Visible="IsVisible" Width="640px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>
+            <div class="lyrics-dialog-header">
+                <i class="bi bi-music-note-list me-2"></i>
+                Lyrics for @(Song?.SongTitle ?? "this song")
+            </div>
+        </Header>
+        <Content>
+            @if (!LyricsService.IsAvailable)
+            {
+                <SfMessage Severity="MessageSeverity.Info" ShowIcon="true">
+                    Lyric timing isn't configured for this environment yet.
+                </SfMessage>
+            }
+            else
+            {
+                @if (_validationErrors.Count > 0)
+                {
+                    <SfMessage Severity="MessageSeverity.Error" ShowIcon="true">
+                        <ul class="lyrics-dialog-errors">
+                            @foreach (var error in _validationErrors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </SfMessage>
+                }
+
+                @if (_status is not null)
+                {
+                    <SfMessage Severity="@_statusSeverity" ShowIcon="true">@_statusMessage</SfMessage>
+                }
+
+                @if (_isRunning)
+                {
+                    <div class="lyrics-dialog-progress">
+                        <div class="lyrics-dialog-progress-label">@_progressDetail</div>
+                        @* A plain Bootstrap bar, matching UploadFiles.razor, rather than
+                           introducing SfProgressBar for one dialog. *@
+                        <div class="progress" style="height: 1.25rem;">
+                            <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 style="width: @(_progressPercent.ToString("0"))%;"
+                                 aria-valuenow="@_progressPercent.ToString("0")"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100"
+                                 aria-label="@($"Lyric timing progress: {_progressDetail}")">
+                                @_progressPercent.ToString("0")%
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="lyrics-dialog-field">
+                    <label class="form-label" for="lyrics-text">Lyrics</label>
+                    <SfTextBox @bind-Value="_lyricsText"
+                               ID="lyrics-text"
+                               Multiline="true"
+                               Placeholder="Paste the lyrics for this song, one line per lyric line."
+                               Enabled="@(!_isRunning && !_isSaving)"
+                               CssClass="lyrics-dialog-textarea" />
+                    <div class="lyrics-dialog-counter @(IsOverLimit ? "is-over" : string.Empty)">
+                        @CharacterCount.ToString("N0") / @MaxCharacters.ToString("N0") characters
+                        &middot; @LineCount.ToString("N0") / @MaxLines.ToString("N0") lines
+                    </div>
+                    <div class="lyrics-dialog-hint">
+                        Paste the words only. Section headings like <code>[Chorus]</code> are ignored
+                        rather than timed, so they're safe to leave in.
+                    </div>
+                </div>
+            }
+        </Content>
+        <FooterTemplate>
+            <div class="lyrics-dialog-footer">
+                @if (_status?.Status is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview)
+                {
+                    <SfButton OnClick="DownloadLrcAsync" CssClass="e-btn e-small e-outline">
+                        <i class="bi bi-download me-1"></i> Download .lrc
+                    </SfButton>
+                }
+
+                @if (_isRunning)
+                {
+                    <SfButton OnClick="CancelAsync" CssClass="e-btn e-small e-danger" Disabled="@_isSaving">
+                        <i class="bi bi-x-circle me-1"></i> Cancel timing
+                    </SfButton>
+                }
+                else if (LyricsService.IsAvailable)
+                {
+                    <SfButton OnClick="SubmitAsync"
+                              CssClass="e-btn cta-secondary hero-secondary-cta"
+                              Disabled="@(_isSaving || IsOverLimit)">
+                        <i class="bi bi-stopwatch me-1"></i> @SubmitLabel
+                    </SfButton>
+                }
+
+                <SfButton OnClick="CloseAsync" CssClass="e-btn e-small">Close</SfButton>
+            </div>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>

@@ -18,18 +18,36 @@
     Functions *host*, before the worker's IConfiguration exists. A per-environment JSON file loaded
     by the worker could not supply them. local.settings.json is the one file the host reads.
 
+    THERE ARE TWO FUNCTION APPS. -AppKind picks which one's settings to write: the .NET
+    audio-processing app, or the Python lyrics-alignment app. They share both storage accounts and
+    the callback secret but need different setting sets, so each has its own Get-*Settings helper
+    and this dispatches between them.
+
+    Unlike those helpers, -AppKind is safe to put on THIS script: their results also feed the
+    drift-check baseline in the provisioning scripts, where a merged set would report an app's
+    settings as permanently missing. This one only writes a file.
+
 .EXAMPLE
     .\Sync-FunctionSettings.ps1 -Environment Test
-    Points the local Function at davidtest.dev and its containers.
+    Points the local audio-processing Function at davidtest.dev and its containers.
+
+.EXAMPLE
+    .\Sync-FunctionSettings.ps1 -Environment Test -AppKind Lyrics
+    Points the local lyrics-alignment Function at davidtest.dev.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [ValidateSet("Development", "Test", "Production")]
     [string]$Environment = "Development",
 
+    # Which of the two Function apps to write settings for.
+    [ValidateSet("Media", "Lyrics")]
+    [string]$AppKind = "Media",
+
     [string]$SettingsPath,
 
-    [string]$OutputPath = (Join-Path $PSScriptRoot "MusicSalesApp.Functions\local.settings.json"),
+    # Defaulted from -AppKind below, because the default depends on it.
+    [string]$OutputPath,
 
     [switch]$ShowAzureCli,
 
@@ -40,6 +58,12 @@ Set-StrictMode -Version 3.0
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "Get-MediaProcessingSettings.ps1")
+. (Join-Path $PSScriptRoot "Get-LyricsProcessingSettings.ps1")
+
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $projectFolder = if ($AppKind -eq "Lyrics") { "MusicSalesApp.LyricsFunctions" } else { "MusicSalesApp.Functions" }
+    $OutputPath = Join-Path $PSScriptRoot (Join-Path $projectFolder "local.settings.json")
+}
 
 if ($Environment -eq "Production") {
     # local.settings.json is only ever read when running the Function on this machine, so this
@@ -50,10 +74,27 @@ if ($Environment -eq "Production") {
         "file. Anything you run locally will process real creator uploads.")
 }
 
-$values = Get-MediaProcessingSettings `
-    -Environment $Environment `
-    -SettingsPath $SettingsPath `
-    -RepositoryRoot $PSScriptRoot
+$values = if ($AppKind -eq "Lyrics") {
+    Get-LyricsProcessingSettings -Environment $Environment -SettingsPath $SettingsPath -RepositoryRoot $PSScriptRoot
+}
+else {
+    Get-MediaProcessingSettings -Environment $Environment -SettingsPath $SettingsPath -RepositoryRoot $PSScriptRoot
+}
+
+if ($AppKind -eq "Lyrics") {
+    # The mount paths in the shared settings are ANNOTATIONS FOR AZURE. On Flex Consumption the
+    # Linux ffmpeg build and the model weights are on an Azure Files share, because CPU-only torch
+    # plus a gigabyte of weights does not fit a zip deployment. None of that exists on a dev machine,
+    # where /mnt/tools/ffmpeg is simply a path that is not there - so the generated LOCAL file points
+    # at whatever is on PATH and lets torch and Demucs use their own default caches.
+    #
+    # Done here rather than in Get-LyricsProcessingSettings because the distinction is not the
+    # environment - this file is written for local use whichever backend it points at - it is that
+    # Sync writes to disk while Provision pushes to Azure.
+    $values["FFMPEG_BINARY"] = "ffmpeg"
+    $values.Remove("TORCH_HOME")
+    $values.Remove("XDG_CACHE_HOME")
+}
 
 $document = [ordered]@{
     IsEncrypted = $false
@@ -63,18 +104,28 @@ $document = [ordered]@{
 if ($PSCmdlet.ShouldProcess($OutputPath, "Write Function app settings for '$Environment'")) {
     $json = $document | ConvertTo-Json -Depth 5
     Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
-    Write-Host "Wrote $OutputPath ($Environment)."
+    Write-Host "Wrote $OutputPath ($Environment, $AppKind)."
     Write-Host "  Media   : $($values['MediaProcessing:MediaContainerName'])"
     Write-Host "  Staging : $($values['MediaProcessing:StagingContainerName'])"
-    Write-Host "  Queues  : $($values['MediaProcessing:TranscodeQueueName']), $($values['MediaProcessing:ProbeQueueName'])"
+
+    if ($AppKind -eq "Lyrics") {
+        # No queues: this app is started over HTTP so its Durable starter can hand back the
+        # orchestration's instance id, which a queue trigger has no way to do.
+        Write-Host "  Task hub: $($values['LyricsTaskHubName'])"
+    }
+    else {
+        Write-Host "  Queues  : $($values['MediaProcessing:TranscodeQueueName']), $($values['MediaProcessing:ProbeQueueName'])"
+    }
+
     Write-Host "  Callback: $($values['CallbackBaseUrl'])"
 }
 
 if ($ShowAzureCli) {
     if ([string]::IsNullOrWhiteSpace($FunctionAppName)) {
+        $slug = if ($AppKind -eq "Lyrics") { "lyrics" } else { "media" }
         $FunctionAppName = switch ($Environment) {
-            "Production" { "streamtunes-media-prod" }
-            default { "streamtunes-media-test" }
+            "Production" { "streamtunes-$slug-prod" }
+            default { "streamtunes-$slug-test" }
         }
     }
 

@@ -25,7 +25,13 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$FunctionAppName,
 
-    [string]$ProjectPath = (Join-Path $PSScriptRoot "MusicSalesApp.Functions")
+    [string]$ProjectPath,
+
+    # Which Function app is being published. There are two, and they need different publish flags:
+    # the .NET one wants --dotnet-isolated, and the Python one wants --build remote so its wheels are
+    # built on a Linux worker rather than shipped from whatever machine ran this.
+    [ValidateSet("dotnet", "python")]
+    [string]$Runtime = "dotnet"
 )
 
 Set-StrictMode -Version 3.0
@@ -50,7 +56,13 @@ function Resolve-FuncExecutable {
         (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\func.exe"),
         # npm -g install
         (Join-Path $env:APPDATA "npm\func.cmd"),
-        (Join-Path $env:APPDATA "npm\func")
+        (Join-Path $env:APPDATA "npm\func"),
+        # Homebrew and npm on macOS/Linux. The stale-PATH problem this function exists to solve is
+        # a Windows one, but the candidate list was Windows-only, so on a Mac it fell through to a
+        # bare Get-Command and then reported "not installed" listing only winget and npm paths.
+        "/opt/homebrew/bin/func",
+        "/usr/local/bin/func",
+        "/usr/bin/func"
     )
 
     foreach ($candidate in $candidates) {
@@ -82,7 +94,16 @@ if (-not (Test-Path -LiteralPath $ProjectPath)) {
     throw "Functions project folder not found: $ProjectPath"
 }
 
-Write-Host "Publishing $ProjectPath -> $FunctionAppName"
+if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
+    $ProjectPath = if ($Runtime -eq "python") {
+        Join-Path $PSScriptRoot "MusicSalesApp.LyricsFunctions"
+    }
+    else {
+        Join-Path $PSScriptRoot "MusicSalesApp.Functions"
+    }
+}
+
+Write-Host "Publishing $ProjectPath -> $FunctionAppName ($Runtime)"
 Write-Host "Using: $($func.Path)"
 
 if (-not $PSCmdlet.ShouldProcess($FunctionAppName, "func azure functionapp publish")) {
@@ -91,7 +112,16 @@ if (-not $PSCmdlet.ShouldProcess($FunctionAppName, "func azure functionapp publi
 
 Push-Location $ProjectPath
 try {
-    & $func.Path azure functionapp publish $FunctionAppName --dotnet-isolated
+    $publishArgs = if ($Runtime -eq "python") {
+        # Remote build: the wheels have to be built for the Linux worker, and torch is not
+        # something to be cross-shipped from a Windows or macOS dev machine even if pip let you.
+        @("--build", "remote")
+    }
+    else {
+        @("--dotnet-isolated")
+    }
+
+    & $func.Path azure functionapp publish $FunctionAppName @publishArgs
     if ($LASTEXITCODE -ne 0) {
         throw "func azure functionapp publish $FunctionAppName failed with exit code $LASTEXITCODE."
     }

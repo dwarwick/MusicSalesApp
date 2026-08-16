@@ -1,0 +1,24 @@
+# The CPU-only PyTorch index. This line is not optional and is the difference between a package that
+# deploys and one that does not: the default wheels drag in CUDA and run to several gigabytes, and
+# Flex Consumption is zip-deploy rather than custom containers. There is no GPU on Flex, so nothing
+# is lost.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+azure-functions==1.21.3
+azure-functions-durable==1.2.10
+azure-storage-blob==12.23.1
+requests==2.32.3
+
+# Pinned exactly, all of them. These libraries move fast and a resolver picking a newer torch on a
+# redeploy is how a working app stops importing.
+torch==2.4.1
+torchaudio==2.4.1
+demucs==4.0.1
+
+# demucs pulls these in, pinned here so a transitive bump cannot change behaviour silently.
+numpy==1.26.4
+soundfile==0.12.1
+
+# NOTE: model weights are deliberately NOT vendored. htdemucs is ~80 MB and the MMS_FA bundle is
+# well over a gigabyte; together with torch they do not fit a zip deployment. They live on the Azure
+# Files mount instead, with TORCH_HOME and the Demucs model directory pointed at it. See README.md.

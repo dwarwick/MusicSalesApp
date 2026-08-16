@@ -52,6 +52,9 @@ public static class MediaProcessingStagingPaths
     private const string CoverBaseName = "cover";
     private const string PlaybackName = "playback.mp3";
     private const string MatchBatchPrefix = "batch";
+    private const string LyricsPrefix = "lyrics";
+    private const string LyricsTimingsName = "timings.json";
+    private const string LyricsLrcName = "lyrics.lrc";
 
     /// <summary>The raw audio exactly as the creator supplied it.</summary>
     public static string Source(Guid jobId, string extension)
@@ -94,6 +97,31 @@ public static class MediaProcessingStagingPaths
         => $"{MatchBatchFolder(batchId)}/{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
             + NormalizeExtension(extension);
 
+    /// <summary>
+    /// The folder holding one lyrics-alignment attempt's derived output.
+    ///
+    /// <para>
+    /// Prefixed for the same reason <see cref="MatchBatchFolder"/> is, and it matters more here. The
+    /// GUID is the <em>attempt's</em>, not a media GUID — a song can be re-aligned any number of
+    /// times — and <c>DeleteStagedBlobsAsync</c> deletes by <c>{guid}/</c>. Without the prefix, an
+    /// upload job cleaning up after itself could collide with a lyrics folder, and the two GUID
+    /// spaces would be indistinguishable in the portal.
+    /// </para>
+    /// </summary>
+    public static string LyricsFolder(Guid jobId)
+        => $"{LyricsPrefix}/{jobId.ToString("N", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>The word-level timing JSON the Function produces. The primary output.</summary>
+    public static string LyricsTimings(Guid jobId)
+        => $"{LyricsFolder(jobId)}/{LyricsTimingsName}";
+
+    /// <summary>
+    /// The Enhanced LRC rendering of the same timings. Secondary: it costs almost nothing to
+    /// produce and gives export and portability for free.
+    /// </summary>
+    public static string LyricsLrc(Guid jobId)
+        => $"{LyricsFolder(jobId)}/{LyricsLrcName}";
+
     private static string NormalizeExtension(string extension)
     {
         if (string.IsNullOrWhiteSpace(extension))
@@ -121,6 +149,21 @@ public static class MediaProcessingRoutes
 
     /// <summary>Where cover-art matching progress is posted. Cosmetic: never throws.</summary>
     public const string MatchProgress = ControllerRoute + "/match-progress";
+
+    /// <summary>
+    /// Where a finished lyrics alignment is posted. Terminal: throws on non-2xx.
+    ///
+    /// <para>
+    /// Shares this controller and this header with the audio pipeline even though the caller is a
+    /// different Function app in a different language. Both are the same kind of caller — a trusted
+    /// background worker authorised to write to the catalogue — so a second controller would only
+    /// duplicate the auth wiring, and a second secret would only be a second thing to rotate.
+    /// </para>
+    /// </summary>
+    public const string LyricsComplete = ControllerRoute + "/lyrics-complete";
+
+    /// <summary>Where lyrics-alignment progress is posted. Cosmetic: never throws.</summary>
+    public const string LyricsProgress = ControllerRoute + "/lyrics-progress";
 
     /// <summary>
     /// Header carrying the shared secret. Deliberately not <c>X-Api-Key</c>: that header is the

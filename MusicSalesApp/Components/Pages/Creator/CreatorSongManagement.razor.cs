@@ -64,7 +64,12 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     protected record PersonaDropdownItem(int? Id, string Name);
 
-    private int? _creatorId;
+    protected int? _creatorId;
+
+    /// <summary>The song whose lyrics dialog is open, if any.</summary>
+    protected SongAdminViewModel _lyricsSong;
+
+    protected bool _showLyricsDialog;
     private bool _hasLoadedData = false;
     private string _currentUserEmail = string.Empty;
 
@@ -464,6 +469,22 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             _songImageTempPath = null;
         }
         _songImageContentType = null;
+    }
+
+    /// <summary>
+    /// Opens the lyric-timing dialog for one song.
+    ///
+    /// <para>
+    /// No ownership check needed here, and it is worth saying why rather than leaving it looking
+    /// like an omission: the grid is populated by <c>GetCreatorSongsAsync(_creatorId)</c>, which
+    /// filters on the creator, so a song reachable from this button is by construction one of
+    /// theirs. The service re-checks anyway, because it is also reachable from elsewhere.
+    /// </para>
+    /// </summary>
+    protected void OpenLyricsEditor(SongAdminViewModel song)
+    {
+        _lyricsSong = song;
+        _showLyricsDialog = true;
     }
 
     protected async Task SaveEdit()

@@ -2759,3 +2759,45 @@ h1:focus {
         page-break-inside: avoid;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Lyric timing dialog (Components/Shared/LyricsEditorDialog.razor)
+   Structure and layout only. Colours live in light.css / dark.css and sizing in
+   the breakpoint files, per AGENTS.md.
+   --------------------------------------------------------------------------- */
+.lyrics-dialog-header {
+    display: flex;
+    align-items: center;
+}
+
+.lyrics-dialog-field {
+    display: flex;
+    flex-direction: column;
+}
+
+/* The textarea is the point of the dialog, so it gets the room. Resizable
+   vertically only - horizontal resize breaks out of the modal. */
+.lyrics-dialog-textarea textarea {
+    resize: vertical;
+}
+
+.lyrics-dialog-counter {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.lyrics-dialog-progress {
+    display: flex;
+    flex-direction: column;
+}
+
+.lyrics-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.lyrics-dialog-errors {
+    margin: 0;
+    padding-left: 1.25rem;
+}

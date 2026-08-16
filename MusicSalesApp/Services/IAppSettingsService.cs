@@ -81,6 +81,16 @@ public interface IAppSettingsService
     Task SetMaxAudioUploadSizeMBAsync(int sizeMB);
 
     /// <summary>
+    /// Gets the minimum confidence, 0-1, at which lyric timings are shown to listeners. Timings
+    /// below it are kept and shown to the creator but withheld from players.
+    /// </summary>
+    Task<double> GetLyricsConfidenceThresholdAsync();
+
+    /// <summary>Sets the minimum confidence at which lyric timings are shown to listeners.</summary>
+    /// <param name="threshold">A value between 0 and 1; anything outside is clamped.</param>
+    Task SetLyricsConfidenceThresholdAsync(double threshold);
+
+    /// <summary>
     /// Gets the maximum image upload file size in MB.
     /// </summary>
     /// <returns>The max upload size in MB, or the default value (20) if not set.</returns>

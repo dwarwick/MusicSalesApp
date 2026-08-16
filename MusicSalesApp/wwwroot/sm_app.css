@@ -973,3 +973,8 @@
         height: 140px;
     }
 }
+
+/* Lyric timing dialog: a phone keyboard takes most of the screen, so the
+   textarea shrinks rather than pushing the buttons out of reach. */
+.lyrics-dialog-textarea textarea { min-height: 160px; }
+.lyrics-dialog-footer { flex-wrap: wrap; }

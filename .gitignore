@@ -380,3 +380,11 @@ FodyWeavers.xsd
 # Azure Functions local settings - holds both storage connection strings and the
 # media-processing API key, exactly like the appsettings.* files above.
 /MusicSalesApp.Functions/local.settings.json
+
+# Python tooling for MusicSalesApp.LyricsFunctions. Its virtualenv, caches and local
+# settings - the last of which holds both storage connection strings and the callback key,
+# exactly like the C# Function app's local.settings.json above.
+.venv/
+.pytest_cache/
+*.egg-info/
+/MusicSalesApp.LyricsFunctions/local.settings.json

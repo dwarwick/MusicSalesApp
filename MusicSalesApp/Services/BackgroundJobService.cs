@@ -138,6 +138,15 @@ public class BackgroundJobService : IBackgroundJobService
                 service => service.ReconcileAsync(),
                 "*/15 * * * *");
 
+            // The lyrics equivalent, and a stronger one: alignment runs as a Durable orchestration
+            // whose instance id was recorded when it started, so this asks Azure what happened rather
+            // than guessing from a timestamp. That is also the only way an orchestration which
+            // succeeded but whose callback was lost ever gets finished instead of failed.
+            RecurringJob.AddOrUpdate<ILyricsAlignmentJobReconciler>(
+                HangfireJobIds.ReconcileStalledLyricsAlignment,
+                service => service.ReconcileAsync(),
+                "*/15 * * * *");
+
             // Schedule hourly retry of pending 1099 transactions
             // This retries TaxBandits 1099 reports that were deferred due to maintenance or failures
             RecurringJob.AddOrUpdate<IStreamPayoutService>(

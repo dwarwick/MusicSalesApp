@@ -39,14 +39,13 @@ public interface IMediaProcessingCompletionService
 /// <inheritdoc />
 public sealed class MediaProcessingCompletionService : IMediaProcessingCompletionService
 {
-    private static readonly TimeSpan CopyPollInterval = TimeSpan.FromSeconds(2);
-
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IBlobContainerFactory _containerFactory;
     private readonly ISongMetadataService _metadataService;
     private readonly IOpenGraphService _openGraphService;
     private readonly ISongUploadJobService _jobService;
     private readonly IUploadProgressNotifier _progressNotifier;
+    private readonly IStagingToMediaCopier _copier;
     private readonly IOptions<MediaProcessingOptions> _options;
     private readonly ILogger<MediaProcessingCompletionService> _logger;
 
@@ -57,6 +56,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         IOpenGraphService openGraphService,
         ISongUploadJobService jobService,
         IUploadProgressNotifier progressNotifier,
+        IStagingToMediaCopier copier,
         IOptions<MediaProcessingOptions> options,
         ILogger<MediaProcessingCompletionService> logger)
     {
@@ -66,6 +66,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         _openGraphService = openGraphService;
         _jobService = jobService;
         _progressNotifier = progressNotifier;
+        _copier = copier;
         _options = options;
         _logger = logger;
     }
@@ -158,7 +159,7 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
             // Queue service, so staging had to go elsewhere. That makes every copy below a
             // cross-account copy needing a read SAS over the source, and a real data movement
             // rather than the metadata operation a same-account copy would be.
-            var sasQuery = CreateStagingReadSasQuery(staging);
+            var sasQuery = _copier.CreateStagingReadSasQuery(staging);
 
             var playbackSource = string.IsNullOrWhiteSpace(result.PlaybackBlobPath)
                 ? MediaProcessingStagingPaths.Playback(mediaGuid)
@@ -168,18 +169,21 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
             {
                 // SongMediaPaths.OriginalAudio collapses onto the playback path for an MP3 source,
                 // so the upload is both the original and the playback copy and is stored once.
-                await CopyAcrossAccountsAsync(
-                    staging, job.SourceBlobPath, media, mp3Path, sasQuery, assemblyToken, cancellationToken);
+                await _copier.CopyAsync(
+                    staging, job.SourceBlobPath, media, mp3Path, sasQuery,
+                    MediaProcessingTimeouts.Assembly, assemblyToken, cancellationToken);
                 copied.Add(mp3Path);
             }
             else
             {
-                await CopyAcrossAccountsAsync(
-                    staging, job.SourceBlobPath, media, originalPath, sasQuery, assemblyToken, cancellationToken);
+                await _copier.CopyAsync(
+                    staging, job.SourceBlobPath, media, originalPath, sasQuery,
+                    MediaProcessingTimeouts.Assembly, assemblyToken, cancellationToken);
                 copied.Add(originalPath);
 
-                await CopyAcrossAccountsAsync(
-                    staging, playbackSource, media, mp3Path, sasQuery, assemblyToken, cancellationToken);
+                await _copier.CopyAsync(
+                    staging, playbackSource, media, mp3Path, sasQuery,
+                    MediaProcessingTimeouts.Assembly, assemblyToken, cancellationToken);
                 copied.Add(mp3Path);
             }
 
@@ -206,14 +210,16 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
 
             if (imagePath is not null && originalImagePath is not null && !string.IsNullOrWhiteSpace(job.CoverArtBlobPath))
             {
-                await CopyAcrossAccountsAsync(
-                    staging, job.CoverArtBlobPath, media, imagePath, sasQuery, assemblyToken, cancellationToken);
+                await _copier.CopyAsync(
+                    staging, job.CoverArtBlobPath, media, imagePath, sasQuery,
+                    MediaProcessingTimeouts.Assembly, assemblyToken, cancellationToken);
                 copied.Add(imagePath);
 
                 // The served copy and the retained original start identical; they diverge the first
                 // time the art is cropped, which only rewrites the served copy.
-                await CopyAcrossAccountsAsync(
-                    staging, job.CoverArtBlobPath, media, originalImagePath, sasQuery, assemblyToken, cancellationToken);
+                await _copier.CopyAsync(
+                    staging, job.CoverArtBlobPath, media, originalImagePath, sasQuery,
+                    MediaProcessingTimeouts.Assembly, assemblyToken, cancellationToken);
                 copied.Add(originalImagePath);
             }
 
@@ -473,72 +479,6 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
             diagnosticCode,
             ImageVariantFailureCodes.DecodeFailed,
             StringComparison.Ordinal);
-
-    private string CreateStagingReadSasQuery(BlobContainerClient staging)
-    {
-        // Needs a shared-key credential. The app authenticates both accounts with account-key
-        // connection strings, so this holds; the guard makes the failure legible if that changes.
-        if (!staging.CanGenerateSasUri)
-        {
-            throw new InvalidOperationException(
-                $"Cannot generate a SAS for staging container '{staging.Name}'. "
-                + "Cross-account assembly requires a key-based connection string.");
-        }
-
-        var lifetime = _options.Value.StagingSasLifetime;
-        var sasUri = staging.GenerateSasUri(
-            BlobContainerSasPermissions.Read,
-            DateTimeOffset.UtcNow.Add(lifetime));
-
-        return sasUri.Query.TrimStart('?');
-    }
-
-    /// <param name="assemblyToken">
-    /// The whole assembly's budget, shared by every copy. Each copy used to carry its own generous
-    /// timeout, which bounded them individually but not together - five copies could each sit just
-    /// inside their own limit and still outlast the caller waiting on all of them.
-    /// </param>
-    /// <param name="requestAborted">
-    /// The original request token, used only to tell "the budget ran out" apart from "the Function
-    /// hung up", so the log says which one happened.
-    /// </param>
-    private static async Task CopyAcrossAccountsAsync(
-        BlobContainerClient sourceContainer,
-        string sourcePath,
-        BlobContainerClient destinationContainer,
-        string destinationPath,
-        string sourceSasQuery,
-        CancellationToken assemblyToken,
-        CancellationToken requestAborted)
-    {
-        var sourceBlob = sourceContainer.GetBlobClient(sourcePath);
-        var destinationBlob = destinationContainer.GetBlobClient(destinationPath);
-        var sourceUri = new UriBuilder(sourceBlob.Uri) { Query = sourceSasQuery }.Uri;
-
-        var operation = await destinationBlob.StartCopyFromUriAsync(
-            sourceUri,
-            new BlobCopyFromUriOptions(),
-            assemblyToken);
-
-        // A same-account copy usually reports completion immediately; a cross-account one moves
-        // real bytes, so expect to poll here.
-        if (operation.HasCompleted)
-        {
-            return;
-        }
-
-        try
-        {
-            await operation.WaitForCompletionAsync(CopyPollInterval, assemblyToken);
-        }
-        catch (OperationCanceledException) when (!requestAborted.IsCancellationRequested)
-        {
-            throw new TimeoutException(
-                $"Copying '{sourcePath}' into '{destinationContainer.Name}/{destinationPath}' "
-                + $"did not finish inside the {MediaProcessingTimeouts.Assembly.TotalMinutes:0}-minute "
-                + "assembly budget.");
-        }
-    }
 
     private async Task<SongUploadJob?> LoadJobAsync(Guid jobId, CancellationToken cancellationToken)
     {
