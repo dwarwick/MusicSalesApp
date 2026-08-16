@@ -244,6 +244,17 @@ if ($shouldApplySettings) {
         Where-Object { $flexRejectedSettings -notcontains $_.Key } |
         ForEach-Object { "$($_.Key)=$($_.Value)" }
 
+    # APPLICATIONINSIGHTS_CONNECTION_STRING, set here rather than left to `--app-insights-key` at
+    # create time. That flag wants an instrumentation KEY and is handed a connection STRING above, and
+    # the result is an app carrying only APPINSIGHTS_INSTRUMENTATIONKEY - the deprecated form, which
+    # the Flex host does not wire telemetry up from. The failure is silent and expensive: functions
+    # run, logs go nowhere, and `az monitor app-insights query` returns zero rows rather than an
+    # error, so the app looks quiet instead of unmonitored. Diagnosing this pipeline without traces
+    # means reading OOM kills out of a Durable status payload, which is exactly how today went.
+    if (-not [string]::IsNullOrWhiteSpace($appInsightsConnectionString)) {
+        $settingPairs += "APPLICATIONINSIGHTS_CONNECTION_STRING=$appInsightsConnectionString"
+    }
+
     # NOTE: WEBSITE_RUN_FROM_PACKAGE is deliberately absent. Provision-FunctionApp.ps1 appends it
     # unconditionally at this exact point, and copying that line across breaks Flex - it has its own
     # one-deploy mechanism and the two do not coexist.
