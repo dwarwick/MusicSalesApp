@@ -1,0 +1,10 @@
+{
+  "version": "2.0",
+  "//": "Bare on purpose. No Durable, no queues, no storage bindings - so a failure to deploy or start can only mean one thing: the Python package itself.",
+  "functionTimeout": "00:10:00",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": { "isEnabled": true, "excludedTypes": "Request;Exception" }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# The CPU-only index. This single line is most of what the spike is testing: the default wheels drag
+# in CUDA and run to several gigabytes, which cannot fit a Flex zip deployment - and Flex has no GPU,
+# so nothing is lost. If /api/health comes back with "torchCudaBuild": true, this line did not take
+# effect and the real app would have the same problem.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+azure-functions==1.21.3
+
+# Pinned identically to MusicSalesApp.LyricsFunctions. A spike that proves a DIFFERENT set of
+# versions deploys has proved nothing about the app it is standing in for.
+torch==2.4.1
+torchaudio==2.4.1
+demucs==4.0.1
+numpy==1.26.4
+soundfile==0.12.1
+
+# Deliberately absent: model weights. They are over a gigabyte and belong on the Azure Files mount,
+# which /api/health also reports on.
