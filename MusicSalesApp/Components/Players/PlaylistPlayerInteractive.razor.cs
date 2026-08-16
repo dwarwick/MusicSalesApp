@@ -61,6 +61,14 @@ namespace MusicSalesApp.Components.Players
         private List<string> _trackStreamUrls = new List<string>();
         private Dictionary<int, CoverArtSource> _trackArtSources = new Dictionary<int, CoverArtSource>();
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
+
+        protected Models.SongLyrics _currentTrackLyrics;
+
+        /// <summary>
+        /// Which song <see cref="_currentTrackLyrics"/> belongs to, so the lookup happens once per
+        /// track rather than once per render.
+        /// </summary>
+        private int _lyricsLoadedForSongId = -1;
         private IJSObjectReference _jsModule;
         private DotNetObjectReference<PlaylistPlayerInteractiveModel> _dotNetRef;
         private bool invokedJs = false;
@@ -367,7 +375,56 @@ namespace MusicSalesApp.Components.Players
 
                 await InvokeAsync(StateHasChanged);
             }
+
+            await RefreshCurrentTrackLyricsAsync();
         }
+
+        /// <summary>
+        /// Load the current track's lyrics when the track changes.
+        ///
+        /// <para>
+        /// Hooked here rather than in <c>PlayTrack</c> because the index is assigned from eight
+        /// different places - initial load for each of the five playlist kinds, auto-advance, shuffle,
+        /// and the tracklist. Keying off the id that ends up rendered catches all of them, including
+        /// any added later, and costs one comparison per render.
+        /// </para>
+        /// </summary>
+        private async Task RefreshCurrentTrackLyricsAsync()
+        {
+            var songId = GetCurrentTrackMetadataId();
+
+            if (songId == _lyricsLoadedForSongId)
+            {
+                return;
+            }
+
+            _lyricsLoadedForSongId = songId;
+            _currentTrackLyrics = songId > 0 ? await LyricsService.GetForSongAsync(songId) : null;
+
+            // The toggle appears or disappears with the track, so the page has to be told.
+            await InvokeAsync(StateHasChanged);
+        }
+
+        /// <summary>Whether the track now playing has lyrics a listener may see.</summary>
+        protected bool HasPublishedLyrics() =>
+            _currentTrackLyrics is { Status: Models.SongLyricsStatus.Published }
+            && !string.IsNullOrWhiteSpace(_currentTrackLyrics.TimingsBlobPath);
+
+        /// <summary>
+        /// The timings URL for the current track, carrying the version as a cache-buster.
+        /// </summary>
+        /// <remarks>
+        /// Changing between tracks is what makes the scroller re-fetch: it compares what it was last
+        /// given, so a new URL is a new document and the same URL is a no-op.
+        /// </remarks>
+        protected string GetLyricsTimingsUrl() =>
+            HasPublishedLyrics()
+                ? $"/api/music/{_currentTrackLyrics.TimingsBlobPath}?v={_currentTrackLyrics.Version}"
+                : null;
+
+        protected void ToggleLyrics() => _showLyrics = !_showLyrics;
+
+        protected bool _showLyrics;
 
         public async ValueTask DisposeAsync()
         {
