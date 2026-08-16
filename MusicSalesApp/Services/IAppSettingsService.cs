@@ -90,6 +90,12 @@ public interface IAppSettingsService
     /// <param name="threshold">A value between 0 and 1; anything outside is clamped.</param>
     Task SetLyricsConfidenceThresholdAsync(double threshold);
 
+    /// <summary>Whether creators are emailed when their lyric timing finishes.</summary>
+    Task<bool> GetLyricsCompletionEmailsEnabledAsync();
+
+    /// <summary>Turn the lyric timing completion email on or off for everybody.</summary>
+    Task SetLyricsCompletionEmailsEnabledAsync(bool enabled);
+
     /// <summary>
     /// Gets the maximum image upload file size in MB.
     /// </summary>

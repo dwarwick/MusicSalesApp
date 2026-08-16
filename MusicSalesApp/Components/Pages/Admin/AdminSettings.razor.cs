@@ -37,6 +37,9 @@ public class AdminSettingsModel : BlazorBase
     protected decimal _lyricsConfidenceThresholdPercent = 70m;
     protected decimal _originalLyricsConfidenceThresholdPercent = 70m;
 
+    protected bool _lyricsCompletionEmailsEnabled = true;
+    protected bool _originalLyricsCompletionEmailsEnabled = true;
+
     // Defaults false to match AppSettingsService, so a load failure can never present the feature as
     // on when it is not - or invite an admin to "turn off" something already off.
     protected bool _directToStorageUploadEnabled;
@@ -105,6 +108,7 @@ public class AdminSettingsModel : BlazorBase
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
                                    || _directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled
                                    || _lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent
+                                   || _lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled
                                    || _appVersion != _originalAppVersion;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
@@ -185,6 +189,9 @@ public class AdminSettingsModel : BlazorBase
         _lyricsConfidenceThresholdPercent =
             (decimal)(await AppSettingsService.GetLyricsConfidenceThresholdAsync()) * 100m;
         _originalLyricsConfidenceThresholdPercent = _lyricsConfidenceThresholdPercent;
+
+        _lyricsCompletionEmailsEnabled = await AppSettingsService.GetLyricsCompletionEmailsEnabledAsync();
+        _originalLyricsCompletionEmailsEnabled = _lyricsCompletionEmailsEnabled;
 
         _appVersion = await AppSettingsService.GetAppVersionAsync() ?? string.Empty;
         _originalAppVersion = _appVersion;
@@ -661,6 +668,7 @@ public class AdminSettingsModel : BlazorBase
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
         _directToStorageUploadEnabled = _originalDirectToStorageUploadEnabled;
         _lyricsConfidenceThresholdPercent = _originalLyricsConfidenceThresholdPercent;
+        _lyricsCompletionEmailsEnabled = _originalLyricsCompletionEmailsEnabled;
         _appVersion = _originalAppVersion;
         _validationErrors.Clear();
         _successMessage = null;
@@ -776,6 +784,15 @@ public class AdminSettingsModel : BlazorBase
                     _lyricsConfidenceThresholdPercent);
             }
 
+            if (_lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled)
+            {
+                await AppSettingsService.SetLyricsCompletionEmailsEnabledAsync(_lyricsCompletionEmailsEnabled);
+
+                Logger.LogWarning(
+                    "Lyric timing completion emails turned {State} by an administrator.",
+                    _lyricsCompletionEmailsEnabled ? "ON" : "OFF");
+            }
+
             // Save the app version (only if changed)
             if (_appVersion != _originalAppVersion)
             {
@@ -786,6 +803,7 @@ public class AdminSettingsModel : BlazorBase
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
             _originalLyricsConfidenceThresholdPercent = _lyricsConfidenceThresholdPercent;
+            _originalLyricsCompletionEmailsEnabled = _lyricsCompletionEmailsEnabled;
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
             _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;

@@ -473,6 +473,7 @@ try
     builder.Services.AddScoped<ISongLyricsService, SongLyricsService>();
     builder.Services.AddScoped<ILyricsAlignmentInvoker, LyricsAlignmentInvoker>();
     builder.Services.AddScoped<ILyricsAlignmentCompletionService, LyricsAlignmentCompletionService>();
+    builder.Services.AddScoped<ILyricsAlignmentEmailService, LyricsAlignmentEmailService>();
     builder.Services.AddScoped<ILyricsAlignmentJobReconciler, LyricsAlignmentJobReconciler>();
 
     builder.Services.AddScoped<IUploadProgressNotifier, UploadProgressNotifier>();

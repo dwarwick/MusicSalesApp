@@ -1,3 +1,4 @@
+using Hangfire;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,7 @@ public class LyricsAlignmentCompletionServiceTests
     private Mock<IStagingToMediaCopier> _copier = null!;
     private Mock<IAppSettingsService> _appSettings = null!;
     private RecordingNotifier _notifier = null!;
+    private RecordingBackgroundJobClient _jobs = null!;
     private LyricsAlignmentCompletionService _service = null!;
 
     [SetUp]
@@ -66,10 +68,12 @@ public class LyricsAlignmentCompletionServiceTests
         _appSettings.Setup(s => s.GetLyricsConfidenceThresholdAsync()).ReturnsAsync(0.7d);
 
         _notifier = new RecordingNotifier();
+        _jobs = new RecordingBackgroundJobClient();
 
         _service = new LyricsAlignmentCompletionService(
             _factory,
             _containers.Object,
+            _jobs,
             _copier.Object,
             _appSettings.Object,
             _notifier,
@@ -308,6 +312,53 @@ public class LyricsAlignmentCompletionServiceTests
         LastWordEndMs = 195_000
     };
 
+    [Test]
+    public async Task ASuccessfulRunQueuesExactlyOneCompletionEmail()
+    {
+        // The creator's only notification if they closed the tab - timing takes minutes, so closing
+        // it is the expected behaviour rather than the exception.
+        var jobId = await AddJobAsync();
+        await AddLyricsAsync(SongLyricsStatus.Pending);
+
+        await _service.CompleteAsync(GoodResult(jobId, confidence: 0.93d));
+
+        Assert.That(_jobs.Created, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task AFailedRunQueuesTheEmailToo()
+    {
+        // A creator who is told nothing after a failure waits for something that is never coming.
+        var jobId = await AddJobAsync();
+        await AddLyricsAsync(SongLyricsStatus.Pending);
+
+        await _service.FailAsync(jobId, LyricsAlignmentFailureCodes.AlignmentFailed, "nope");
+
+        Assert.That(_jobs.Created, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task AReplayedCallbackDoesNotQueueASecondEmail()
+    {
+        // The Function retries its terminal callback on any non-2xx and the reconciler can drive the
+        // same completion, so without the already-terminal guard a creator gets the same mail twice.
+        var jobId = await AddJobAsync();
+        await AddLyricsAsync(SongLyricsStatus.Pending);
+
+        await _service.CompleteAsync(GoodResult(jobId, confidence: 0.93d));
+        await _service.CompleteAsync(GoodResult(jobId, confidence: 0.93d));
+
+        Assert.That(_jobs.Created, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task AnUnknownJobQueuesNothing()
+    {
+        await _service.CompleteAsync(GoodResult(Guid.NewGuid(), confidence: 0.9d));
+
+        Assert.That(_jobs.Created, Is.Zero);
+    }
+
     private async Task<Guid> AddJobAsync(
         LyricsAlignmentJobStatus status = LyricsAlignmentJobStatus.Processing,
         LyricsAlignmentStep step = LyricsAlignmentStep.WritingOutputs,
@@ -395,5 +446,19 @@ public class LyricsAlignmentCompletionServiceTests
         : IDbContextFactory<AppDbContext>
     {
         public AppDbContext CreateDbContext() => new(options);
+    }
+
+    /// <summary>Counts what was enqueued, so the email hook can be asserted without Hangfire.</summary>
+    private sealed class RecordingBackgroundJobClient : IBackgroundJobClient
+    {
+        public int Created { get; private set; }
+
+        public string Create(Hangfire.Common.Job job, Hangfire.States.IState state)
+        {
+            Created++;
+            return Guid.NewGuid().ToString("N");
+        }
+
+        public bool ChangeState(string jobId, Hangfire.States.IState state, string expectedState) => true;
     }
 }

@@ -1,5 +1,6 @@
 #nullable enable
 using Azure.Storage.Blobs.Models;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
@@ -42,6 +43,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IBlobContainerFactory _containerFactory;
+    private readonly IBackgroundJobClient _backgroundJobs;
     private readonly IStagingToMediaCopier _copier;
     private readonly IAppSettingsService _appSettings;
     private readonly ILyricsAlignmentNotifier _notifier;
@@ -50,6 +52,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     public LyricsAlignmentCompletionService(
         IDbContextFactory<AppDbContext> contextFactory,
         IBlobContainerFactory containerFactory,
+        IBackgroundJobClient backgroundJobs,
         IStagingToMediaCopier copier,
         IAppSettingsService appSettings,
         ILyricsAlignmentNotifier notifier,
@@ -57,6 +60,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     {
         _contextFactory = contextFactory;
         _containerFactory = containerFactory;
+        _backgroundJobs = backgroundJobs;
         _copier = copier;
         _appSettings = appSettings;
         _notifier = notifier;
@@ -262,6 +266,8 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
             LyricsAlignmentStep.Completed,
             classification.Message);
 
+        QueueCompletionEmail(job.JobId);
+
         await DeleteStagedOutputAsync(result.JobId, cancellationToken);
 
         // After the save, and best-effort. A draft blob left behind is unreachable - nothing points
@@ -454,6 +460,8 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
 
         await _notifier.NotifyStepAsync(job.CreatorId, job.JobId, LyricsAlignmentStep.Failed, message);
 
+        QueueCompletionEmail(job.JobId);
+
         _logger.LogWarning(
             "Lyrics alignment {JobId} failed: {FailureCode} - {Message}", job.JobId, failureCode, message);
     }
@@ -510,6 +518,37 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not clean up staged lyrics output for job {JobId}.", jobId);
+        }
+    }
+
+    /// <summary>
+    /// Ask Hangfire to tell the creator. Never sends inline.
+    ///
+    /// <para>
+    /// Both callers run on the Function's terminal callback, which has a two-minute contract and a
+    /// documented hazard if it overruns - the Function abandons the request and retries assembly on
+    /// top of one still in flight. SMTP here is synchronous with a 30-second timeout, so it belongs
+    /// on a background thread with its own retries rather than in that budget.
+    /// </para>
+    ///
+    /// <para>
+    /// Both call sites sit after their <c>SaveChangesAsync</c> and behind the already-terminal guards
+    /// at the top of <c>CompleteAsync</c> and <c>FailAsync</c>, so a replayed callback returns before
+    /// reaching either and cannot send a second email.
+    /// </para>
+    /// </summary>
+    private void QueueCompletionEmail(Guid jobId)
+    {
+        try
+        {
+            _backgroundJobs.Enqueue<ILyricsAlignmentEmailService>(
+                service => service.SendCompletionEmailAsync(jobId));
+        }
+        catch (Exception ex)
+        {
+            // Hangfire being unreachable must not fail an alignment that otherwise worked. The
+            // creator still has the SignalR ping and the song list; they simply do not get the mail.
+            _logger.LogWarning(ex, "Could not queue the completion email for lyrics job {JobId}.", jobId);
         }
     }
 

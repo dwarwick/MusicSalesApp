@@ -91,6 +91,22 @@ public class AppSettingsService : IAppSettingsService
     public const double DefaultLyricsConfidenceThreshold = 0.7d;
 
     /// <summary>
+    /// Whether a creator is emailed when their lyric timing finishes.
+    /// </summary>
+    public const string LyricsCompletionEmailsEnabledKey = "LyricsCompletionEmailsEnabled";
+
+    /// <summary>
+    /// On by default: timing takes several minutes, so a creator who is not told when it lands has to
+    /// keep coming back to find out.
+    ///
+    /// <para>
+    /// A switch exists at all because sending is SMTP with a 30-second timeout, and a mail server
+    /// having a bad afternoon should be something an admin can step around without a deploy.
+    /// </para>
+    /// </summary>
+    public const bool DefaultLyricsCompletionEmailsEnabled = true;
+
+    /// <summary>
     /// The key used for storing the maximum image upload file size in MB.
     /// </summary>
     public const string MaxImageUploadSizeMBKey = "MaxImageUploadSizeMB";
@@ -313,6 +329,30 @@ public class AppSettingsService : IAppSettingsService
             LyricsConfidenceThresholdKey,
             Math.Clamp(threshold, 0d, 1d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
             "Minimum confidence at which lyric timings are shown to listeners");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetLyricsCompletionEmailsEnabledAsync()
+    {
+        var value = await GetSettingAsync(LyricsCompletionEmailsEnabledKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultLyricsCompletionEmailsEnabled;
+        }
+
+        return bool.TryParse(value, out var enabled)
+            ? enabled
+            : DefaultLyricsCompletionEmailsEnabled;
+    }
+
+    /// <inheritdoc />
+    public async Task SetLyricsCompletionEmailsEnabledAsync(bool enabled)
+    {
+        await SetSettingAsync(
+            LyricsCompletionEmailsEnabledKey,
+            enabled.ToString(),
+            "Email creators when their lyric timing finishes");
     }
 
     /// <inheritdoc />
