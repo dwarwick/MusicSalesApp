@@ -161,10 +161,12 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
     }
 
     [Test]
-    public void ASongHeldBackForReviewSaysSoAlongsideItsScore()
+    public void ASongNotYetPublishedSaysSoAlongsideItsScore()
     {
-        // The number alone does not say whether listeners can see the lyrics. Both halves matter:
-        // the score is what the threshold gets judged against, the status is the consequence.
+        // "Not published", not "Needs review". Every successful alignment now lands in NeedsReview
+        // regardless of score, so wording it as a problem would tell a creator with a perfectly good
+        // 88% song that something is wrong with it. What is true of all of them is only that no
+        // listener can see them yet.
         GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.4123d);
 
         var cut = TestContext.Render<CreatorSongManagement>();
@@ -173,7 +175,8 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Markup, Does.Contain("41.2"));
-            Assert.That(cut.Markup, Does.Contain("Needs review"));
+            Assert.That(cut.Markup, Does.Contain("Not published"));
+            Assert.That(cut.Markup, Does.Not.Contain("Needs review"));
         });
     }
 

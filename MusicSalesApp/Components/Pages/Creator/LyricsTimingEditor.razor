@@ -260,7 +260,40 @@ else
                     <button type="button" class="btn btn-secondary btn-sm" @onclick="SaveDraft" disabled="@(_isSaving || !_isDirty)">
                         Save
                     </button>
+
+                    @* The only thing on this page that changes what a listener sees. Kept visually
+                       distinct from Save for that reason - the two being adjacent and identical is
+                       how somebody publishes a half-finished pass by muscle memory. *@
+                    <button type="button" class="btn btn-success" @onclick="Publish" disabled="@_isSaving">
+                        @(_isPublished ? "Publish changes" : "Publish")
+                    </button>
                 </div>
+
+                <p class="text-muted small mt-2 mb-0">
+                    @if (_isPublished)
+                    {
+                        <span>Listeners can see these lyrics. Publishing again replaces what they see.</span>
+                    }
+                    else
+                    {
+                        <span>Listeners can't see these lyrics yet.</span>
+                    }
+                </p>
+
+                @if (_problems.Count > 0)
+                {
+                    @* Validation only ever runs at Publish, so this is the one place a creator meets
+                       it. Worded as things to fix rather than as error codes. *@
+                    <div class="alert alert-warning mt-2">
+                        <strong>These timings aren't ready yet:</strong>
+                        <ul class="mb-0">
+                            @foreach (var problem in _problems)
+                            {
+                                <li>@problem</li>
+                            }
+                        </ul>
+                    </div>
+                }
 
                 @if (!string.IsNullOrEmpty(_statusMessage))
                 {

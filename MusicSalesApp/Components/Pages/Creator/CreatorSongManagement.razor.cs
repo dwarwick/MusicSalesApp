@@ -277,6 +277,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                 {
                     song.LyricsStatus = songLyrics.Status;
                     song.LyricsConfidence = songLyrics.Confidence;
+                    song.HasUnpublishedLyricEdits = songLyrics.HasUnpublishedChanges;
                 }
             }
         }

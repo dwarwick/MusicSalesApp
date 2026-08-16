@@ -109,4 +109,14 @@ public class SongAdminViewModel
     /// </para>
     /// </summary>
     public double? LyricsConfidence { get; set; }
+
+    /// <summary>
+    /// Whether the creator has timing edits they have saved but not released.
+    /// </summary>
+    /// <remarks>
+    /// Worth a badge because the draft split makes it genuinely invisible otherwise: the song still
+    /// plays, the lyrics still show the published version, and nothing anywhere says there is newer
+    /// work sitting behind them. A creator interrupted mid-session has no other way to find out.
+    /// </remarks>
+    public bool HasUnpublishedLyricEdits { get; set; }
 }

@@ -80,6 +80,10 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected bool _isDirty;
     protected bool _isSaving;
     protected bool _hasUnpublishedChanges;
+    protected bool _isPublished;
+
+    /// <summary>Why a publish was refused, in the creator's language. Empty unless one was.</summary>
+    protected IReadOnlyList<string> _problems = [];
     protected string? _statusMessage;
     protected string _bannerClass = "alert-secondary";
     protected string _bannerMessage = string.Empty;
@@ -163,6 +167,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         _pristine = LyricsTimingEdits.CopyDocument(editable.Document!);
         _lyrics = editable.Lyrics;
         _hasUnpublishedChanges = editable.Lyrics?.HasUnpublishedChanges ?? false;
+        _isPublished = editable.Lyrics?.Status == SongLyricsStatus.Published;
 
         var song = await SongMetadataService.GetByIdAsync(SongId);
         if (song is not null)
@@ -567,6 +572,65 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
                 _statusMessage = result.Message;
             }
             else
+            {
+                _error = result.Message;
+            }
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+
+    /// <summary>
+    /// Release these timings to listeners.
+    ///
+    /// <para>
+    /// The only action on this page that changes what anybody else sees. It saves first when there
+    /// are unsaved edits, so a creator who tunes and presses Publish gets what they just heard rather
+    /// than the last thing they happened to save - the alternative is publishing a version that never
+    /// existed on their screen.
+    /// </para>
+    /// </summary>
+    protected internal async Task Publish()
+    {
+        if (_document is null || _creatorId is null || _isSaving) return;
+
+        _isSaving = true;
+        _problems = [];
+        _statusMessage = null;
+
+        try
+        {
+            if (_isDirty)
+            {
+                var saved = await LyricsService.SaveDraftAsync(SongId, _creatorId.Value, _document);
+                if (!saved.Success)
+                {
+                    _error = saved.Message;
+                    return;
+                }
+
+                _isDirty = false;
+            }
+
+            var result = await LyricsService.PublishAsync(SongId, _creatorId.Value);
+
+            if (result.Success)
+            {
+                _isPublished = true;
+                _hasUnpublishedChanges = false;
+                _statusMessage = result.Message;
+                return;
+            }
+
+            // Validation is the only gate between here and listeners, so its complaints are shown
+            // rather than summarised - "these timings aren't ready" with no reason leaves a creator
+            // with nothing to act on.
+            _problems = result.Problems;
+
+            if (_problems.Count == 0)
             {
                 _error = result.Message;
             }

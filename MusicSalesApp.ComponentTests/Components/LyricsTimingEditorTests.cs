@@ -511,4 +511,99 @@ public class LyricsTimingEditorTests : BUnitTestBase
 
         Assert.That(tap.HasAttribute("data-tap-now"), Is.True);
     }
+
+    // -----------------------------------------------------------------
+    // Publishing
+    // -----------------------------------------------------------------
+
+    private static void ClickPublish(IRenderedComponent<LyricsTimingEditor> cut) =>
+        cut.FindAll("button").First(b => b.TextContent.Trim().StartsWith("Publish")).Click();
+
+    private void GivenPublishReturns(LyricsEditResult result) =>
+        MockLyricsService
+            .Setup(x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+    [Test]
+    public void PublishingReleasesTheTimingsToListeners()
+    {
+        GivenTimings();
+        GivenPublishReturns(LyricsEditResult.Ok("Published."));
+
+        var cut = Render();
+        ClickPublish(cut);
+
+        MockLyricsService.Verify(
+            x => x.PublishAsync(SongId, CreatorId, It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        Assert.That(cut.Markup, Does.Contain("Listeners can see these lyrics"));
+    }
+
+    [Test]
+    public async Task PublishingSavesUnsavedEditsFirst()
+    {
+        // Otherwise a creator who tunes and presses Publish gets the last thing they happened to
+        // save, not what they just heard - publishing a version that never existed on their screen.
+        GivenTimings(document: ThreeLines());
+        GivenPublishReturns(LyricsEditResult.Ok("Published."));
+        MockLyricsService
+            .Setup(x => x.SaveDraftAsync(SongId, CreatorId, It.IsAny<LyricsTimingsDocument>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(LyricsEditResult.Ok("Saved."));
+
+        var cut = Render();
+
+        await cut.InvokeAsync(() => Model(cut).StartRecording());
+        await cut.InvokeAsync(() => Model(cut).RecordLineTap(11_500));
+        await cut.InvokeAsync(() => Model(cut).Publish());
+
+        MockLyricsService.Verify(
+            x => x.SaveDraftAsync(SongId, CreatorId, It.IsAny<LyricsTimingsDocument>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Test]
+    public void ARefusedPublishShowsEveryReasonRatherThanASummary()
+    {
+        // Validation runs only at Publish, so this is the one place a creator meets it. "These
+        // timings aren't ready" with no reason leaves them nothing to act on.
+        GivenTimings();
+        GivenPublishReturns(new LyricsEditResult(
+            LyricsEditOutcome.Invalid,
+            "These timings aren't ready to publish yet.",
+            ["Line 4 starts before the line above it finishes.", "Line 9 runs past the end of the song."]));
+
+        var cut = Render();
+        ClickPublish(cut);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Line 4 starts before"));
+            Assert.That(cut.Markup, Does.Contain("Line 9 runs past"));
+            Assert.That(cut.Markup, Does.Not.Contain("Listeners can see these lyrics"));
+        });
+    }
+
+    [Test]
+    public void AnUnpublishedSongSaysListenersCannotSeeIt()
+    {
+        // The state every freshly aligned song is now in, and the thing a creator most needs to
+        // understand: the old behaviour published automatically, so silence here reads as "done".
+        GivenTimings();
+
+        Assert.That(Render().Markup, Does.Contain("can't see these lyrics yet"));
+    }
+
+    [Test]
+    public void PublishIsAlwaysAvailableEvenWithNothingEdited()
+    {
+        // The common case for a good alignment is listen, agree, publish - with no edits at all. A
+        // Publish gated on being dirty would strand exactly the songs that came out well.
+        GivenTimings();
+
+        var cut = Render();
+        var publish = cut.FindAll("button").First(b => b.TextContent.Trim().StartsWith("Publish"));
+
+        Assert.That(publish.HasAttribute("disabled"), Is.False);
+    }
 }

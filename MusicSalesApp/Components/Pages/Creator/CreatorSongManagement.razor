@@ -256,7 +256,7 @@
                                         break;
                                     case SongLyricsStatus.NeedsReview:
                                         <span class="badge bg-warning text-dark">@FormatLyricsConfidence(song.LyricsConfidence)</span>
-                                        <div><small class="text-muted">Needs review</small></div>
+                                        <div><small class="text-muted">Not published</small></div>
                                         break;
                                     case SongLyricsStatus.Failed:
                                         <span class="badge bg-danger">Failed</span>
@@ -267,6 +267,15 @@
                                     default:
                                         <span class="text-muted">&mdash;</span>
                                         break;
+                                }
+
+                                @* Otherwise genuinely invisible: the song plays, listeners still see
+                                   the published timings, and nothing says there is newer work behind
+                                   them. A creator interrupted mid-session has no other way to find
+                                   out they never finished. *@
+                                if (song.HasUnpublishedLyricEdits)
+                                {
+                                    <div><small class="text-info">Unpublished edits</small></div>
                                 }
                             }
                         </Template>
