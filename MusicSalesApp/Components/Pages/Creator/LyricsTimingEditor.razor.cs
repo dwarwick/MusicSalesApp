@@ -51,6 +51,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected LyricsScroller? _scroller;
 
     protected bool _loading = true;
+    private bool _jsInitialised;
     protected string? _error;
     protected string _songTitle = string.Empty;
     protected string? _streamUrl;
@@ -225,18 +226,36 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Wire up the transport once the editor is actually on screen.
+    ///
+    /// <para>
+    /// <b>Gated on having initialised, not on <c>firstRender</c>.</b> The whole editor sits behind
+    /// <c>@if (_loading)</c>, and <c>_loading</c> is only cleared after the document has been
+    /// fetched - which is always later than the first render. A <c>firstRender</c> gate therefore
+    /// never coincided with the markup existing, so the module was never imported and every transport
+    /// control was inert.
+    /// </para>
+    /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || _loading || _document is null)
+        if (_jsInitialised || _loading || _document is null)
         {
             return;
         }
+
+        _jsInitialised = true;
 
         _selfRef = DotNetObjectReference.Create(this);
         _module = await JS.InvokeAsync<IJSObjectReference>(
             "import", "./Components/Pages/Creator/LyricsTimingEditor.razor.js");
 
         await _module.InvokeVoidAsync("init", _audioElement, _selfRef, _progressBarContainer, _volumeBarContainer);
+
+        // One more render, so the scroller is handed the element references this render populated.
+        // It is declared above the <audio> element it follows, so on the render that first drew both
+        // it received an empty reference and deliberately declined to initialise.
+        StateHasChanged();
     }
 
     // -----------------------------------------------------------------

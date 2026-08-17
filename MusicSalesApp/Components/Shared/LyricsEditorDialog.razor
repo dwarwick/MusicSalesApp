@@ -90,13 +90,28 @@
                         <i class="bi bi-x-circle me-1"></i> Cancel timing
                     </SfButton>
                 }
-                else if (LyricsService.IsAvailable)
+                else
                 {
-                    <SfButton OnClick="SubmitAsync"
-                              CssClass="e-btn cta-secondary hero-secondary-cta"
-                              Disabled="@(_isSaving || IsOverLimit)">
-                        <i class="bi bi-stopwatch me-1"></i> @SubmitLabel
-                    </SfButton>
+                    @* Offered before the re-run, and styled as the primary action, because it is
+                       almost always the right one: a re-run costs another separation pass and comes
+                       back with the same 150-300 ms of drift, whereas nudging the handful of words
+                       that are actually off takes seconds and is exact. The re-run stays for the case
+                       editing cannot fix - lyrics that were wrong in the first place. *@
+                    @if (_hasTimings)
+                    {
+                        <SfButton OnClick="OpenTimingEditorAsync" CssClass="e-btn cta-secondary hero-secondary-cta">
+                            <i class="bi bi-sliders me-1"></i> Fix the timing
+                        </SfButton>
+                    }
+
+                    @if (LyricsService.IsAvailable)
+                    {
+                        <SfButton OnClick="SubmitAsync"
+                                  CssClass="@(_hasTimings ? "e-btn e-small e-outline" : "e-btn cta-secondary hero-secondary-cta")"
+                                  Disabled="@(_isSaving || IsOverLimit)">
+                            <i class="bi bi-stopwatch me-1"></i> @SubmitLabel
+                        </SfButton>
+                    }
                 }
 
                 <SfButton OnClick="CloseAsync" CssClass="e-btn e-small">Close</SfButton>

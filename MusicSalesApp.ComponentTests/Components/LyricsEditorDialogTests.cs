@@ -184,6 +184,57 @@ public class LyricsEditorDialogTests : BUnitTestBase
     }
 
     /// <summary>
+    /// Timings that came out usable send the creator to the editor before offering another run.
+    ///
+    /// <para>
+    /// The ordering is the point. Re-running costs another separation pass and comes back with the
+    /// same inherent drift, so it is the wrong first suggestion for a result that is merely
+    /// imprecise - and it is the only thing that helps when the pasted words were wrong, so it stays.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void TimingsWorthKeepingOfferEditingBeforeAnotherRun()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.NeedsReview,
+                Confidence = 0.41d,
+                TimingsBlobPath = "abc/abc-lyrics.json"
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("Fix the timing"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Fix the timing"));
+            Assert.That(cut.Markup, Does.Contain("Re-run timing"), "Still available - wrong words need it.");
+            Assert.That(
+                cut.Markup.IndexOf("Fix the timing", StringComparison.Ordinal),
+                Is.LessThan(cut.Markup.IndexOf("Re-run timing", StringComparison.Ordinal)),
+                "Editing is offered first.");
+        });
+    }
+
+    [Test]
+    public void ASongWithNoTimingsYetHasNothingToEdit()
+    {
+        // Nothing has been aligned, so an editor button would lead to an empty page.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Fix the timing"));
+            Assert.That(cut.Markup, Does.Contain("Time lyrics"));
+        });
+    }
+
+    /// <summary>
     /// A finished attempt clears the progress bar even when the parent's refresh fails.
     ///
     /// <para>

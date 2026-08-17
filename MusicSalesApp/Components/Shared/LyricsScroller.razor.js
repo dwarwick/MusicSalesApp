@@ -26,7 +26,12 @@ const instances = new Map();
 const RECENTRE_EPSILON_PX = 1;
 
 export function init(id, root, audio, dotNetRef, interactive) {
-    if (!root || !audio) {
+    // Checked by capability, not by truthiness. An ElementReference that was never assigned - which
+    // happens whenever the audio element is rendered after this component in its parent's markup -
+    // arrives here as an object rather than as null, so `!audio` does not catch it. Calling
+    // addEventListener on it throws, and an unhandled JSException on Blazor Server does not fail
+    // quietly: it tears down the circuit and the whole page reports "An unhandled error has occurred".
+    if (!root || !audio || typeof audio.addEventListener !== 'function') {
         return;
     }
 

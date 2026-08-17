@@ -105,6 +105,28 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     protected string SubmitLabel =>
         _status is null || _status.Status == SongLyricsStatus.Pending ? "Time lyrics" : "Re-run timing";
 
+    /// <summary>Whether there is something to open the timing editor on.</summary>
+    protected bool _hasTimings =>
+        _status?.TimingsBlobPath is not null
+        && _status.Status is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
+
+    /// <summary>
+    /// Send the creator to the timing editor for this song.
+    /// </summary>
+    protected async Task OpenTimingEditorAsync()
+    {
+        if (SongMetadataId is null)
+        {
+            return;
+        }
+
+        await CloseAsync();
+
+        // The shared route helper rather than the path, for the reason it documents: the completion
+        // email links here too, and the two must not drift apart.
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorSongLyrics(SongMetadataId.Value));
+    }
+
     protected MessageSeverity _statusSeverity => _status?.Status switch
     {
         SongLyricsStatus.Published => MessageSeverity.Success,
@@ -118,13 +140,16 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         SongLyricsStatus.Published =>
             $"Lyrics timed ({_status.Confidence ?? 0d:P0} confidence). Listeners will see them in time with the song.",
 
-        // The single most useful thing to say here. A large share of low-confidence results are
-        // caused by something in the pasted text the singer never sings, and pointing at that is
-        // worth more to the creator than the number is.
+        // Editing is offered first on purpose. Machine alignment lands 150-300 ms out on a good day,
+        // so a re-run of the same text usually returns something just as approximate after another
+        // several minutes of compute - while tapping the few lines that drifted is quick and exact.
+        // The re-run is still named, because it is the only thing that helps when the pasted text was
+        // wrong rather than the timing.
         SongLyricsStatus.NeedsReview =>
             $"We timed these lyrics but aren't confident in the result ({_status.Confidence ?? 0d:P0}), "
-            + "so they won't be shown to listeners yet. Re-running after removing anything that isn't "
-            + "sung - spoken asides, credits, repeated section notes - often fixes it.",
+            + "so they won't be shown to listeners yet. Have a listen first - fixing the few lines "
+            + "that drifted is usually quicker than timing it again. If the words themselves are "
+            + "wrong, edit them and re-run instead.",
 
         SongLyricsStatus.Failed => "We couldn't time these lyrics. You can edit them and try again.",
         SongLyricsStatus.Pending => "These lyrics are queued for timing.",

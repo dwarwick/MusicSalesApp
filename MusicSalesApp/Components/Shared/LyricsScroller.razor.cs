@@ -100,15 +100,33 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Initialise once the audio element actually exists, which is not necessarily the first render.
+    ///
+    /// <para>
+    /// <b>Deliberately not gated on <c>firstRender</c>.</b> <see cref="ElementReference"/> is a struct
+    /// captured when the parameter is set, and a parent that declares its <c>&lt;audio&gt;</c> after
+    /// this component - as the timing editor does - has not assigned its <c>@ref</c> yet at that
+    /// point, because refs are populated only once the render batch reaches the DOM. Initialising
+    /// anyway hands JS a reference to nothing, and the resulting JSException takes the circuit down
+    /// with it. Waiting for a populated <see cref="ElementReference.Id"/> costs one extra render and
+    /// removes the ordering trap entirely.
+    /// </para>
+    /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_initialised)
         {
-            _selfRef = DotNetObjectReference.Create(this);
+            if (string.IsNullOrEmpty(AudioElement.Id))
+            {
+                return;
+            }
+
+            _selfRef ??= DotNetObjectReference.Create(this);
 
             try
             {
-                _module = await JS.InvokeAsync<IJSObjectReference>(
+                _module ??= await JS.InvokeAsync<IJSObjectReference>(
                     "import", "./Components/Shared/LyricsScroller.razor.js");
 
                 await _module.InvokeVoidAsync(
