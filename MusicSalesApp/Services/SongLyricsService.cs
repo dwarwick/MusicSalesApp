@@ -372,6 +372,21 @@ public sealed class SongLyricsService : ISongLyricsService
                 "These lyrics are already being timed. Cancel that first if you want to start again.");
         }
 
+        // Prevent submitting new lyrics if there are already successful timings. The creator
+        // should use the timing editor to edit the existing ones instead of re-running alignment.
+        var existingLyrics = await context.SongLyrics
+            .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
+
+        if (existingLyrics is not null
+            && (existingLyrics.Status == SongLyricsStatus.Published
+                || existingLyrics.Status == SongLyricsStatus.NeedsReview))
+        {
+            return new LyricsSubmissionResult(
+                LyricsSubmissionOutcome.NotAllowed,
+                null,
+                "These lyrics have already been timed successfully. Use the timing editor to make changes instead of re-running the alignment.");
+        }
+
         var lyricsBlobPath = SongMediaPaths.ResolveLyricsTextTarget(
             song.Id, song.MediaGuid, song.Mp3BlobPath);
 
