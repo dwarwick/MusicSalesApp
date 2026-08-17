@@ -70,6 +70,17 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         int.TryParse(Song?.Id, out var parsed) ? parsed : null;
     private bool _subscribed;
 
+    /// <summary>
+    /// How often the fallback poll asks whether the attempt is still running.
+    ///
+    /// <para>
+    /// Chosen to match the reasoning behind the Function's own timer intervals: this is a backstop
+    /// for a dropped push, not the mechanism, so it trades a slower worst case for far fewer queries
+    /// than a bar that visibly ticks would need.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan StatusPollInterval = TimeSpan.FromSeconds(30);
+
     private PeriodicTimer? _statusPoller;
 
     protected static int MaxCharacters => LyricsTextLimits.MaxCharacters;
@@ -170,6 +181,11 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             {
                 _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(_activeJob.Step);
                 _progressDetail = DescribeStep(_activeJob.Step);
+
+                // An attempt that was already in flight when this dialog opened needs the fallback
+                // just as much as one started here - more, in fact, since a reopened dialog is
+                // usually a reconnected circuit, which is exactly when a push goes missing.
+                StartStatusPoller();
             }
 
             // Deliberately not pre-filled from the stored blob. Reading it back would cost a blob
@@ -292,16 +308,8 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
 
         if (LyricsAlignmentProgressCalculator.IsTerminal(progress.Step))
         {
-            StopStatusPoller();
-            _isRunning = false;
-            _activeJob = null;
-
-            if (SongMetadataId is not null)
-            {
-                _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
-            }
-
-            await OnCompleted.InvokeAsync();
+            await ApplyTerminalStateAsync();
+            return;
         }
 
         await InvokeAsync(StateHasChanged);
@@ -331,8 +339,13 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     private void StartStatusPoller()
     {
         StopStatusPoller();
-        _statusPoller = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        _ = PollStatusAsync();
+
+        // The timer is passed to the loop rather than read from the field, because the field is
+        // nulled the moment anything stops the poller - and reading it from the loop condition after
+        // that would dereference null on a fire-and-forget task, where nobody would ever see it.
+        var poller = new PeriodicTimer(StatusPollInterval);
+        _statusPoller = poller;
+        _ = PollStatusAsync(poller);
     }
 
     private void StopStatusPoller()
@@ -341,18 +354,24 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         _statusPoller = null;
     }
 
-    private async Task PollStatusAsync()
+    /// <summary>
+    /// The fallback that notices an attempt finished when the terminal SignalR push did not arrive.
+    ///
+    /// <para>
+    /// Deliberately only a fallback. It reads the job row, which records the step but not the
+    /// progress within it, so it can only ever move the bar to a band start - the live pushes carry
+    /// the fractional progress and stay authoritative while they are arriving.
+    /// </para>
+    /// </summary>
+    private async Task PollStatusAsync(PeriodicTimer poller)
     {
-        if (_statusPoller is null)
-        {
-            return;
-        }
-
         try
         {
-            while (await _statusPoller.WaitForNextTickAsync())
+            while (await poller.WaitForNextTickAsync())
             {
-                if (!_isRunning || _activeJob is null || SongMetadataId is null)
+                var watchedJobId = _activeJob?.JobId;
+
+                if (!_isRunning || watchedJobId is null || SongMetadataId is null)
                 {
                     break;
                 }
@@ -361,57 +380,91 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
                 {
                     var updated = await LyricsService.GetActiveJobAsync(SongMetadataId.Value);
 
-                    if (updated is not null && updated.JobId == _activeJob.JobId)
+                    // GetActiveJobAsync only ever returns Queued or Processing rows, so an attempt
+                    // that has finished - however it finished - stops being returned at all. That
+                    // disappearance IS the terminal signal here; there is no terminal row to read.
+                    if (updated is null || updated.JobId != watchedJobId)
                     {
-                        var step = updated.Step;
-
-                        // Only override the displayed progress if the step has advanced. The DB row does
-                        // not carry in-step progress percentages (only SignalR does), so pulling ToOverallPercent(step)
-                        // without an in-step percent would overwrite live 22%/29% updates with a stale 15% band-start.
-                        // This poll exists only as a terminal-state fallback: if the final SignalR push was lost,
-                        // detect it here.
-                        if (step > _activeJob.Step)
-                        {
-                            _activeJob = updated;
-                            _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(step);
-                            _progressDetail = DescribeStep(step);
-                        }
-
-                        if (LyricsAlignmentProgressCalculator.IsTerminal(step))
-                        {
-                            StopStatusPoller();
-                            _isRunning = false;
-                            _activeJob = null;
-                            _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
-                            await OnCompleted.InvokeAsync();
-                            await InvokeAsync(StateHasChanged);
-                        }
+                        await ApplyTerminalStateAsync();
+                        break;
                     }
-                    else if (updated is null && _isRunning)
+
+                    if (updated.Step > _activeJob!.Step)
                     {
-                        // Job was deleted, probably by the creator hitting Cancel elsewhere. Treat it as failed.
-                        StopStatusPoller();
-                        _isRunning = false;
-                        _activeJob = null;
-                        _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
-                        await OnCompleted.InvokeAsync();
+                        _activeJob = updated;
+                        _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(updated.Step);
+                        _progressDetail = DescribeStep(updated.Step);
                         await InvokeAsync(StateHasChanged);
                     }
                 }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
-                    // A polled status check failure should not break the SignalR-driven display, only
-                    // offer a fallback if SignalR failed.
-                    Logger.LogDebug(
-                        ex,
-                        "Status poll failed for lyrics job {JobId}, deferring to SignalR.",
-                        _activeJob?.JobId);
+                    // Warning rather than Debug: this is the safety net for a lost terminal push, so
+                    // it failing silently leaves the creator watching a bar that will never move and
+                    // leaves nothing in the logs to explain why.
+                    Logger.LogWarning(
+                        ex, "Lyrics status poll failed for job {JobId}.", watchedJobId);
                 }
             }
         }
+        catch (ObjectDisposedException)
+        {
+            // Stopped while waiting for the next tick. Expected on completion and on dispose.
+        }
         finally
         {
-            StopStatusPoller();
+            poller.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Closes the attempt out in the UI, from whichever path noticed first.
+    ///
+    /// <para>
+    /// <b>The repaint is in a finally, and the parent refresh happens after it.</b> Both matter.
+    /// <c>_isRunning</c> gates the progress bar, so clearing it without repainting leaves the bar
+    /// frozen at whatever it last showed - and because the poller stops once the attempt is no longer
+    /// running, nothing would ever come back to correct it. Refreshing the parent grid is a much
+    /// larger operation than this dialog, and it must not be able to strand this dialog by throwing.
+    /// </para>
+    /// </summary>
+    private async Task ApplyTerminalStateAsync()
+    {
+        StopStatusPoller();
+
+        _isRunning = false;
+        _activeJob = null;
+
+        try
+        {
+            if (SongMetadataId is not null)
+            {
+                _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex, "Could not refresh lyrics status for song {SongId}.", SongMetadataId);
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+
+        try
+        {
+            await OnCompleted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex, "Could not refresh the song list after lyrics job for song {SongId} finished.",
+                SongMetadataId);
         }
     }
 
@@ -424,5 +477,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             UploadProgressHubClient.OnLyricsProgress -= HandleProgressAsync;
             _subscribed = false;
         }
+
+        await ValueTask.CompletedTask;
     }
 }

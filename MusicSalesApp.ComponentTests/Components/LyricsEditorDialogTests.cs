@@ -1,5 +1,7 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Moq;
+using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Shared;
@@ -179,6 +181,68 @@ public class LyricsEditorDialogTests : BUnitTestBase
             Assert.That(cut.Markup, Does.Contain("Isolating the vocal"), "The slow stage says it is the slow stage.");
             Assert.That(cut.Markup, Does.Not.Contain("Time lyrics"), "Submit is replaced while one is running.");
         });
+    }
+
+    /// <summary>
+    /// A finished attempt clears the progress bar even when the parent's refresh fails.
+    ///
+    /// <para>
+    /// The regression this exists for: the terminal handler used to clear <c>_isRunning</c>, then
+    /// await the parent's <c>OnCompleted</c> grid reload, and only then repaint. A reload that threw
+    /// therefore left the component believing it had finished while the DOM still showed the bar
+    /// frozen at its last percent - and because the fallback poll stops once the attempt is no longer
+    /// running, nothing ever came back to correct it. The creator watched 96% until they refreshed.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void AFinishedAttemptClearsTheBarEvenIfTheParentRefreshThrows()
+    {
+        var jobId = Guid.NewGuid();
+
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LyricsAlignmentJob
+            {
+                JobId = jobId,
+                SongMetadataId = 1,
+                CreatorId = 7,
+                LyricsBlobPath = "abc/abc-lyrics.txt",
+                Step = MusicSalesApp.Common.Contracts.LyricsAlignmentStep.Saving
+            });
+
+        SetupRendererInfo();
+        SetupAuthorizedUser(1, "creator@example.com", "Creator");
+
+        var cut = TestContext.Render<LyricsEditorDialog>(parameters => parameters
+            .Add(p => p.IsVisible, true)
+            .Add(p => p.CreatorId, 7)
+            .Add(p => p.Song, new SongAdminViewModel
+            {
+                Id = "1",
+                SongTitle = "Night Drive",
+                MediaGuid = Guid.Parse("abc00000-0000-0000-0000-000000000000")
+            })
+            .Add(p => p.OnCompleted, EventCallback.Factory.Create(this, () =>
+                throw new InvalidOperationException("The song grid failed to reload."))));
+
+        cut.WaitForState(() => cut.Markup.Contains("progress-bar"), TimeSpan.FromSeconds(5));
+
+        // The attempt finishes. Only the terminal push arrives - the parent's reload then throws.
+        MockUploadProgressHubClient.Raise(
+            x => x.OnLyricsProgress += null,
+            new LyricsAlignmentProgress
+            {
+                JobId = jobId,
+                Step = MusicSalesApp.Common.Contracts.LyricsAlignmentStep.Completed,
+                OverallPercent = 100d
+            });
+
+        cut.WaitForState(() => !cut.Markup.Contains("progress-bar"), TimeSpan.FromSeconds(5));
+
+        Assert.That(
+            cut.Markup,
+            Does.Not.Contain("progress-bar"),
+            "The bar must clear on the dialog's own repaint, not depend on the parent's reload surviving.");
     }
 
     private IRenderedComponent<LyricsEditorDialog> RenderDialog()
