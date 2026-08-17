@@ -364,8 +364,18 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
                     if (updated is not null && updated.JobId == _activeJob.JobId)
                     {
                         var step = updated.Step;
-                        _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(step);
-                        _progressDetail = DescribeStep(step);
+
+                        // Only override the displayed progress if the step has advanced. The DB row does
+                        // not carry in-step progress percentages (only SignalR does), so pulling ToOverallPercent(step)
+                        // without an in-step percent would overwrite live 22%/29% updates with a stale 15% band-start.
+                        // This poll exists only as a terminal-state fallback: if the final SignalR push was lost,
+                        // detect it here.
+                        if (step > _activeJob.Step)
+                        {
+                            _activeJob = updated;
+                            _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(step);
+                            _progressDetail = DescribeStep(step);
+                        }
 
                         if (LyricsAlignmentProgressCalculator.IsTerminal(step))
                         {
@@ -374,9 +384,8 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
                             _activeJob = null;
                             _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
                             await OnCompleted.InvokeAsync();
+                            await InvokeAsync(StateHasChanged);
                         }
-
-                        await InvokeAsync(StateHasChanged);
                     }
                     else if (updated is null && _isRunning)
                     {
