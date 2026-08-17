@@ -1015,6 +1015,17 @@ h1:focus {
     margin-top: 4px;
 }
 
+/* A DEFAULT SIZE, because an inline SVG that is given none is not small - it falls back to the
+   replaced-element default of 300x150 and draws the icon at that size. Every other rule for this
+   class is scoped to a player container (.playlist-player-container, .song-player-container), so
+   any other home for these controls - the lyric timing editor is one - had no size at all and drew
+   enormous shapes. The scoped rules are more specific and still win where they apply, and the
+   breakpoint files load after this one so their overrides do too. */
+.control-icon {
+    width: 18px;
+    height: 18px;
+}
+
 .card-now-playing {
     font-size: 12px;
     font-weight: 500;
@@ -2883,6 +2894,24 @@ h1:focus {
 /* --- Editor: the creator is reading and clicking these, so they get the most room --- */
 .lyrics-scroller--editor {
     font-size: 17px;
+
+    /* Turns this box into a query container so the track below can ask for half its HEIGHT.
+       See the track rule for why a percentage cannot do that. Scoped to the editor rather than
+       applied to .lyrics-scroller, because container-type: size also makes the box ignore its
+       contents when sizing itself - safe here, where .lyrics-editor-scroller gives it a definite
+       420px, but not something to impose on the card and player without checking each one. */
+    container-type: size;
+}
+
+/* HALF THE SCROLLER'S HEIGHT, so the first line can sit in the middle with nothing above it.
+   The shared rule asks for `padding-block: 50%`, and percentage padding resolves against the
+   container's INLINE size - its width - never its height. That is close enough to right while the
+   scroller is roughly square, which it is on a card and on the player page where it stands in for
+   cover art. The editor is the one home where it is not: 420px tall and as wide as the page, so
+   50% became some 700px of padding inside a 420px clipped box and pushed every line out of sight.
+   cqh is the unit that means what this always intended. */
+.lyrics-scroller--editor .lyrics-scroller-track {
+    padding-block: 50cqh;
 }
 
 .lyrics-scroller--editor .lyrics-line {

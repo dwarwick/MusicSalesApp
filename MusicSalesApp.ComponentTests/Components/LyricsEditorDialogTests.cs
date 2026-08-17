@@ -119,11 +119,20 @@ public class LyricsEditorDialogTests : BUnitTestBase
         });
     }
 
+    /// <summary>
+    /// Timings held for review report their score and say what is stopping them being seen.
+    ///
+    /// <para>
+    /// This used to assert the message said "we aren't confident about this one", which was right
+    /// while <c>NeedsReview</c> meant a weak result. It is now where <em>every</em> successful
+    /// alignment lands, at any confidence, so that wording would tell a creator with a 95% result
+    /// that their song went badly. What the message owes them instead is the number and the reason
+    /// nothing is live yet - which is Publish, not the score.
+    /// </para>
+    /// </summary>
     [Test]
-    public void ALowConfidenceResultExplainsItselfAndKeepsTheExport()
+    public void TimingsHeldForReviewReportTheScoreAndKeepTheExport()
     {
-        // The creator's most likely next question is "why", and the most useful answer is the one
-        // they can act on: something in the pasted text that nobody sings.
         MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
         MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SongLyrics
@@ -136,12 +145,16 @@ public class LyricsEditorDialogTests : BUnitTestBase
             });
 
         var cut = RenderDialog();
-        cut.WaitForState(() => cut.Markup.Contains("aren't confident"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("until you press Publish"), TimeSpan.FromSeconds(5));
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("won't be shown to listeners yet"));
-            Assert.That(cut.Markup, Does.Contain("Download .lrc"), "Low-confidence timings are kept, not discarded.");
+            Assert.That(cut.Markup, Does.Contain("41"), "The score is reported, not judged.");
+            Assert.That(
+                cut.Markup,
+                Does.Not.Contain("aren't confident"),
+                "NeedsReview is universal now, so it must not read as a verdict on this song.");
+            Assert.That(cut.Markup, Does.Contain("Download .lrc"), "Timings held for review are kept, not discarded.");
         });
     }
 

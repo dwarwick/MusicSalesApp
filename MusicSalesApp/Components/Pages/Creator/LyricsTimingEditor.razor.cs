@@ -42,6 +42,18 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     /// </summary>
     private const int MaxUndoDepth = 50;
 
+    /// <summary>
+    /// The confidence below which the banner stops suggesting the work might already be done.
+    ///
+    /// <para>
+    /// Separate from the admin threshold on purpose. That one is a policy dial with a legal range of
+    /// 0 to 1 and decides where the line between "confident" and "not" sits; this is a floor on what
+    /// the wording is allowed to promise, so that lowering the dial can never turn a half-aligned
+    /// song into a page telling its creator it may need no work at all.
+    /// </para>
+    /// </summary>
+    private const double ConfidentEnoughToPromiseNoWork = 0.85d;
+
     [Parameter] public int SongId { get; set; }
 
     protected ElementReference _audioElement;
@@ -213,15 +225,33 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
         var threshold = await AppSettingsService.GetLyricsConfidenceThresholdAsync();
         var confidence = _lyrics?.Confidence ?? 0d;
 
-        if (confidence >= threshold)
+        if (confidence < threshold)
+        {
+            _bannerClass = "alert-warning";
+            _bannerMessage = "We weren't confident about this one. Expect to do some tapping before "
+                             + "you publish.";
+            return;
+        }
+
+        // ABOVE THE THRESHOLD IS NOT THE SAME AS GOOD, which is why this does not stop at the
+        // comparison above. The threshold is an admin knob with a legal range of 0 to 1, so "cleared
+        // it" can mean anything at all - set it to 0.3 and a barely-half-aligned song clears it. The
+        // old copy promised "it may need no work at all" on that basis alone, and a creator who took
+        // it at face value published timings that visibly drift.
+        //
+        // So clearing the threshold decides the COLOUR - that is the admin's call about where the
+        // line sits - and this second, absolute test decides how much the copy is willing to promise.
+        // Nothing claims the work might already be done unless the aligner really did place almost
+        // everything.
+        if (confidence >= ConfidentEnoughToPromiseNoWork)
         {
             _bannerClass = "alert-success";
             _bannerMessage = "This one came out well. Have a listen — it may need no work at all.";
         }
         else
         {
-            _bannerClass = "alert-warning";
-            _bannerMessage = "We weren't confident about this one. Expect to do some tapping before "
+            _bannerClass = "alert-success";
+            _bannerMessage = "These are usable. Have a listen — expect to nudge a few lines before "
                              + "you publish.";
         }
     }

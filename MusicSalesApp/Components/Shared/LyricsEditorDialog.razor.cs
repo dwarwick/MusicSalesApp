@@ -145,11 +145,14 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         // several minutes of compute - while tapping the few lines that drifted is quick and exact.
         // The re-run is still named, because it is the only thing that helps when the pasted text was
         // wrong rather than the timing.
+        // States the score without passing a verdict on it. NeedsReview is where EVERY successful
+        // alignment lands now, at any confidence, so copy that reads "we aren't confident in this"
+        // would tell a creator with a 95% result that their song went badly.
         SongLyricsStatus.NeedsReview =>
-            $"We timed these lyrics but aren't confident in the result ({_status.Confidence ?? 0d:P0}), "
-            + "so they won't be shown to listeners yet. Have a listen first - fixing the few lines "
-            + "that drifted is usually quicker than timing it again. If the words themselves are "
-            + "wrong, edit them and re-run instead.",
+            $"Timed with {_status.Confidence ?? 0d:P0} confidence. Nothing is shown to listeners "
+            + "until you press Publish. Have a listen - fixing the few lines that drifted is "
+            + "usually quicker than timing it again. If the words themselves are wrong, edit them "
+            + "and re-run instead.",
 
         SongLyricsStatus.Failed => "We couldn't time these lyrics. You can edit them and try again.",
         SongLyricsStatus.Pending => "These lyrics are queued for timing.",

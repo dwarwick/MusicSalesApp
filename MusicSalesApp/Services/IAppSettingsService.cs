@@ -81,12 +81,19 @@ public interface IAppSettingsService
     Task SetMaxAudioUploadSizeMBAsync(int sizeMB);
 
     /// <summary>
-    /// Gets the minimum confidence, 0-1, at which lyric timings are shown to listeners. Timings
-    /// below it are kept and shown to the creator but withheld from players.
+    /// Gets the confidence, 0-1, above which a creator is told their timings look good.
+    ///
+    /// <para>
+    /// <b>It gates nothing a listener can see.</b> Alignment never publishes - every result lands as
+    /// <c>NeedsReview</c> at any confidence, and only the creator pressing Publish makes timings
+    /// visible - so this chooses which greeting the timing editor opens with and nothing else. The
+    /// wording matters because the obvious reading, that lowering it lets more timings through to
+    /// listeners, is false: lowering it only tells creators that weaker alignments are fine.
+    /// </para>
     /// </summary>
     Task<double> GetLyricsConfidenceThresholdAsync();
 
-    /// <summary>Sets the minimum confidence at which lyric timings are shown to listeners.</summary>
+    /// <summary>Sets the confidence above which a creator is told their timings look good.</summary>
     /// <param name="threshold">A value between 0 and 1; anything outside is clamped.</param>
     Task SetLyricsConfidenceThresholdAsync(double threshold);
 

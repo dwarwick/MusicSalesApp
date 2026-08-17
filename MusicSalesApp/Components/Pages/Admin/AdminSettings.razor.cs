@@ -770,9 +770,12 @@ public class AdminSettingsModel : BlazorBase
                     _directToStorageUploadEnabled ? "ON" : "OFF");
             }
 
-            // Written only on a change, and logged, because this one silently re-grades every
-            // alignment that completes after it. A song that was Published yesterday and NeedsReview
-            // today has not changed; the bar did.
+            // Written only on a change, and logged, because this one silently re-words what every
+            // creator is told about work that has already finished - the banner reads the threshold
+            // live rather than storing a verdict with the song. It does not re-grade anything: no
+            // alignment has ever published itself, so moving this cannot change what a listener
+            // sees, only whether a creator is greeted with "have a listen" or "expect to do some
+            // tapping".
             if (_lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent)
             {
                 await AppSettingsService.SetLyricsConfidenceThresholdAsync(

@@ -71,13 +71,14 @@ public class AppSettingsService : IAppSettingsService
     public const int DefaultMaxAudioUploadSizeMB = 100;
 
     /// <summary>
-    /// The key used for storing the minimum confidence at which lyric timings are shown to
-    /// listeners, 0-1.
+    /// The key used for storing the confidence, 0-1, above which a creator is told their timings
+    /// look good. It gates nothing a listener can see - see
+    /// <see cref="IAppSettingsService.GetLyricsConfidenceThresholdAsync"/>.
     /// </summary>
     public const string LyricsConfidenceThresholdKey = "LyricsConfidenceThreshold";
 
     /// <summary>
-    /// Default minimum confidence for publishing lyric timings.
+    /// Default confidence above which a creator is told their timings look good.
     ///
     /// <para>
     /// Admin-tunable rather than a constant in the alignment pipeline, and that placement is the
@@ -328,7 +329,8 @@ public class AppSettingsService : IAppSettingsService
         await SetSettingAsync(
             LyricsConfidenceThresholdKey,
             Math.Clamp(threshold, 0d, 1d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-            "Minimum confidence at which lyric timings are shown to listeners");
+            "Advice only: the confidence above which a creator is told their timings look good. "
+            + "Nothing reaches listeners until the creator presses Publish, at any confidence.");
     }
 
     /// <inheritdoc />
