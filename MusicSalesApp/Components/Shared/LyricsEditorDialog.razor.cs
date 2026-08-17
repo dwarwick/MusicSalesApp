@@ -70,6 +70,8 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         int.TryParse(Song?.Id, out var parsed) ? parsed : null;
     private bool _subscribed;
 
+    private PeriodicTimer? _statusPoller;
+
     protected static int MaxCharacters => LyricsTextLimits.MaxCharacters;
 
     protected static int MaxLines => LyricsTextLimits.MaxLines;
@@ -209,6 +211,8 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
 
             _status = await LyricsService.GetForSongAsync(SongMetadataId!.Value);
             _activeJob = await LyricsService.GetActiveJobAsync(SongMetadataId!.Value);
+
+            StartStatusPoller();
         }
         catch (Exception ex)
         {
@@ -229,6 +233,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             return;
         }
 
+        StopStatusPoller();
         _isSaving = true;
 
         try
@@ -287,6 +292,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
 
         if (LyricsAlignmentProgressCalculator.IsTerminal(progress.Step))
         {
+            StopStatusPoller();
             _isRunning = false;
             _activeJob = null;
 
@@ -322,14 +328,92 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         _ => "Working…"
     };
 
-    public ValueTask DisposeAsync()
+    private void StartStatusPoller()
     {
+        StopStatusPoller();
+        _statusPoller = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _ = PollStatusAsync();
+    }
+
+    private void StopStatusPoller()
+    {
+        _statusPoller?.Dispose();
+        _statusPoller = null;
+    }
+
+    private async Task PollStatusAsync()
+    {
+        if (_statusPoller is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await _statusPoller.WaitForNextTickAsync())
+            {
+                if (!_isRunning || _activeJob is null || SongMetadataId is null)
+                {
+                    break;
+                }
+
+                try
+                {
+                    var updated = await LyricsService.GetActiveJobAsync(SongMetadataId.Value);
+
+                    if (updated is not null && updated.JobId == _activeJob.JobId)
+                    {
+                        var step = updated.Step;
+                        _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(step);
+                        _progressDetail = DescribeStep(step);
+
+                        if (LyricsAlignmentProgressCalculator.IsTerminal(step))
+                        {
+                            StopStatusPoller();
+                            _isRunning = false;
+                            _activeJob = null;
+                            _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
+                            await OnCompleted.InvokeAsync();
+                        }
+
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    else if (updated is null && _isRunning)
+                    {
+                        // Job was deleted, probably by the creator hitting Cancel elsewhere. Treat it as failed.
+                        StopStatusPoller();
+                        _isRunning = false;
+                        _activeJob = null;
+                        _status = await LyricsService.GetForSongAsync(SongMetadataId.Value);
+                        await OnCompleted.InvokeAsync();
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // A polled status check failure should not break the SignalR-driven display, only
+                    // offer a fallback if SignalR failed.
+                    Logger.LogDebug(
+                        ex,
+                        "Status poll failed for lyrics job {JobId}, deferring to SignalR.",
+                        _activeJob?.JobId);
+                }
+            }
+        }
+        finally
+        {
+            StopStatusPoller();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        StopStatusPoller();
+
         if (_subscribed)
         {
             UploadProgressHubClient.OnLyricsProgress -= HandleProgressAsync;
             _subscribed = false;
         }
-
-        return ValueTask.CompletedTask;
     }
 }

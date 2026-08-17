@@ -76,8 +76,13 @@ public sealed class LyricsAlignmentNotifier : ILyricsAlignmentNotifier
         }
         catch (Exception ex)
         {
-            // Swallowed on purpose - see the interface docs.
-            _logger.LogDebug(
+            // Swallowed on purpose - see the interface docs. Terminal steps are logged at Warning
+            // so failures aren't invisible when the very last push (100% / Completed) is dropped.
+            var level = LyricsAlignmentProgressCalculator.IsTerminal(progress.Step)
+                ? LogLevel.Warning
+                : LogLevel.Debug;
+            _logger.Log(
+                level,
                 ex,
                 "Could not push lyrics progress for job {JobId} at step {Step}",
                 progress.JobId,
