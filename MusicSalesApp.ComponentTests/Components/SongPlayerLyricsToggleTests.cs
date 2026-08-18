@@ -72,13 +72,43 @@ public class SongPlayerLyricsToggleTests : BUnitTestBase
         base.BaseTearDown();
     }
 
-    private IRenderedComponent<SongPlayer> RenderWith(SongLyrics? lyrics)
+    private IRenderedComponent<SongPlayer> RenderWith(
+        SongLyrics? lyrics,
+        MusicSalesApp.Common.Contracts.LyricsTimingsDocument? timings = null)
     {
         MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(lyrics);
 
+        // The service is what enforces "published only" for the document itself, so the stub answers
+        // for whatever this case asked for rather than deriving it from the row.
+        MockLyricsService
+            .Setup(x => x.GetPublishedTimingsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(timings);
+
         return TestContext.Render<SongPlayer>(pb => pb.Add(p => p.SongTitle, "TestSong"));
     }
+
+    private static MusicSalesApp.Common.Contracts.LyricsTimingsDocument TimingsDocument() => new()
+    {
+        SongId = 1,
+        DurationMs = 240_000,
+        Lines =
+        [
+            new MusicSalesApp.Common.Contracts.LyricsTimedLine
+            {
+                Text = "hello world",
+                StartMs = 1_000,
+                EndMs = 3_000,
+                Words =
+                [
+                    new MusicSalesApp.Common.Contracts.LyricsTimedWord
+                    { Text = "hello", StartMs = 1_000, EndMs = 2_000 },
+                    new MusicSalesApp.Common.Contracts.LyricsTimedWord
+                    { Text = "world", StartMs = 2_000, EndMs = 3_000 }
+                ]
+            }
+        ]
+    };
 
     private static SongLyrics Lyrics(SongLyricsStatus status, string? timings = "abc/abc-lyrics.json") => new()
     {
@@ -131,19 +161,40 @@ public class SongPlayerLyricsToggleTests : BUnitTestBase
         Assert.That(cut.FindAll(".lyrics-toggle-button"), Is.Empty);
     }
 
+    /// <summary>
+    /// The player renders the words, rather than merely naming where they live.
+    ///
+    /// <para>
+    /// This replaces a test that asserted the scroller was handed a timings URL, which it was - and
+    /// the panel still showed nothing but "Lyrics are loading…" forever. The words are drawn from a
+    /// document C# holds; a URL only ever reached the browser-side highlighter, which can colour
+    /// existing spans but cannot create them. The old test passed for as long as the feature was
+    /// completely broken, which is the reason this one asserts on rendered output instead.
+    /// </para>
+    /// </summary>
     [Test]
-    public void TheTimingsUrlCarriesTheVersionAsACacheBuster()
+    public void PublishedLyricsAreActuallyRenderedAsWords()
     {
-        // The blob path never changes between versions and the response is served immutable for a
-        // year. Without ?v= a creator's re-publish would be invisible to every browser that had
-        // already seen the song, permanently.
-        // Asserted on the parameter rather than the markup: the URL is handed to the JS module to
-        // fetch with, so it never appears in the rendered HTML at all.
-        var cut = RenderWith(Lyrics(SongLyricsStatus.Published));
+        var cut = RenderWith(Lyrics(SongLyricsStatus.Published), TimingsDocument());
 
-        var scroller = cut.FindComponent<MusicSalesApp.Components.Shared.LyricsScroller>();
+        cut.WaitForState(() => cut.FindAll("[data-w]").Count > 0, TimeSpan.FromSeconds(5));
 
-        Assert.That(scroller.Instance.TimingsUrl, Is.EqualTo("/api/music/abc/abc-lyrics.json?v=4"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll("[data-w]"), Has.Count.EqualTo(2), "One span per timed word.");
+            Assert.That(cut.Markup, Does.Contain("hello"));
+            Assert.That(cut.Markup, Does.Not.Contain("Lyrics are loading"));
+        });
+    }
+
+    [Test]
+    public void APublishedSongWhoseDocumentCannotBeReadSaysSoRatherThanRenderingNothing()
+    {
+        // The row says published but the blob is unreadable - the empty message is then honest, and
+        // it is the state the whole player used to sit in permanently.
+        var cut = RenderWith(Lyrics(SongLyricsStatus.Published), timings: null);
+
+        Assert.That(cut.Markup, Does.Contain("Lyrics are loading"));
     }
 
     [Test]

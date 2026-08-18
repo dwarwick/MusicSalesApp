@@ -61,9 +61,15 @@ else
                     </li>
                     <li>
                         <strong>If a section drifts, re-tap it.</strong> Press
-                        <em>Start tapping</em>, then press the <strong>space bar</strong> at the
-                        exact moment each line begins. The words inside that line spread out to
-                        match. You don't have to do the whole song — just the part that's wrong.
+                        <em>Start tapping</em> and the song plays from where you are. Each time you
+                        hear a new line begin, press the <strong>space bar</strong> — that line moves
+                        to the moment you pressed it, and the words inside it spread out to match.
+                        The box shows which line your next press belongs to, and it
+                        <strong>waits for you</strong> rather than following the song. The on-screen
+                        <em>Tap</em> button does exactly the same thing as the space bar — use
+                        whichever you prefer. Slow the song to <em>0.5×</em> first if you like; the
+                        timings still come out right at normal speed. You don't have to do the whole
+                        song — just the part that's wrong.
                     </li>
                     <li>
                         <strong>If one word is slightly off, nudge it.</strong> Click the word, then
@@ -188,14 +194,18 @@ else
                             ● Start tapping
                         </button>
                         <p class="text-muted mt-2 mb-0">
-                            Plays from where you are now. Press the <strong>space bar</strong> as each
-                            line begins &mdash; you only need to do the part that's wrong.
+                            Plays from where you are now. Each time you hear a new line begin, press
+                            the <strong>space bar</strong> &mdash; or the <em>Tap</em> button, which
+                            is the same control. You only need to do the part that's wrong.
                         </p>
                     }
                     else
                     {
+                        @* "Press space when you hear" rather than "Next line": the passive label
+                           named the thing without ever saying what to do with it, which is most of
+                           why this control did not explain itself. *@
                         <div class="lyrics-editor-next-line">
-                            <span class="text-muted">Next line</span>
+                            <span class="text-muted">Press space when you hear</span>
                             <strong>@NextLineToTap</strong>
                         </div>
 
@@ -205,8 +215,9 @@ else
                            never changes. The last sentence is the one that was missing: this
                            follows the creator, not the song. *@
                         <p class="text-muted small mt-2 mb-0">
-                            Press the <strong>space bar</strong> the moment this line starts being
-                            sung. It waits for you &mdash; it does not follow the song on its own.
+                            It waits for you &mdash; it does not follow the song on its own. Each
+                            press moves that line to the moment you pressed, then shows you the next
+                            one.
                         </p>
 
                         @* The same action as the space bar, for touch - and for anybody who would
@@ -217,8 +228,11 @@ else
                            worse than the space bar at the one thing it exists to do. JS picks it up
                            by the data attribute and reads the audio clock in the click handler
                            itself, exactly as it does for the key. *@
+                        @* Names the space bar on the button itself. The two being the same control
+                           was stated nowhere, so a creator reading "Tap" here and "space bar" in the
+                           copy above had every reason to think they were two different things. *@
                         <button type="button" class="btn btn-danger btn-lg w-100 mt-2" data-tap-now>
-                            Tap
+                            Tap <span class="lyrics-editor-tap-alt">or press space</span>
                         </button>
 
                         <button type="button" class="btn btn-outline-secondary btn-sm mt-2" @onclick="StopRecording">

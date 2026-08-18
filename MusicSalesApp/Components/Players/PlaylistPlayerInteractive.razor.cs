@@ -63,6 +63,7 @@ namespace MusicSalesApp.Components.Players
         private Dictionary<string, Models.SongMetadata> _metadataLookup = new Dictionary<string, Models.SongMetadata>();
 
         protected Models.SongLyrics _currentTrackLyrics;
+        protected MusicSalesApp.Common.Contracts.LyricsTimingsDocument _currentTrackTimings;
 
         /// <summary>
         /// Which song <see cref="_currentTrackLyrics"/> belongs to, so the lookup happens once per
@@ -400,6 +401,12 @@ namespace MusicSalesApp.Components.Players
 
             _lyricsLoadedForSongId = songId;
             _currentTrackLyrics = songId > 0 ? await LyricsService.GetForSongAsync(songId) : null;
+
+            // The document as well as the row: the scroller draws its words from this, so a player
+            // without it shows an empty panel however good the timings are.
+            _currentTrackTimings = songId > 0
+                ? await LyricsService.GetPublishedTimingsAsync(songId)
+                : null;
 
             // The toggle appears or disappears with the track, so the page has to be told.
             await InvokeAsync(StateHasChanged);

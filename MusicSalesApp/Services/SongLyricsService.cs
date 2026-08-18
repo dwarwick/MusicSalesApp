@@ -108,6 +108,20 @@ public interface ISongLyricsService
     Task<LyricsAlignmentJob?> GetActiveJobAsync(int songMetadataId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The published timings for a song, for a listener's player. Null unless they are published.
+    /// </summary>
+    /// <remarks>
+    /// <b>Read on the server because the words are rendered on the server.</b> The scroller draws one
+    /// span per word from a document C# holds; a browser-side fetch can hand the highlighter its
+    /// timings but cannot produce the elements for it to highlight, so a player given only a URL
+    /// renders no lyrics at all and sits on its empty message forever. Anything that wants to SHOW
+    /// lyrics needs this; the URL path can only ever decorate something already drawn.
+    /// </remarks>
+    Task<LyricsTimingsDocument?> GetPublishedTimingsAsync(
+        int songMetadataId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Whether <paramref name="blobPath"/> is a lyrics artifact a listener is allowed to fetch.
     ///
     /// <para>
@@ -262,6 +276,29 @@ public sealed class SongLyricsService : ISongLyricsService
                 || job.Status == LyricsAlignmentJobStatus.Processing)
             .OrderByDescending(job => job.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsTimingsDocument?> GetPublishedTimingsAsync(
+        int songMetadataId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var lyrics = await context.SongLyrics
+            .AsNoTracking()
+            .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
+
+        // Gated on the row's status for the same reason IsPubliclyReadableAsync is: timings held back
+        // for review sit at exactly the same blob path as published ones, so the path proves nothing.
+        if (lyrics is null
+            || lyrics.Status != SongLyricsStatus.Published
+            || string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath))
+        {
+            return null;
+        }
+
+        return await ReadDocumentAsync(lyrics.TimingsBlobPath);
     }
 
     /// <inheritdoc />

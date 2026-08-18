@@ -3062,6 +3062,14 @@ h1:focus {
 /* The selected word's own span. Tabular figures because these two numbers are read against each
    other and against the line times in the panel to the left, and digits that change width make
    that comparison harder than it needs to be. */
+/* Quieter than the button's own label, because it is naming the shortcut rather than a second
+   thing the button does. */
+.lyrics-editor-tap-alt {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
 .lyrics-editor-span {
     margin-top: 10px;
 }

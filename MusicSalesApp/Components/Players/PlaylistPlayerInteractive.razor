@@ -37,7 +37,7 @@ else if (!string.IsNullOrEmpty(_error))
                                 <div class="lyrics-scroller-overlay @(_showLyrics ? "" : "is-hidden")">
                                     <LyricsScroller AudioElement="_audioElement"
                                                     Mode="LyricsScrollerMode.Player"
-                                                    TimingsUrl="@GetLyricsTimingsUrl()"
+                                                    Document="_currentTrackTimings"
                                                     EmptyMessage="Lyrics are loading&hellip;" />
                                 </div>
                             }

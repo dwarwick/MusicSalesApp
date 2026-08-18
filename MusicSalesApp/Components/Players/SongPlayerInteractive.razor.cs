@@ -55,6 +55,7 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected bool _isAdmin;
     protected bool _isCreatorOfSong;
     protected SongLyrics _lyrics;
+    protected MusicSalesApp.Common.Contracts.LyricsTimingsDocument _lyricsTimings;
     protected bool _showLyrics;
     private int? _currentUserId;
     private Action<int, int> _streamCountUpdatedHandler;
@@ -256,6 +257,11 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             // every other state - pending, waiting for the creator, failed - must look identical to
             // "this song has no lyrics" from out here.
             _lyrics = await LyricsService.GetForSongAsync(_songMetadata.Id);
+
+            // The document itself, not just the row. The scroller renders one span per word from a
+            // document C# holds, so without this there is nothing on the page for the highlighter to
+            // highlight and the panel sits on its empty message forever.
+            _lyricsTimings = await LyricsService.GetPublishedTimingsAsync(_songMetadata.Id);
 
             _songInfo = new StorageFileInfo
             {
