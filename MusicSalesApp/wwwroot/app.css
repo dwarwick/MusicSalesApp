@@ -2923,6 +2923,23 @@ h1:focus {
     padding: 0 1px;
 }
 
+/* The line's span, down the left edge of the editor. Tabular figures and a fixed width so the
+   numbers form a column the eye can scan for the odd one out, and rendered even when empty (an
+   untimed marker has no span) so every line's words still start at the same x. Not selectable:
+   dragging across the lyrics to read them should not pick up a column of timestamps. */
+.lyrics-scroller--editor .lyrics-line-time {
+    display: inline-block;
+    width: 9.5em;
+    margin-right: 8px;
+    font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.66em;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    opacity: 0.55;
+    cursor: default;
+    user-select: none;
+}
+
 /* Somebody who has asked for less motion should not be given a panel that glides every few seconds.
    The highlight still moves; only the easing stops. */
 @media (prefers-reduced-motion: reduce) {

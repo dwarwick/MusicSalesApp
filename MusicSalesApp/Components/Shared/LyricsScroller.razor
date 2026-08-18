@@ -23,11 +23,26 @@
                 {
                     @* A section marker or blank. Shown because it is part of how the artist laid the
                        song out, but never highlighted and never scrolled to - it has no time. *@
-                    <div class="lyrics-line lyrics-line--untimed">@line.Text</div>
+                    <div class="lyrics-line lyrics-line--untimed">
+                        @if (Mode == LyricsScrollerMode.Editor)
+                        {
+                            @* Empty, but still rendered, so the words of every line start at the
+                               same x whether or not that line has a span to show. *@
+                            <span class="lyrics-line-time"></span>
+                        }
+                        @line.Text
+                    </div>
                 }
                 else
                 {
                     <div class="lyrics-line" data-l="@lineIndex">
+                        @if (Mode == LyricsScrollerMode.Editor)
+                        {
+                            @* Editor only. The creator is here to judge whether a line sits where it
+                               should, and "the highlight looks late" is a much harder thing to act on
+                               than a number they can compare against what they are hearing. *@
+                            <span class="lyrics-line-time">@FormatLineRange(line)</span>
+                        }
                         @if (line.Words.Count == 0)
                         {
                             @* The aligner placed the line but not its words. The line still lights up

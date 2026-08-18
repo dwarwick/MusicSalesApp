@@ -212,6 +212,34 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// The line's span as <c>2:45.5 - 2:45.6</c>, shown down the editor's left edge.
+    ///
+    /// <para>
+    /// Tenths rather than hundredths on purpose: a creator is comparing these against what they can
+    /// hear, and hundredths are past the resolution of that judgement. Tenths are also enough to make
+    /// the failure this was added for obvious - a line squeezed into a few hundredths reads as
+    /// <c>2:45.5 - 2:45.6</c>, where the highlight simply appears never to land on it.
+    /// </para>
+    /// </summary>
+    protected static string FormatLineRange(LyricsTimedLine line) =>
+        line.IsTimed
+            ? $"{FormatStamp(line.StartMs!.Value)} - {FormatStamp(line.EndMs!.Value)}"
+            : string.Empty;
+
+    private static string FormatStamp(long ms)
+    {
+        if (ms < 0)
+        {
+            ms = 0;
+        }
+
+        var minutes = ms / 60_000;
+        var seconds = (ms % 60_000) / 1000d;
+
+        return $"{minutes}:{seconds:00.0}";
+    }
+
+    /// <summary>
     /// Flatten the document into parallel arrays of every <em>timed</em> word.
     ///
     /// <para>
