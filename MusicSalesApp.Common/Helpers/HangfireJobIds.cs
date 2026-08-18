@@ -18,4 +18,17 @@ public static class HangfireJobIds
     /// account's temp directory on Windows, so without this an orphan is permanent.
     /// </summary>
     public const string CleanupOrphanedTempFiles = "cleanup-orphaned-temp-files";
+
+    /// <summary>
+    /// Resolves lyrics-alignment attempts that stopped reporting, by asking Azure what became of the
+    /// orchestration behind each one.
+    ///
+    /// <para>
+    /// A Durable orchestration has no poison queue - its trigger message is deleted the moment the
+    /// run is scheduled - so a failure hours later produces no platform event at all. This is the
+    /// only detector besides the orchestrator's own error handling, and the only thing that can
+    /// finish a run which succeeded but whose callback was lost.
+    /// </para>
+    /// </summary>
+    public const string ReconcileStalledLyricsAlignment = "reconcile-stalled-lyrics-alignment";
 }

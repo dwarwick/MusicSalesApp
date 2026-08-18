@@ -28,6 +28,22 @@ public static class AppSettingKeys
     public const string AzureLowSpeedUploadStagingContainerName = "AzureLowSpeed:UploadStagingContainerName";
     public const string AzureLowSpeedTranscodeQueueName = "AzureLowSpeed:TranscodeQueueName";
     public const string AzureLowSpeedProbeQueueName = "AzureLowSpeed:ProbeQueueName";
+    public const string AzureLowSpeedMatchQueueName = "AzureLowSpeed:MatchQueueName";
+
+    // The lyrics-alignment pipeline runs in a *second* Function app - Python on Linux, because
+    // Demucs and the forced aligner are PyTorch, and a Function app is pinned to one language
+    // runtime. Unlike the audio pipeline it is invoked over HTTP rather than through a queue: a
+    // Durable HTTP starter answers with the orchestration's instance id and its management URLs,
+    // which a queue trigger has no way to hand back. That id is what makes the reconciler able to
+    // ask Azure how a run is going instead of inferring it from a stale timestamp.
+    public const string LyricsFunctionsBaseUrl = "LyricsFunctions:BaseUrl";
+
+    /// <summary>
+    /// The Function app's key, presented as <c>x-functions-key</c> when starting an orchestration.
+    /// Authorises this app to the Function app - the opposite direction from
+    /// <see cref="MediaProcessingApiKey"/>, and therefore a separate secret.
+    /// </summary>
+    public const string LyricsFunctionsFunctionKey = "LyricsFunctions:FunctionKey";
 
     /// <summary>
     /// Shared secret the audio-processing Function presents on its callbacks. Top-level, matching

@@ -54,6 +54,9 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected bool _hasActiveSubscription;
     protected bool _isAdmin;
     protected bool _isCreatorOfSong;
+    protected SongLyrics _lyrics;
+    protected MusicSalesApp.Common.Contracts.LyricsTimingsDocument _lyricsTimings;
+    protected bool _showLyrics;
     private int? _currentUserId;
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
@@ -249,6 +252,16 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             }
 
             _streamCount = _songMetadata.NumberOfStreams;
+
+            // Published lyrics only. GetForSongAsync returns the row whatever state it is in, and
+            // every other state - pending, waiting for the creator, failed - must look identical to
+            // "this song has no lyrics" from out here.
+            _lyrics = await LyricsService.GetForSongAsync(_songMetadata.Id);
+
+            // The document itself, not just the row. The scroller renders one span per word from a
+            // document C# holds, so without this there is nothing on the page for the highlighter to
+            // highlight and the panel sits on its empty message forever.
+            _lyricsTimings = await LyricsService.GetPublishedTimingsAsync(_songMetadata.Id);
 
             _songInfo = new StorageFileInfo
             {
@@ -702,6 +715,38 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             }
         }
     }
+
+
+    /// <summary>
+    /// Whether this song has lyrics a listener is allowed to see.
+    ///
+    /// <para>
+    /// Published is the only state that qualifies. Timings waiting for their creator sit at the same
+    /// blob path as published ones and would 404 from the media route anyway, but the toggle is
+    /// hidden here as well so nobody is offered a panel that can only disappoint them.
+    /// </para>
+    /// </summary>
+    protected bool HasPublishedLyrics() =>
+        _lyrics is { Status: SongLyricsStatus.Published }
+        && !string.IsNullOrWhiteSpace(_lyrics.TimingsBlobPath);
+
+    /// <summary>
+    /// The timings URL, carrying the version as a cache-buster.
+    ///
+    /// <para>
+    /// <b>The <c>?v=</c> is load-bearing rather than decorative.</b> The blob path never changes
+    /// between versions - that is what <c>SongLyrics.Version</c> exists for - and MusicController
+    /// serves these with a year-long immutable cache header. Without it, a creator who re-times a
+    /// chorus and republishes would find every browser that had already seen the song still showing
+    /// the old timings, permanently.
+    /// </para>
+    /// </summary>
+    protected string GetLyricsTimingsUrl() =>
+        HasPublishedLyrics()
+            ? $"/api/music/{_lyrics.TimingsBlobPath}?v={_lyrics.Version}"
+            : null;
+
+    protected void ToggleLyrics() => _showLyrics = !_showLyrics;
 
     protected double GetDisplayVolume()
     {

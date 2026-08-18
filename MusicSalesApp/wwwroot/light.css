@@ -870,3 +870,71 @@ body {
     border-color: #c6c6c6 !important;
     color: #1f1f1f !important;
 }
+
+/* Lyric timing dialog. The counter is quiet until it is not: over the limit it
+   turns into the reason the Submit button is disabled, so it has to be findable. */
+.lyrics-dialog-counter {
+    color: #6c757d;
+}
+
+.lyrics-dialog-counter.is-over {
+    color: #b02a37;
+}
+
+.lyrics-dialog-hint {
+    color: #6c757d;
+}
+
+.lyrics-dialog-progress-label {
+    color: #495057;
+}
+
+/* ============================================================
+   Scrolling lyrics - light
+   ============================================================ */
+
+.lyrics-scroller {
+    background-color: #f4f4f4;
+    color: #6b6b6b;
+}
+
+.lyrics-scroller-empty {
+    color: #7a7a7a;
+}
+
+.lyrics-line--active {
+    color: #1a1a1a;
+}
+
+.lyrics-word--active {
+    color: #0f7a37;
+}
+
+.lyrics-word--selected {
+    background-color: rgba(15, 122, 55, 0.16);
+    outline: 1px solid #0f7a37;
+}
+
+.lyrics-line--untimed {
+    color: #8d8d8d;
+}
+
+.lyrics-toggle-button {
+    background-color: rgba(255, 255, 255, 0.85);
+    color: #333;
+}
+
+.lyrics-editor-help {
+    background-color: #f6f6f6;
+    border: 1px solid #e0e0e0;
+}
+
+.lyrics-editor-selection {
+    background-color: #f6f6f6;
+    border: 1px solid #e0e0e0;
+}
+
+.lyrics-editor-record {
+    background-color: #f6f6f6;
+    border: 1px solid #e0e0e0;
+}

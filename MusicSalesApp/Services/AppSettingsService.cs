@@ -71,6 +71,43 @@ public class AppSettingsService : IAppSettingsService
     public const int DefaultMaxAudioUploadSizeMB = 100;
 
     /// <summary>
+    /// The key used for storing the confidence, 0-1, above which a creator is told their timings
+    /// look good. It gates nothing a listener can see - see
+    /// <see cref="IAppSettingsService.GetLyricsConfidenceThresholdAsync"/>.
+    /// </summary>
+    public const string LyricsConfidenceThresholdKey = "LyricsConfidenceThreshold";
+
+    /// <summary>
+    /// Default confidence above which a creator is told their timings look good.
+    ///
+    /// <para>
+    /// Admin-tunable rather than a constant in the alignment pipeline, and that placement is the
+    /// point: the Function reports a score, this application decides what the score is worth. Sung
+    /// vocals are genuinely hard - even good pipelines land 150-300 ms average word-onset error, and
+    /// worse on melisma, harmonies and dense mixes - so the right threshold is something to be found
+    /// by looking at real songs, not guessed once and compiled into the slowest component in the
+    /// system to redeploy.
+    /// </para>
+    /// </summary>
+    public const double DefaultLyricsConfidenceThreshold = 0.7d;
+
+    /// <summary>
+    /// Whether a creator is emailed when their lyric timing finishes.
+    /// </summary>
+    public const string LyricsCompletionEmailsEnabledKey = "LyricsCompletionEmailsEnabled";
+
+    /// <summary>
+    /// On by default: timing takes several minutes, so a creator who is not told when it lands has to
+    /// keep coming back to find out.
+    ///
+    /// <para>
+    /// A switch exists at all because sending is SMTP with a 30-second timeout, and a mail server
+    /// having a bad afternoon should be something an admin can step around without a deploy.
+    /// </para>
+    /// </summary>
+    public const bool DefaultLyricsCompletionEmailsEnabled = true;
+
+    /// <summary>
     /// The key used for storing the maximum image upload file size in MB.
     /// </summary>
     public const string MaxImageUploadSizeMBKey = "MaxImageUploadSizeMB";
@@ -259,6 +296,65 @@ public class AppSettingsService : IAppSettingsService
 
         _logger.LogWarning("Invalid max audio upload size value in database: {Value}. Using default.", value);
         return DefaultMaxAudioUploadSizeMB;
+    }
+
+    /// <inheritdoc />
+    public async Task<double> GetLyricsConfidenceThresholdAsync()
+    {
+        var value = await GetSettingAsync(LyricsConfidenceThresholdKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultLyricsConfidenceThreshold;
+        }
+
+        if (double.TryParse(
+                value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var threshold)
+            && threshold is >= 0d and <= 1d)
+        {
+            return threshold;
+        }
+
+        _logger.LogWarning(
+            "Invalid lyrics confidence threshold in database: {Value}. Using default.", value);
+        return DefaultLyricsConfidenceThreshold;
+    }
+
+    /// <inheritdoc />
+    public async Task SetLyricsConfidenceThresholdAsync(double threshold)
+    {
+        await SetSettingAsync(
+            LyricsConfidenceThresholdKey,
+            Math.Clamp(threshold, 0d, 1d).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+            "Advice only: the confidence above which a creator is told their timings look good. "
+            + "Nothing reaches listeners until the creator presses Publish, at any confidence.");
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetLyricsCompletionEmailsEnabledAsync()
+    {
+        var value = await GetSettingAsync(LyricsCompletionEmailsEnabledKey);
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return DefaultLyricsCompletionEmailsEnabled;
+        }
+
+        return bool.TryParse(value, out var enabled)
+            ? enabled
+            : DefaultLyricsCompletionEmailsEnabled;
+    }
+
+    /// <inheritdoc />
+    public async Task SetLyricsCompletionEmailsEnabledAsync(bool enabled)
+    {
+        await SetSettingAsync(
+            LyricsCompletionEmailsEnabledKey,
+            enabled.ToString(),
+            "Email creators when their lyric timing finishes");
     }
 
     /// <inheritdoc />

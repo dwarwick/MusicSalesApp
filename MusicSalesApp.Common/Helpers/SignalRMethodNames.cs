@@ -54,6 +54,18 @@ public static class SignalRMethodNames
     /// CoverArtMatchResult. This is what releases the upload page's waiting task.
     /// </summary>
     public const string ReceiveCoverArtMatchResult = "ReceiveCoverArtMatchResult";
+
+    /// <summary>
+    /// Sent to one creator's group as their song's lyrics are aligned to its audio. Payload:
+    /// LyricsAlignmentProgress.
+    ///
+    /// <para>
+    /// Rides the same hub and the same per-creator group as upload progress rather than getting its
+    /// own, for the reason CoverArtMatchNotifier already gives: a second hub would have to solve
+    /// authentication and group membership again for nothing.
+    /// </para>
+    /// </summary>
+    public const string ReceiveLyricsAlignmentProgress = "ReceiveLyricsAlignmentProgress";
 }
 
 /// <summary>

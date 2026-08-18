@@ -25,7 +25,13 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$FunctionAppName,
 
-    [string]$ProjectPath = (Join-Path $PSScriptRoot "MusicSalesApp.Functions")
+    [string]$ProjectPath,
+
+    # Which Function app is being published. There are two, and they need different publish flags:
+    # the .NET one wants --dotnet-isolated, and the Python one wants --build remote so its wheels are
+    # built on a Linux worker rather than shipped from whatever machine ran this.
+    [ValidateSet("dotnet", "python")]
+    [string]$Runtime = "dotnet"
 )
 
 Set-StrictMode -Version 3.0
@@ -50,7 +56,13 @@ function Resolve-FuncExecutable {
         (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\func.exe"),
         # npm -g install
         (Join-Path $env:APPDATA "npm\func.cmd"),
-        (Join-Path $env:APPDATA "npm\func")
+        (Join-Path $env:APPDATA "npm\func"),
+        # Homebrew and npm on macOS/Linux. The stale-PATH problem this function exists to solve is
+        # a Windows one, but the candidate list was Windows-only, so on a Mac it fell through to a
+        # bare Get-Command and then reported "not installed" listing only winget and npm paths.
+        "/opt/homebrew/bin/func",
+        "/usr/local/bin/func",
+        "/usr/bin/func"
     )
 
     foreach ($candidate in $candidates) {
@@ -65,8 +77,23 @@ function Resolve-FuncExecutable {
 $func = Resolve-FuncExecutable
 
 if ($null -eq $func) {
-    throw ("Azure Functions Core Tools (func) is not installed.`n`n" +
-        "    winget install Microsoft.Azure.FunctionsCoreTools`n`n" +
+    # Platform-specific, because the previous message offered a winget command on machines that have
+    # never heard of winget. The brew line is two commands rather than one on purpose: Homebrew 6
+    # refuses formulae from untrusted third-party taps, so `brew install` alone fails with
+    # "Refusing to load formula ... from untrusted tap azure/functions" - which reads like a broken
+    # formula rather than a consent prompt.
+    $install = if ($IsMacOS) {
+        "    brew trust azure/functions`n" +
+        "    brew install azure-functions-core-tools@4"
+    }
+    elseif ($IsLinux) {
+        "    npm install -g azure-functions-core-tools@4 --unsafe-perm true"
+    }
+    else {
+        "    winget install Microsoft.Azure.FunctionsCoreTools"
+    }
+
+    throw ("Azure Functions Core Tools (func) is not installed.`n`n" + $install + "`n`n" +
         "See https://learn.microsoft.com/azure/azure-functions/functions-run-local")
 }
 
@@ -78,11 +105,24 @@ if (-not $func.OnPath) {
         "reopen it - Reload Window keeps the old environment.")
 }
 
+# Resolved BEFORE the existence check below, which is the whole point: with the default moved out
+# of the param block (so it can depend on -Runtime), leaving this until later meant omitting
+# -ProjectPath failed with "Functions project folder not found: " and an empty path - which is
+# exactly how the VS Code publish tasks invoke this script.
+if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
+    $ProjectPath = if ($Runtime -eq "python") {
+        Join-Path $PSScriptRoot "MusicSalesApp.LyricsFunctions"
+    }
+    else {
+        Join-Path $PSScriptRoot "MusicSalesApp.Functions"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $ProjectPath)) {
     throw "Functions project folder not found: $ProjectPath"
 }
 
-Write-Host "Publishing $ProjectPath -> $FunctionAppName"
+Write-Host "Publishing $ProjectPath -> $FunctionAppName ($Runtime)"
 Write-Host "Using: $($func.Path)"
 
 if (-not $PSCmdlet.ShouldProcess($FunctionAppName, "func azure functionapp publish")) {
@@ -91,7 +131,21 @@ if (-not $PSCmdlet.ShouldProcess($FunctionAppName, "func azure functionapp publi
 
 Push-Location $ProjectPath
 try {
-    & $func.Path azure functionapp publish $FunctionAppName --dotnet-isolated
+    $publishArgs = if ($Runtime -eq "python") {
+        # --python is stated rather than inferred. Core Tools works the language out from
+        # local.settings.json, which is gitignored - so on a clean checkout, or for any project that
+        # has not had settings synced yet, it fails with "Can't determine project language" and
+        # "Worker runtime cannot be 'None'". Neither message points at the missing file.
+        #
+        # Remote build: the wheels have to be built for the Linux worker, and torch is not
+        # something to be cross-shipped from a Windows or macOS dev machine even if pip let you.
+        @("--python", "--build", "remote")
+    }
+    else {
+        @("--dotnet-isolated")
+    }
+
+    & $func.Path azure functionapp publish $FunctionAppName @publishArgs
     if ($LASTEXITCODE -ne 0) {
         throw "func azure functionapp publish $FunctionAppName failed with exit code $LASTEXITCODE."
     }

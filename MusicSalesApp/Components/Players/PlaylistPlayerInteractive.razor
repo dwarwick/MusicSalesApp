@@ -29,19 +29,58 @@ else if (!string.IsNullOrEmpty(_error))
                     }
                     <div class="player-art-content">
                         <div class="player-art-shell">
-                            @if (displayArtSource.HasImage)
+                            @* Mounted alongside the art rather than instead of it, so toggling does
+                               not tear down the highlighting loop mid-song. A track change swaps the
+                               URL, which the scroller notices and re-fetches. *@
+                            @if (HasPublishedLyrics())
                             {
-                                <CoverArt Source="displayArtSource"
-                                          Sizes="@CoverArtSizes.PlaylistPlayerHero"
-                                          CssClass="playlist-art"
-                                          Alt="Track Art"
-                                          Eager="true" />
-                            }
-                            else
-                            {
-                                <div class="playlist-art-animation">
-                                    <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                <div class="lyrics-scroller-overlay @(_showLyrics ? "" : "is-hidden")">
+                                    <LyricsScroller AudioElement="_audioElement"
+                                                    Mode="LyricsScrollerMode.Player"
+                                                    Document="_currentTrackTimings"
+                                                    EmptyMessage="Lyrics are loading&hellip;" />
                                 </div>
+                            }
+
+                            <div class="@(_showLyrics && HasPublishedLyrics() ? "is-hidden" : "")">
+                                @if (displayArtSource.HasImage)
+                                {
+                                    <CoverArt Source="displayArtSource"
+                                              Sizes="@CoverArtSizes.PlaylistPlayerHero"
+                                              CssClass="playlist-art"
+                                              Alt="Track Art"
+                                              Eager="true" />
+                                }
+                                else
+                                {
+                                    <div class="playlist-art-animation">
+                                        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Per track, not per playlist: the toggle comes and goes as the playlist
+                               moves between songs that have published lyrics and songs that do not. *@
+                            @if (HasPublishedLyrics())
+                            {
+                                <button type="button"
+                                        class="lyrics-toggle-button"
+                                        @onclick="ToggleLyrics"
+                                        title="@(_showLyrics ? "Show cover art" : "Show lyrics")"
+                                        aria-pressed="@_showLyrics.ToString().ToLowerInvariant()">
+                                    @if (_showLyrics)
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                                        </svg>
+                                    }
+                                    else
+                                    {
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                            <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
+                                        </svg>
+                                    }
+                                </button>
                             }
                         </div>
                         <AiContentBadges IsAiMusic="IsCurrentTrackAiGenerated()"

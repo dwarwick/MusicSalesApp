@@ -1015,6 +1015,17 @@ h1:focus {
     margin-top: 4px;
 }
 
+/* A DEFAULT SIZE, because an inline SVG that is given none is not small - it falls back to the
+   replaced-element default of 300x150 and draws the icon at that size. Every other rule for this
+   class is scoped to a player container (.playlist-player-container, .song-player-container), so
+   any other home for these controls - the lyric timing editor is one - had no size at all and drew
+   enormous shapes. The scoped rules are more specific and still win where they apply, and the
+   breakpoint files load after this one so their overrides do too. */
+.control-icon {
+    width: 18px;
+    height: 18px;
+}
+
 .card-now-playing {
     font-size: 12px;
     font-weight: 500;
@@ -2758,4 +2769,385 @@ h1:focus {
         break-inside: avoid;
         page-break-inside: avoid;
     }
+}
+
+/* ---------------------------------------------------------------------------
+   Lyric timing dialog (Components/Shared/LyricsEditorDialog.razor)
+   Structure and layout only. Colours live in light.css / dark.css and sizing in
+   the breakpoint files, per AGENTS.md.
+   --------------------------------------------------------------------------- */
+.lyrics-dialog-header {
+    display: flex;
+    align-items: center;
+}
+
+.lyrics-dialog-field {
+    display: flex;
+    flex-direction: column;
+}
+
+/* The textarea is the point of the dialog, so it gets the room. Resizable
+   vertically only - horizontal resize breaks out of the modal. */
+.lyrics-dialog-textarea textarea {
+    resize: vertical;
+}
+
+.lyrics-dialog-counter {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.lyrics-dialog-progress {
+    display: flex;
+    flex-direction: column;
+}
+
+.lyrics-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.lyrics-dialog-errors {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+/* ============================================================
+   Scrolling lyrics
+   ============================================================
+   Layout and animation only; colours live in light.css / dark.css.
+
+   The box is FIXED HEIGHT and CLIPPED, and the track inside it is moved with a transform. It is
+   never scrolled: scrollIntoView would drag every scrollable ancestor along with it - the library
+   grid, the player page - every time a song moved to the next line.
+
+   The track's vertical padding is half the box, so the first and last lines can reach the middle.
+   Without it the opening line sits at the top until the song is a few lines in. */
+
+.lyrics-scroller {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+}
+
+.lyrics-scroller-track {
+    padding-block: 50%;
+    transform: translate3d(0, 0, 0);
+    transition: transform 320ms ease-out;
+    will-change: transform;
+}
+
+.lyrics-scroller-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 12px;
+    text-align: center;
+}
+
+.lyrics-line {
+    padding: 2px 10px;
+    line-height: 1.35;
+    transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.lyrics-word {
+    transition: color 120ms linear;
+}
+
+/* The sung word. Deliberately a colour change and nothing that reflows - a transform or a font-size
+   change here would move every following word on the line, sixty times a second. */
+.lyrics-word--active {
+    font-weight: 600;
+}
+
+.lyrics-word--selected {
+    border-radius: 3px;
+    outline-offset: 1px;
+}
+
+/* Section markers and blank lines. Present because they are part of how the artist laid the song
+   out, but never highlighted and never scrolled to - they have no time. */
+.lyrics-line--untimed {
+    font-style: italic;
+    opacity: 0.55;
+}
+
+/* --- Card: smallest type, in place of a 210px cover --- */
+.lyrics-scroller--card {
+    font-size: 11px;
+}
+
+.lyrics-scroller--card .lyrics-line {
+    padding: 1px 6px;
+}
+
+/* --- Player page: in place of the hero art --- */
+.lyrics-scroller--player {
+    font-size: 14px;
+}
+
+/* --- Editor: the creator is reading and clicking these, so they get the most room --- */
+.lyrics-scroller--editor {
+    font-size: 17px;
+
+    /* Turns this box into a query container so the track below can ask for half its HEIGHT.
+       See the track rule for why a percentage cannot do that. Scoped to the editor rather than
+       applied to .lyrics-scroller, because container-type: size also makes the box ignore its
+       contents when sizing itself - safe here, where .lyrics-editor-scroller gives it a definite
+       420px, but not something to impose on the card and player without checking each one. */
+    container-type: size;
+}
+
+/* HALF THE SCROLLER'S HEIGHT, so the first line can sit in the middle with nothing above it.
+   The shared rule asks for `padding-block: 50%`, and percentage padding resolves against the
+   container's INLINE size - its width - never its height. That is close enough to right while the
+   scroller is roughly square, which it is on a card and on the player page where it stands in for
+   cover art. The editor is the one home where it is not: 420px tall and as wide as the page, so
+   50% became some 700px of padding inside a 420px clipped box and pushed every line out of sight.
+   cqh is the unit that means what this always intended. */
+.lyrics-scroller--editor .lyrics-scroller-track {
+    padding-block: 50cqh;
+}
+
+.lyrics-scroller--editor .lyrics-line {
+    padding: 4px 12px;
+}
+
+.lyrics-scroller--editor .lyrics-word {
+    cursor: pointer;
+    padding: 0 1px;
+}
+
+/* The line's span, down the left edge of the editor. Tabular figures and a fixed width so the
+   numbers form a column the eye can scan for the odd one out, and rendered even when empty (an
+   untimed marker has no span) so every line's words still start at the same x. Not selectable:
+   dragging across the lyrics to read them should not pick up a column of timestamps. */
+.lyrics-scroller--editor .lyrics-line-time {
+    display: inline-block;
+    width: 9.5em;
+    margin-right: 8px;
+    font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.66em;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    opacity: 0.55;
+    cursor: default;
+    user-select: none;
+}
+
+/* Somebody who has asked for less motion should not be given a panel that glides every few seconds.
+   The highlight still moves; only the easing stops. */
+@media (prefers-reduced-motion: reduce) {
+    .lyrics-scroller-track {
+        transition-duration: 0s;
+    }
+
+    .lyrics-line {
+        transition-duration: 0s;
+    }
+}
+
+/* The scroller sitting where the cover art was. Absolute inside .player-art-shell, which is already
+   position:relative and overflow:hidden, so the swap costs no layout change at all. */
+.lyrics-scroller-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+}
+
+/* Kept in the DOM rather than removed, so the animation loop and element cache survive a toggle.
+   visibility:hidden rather than display:none for the same reason - offsetTop has to keep working,
+   or the first line after a toggle would centre against a zero-height box. */
+.is-hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.lyrics-toggle-button {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 3;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.lyrics-toggle-button:hover {
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+.lyrics-toggle-icon {
+    width: 15px;
+    height: 15px;
+}
+
+/* ============================================================
+   Creator lyric timing editor
+   ============================================================ */
+
+.lyrics-editor-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.lyrics-editor-help {
+    margin-bottom: 16px;
+    border-radius: 6px;
+    padding: 10px 14px;
+}
+
+.lyrics-editor-help summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.lyrics-editor-help-body {
+    padding-top: 10px;
+    max-width: 70ch;
+}
+
+.lyrics-editor-help-body ol {
+    padding-left: 1.25rem;
+}
+
+.lyrics-editor-help-body li {
+    margin-bottom: 8px;
+}
+
+/* Scroller on the left, controls on the right, stacking on narrow screens. The scroller gets a
+   fixed height because that is what makes centring meaningful - it is the box the current line is
+   centred within. */
+.lyrics-editor-body {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.lyrics-editor-scroller {
+    flex: 1 1 420px;
+    height: 420px;
+    min-width: 280px;
+}
+
+.lyrics-editor-side {
+    flex: 0 1 320px;
+    min-width: 260px;
+}
+
+.lyrics-editor-rates {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+/* The selected word's own span. Tabular figures because these two numbers are read against each
+   other and against the line times in the panel to the left, and digits that change width make
+   that comparison harder than it needs to be. */
+/* Quieter than the button's own label, because it is naming the shortcut rather than a second
+   thing the button does. */
+.lyrics-editor-tap-alt {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+.lyrics-editor-span {
+    margin-top: 10px;
+}
+
+.lyrics-editor-span-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.lyrics-editor-span-label {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+.lyrics-editor-span-value {
+    font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95rem;
+}
+
+/* Six buttons sharing the row equally, so the pair for a given step sits the same distance either
+   side of centre and the row can be aimed at without reading it. */
+.lyrics-editor-span-steps {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 8px;
+}
+
+.lyrics-editor-span-steps .btn {
+    flex: 1 1 0;
+    padding-inline: 0;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+}
+
+.lyrics-editor-span-length {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+.lyrics-editor-selection {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 6px;
+}
+
+.lyrics-editor-selected-word {
+    font-size: 15px;
+}
+
+.lyrics-editor-actions {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.lyrics-editor-record {
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    transition: box-shadow 200ms ease;
+}
+
+/* Unmistakably armed. A creator who does not realise recording is live will press space expecting
+   play/pause and re-time a line by accident. */
+.lyrics-editor-record.is-recording {
+    box-shadow: 0 0 0 2px #dc3545;
+}
+
+.lyrics-editor-next-line {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 15px;
 }

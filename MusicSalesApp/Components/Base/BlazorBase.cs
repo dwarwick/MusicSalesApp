@@ -105,6 +105,9 @@ public abstract class BlazorBase : ComponentBase
     protected ISongUploadJobService SongUploadJobService { get; set; } = default!;
 
     [Inject]
+    protected ISongLyricsService LyricsService { get; set; } = default!;
+
+    [Inject]
     protected IRecommendationService RecommendationService { get; set; } = default!;
 
     [Inject]

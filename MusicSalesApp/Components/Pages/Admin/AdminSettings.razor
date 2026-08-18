@@ -121,6 +121,41 @@ else
                         Version number displayed in the navigation menu footer.
                     </small>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Lyric Timing Confidence (%) <span class="text-danger">*</span></label>
+                    <SfNumericTextBox @bind-Value="_lyricsConfidenceThresholdPercent"
+                                     Format="N0"
+                                     Min="0"
+                                     Max="100"
+                                     Decimals="0"
+                                     Step="5"
+                                     Placeholder="Enter a percentage"
+                                     CssClass="e-outline" />
+                    <small class="text-muted">
+                        Advice to creators, not a gate (default 70). Timed lyrics are never shown to
+                        listeners until the creator has heard them and pressed Publish. This score
+                        only decides how a creator is greeted in the timing editor &mdash; above it,
+                        &ldquo;have a listen&rdquo;; below it, &ldquo;expect to do some tapping&rdquo;.
+                        Sung vocals score lower than speech, so this may want lowering once a few
+                        songs have been timed; the creator&rsquo;s song list shows each score.
+                    </small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Lyric Timing Emails</label>
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="lyricsCompletionEmails"
+                               @bind="_lyricsCompletionEmailsEnabled" />
+                        <label class="form-check-label" for="lyricsCompletionEmails">
+                            @(_lyricsCompletionEmailsEnabled ? "Sending" : "Not sending")
+                        </label>
+                    </div>
+                    <small class="text-muted">
+                        Email a creator when their lyric timing finishes (default on). Timing takes
+                        several minutes, so this is usually the only way a creator who closed the tab
+                        finds out. Turn it off only if the mail server is causing trouble.
+                    </small>
+                </div>
             </div>
 
             @* This is the rollback control for browser-direct uploads, so it lives where an admin

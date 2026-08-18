@@ -916,6 +916,65 @@ namespace MusicSalesApp.Migrations
                     b.ToTable("CreatorPersonas");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.DurableFunctionTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FailureDetail")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("FunctionName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InputJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("LastPolledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RuntimeStatusRaw")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StatusQueryUri")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("TerminateUri")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstanceId")
+                        .IsUnique();
+
+                    b.HasIndex("FunctionName", "Status");
+
+                    b.ToTable("DurableFunctionTasks");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.Genre", b =>
                 {
                     b.Property<int>("Id")
@@ -1145,6 +1204,73 @@ namespace MusicSalesApp.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.ToTable("ImageVariantBackfillRuns");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.LyricsAlignmentJob", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatorId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("DurableFunctionTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("LyricsBlobPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StepUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DurableFunctionTaskId");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.HasIndex("CreatorId", "Status");
+
+                    b.HasIndex("SongMetadataId", "Status");
+
+                    b.HasIndex("Status", "StepUpdatedAt");
+
+                    b.ToTable("LyricsAlignmentJobs");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
@@ -1688,6 +1814,72 @@ namespace MusicSalesApp.Migrations
                         .IsUnique();
 
                     b.ToTable("SongLikes");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.SongLyrics", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AlignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DraftTimingsBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("DraftUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("LastJobId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("LrcBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("LyricsBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SongMetadataId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TimingsBlobPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LrcBlobPath");
+
+                    b.HasIndex("SongMetadataId")
+                        .IsUnique();
+
+                    b.HasIndex("TimingsBlobPath");
+
+                    b.ToTable("SongLyrics");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongMetadata", b =>
@@ -2773,6 +2965,24 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("Run");
                 });
 
+            modelBuilder.Entity("MusicSalesApp.Models.LyricsAlignmentJob", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.DurableFunctionTask", "DurableFunctionTask")
+                        .WithMany()
+                        .HasForeignKey("DurableFunctionTaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SongMetadataId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DurableFunctionTask");
+
+                    b.Navigation("SongMetadata");
+                });
+
             modelBuilder.Entity("MusicSalesApp.Models.MediaIntegrityAuditItem", b =>
                 {
                     b.HasOne("MusicSalesApp.Models.MediaIntegrityAuditRun", "AuditRun")
@@ -2890,6 +3100,17 @@ namespace MusicSalesApp.Migrations
                     b.Navigation("SongMetadata");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MusicSalesApp.Models.SongLyrics", b =>
+                {
+                    b.HasOne("MusicSalesApp.Models.SongMetadata", "SongMetadata")
+                        .WithMany()
+                        .HasForeignKey("SongMetadataId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SongMetadata");
                 });
 
             modelBuilder.Entity("MusicSalesApp.Models.SongMetadata", b =>

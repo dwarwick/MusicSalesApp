@@ -48,6 +48,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
     public DbSet<AdminMessageRecipient> AdminMessageRecipients { get; set; }
     public DbSet<ContactRequestSubmission> ContactRequestSubmissions { get; set; }
     public DbSet<PayPalSubscriptionAnomaly> PayPalSubscriptionAnomalies { get; set; }
+    public DbSet<DurableFunctionTask> DurableFunctionTasks { get; set; }
+    public DbSet<LyricsAlignmentJob> LyricsAlignmentJobs { get; set; }
+    public DbSet<SongLyrics> SongLyrics { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -484,6 +487,83 @@ public class AppDbContext : IdentityDbContext<ApplicationUser, IdentityRole<int>
             .WithMany()
             .HasForeignKey(job => job.SongMetadataId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Configure DurableFunctionTask entity
+
+        // The instance id is how a callback, a status poll and a terminate request all find the same
+        // run. Two rows claiming one instance would mean two callers believing they own it.
+        builder.Entity<DurableFunctionTask>()
+            .HasIndex(task => task.InstanceId)
+            .IsUnique();
+
+        // The reconciler sweeps one durable function's unfinished runs at a time.
+        builder.Entity<DurableFunctionTask>()
+            .HasIndex(task => new { task.FunctionName, task.Status });
+
+        // Configure LyricsAlignmentJob entity
+
+        // The attempt GUID names its staging folder and correlates every callback. Unique for the
+        // same reason SongUploadJob.MediaGuid is - a duplicate would let two callbacks assemble the
+        // same result twice.
+        builder.Entity<LyricsAlignmentJob>()
+            .HasIndex(job => job.JobId)
+            .IsUnique();
+
+        // The reconciler sweeps by "stopped moving", not by age.
+        builder.Entity<LyricsAlignmentJob>()
+            .HasIndex(job => new { job.Status, job.StepUpdatedAt });
+
+        // Submitting refuses while an attempt for the same song is still in flight, which is a
+        // lookup on exactly this pair. Without it that check table-scans on every submit.
+        builder.Entity<LyricsAlignmentJob>()
+            .HasIndex(job => new { job.SongMetadataId, job.Status });
+
+        builder.Entity<LyricsAlignmentJob>()
+            .HasIndex(job => new { job.CreatorId, job.Status });
+
+        // An attempt belongs to its song; deleting the song makes its alignment history meaningless,
+        // so it goes too. Note there is deliberately no Creator foreign key here - see the comment
+        // on LyricsAlignmentJob.CreatorId - which is what keeps this the only cascade path in.
+        builder.Entity<LyricsAlignmentJob>()
+            .HasOne(job => job.SongMetadata)
+            .WithMany()
+            .HasForeignKey(job => job.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The orchestration record outlives the attempt that started it: it is the generic audit of
+        // what this application asked Azure to run, and is useful precisely when the domain row has
+        // been tidied away.
+        builder.Entity<LyricsAlignmentJob>()
+            .HasOne(job => job.DurableFunctionTask)
+            .WithMany()
+            .HasForeignKey(job => job.DurableFunctionTaskId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Configure SongLyrics entity
+
+        // One lyrics record per song. Unique rather than merely indexed, because the completion
+        // service upserts on this key and a duplicate would let two rows disagree about what is
+        // published.
+        builder.Entity<SongLyrics>()
+            .HasIndex(lyrics => lyrics.SongMetadataId)
+            .IsUnique();
+
+        // The public media whitelist resolves an incoming blob path to a lyrics row, and that check
+        // runs on EVERY request to api/music - including every audio stream and every cover image,
+        // none of which are lyrics. Without these it is a table scan per request; with them it is a
+        // seek that misses. Two separate indexes rather than one composite, because the lookup is an
+        // OR across the two columns and a composite could only serve the leading one.
+        builder.Entity<SongLyrics>()
+            .HasIndex(lyrics => lyrics.TimingsBlobPath);
+
+        builder.Entity<SongLyrics>()
+            .HasIndex(lyrics => lyrics.LrcBlobPath);
+
+        builder.Entity<SongLyrics>()
+            .HasOne(lyrics => lyrics.SongMetadata)
+            .WithMany()
+            .HasForeignKey(lyrics => lyrics.SongMetadataId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<MediaIntegrityAuditNotification>()
             .HasOne(notification => notification.AuditRun)

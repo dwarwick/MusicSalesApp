@@ -18,6 +18,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MusicSalesApp.Tests" />
+
+    <!-- The component tests need the same reach. Some component logic is pure and worth asserting
+         directly rather than through rendered markup - LyricsScroller.Flatten builds the payload the
+         highlighting loop consumes, and inferring its contents from HTML would test the wrong thing. -->
+    <InternalsVisibleTo Include="MusicSalesApp.ComponentTests" />
   </ItemGroup>
 
   <ItemGroup>

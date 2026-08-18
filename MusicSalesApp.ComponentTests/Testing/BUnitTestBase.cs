@@ -57,6 +57,7 @@ public abstract class BUnitTestBase
     protected Mock<IMaintenanceHubClient> MockMaintenanceHubClient { get; private set; } = default!;
     protected Mock<IUploadProgressHubClient> MockUploadProgressHubClient { get; private set; } = default!;
     protected Mock<ISongUploadJobService> MockSongUploadJobService { get; private set; } = default!;
+    protected Mock<ISongLyricsService> MockLyricsService { get; private set; } = default!;
     protected Mock<IRecommendationService> MockRecommendationService { get; private set; } = default!;
     protected Mock<IPurchaseEmailService> MockPurchaseEmailService { get; private set; } = default!;
     protected Mock<IAccountEmailService> MockAccountEmailService { get; private set; } = default!;
@@ -114,6 +115,12 @@ public abstract class BUnitTestBase
         MockMaintenanceHubClient = new Mock<IMaintenanceHubClient>();
         MockUploadProgressHubClient = new Mock<IUploadProgressHubClient>();
         MockSongUploadJobService = new Mock<ISongUploadJobService>();
+        MockLyricsService = new Mock<ISongLyricsService>();
+
+        // Defaults to unavailable, matching an environment with no lyrics Function app
+        // configured. That is the path the dialog takes without a live SignalR round trip,
+        // which bUnit cannot provide - the same reason MockCoverArtMatchService defaults off.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(false);
         MockRecommendationService = new Mock<IRecommendationService>();
         MockPurchaseEmailService = new Mock<IPurchaseEmailService>();
         MockAccountEmailService = new Mock<IAccountEmailService>();
@@ -525,6 +532,7 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IMaintenanceHubClient>(MockMaintenanceHubClient.Object);
         TestContext.Services.AddSingleton<IUploadProgressHubClient>(MockUploadProgressHubClient.Object);
         TestContext.Services.AddSingleton<ISongUploadJobService>(MockSongUploadJobService.Object);
+        TestContext.Services.AddSingleton<ISongLyricsService>(MockLyricsService.Object);
         TestContext.Services.AddSingleton<IRecommendationService>(MockRecommendationService.Object);
         TestContext.Services.AddSingleton<IPurchaseEmailService>(MockPurchaseEmailService.Object);
         TestContext.Services.AddSingleton<IAccountEmailService>(MockAccountEmailService.Object);

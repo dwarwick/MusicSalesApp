@@ -179,12 +179,20 @@ else {
     Write-Host "No WEBSITE_CONTENTSHARE recorded; skipping the file share."
 }
 
-foreach ($container in @("azure-webjobs-hosts", "azure-webjobs-secrets")) {
-    if ($PSCmdlet.ShouldProcess("$stagingAccountName/$container", "Delete Functions runtime container")) {
-        Write-Host "Deleting runtime container '$container'..."
-        Invoke-Az @("storage", "container", "delete", "--name", $container, "--connection-string", $stagingConnection, "--only-show-errors", "--output", "none") -AllowFailure | Out-Null
-    }
-}
+# azure-webjobs-hosts and azure-webjobs-secrets are deliberately NOT deleted here, though they look
+# like this app's leftovers.
+#
+# Every Function App pointed at a storage account shares them, and streamtunes-media-test,
+# streamtunes-media-prod and streamtunes-lyrics-test all use musicsalesstorageaccount. Tearing down
+# Test therefore reached into Production - and azure-webjobs-secrets holds the function keys, so the
+# consequence was Production losing the keys its callbacks authenticate with.
+#
+# They are cheap to leave: the Functions runtime recreates what it needs, and an orphaned lease blob
+# for an app that no longer exists costs nothing. That is a far better trade than a teardown script
+# whose blast radius includes an environment it was never pointed at.
+Write-Host "Leaving azure-webjobs-hosts and azure-webjobs-secrets alone - they are shared with the"
+Write-Host "other Function Apps on $stagingAccountName, including production."
+
 
 if ($IncludeQueuesAndStaging) {
     foreach ($queueName in @($values["MediaProcessing:TranscodeQueueName"], $values["MediaProcessing:ProbeQueueName"], $values["MediaProcessing:MatchQueueName"])) {

@@ -31,6 +31,15 @@ public class AdminSettingsModel : BlazorBase
     protected int _maxImageUploadSizeMB = 20;
     protected int _originalMaxImageUploadSizeMB = 20;
 
+    // Held as a percentage because that is how it is read everywhere else - the creator's lyrics
+    // dialog reports "61% confidence" - while the service stores it as 0-1. Asking an admin to
+    // compare 0.61 against a number the UI showed them as 61% is a needless conversion to get wrong.
+    protected decimal _lyricsConfidenceThresholdPercent = 70m;
+    protected decimal _originalLyricsConfidenceThresholdPercent = 70m;
+
+    protected bool _lyricsCompletionEmailsEnabled = true;
+    protected bool _originalLyricsCompletionEmailsEnabled = true;
+
     // Defaults false to match AppSettingsService, so a load failure can never present the feature as
     // on when it is not - or invite an admin to "turn off" something already off.
     protected bool _directToStorageUploadEnabled;
@@ -98,6 +107,8 @@ public class AdminSettingsModel : BlazorBase
                                    || _maxAudioUploadSizeMB != _originalMaxAudioUploadSizeMB
                                    || _maxImageUploadSizeMB != _originalMaxImageUploadSizeMB
                                    || _directToStorageUploadEnabled != _originalDirectToStorageUploadEnabled
+                                   || _lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent
+                                   || _lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled
                                    || _appVersion != _originalAppVersion;
 
     protected bool _hasNotificationChanges => _notifyRegistration != _originalNotifyRegistration
@@ -174,6 +185,13 @@ public class AdminSettingsModel : BlazorBase
 
         _directToStorageUploadEnabled = await AppSettingsService.IsDirectToStorageUploadEnabledAsync();
         _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;
+
+        _lyricsConfidenceThresholdPercent =
+            (decimal)(await AppSettingsService.GetLyricsConfidenceThresholdAsync()) * 100m;
+        _originalLyricsConfidenceThresholdPercent = _lyricsConfidenceThresholdPercent;
+
+        _lyricsCompletionEmailsEnabled = await AppSettingsService.GetLyricsCompletionEmailsEnabledAsync();
+        _originalLyricsCompletionEmailsEnabled = _lyricsCompletionEmailsEnabled;
 
         _appVersion = await AppSettingsService.GetAppVersionAsync() ?? string.Empty;
         _originalAppVersion = _appVersion;
@@ -649,6 +667,8 @@ public class AdminSettingsModel : BlazorBase
         _maxAudioUploadSizeMB = _originalMaxAudioUploadSizeMB;
         _maxImageUploadSizeMB = _originalMaxImageUploadSizeMB;
         _directToStorageUploadEnabled = _originalDirectToStorageUploadEnabled;
+        _lyricsConfidenceThresholdPercent = _originalLyricsConfidenceThresholdPercent;
+        _lyricsCompletionEmailsEnabled = _originalLyricsCompletionEmailsEnabled;
         _appVersion = _originalAppVersion;
         _validationErrors.Clear();
         _successMessage = null;
@@ -704,6 +724,15 @@ public class AdminSettingsModel : BlazorBase
                 _validationErrors.Add("Max image upload size cannot exceed 100 MB.");
             }
 
+            // Validated here as well as bounded on the control, because an out-of-range value does
+            // not fail on the way in - SetLyricsConfidenceThresholdAsync clamps it, and
+            // GetLyricsConfidenceThresholdAsync silently returns the 0.7 default for anything outside
+            // 0-1. Between them a mistyped threshold would look like a save that did not take.
+            if (_lyricsConfidenceThresholdPercent < 0m || _lyricsConfidenceThresholdPercent > 100m)
+            {
+                _validationErrors.Add("Lyric timing confidence must be between 0 and 100%.");
+            }
+
             _appVersion = _appVersion.Trim();
 
             if (string.IsNullOrWhiteSpace(_appVersion))
@@ -741,6 +770,32 @@ public class AdminSettingsModel : BlazorBase
                     _directToStorageUploadEnabled ? "ON" : "OFF");
             }
 
+            // Written only on a change, and logged, because this one silently re-words what every
+            // creator is told about work that has already finished - the banner reads the threshold
+            // live rather than storing a verdict with the song. It does not re-grade anything: no
+            // alignment has ever published itself, so moving this cannot change what a listener
+            // sees, only whether a creator is greeted with "have a listen" or "expect to do some
+            // tapping".
+            if (_lyricsConfidenceThresholdPercent != _originalLyricsConfidenceThresholdPercent)
+            {
+                await AppSettingsService.SetLyricsConfidenceThresholdAsync(
+                    (double)(_lyricsConfidenceThresholdPercent / 100m));
+
+                Logger.LogWarning(
+                    "Lyric timing confidence threshold changed from {Old}% to {New}% by an administrator.",
+                    _originalLyricsConfidenceThresholdPercent,
+                    _lyricsConfidenceThresholdPercent);
+            }
+
+            if (_lyricsCompletionEmailsEnabled != _originalLyricsCompletionEmailsEnabled)
+            {
+                await AppSettingsService.SetLyricsCompletionEmailsEnabledAsync(_lyricsCompletionEmailsEnabled);
+
+                Logger.LogWarning(
+                    "Lyric timing completion emails turned {State} by an administrator.",
+                    _lyricsCompletionEmailsEnabled ? "ON" : "OFF");
+            }
+
             // Save the app version (only if changed)
             if (_appVersion != _originalAppVersion)
             {
@@ -750,6 +805,8 @@ public class AdminSettingsModel : BlazorBase
             // Update the original values to reflect the saved state
             _originalStreamPayRateDisplay = _streamPayRateDisplay;
             _originalStreamQualifyingSeconds = _streamQualifyingSeconds;
+            _originalLyricsConfidenceThresholdPercent = _lyricsConfidenceThresholdPercent;
+            _originalLyricsCompletionEmailsEnabled = _lyricsCompletionEmailsEnabled;
             _originalMaxAudioUploadSizeMB = _maxAudioUploadSizeMB;
             _originalMaxImageUploadSizeMB = _maxImageUploadSizeMB;
             _originalDirectToStorageUploadEnabled = _directToStorageUploadEnabled;

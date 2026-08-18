@@ -58,11 +58,53 @@ function Invoke-Az {
         }
 
         if (-not $AllowFailure) {
-            throw "az $($Arguments -join ' ') failed:`n$joined"
+            throw "az $((Get-RedactedAzArguments $Arguments) -join ' ') failed:`n$joined"
         }
     }
 
     return $output
+}
+
+function Get-RedactedAzArguments {
+    <#
+        .SYNOPSIS
+            Masks secret values in an az argument list before it is echoed.
+
+        .DESCRIPTION
+            Invoke-Az reports the command it ran when that command fails, which is exactly what you
+            want for a failed `functionapp create` and exactly what you do NOT want for a failed
+            `appsettings set`: the argument list there is every connection string and every API key,
+            and a failure prints all of them to the terminal, into scrollback, and into whatever
+            captured the output.
+
+            That is not hypothetical - provisioning the lyrics Function app hit it on the first run,
+            because Flex Consumption rejects one of the settings, and the rejection printed two
+            storage account keys and the media-processing key in full.
+
+            Masking rather than suppressing: seeing WHICH setting was rejected is the whole value of
+            the message, and the names are not secret.
+    #>
+    param([string[]]$Arguments)
+
+    return $Arguments | ForEach-Object {
+        $arg = [string]$_
+
+        # Storage connection strings, wherever they appear in a longer value.
+        $arg = [regex]::Replace($arg, '(?i)(AccountKey=)[^;]+', '${1}***')
+        $arg = [regex]::Replace($arg, '(?i)(SharedAccessSignature=)[^;]+', '${1}***')
+
+        # NAME=VALUE settings whose name suggests a credential.
+        $arg = [regex]::Replace(
+            $arg,
+            '(?i)^([A-Za-z0-9_:.\-]*(key|secret|password|pwd|token|connectionstring)[A-Za-z0-9_:.\-]*)=.+$',
+            '${1}=***')
+
+        # Bare --access-key style values are positional; the flag before them is the giveaway, but a
+        # value that simply looks like a base64 storage key is masked wherever it sits.
+        $arg = [regex]::Replace($arg, '^[A-Za-z0-9+/]{60,}={0,2}$', '***')
+
+        $arg
+    }
 }
 
 function Remove-NullProperty {
@@ -152,7 +194,12 @@ function Connect-AzureCliSession {
     )
 
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-        throw "The Azure CLI is not installed. See https://learn.microsoft.com/cli/azure/install-azure-cli"
+        $install = if ($IsMacOS) { "    brew install azure-cli" }
+                   elseif ($IsLinux) { "    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash" }
+                   else { "    winget install Microsoft.AzureCLI" }
+
+        throw ("The Azure CLI is not installed.`n`n" + $install + "`n`n" +
+            "See https://learn.microsoft.com/cli/azure/install-azure-cli")
     }
 
     # 'az account show' reads the local token cache and answers even when that token is long dead,

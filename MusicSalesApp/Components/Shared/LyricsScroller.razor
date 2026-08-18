@@ -1,0 +1,78 @@
+@using MusicSalesApp.Common.Contracts
+@inherits LyricsScrollerModel
+
+<div class="lyrics-scroller lyrics-scroller--@Mode.ToString().ToLowerInvariant()"
+     @ref="_root"
+     data-instance="@InstanceId">
+
+    @if (_document is null)
+    {
+        <div class="lyrics-scroller-empty">
+            <span>@EmptyMessage</span>
+        </div>
+    }
+    else
+    {
+        @* One track element, moved by a CSS transform. Never scrolled - see the JS module. *@
+        <div class="lyrics-scroller-track">
+            @for (var lineIndex = 0; lineIndex < _document.Lines.Count; lineIndex++)
+            {
+                var line = _document.Lines[lineIndex];
+
+                @if (!line.IsTimed)
+                {
+                    @* A section marker or blank. Shown because it is part of how the artist laid the
+                       song out, but never highlighted and never scrolled to - it has no time. *@
+                    <div class="lyrics-line lyrics-line--untimed">
+                        @if (Mode == LyricsScrollerMode.Editor)
+                        {
+                            @* Empty, but still rendered, so the words of every line start at the
+                               same x whether or not that line has a span to show. *@
+                            <span class="lyrics-line-time"></span>
+                        }
+                        @line.Text
+                    </div>
+                }
+                else
+                {
+                    <div class="lyrics-line" data-l="@lineIndex">
+                        @if (Mode == LyricsScrollerMode.Editor)
+                        {
+                            @* Editor only. The creator is here to judge whether a line sits where it
+                               should, and "the highlight looks late" is a much harder thing to act on
+                               than a number they can compare against what they are hearing. *@
+                            <span class="lyrics-line-time">@FormatLineRange(line)</span>
+                        }
+                        @if (line.Words.Count == 0)
+                        {
+                            @* The aligner placed the line but not its words. The line still lights up
+                               as a whole, which is better than dropping it. *@
+                            <span class="lyrics-word">@line.Text</span>
+                        }
+                        else
+                        {
+                            @for (var wordIndex = 0; wordIndex < line.Words.Count; wordIndex++)
+                            {
+                                var word = line.Words[wordIndex];
+
+                                @if (word.IsTimed)
+                                {
+                                    @* data- attributes rather than @onclick: a long song is a few
+                                       thousand words, and that many Blazor handlers on a Server
+                                       circuit is a cost paid on every render. The editor attaches one
+                                       delegated listener instead. *@
+                                    <span class="lyrics-word" data-l="@lineIndex" data-w="@wordIndex">@word.Text</span>
+                                }
+                                else
+                                {
+                                    <span class="lyrics-word lyrics-word--untimed">@word.Text</span>
+                                }
+                                @(" ")
+                            }
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>

@@ -1,0 +1,54 @@
+{
+  "//": "DO NOT hand-edit. Generate this from the web app's appsettings so the storage connection strings have one source of truth: pwsh ./Sync-FunctionSettings.ps1 -Environment Test -AppKind Lyrics",
+
+  "//why-one-file": "Same constraint as the C# Function app: the Durable task hub name is resolved by the Functions HOST from %LyricsTaskHubName% in host.json, before any worker configuration exists. A settings file the worker loaded could not supply it.",
+
+  "//in-azure": "There are no settings files in Azure. The Function App carries its own Application Settings, and that is the per-environment mechanism.",
+
+  "//second-app": "This is the SECOND Function app. The first (MusicSalesApp.Functions) is Windows/.NET and owns FFmpeg for transcoding. This one is Linux/Python because Demucs and the forced aligner are PyTorch, and a Function app is pinned to one language runtime. They share both storage accounts and the same callback secret.",
+
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "FUNCTIONS_EXTENSION_VERSION": "~4",
+
+    "//AzureWebJobsStorage": "Functions runtime bookkeeping. Shares the standard account with the task hub.",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "//StagingStorageConnectionString": "STANDARD general-purpose account. Holds the Durable task hub AND the staging container this app writes its derived timings to. Read/write. Premium accounts have no Queue service, which is the whole reason there are two accounts.",
+    "StagingStorageConnectionString": "UseDevelopmentStorage=true",
+
+    "//MediaStorageConnectionString": "PREMIUM account holding song media. READ ONLY from this app - it reads a song's MP3 and the lyrics the artist pasted, and writes nothing. Stricter than the C# app, which does write cover-art renditions here: those go into a brand-new GUID folder before any row exists, whereas lyrics alignment re-runs against a song whose row already points at its timings.",
+    "MediaStorageConnectionString": "UseDevelopmentStorage=true",
+
+    "//LyricsTaskHubName": "Referenced as %...% from host.json, so the HOST resolves it before the worker starts - if it is missing the app fails to start. MUST differ between Test and Production: both share one storage account, so a shared hub name would have the two environments stealing each other's orchestrations.",
+    "LyricsTaskHubName": "LyricsAlignHubLocal",
+
+    "MediaProcessing__StagingContainerName": "musicuploads-local",
+    "MediaProcessing__MediaContainerName": "musiccontainer-local",
+
+    "//CallbackBaseUrl": "Where results are posted. Must match the environment the containers belong to.",
+    "CallbackBaseUrl": "https://localhost:7173",
+
+    "//MediaProcessingApiKey": "Must equal the top-level MediaProcessingApiKey in the web app's appsettings for the same environment. Note this authorises THIS app to call the web app; the web app authorises itself to call this one with a function key, which is a separate secret travelling the other way.",
+    "MediaProcessingApiKey": "",
+
+    "//FFMPEG_BINARY": "A LINUX ffmpeg. The C# app's bundled ffmpeg.exe is useless here. In Azure this points at the Azure Files mount; the generated local file overrides it to whatever is on PATH, and drops TORCH_HOME/XDG_CACHE_HOME so torch and Demucs use their own caches - those mount paths do not exist on a dev machine.",
+    "FFMPEG_BINARY": "ffmpeg",
+
+    "//TORCH_HOME": "Where torchaudio looks for the MMS_FA bundle. Pointed at the mount so the weights are not in the deployment package - they are well over a gigabyte and would not fit.",
+    "TORCH_HOME": "/mnt/models/torch",
+
+    "//XDG_CACHE_HOME": "Where Demucs looks for its checkpoints. Same reasoning as TORCH_HOME.",
+    "XDG_CACHE_HOME": "/mnt/models",
+
+    "//DEMUCS_SEGMENT": "Seconds per chunk. Peak memory scales with this, and an out-of-memory kill is a hard failure - the orchestration deliberately does not retry separation. Raise only with a measurement to back it up.",
+    "DEMUCS_SEGMENT": "8",
+
+    "//threads": "Four - measured from a deployed 4096 MB Flex instance, which reports 4 CPUs. Coupled to that instance size; a smaller one gets fewer cores and over-subscribing costs more in contention than it buys.",
+    "OMP_NUM_THREADS": "4",
+    "MKL_NUM_THREADS": "4",
+
+    "PYTHONUNBUFFERED": "1"
+  }
+}

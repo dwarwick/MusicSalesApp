@@ -106,6 +106,24 @@
                                     <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
                                         <i class="bi bi-pencil me-1"></i> Edit
                                     </SfButton>
+                                    @if (_lyricsAvailable)
+                                    {
+                                        <SfButton OnClick="() => OpenLyricsEditor(song)" CssClass="e-btn e-small e-outline">
+                                            <i class="bi bi-music-note-list me-1"></i> Lyrics
+                                        </SfButton>
+
+                                        @* Only once there is something to tune. Before an alignment
+                                           lands the editor has nothing to show, and sending a creator
+                                           to a page that can only apologise is worse than not
+                                           offering it. *@
+                                        @if (HasTimingsToEdit(song))
+                                        {
+                                            <a class="e-btn e-small e-outline"
+                                               href="@AppPageRoutes.CreatorSongLyrics(int.Parse(song.Id))">
+                                                <i class="bi bi-sliders me-1"></i> Timing
+                                            </a>
+                                        }
+                                    }
                                     <SfButton OnClick="() => ShowDeleteConfirmation(song)" CssClass="e-btn e-small e-danger">
                                         <i class="bi bi-trash me-1"></i> Delete
                                     </SfButton>
@@ -222,6 +240,47 @@
                 </GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.NumberOfStreams)" HeaderText="Streams" Width="100" Format="N0"></GridColumn>
                 <GridColumn Field="@nameof(SongAdminViewModel.LikeCount)" HeaderText="Likes" Width="80" Format="N0"></GridColumn>
+                @if (_lyricsAvailable)
+                {
+                    @* Sorted on the confidence, not the status, because the reason to sort this column
+                       is to find the weakest alignments - which is also how the admin threshold gets
+                       chosen. Songs with no lyrics sort as null and fall to one end together. *@
+                    <GridColumn Field="@nameof(SongAdminViewModel.LyricsConfidence)" HeaderText="Lyrics" Width="130" AllowSorting="true">
+                        <Template>
+                            @{
+                                var song = (context as SongAdminViewModel);
+                                switch (song.LyricsStatus)
+                                {
+                                    case SongLyricsStatus.Published:
+                                        <span class="badge bg-success">@FormatLyricsConfidence(song.LyricsConfidence)</span>
+                                        break;
+                                    case SongLyricsStatus.NeedsReview:
+                                        <span class="badge bg-warning text-dark">@FormatLyricsConfidence(song.LyricsConfidence)</span>
+                                        <div><small class="text-muted">Not published</small></div>
+                                        break;
+                                    case SongLyricsStatus.Failed:
+                                        <span class="badge bg-danger">Failed</span>
+                                        break;
+                                    case SongLyricsStatus.Pending:
+                                        <span class="badge bg-secondary">Timing&hellip;</span>
+                                        break;
+                                    default:
+                                        <span class="text-muted">&mdash;</span>
+                                        break;
+                                }
+
+                                @* Otherwise genuinely invisible: the song plays, listeners still see
+                                   the published timings, and nothing says there is newer work behind
+                                   them. A creator interrupted mid-session has no other way to find
+                                   out they never finished. *@
+                                if (song.HasUnpublishedLyricEdits)
+                                {
+                                    <div><small class="text-info">Unpublished edits</small></div>
+                                }
+                            }
+                        </Template>
+                    </GridColumn>
+                }
                 <GridColumn Field="@nameof(SongAdminViewModel.IsEnabled)" HeaderText="Status" Width="120">
                     <Template>
                         @{
@@ -462,3 +521,17 @@
         </FooterTemplate>
     </DialogTemplates>
 </SfDialog>
+
+@* Lyric timing lives in its own component: this file is already long, and the dialog owns a
+   SignalR subscription and a state machine that have nothing to do with editing song metadata.
+
+   Mounted only when the feature is configured, which matters beyond tidiness: the dialog opens a
+   SignalR connection on first render, and an environment without lyric timing should not pay for
+   one on every visit to this page. *@
+@if (_lyricsAvailable)
+{
+    <LyricsEditorDialog Song="_lyricsSong"
+                        CreatorId="@(_creatorId ?? 0)"
+                        @bind-IsVisible="_showLyricsDialog"
+                        OnCompleted="LoadSongsAsync" />
+}

@@ -6,6 +6,7 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Grids;
+using System.Globalization;
 
 namespace MusicSalesApp.Components.Pages.Creator;
 
@@ -64,7 +65,28 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     protected record PersonaDropdownItem(int? Id, string Name);
 
-    private int? _creatorId;
+    protected int? _creatorId;
+
+    /// <summary>The song whose lyrics dialog is open, if any.</summary>
+    protected SongAdminViewModel _lyricsSong;
+
+    protected bool _showLyricsDialog;
+
+    /// <summary>
+    /// Whether lyric timing is offered at all in this environment.
+    ///
+    /// <para>
+    /// Read once on load rather than per grid row: it is a configuration check, so the answer cannot
+    /// change between rows, and the grid renders it for every song.
+    /// </para>
+    ///
+    /// <para>
+    /// Used to hide the action entirely rather than to disable it. An environment with no lyrics
+    /// Function app configured is not a creator having done something wrong - offering a button that
+    /// can only explain why it does nothing is worse than not offering one.
+    /// </para>
+    /// </summary>
+    protected bool _lyricsAvailable;
     private bool _hasLoadedData = false;
     private string _currentUserEmail = string.Empty;
 
@@ -73,6 +95,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         if (firstRender && !_hasLoadedData)
         {
             _hasLoadedData = true;
+            _lyricsAvailable = LyricsService.IsAvailable;
             try
             {
                 // Load max image upload size from settings
@@ -132,6 +155,32 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Whether this song has timings worth opening the editor for.
+    ///
+    /// <para>
+    /// Published and NeedsReview both qualify: NeedsReview is where every successful alignment now
+    /// lands and is exactly the state that needs a listen, and a Published song can still be
+    /// re-tuned. Pending has nothing yet and Failed has nothing usable.
+    /// </para>
+    /// </summary>
+    protected static bool HasTimingsToEdit(SongAdminViewModel song) =>
+        song.LyricsStatus is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
+
+    /// <summary>
+    /// The confidence as a percentage with one decimal place.
+    ///
+    /// <para>
+    /// One decimal, unlike the lyrics dialog's whole-percent banner, because this column exists to
+    /// choose a threshold. Rounding 69.6% and 70.4% both to "70%" hides exactly the distinction
+    /// being made when the two fall either side of the bar.
+    /// </para>
+    /// </summary>
+    protected static string FormatLyricsConfidence(double? confidence) =>
+        confidence.HasValue
+            ? confidence.Value.ToString("P1", CultureInfo.CurrentCulture)
+            : "—";
+
     protected async Task LoadSongsAsync()
     {
         if (!_creatorId.HasValue)
@@ -179,6 +228,28 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             .ToList();
         var likeCounts = await SongLikeService.GetBulkLikeCountsAsync(songIds);
 
+        // Only asked for when lyric timing is configured at all. Where it is not, the Lyrics button
+        // is hidden and the column renders empty, so the query would be answering a question nobody
+        // can see the answer to.
+        //
+        // Failure here is swallowed deliberately. Lyric timing is supplementary to this page - the
+        // creator came to manage songs - so a lyrics lookup that throws must cost the column, not the
+        // song list. Without this the entire grid renders empty, including Edit and Delete, and the
+        // page reports no songs at all rather than songs without a confidence figure.
+        IReadOnlyDictionary<int, SongLyrics> lyrics = new Dictionary<int, SongLyrics>();
+
+        if (_lyricsAvailable)
+        {
+            try
+            {
+                lyrics = await LyricsService.GetForSongsAsync(songIds);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Could not load lyric timing status for the creator song grid.");
+            }
+        }
+
         foreach (var song in _songs)
         {
             // Generate persona image SAS URLs
@@ -201,6 +272,13 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             if (int.TryParse(song.Id, out var songId))
             {
                 song.LikeCount = likeCounts.GetValueOrDefault(songId, 0);
+
+                if (lyrics.TryGetValue(songId, out var songLyrics))
+                {
+                    song.LyricsStatus = songLyrics.Status;
+                    song.LyricsConfidence = songLyrics.Confidence;
+                    song.HasUnpublishedLyricEdits = songLyrics.HasUnpublishedChanges;
+                }
             }
         }
     }
@@ -464,6 +542,22 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             _songImageTempPath = null;
         }
         _songImageContentType = null;
+    }
+
+    /// <summary>
+    /// Opens the lyric-timing dialog for one song.
+    ///
+    /// <para>
+    /// No ownership check needed here, and it is worth saying why rather than leaving it looking
+    /// like an omission: the grid is populated by <c>GetCreatorSongsAsync(_creatorId)</c>, which
+    /// filters on the creator, so a song reachable from this button is by construction one of
+    /// theirs. The service re-checks anyway, because it is also reachable from elsewhere.
+    /// </para>
+    /// </summary>
+    protected void OpenLyricsEditor(SongAdminViewModel song)
+    {
+        _lyricsSong = song;
+        _showLyricsDialog = true;
     }
 
     protected async Task SaveEdit()

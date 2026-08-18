@@ -36,6 +36,7 @@ namespace MusicSalesApp.Controllers
         private readonly ICreatorService _creatorService;
         private readonly IAuthorizationService _authorizationService;
         private readonly IImageVariantCoordinator _imageVariants;
+        private readonly ISongLyricsService _lyricsService;
         private readonly ILogger<MusicController> _logger;
 
         public MusicController(
@@ -52,11 +53,13 @@ namespace MusicSalesApp.Controllers
             ICreatorService creatorService,
             IAuthorizationService authorizationService,
             IImageVariantCoordinator imageVariants,
+            ISongLyricsService lyricsService,
             ILogger<MusicController> logger)
         {
             _creatorService = creatorService;
             _authorizationService = authorizationService;
             _imageVariants = imageVariants;
+            _lyricsService = lyricsService;
             _storageService = storageService;
             _subscriptionService = subscriptionService;
             _streamCountService = streamCountService;
@@ -157,6 +160,20 @@ namespace MusicSalesApp.Controllers
 
         private async Task<bool> IsRegisteredPublicMediaPathAsync(string fileName)
         {
+            // Lyrics artifacts are checked first and separately, because they cannot be resolved the
+            // way everything else here is: their paths live on SongLyrics, not on SongMetadata, so
+            // GetByBlobPathAsync below would simply not find them and the request would 404 before
+            // any decision was reached.
+            //
+            // The gate is that row's STATUS, never the shape of the path. Timings held back as
+            // NeedsReview sit at exactly the same path as published ones - the path does not change
+            // between runs, the version does - so admitting anything that merely looks like a lyrics
+            // artifact would serve every low-confidence alignment the pipeline deliberately withheld.
+            if (SongMediaPaths.IsLyricsArtifactPath(fileName))
+            {
+                return await _lyricsService.IsPubliclyReadableAsync(fileName);
+            }
+
             // A rendition path is its master's path with ".w{width}.webp" appended, so the master is
             // recoverable by string alone and the existing lookup works unchanged - no extra query,
             // no new index.

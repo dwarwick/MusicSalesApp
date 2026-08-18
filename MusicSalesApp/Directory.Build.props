@@ -1,0 +1,66 @@
+<Project>
+
+  <!--
+    Pins the output paths to absolute, forward-slash values. This looks like a no-op and is not.
+
+    MSBuild's default BaseOutputPath is the literal string "bin\" - with a BACKSLASH, on every
+    platform. DefaultItemExcludes is then built from it, producing entries like "bin\/**". On Windows
+    that is a normal path and everything works. On macOS and Linux a backslash is an ordinary
+    filename character, so "bin\/**" describes a directory called `bin\` that does not exist, the
+    exclude silently matches nothing, and the Web SDK's recursive "**/*" Content and None globs sweep
+    bin/ straight back into the build.
+
+    The result is that every build copies the output directory into itself, one level deeper each
+    time: bin/Debug/net10.0/bin/Debug/net10.0/... It surfaces first as an MSB3026 "could not copy"
+    warning that is easy to read as noise, and eventually as a hard MSB3021 error when the path
+    exceeds the OS limit - at which point the tree is also too deep for `rm -rf` to remove.
+
+    MusicSalesApp.ComponentTests already carries an identical file for the same reason. This is a
+    cross-platform issue only: the Windows dev box never sees it, which is precisely why it went
+    unnoticed long enough to accumulate fifty levels.
+  -->
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+  <!--
+    Fixing BaseOutputPath alone is necessary but not sufficient, which is worth knowing before
+    anyone deletes this half as redundant.
+
+    The SDK builds its own excludes as "$(BaseOutputPath)/**". Because BaseOutputPath conventionally
+    ends in a separator, that yields ".../bin//**" - a doubled slash the glob matcher does not match
+    against ".../bin/Debug/...". So the exclude is still inert and bin/ is still swept back in, just
+    with a tidier-looking path than before.
+
+    This entry is the one that actually bites, and it is deliberately RELATIVE. The SDK's Include
+    globs are relative to the project directory, and MSBuild matches Exclude against Include
+    textually - an absolute exclude does not cancel a relative include, which is why the obvious
+    $(MSBuildThisFileDirectory)bin/** spelling looks right and does nothing.
+
+    Set here rather than in the .csproj because Directory.Build.props is imported before
+    Microsoft.Common.props, which appends its own entries to whatever it finds - so ours survive.
+  -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!--
+    The belt to the above braces, because the excludes have not proved sufficient on their own: the
+    SDK still resolves Content items under bin once it is populated, and a nested copy reappears
+    every few builds.
+
+    Deleting one level before each build is enough to make the problem self-correcting rather than
+    cumulative, which is the part that actually hurt - the tree reached fifty levels, broke the build
+    with a path-too-long error, and by then was too deep for `rm -rf` to remove. Bounded at one level
+    it is a directory nobody notices.
+
+    Cheap, and deliberately not a full clean: wiping bin/obj outright would force a from-scratch
+    rebuild every time, which is a far larger tax than the problem. On Windows the directory never
+    appears, so this is a no-op there.
+  -->
+  <Target Name="RemoveNestedOutputCopy" BeforeTargets="Build;Publish">
+    <RemoveDir Directories="$(OutDir)bin" Condition="Exists('$(OutDir)bin')" ContinueOnError="true" />
+  </Target>
+
+</Project>

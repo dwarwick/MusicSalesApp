@@ -52,6 +52,10 @@ public class MediaProcessingCompletionServiceTests
             _openGraph.Object,
             _jobService.Object,
             _progress,
+            // The cross-account copy is the one piece of this service unit tests cannot exercise -
+            // it needs two real storage accounts - so it is stubbed out entirely. Every test here
+            // asserts on the decisions around the copy, never on the copy itself.
+            Mock.Of<IStagingToMediaCopier>(),
             Options.Create(new MediaProcessingOptions()),
             Mock.Of<ILogger<MediaProcessingCompletionService>>());
     }

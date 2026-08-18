@@ -437,9 +437,45 @@ try
         options.MatchQueueName = storageSection["MatchQueueName"] ?? MediaProcessingQueues.CoverArtMatch;
     });
     builder.Services.AddSingleton<IMediaProcessingQueueClient, MediaProcessingQueueClient>();
+
+    // Singleton: it holds no per-request state, and the cross-account copy is the one piece of
+    // storage plumbing unit tests cannot reach, so both pipelines share this single implementation
+    // rather than each keeping a copy that nobody can verify locally.
+    builder.Services.AddSingleton<IStagingToMediaCopier, StagingToMediaCopier>();
+
     builder.Services.AddScoped<ISongUploadJobService, SongUploadJobService>();
     builder.Services.AddScoped<IMediaProcessingCompletionService, MediaProcessingCompletionService>();
     builder.Services.AddScoped<IAudioProbeResultHandler, AudioProbeResultHandler>();
+
+    // Lyrics alignment runs in a *second* Function app - Python on Linux, because Demucs and the
+    // forced aligner are PyTorch and a Function app is pinned to one language runtime. It is invoked
+    // over HTTP rather than through a queue, because a Durable HTTP starter answers with the
+    // orchestration's instance id and a queue trigger has nothing to answer. Recording that id is
+    // what lets the reconciler ask Azure how a run is going instead of inferring it from a timestamp.
+    builder.Services.Configure<LyricsFunctionsOptions>(options =>
+    {
+        var section = builder.Configuration.GetSection("LyricsFunctions");
+        options.BaseUrl = section["BaseUrl"] ?? string.Empty;
+        options.FunctionKey = section["FunctionKey"] ?? string.Empty;
+    });
+    builder.Services.AddHttpClient<IDurableTaskClient, DurableTaskClient>((provider, client) =>
+    {
+        var options = provider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<LyricsFunctionsOptions>>().Value;
+        if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+        {
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+        }
+
+        client.Timeout = options.StartTimeout;
+    });
+    builder.Services.AddScoped<ILyricsAlignmentNotifier, LyricsAlignmentNotifier>();
+    builder.Services.AddScoped<ISongLyricsService, SongLyricsService>();
+    builder.Services.AddScoped<ILyricsAlignmentInvoker, LyricsAlignmentInvoker>();
+    builder.Services.AddScoped<ILyricsAlignmentCompletionService, LyricsAlignmentCompletionService>();
+    builder.Services.AddScoped<ILyricsAlignmentEmailService, LyricsAlignmentEmailService>();
+    builder.Services.AddScoped<ILyricsAlignmentJobReconciler, LyricsAlignmentJobReconciler>();
+
     builder.Services.AddScoped<IUploadProgressNotifier, UploadProgressNotifier>();
     builder.Services.AddScoped<ICoverArtMatchNotifier, CoverArtMatchNotifier>();
     builder.Services.AddScoped<ICoverArtMatchService, CoverArtMatchService>();

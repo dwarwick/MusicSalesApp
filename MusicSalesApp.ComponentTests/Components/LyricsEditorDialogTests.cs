@@ -1,0 +1,329 @@
+using Bunit;
+using Microsoft.AspNetCore.Components;
+using Moq;
+using MusicSalesApp.Common.Contracts;
+using MusicSalesApp.Common.Helpers;
+using MusicSalesApp.ComponentTests.Testing;
+using MusicSalesApp.Components.Shared;
+using MusicSalesApp.Models;
+using MusicSalesApp.Services;
+
+namespace MusicSalesApp.ComponentTests.Components;
+
+/// <summary>
+/// The creator's lyric-timing dialog.
+///
+/// <para>
+/// Note what this can and cannot reach. The interesting behaviour after Submit is driven by SignalR
+/// - a progress bar fed by an orchestration running in Azure - and bUnit cannot provide that, which
+/// is the same limitation that makes <c>MockCoverArtMatchService.IsAvailable</c> default to false in
+/// the base fixture. What is testable is everything before that point: whether the feature offers
+/// itself at all, and whether the client-side guards stop a submission the server would reject.
+/// </para>
+/// </summary>
+[TestFixture]
+public class LyricsEditorDialogTests : BUnitTestBase
+{
+    [SetUp]
+    public override void BaseSetup()
+    {
+        base.BaseSetup();
+
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((SongLyrics)null);
+        MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LyricsAlignmentJob)null);
+        MockUploadProgressHubClient.Setup(x => x.StartAsync()).Returns(Task.CompletedTask);
+    }
+
+    [Test]
+    public void AnEnvironmentWithoutTheFunctionAppSaysSoInsteadOfOfferingTheFeature()
+    {
+        // Not an error state. A site with no lyrics Function app configured simply does not offer
+        // lyric timing, and everything else about it carries on working.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(false);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("isn't configured for this environment"));
+            Assert.That(cut.Markup, Does.Not.Contain("Time lyrics"));
+        });
+    }
+
+    [Test]
+    public void AConfiguredEnvironmentOffersTheEditor()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Time lyrics"));
+            Assert.That(cut.Markup, Does.Contain("Paste the lyrics"));
+        });
+    }
+
+    [Test]
+    public void TheCountersShowTheServerSideLimits()
+    {
+        // The caps are enforced server-side regardless; showing them is what stops a creator pasting
+        // a novel and only finding out after a round trip.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain(LyricsTextLimits.MaxCharacters.ToString("N0")));
+            Assert.That(cut.Markup, Does.Contain(LyricsTextLimits.MaxLines.ToString("N0")));
+        });
+    }
+
+    [Test]
+    public void SectionHeadingsAreExplainedRatherThanLeftToGuesswork()
+    {
+        // Worth its own assertion: creators strip these out to be helpful, and doing so removes the
+        // one thing that reliably raises a low confidence score.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.That(cut.Markup, Does.Contain("[Chorus]"));
+    }
+
+    [Test]
+    public void ASongWithPublishedTimingsOffersARerunAndAnExport()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.Published,
+                Confidence = 0.94d,
+                TimingsBlobPath = "abc/abc-lyrics.json",
+                LrcBlobPath = "abc/abc-lyrics.lrc"
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("Re-run timing"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Re-run timing"), "Not 'Time lyrics' - it has been done once.");
+            Assert.That(cut.Markup, Does.Contain("Download .lrc"));
+            Assert.That(cut.Markup, Does.Contain("94"), "The confidence is shown, not just the status.");
+        });
+    }
+
+    /// <summary>
+    /// Timings held for review report their score and say what is stopping them being seen.
+    ///
+    /// <para>
+    /// This used to assert the message said "we aren't confident about this one", which was right
+    /// while <c>NeedsReview</c> meant a weak result. It is now where <em>every</em> successful
+    /// alignment lands, at any confidence, so that wording would tell a creator with a 95% result
+    /// that their song went badly. What the message owes them instead is the number and the reason
+    /// nothing is live yet - which is Publish, not the score.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void TimingsHeldForReviewReportTheScoreAndKeepTheExport()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.NeedsReview,
+                Confidence = 0.41d,
+                TimingsBlobPath = "abc/abc-lyrics.json",
+                LrcBlobPath = "abc/abc-lyrics.lrc"
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("until you press Publish"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("41"), "The score is reported, not judged.");
+            Assert.That(
+                cut.Markup,
+                Does.Not.Contain("aren't confident"),
+                "NeedsReview is universal now, so it must not read as a verdict on this song.");
+            Assert.That(cut.Markup, Does.Contain("Download .lrc"), "Timings held for review are kept, not discarded.");
+        });
+    }
+
+    [Test]
+    public void AFailedAttemptInvitesAnotherTry()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics { SongMetadataId = 1, Status = SongLyricsStatus.Failed });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("couldn't time these lyrics"), TimeSpan.FromSeconds(5));
+
+        Assert.That(cut.Markup, Does.Contain("try again"));
+    }
+
+    [Test]
+    public void AnAttemptAlreadyRunningShowsProgressAndOffersCancelInsteadOfSubmit()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LyricsAlignmentJob
+            {
+                JobId = Guid.NewGuid(),
+                SongMetadataId = 1,
+                CreatorId = 7,
+                LyricsBlobPath = "abc/abc-lyrics.txt",
+                Step = MusicSalesApp.Common.Contracts.LyricsAlignmentStep.SeparatingVocals
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("Cancel timing"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("progress-bar"));
+            Assert.That(cut.Markup, Does.Contain("Isolating the vocal"), "The slow stage says it is the slow stage.");
+            Assert.That(cut.Markup, Does.Not.Contain("Time lyrics"), "Submit is replaced while one is running.");
+        });
+    }
+
+    /// <summary>
+    /// Timings that came out usable send the creator to the editor before offering another run.
+    ///
+    /// <para>
+    /// The ordering is the point. Re-running costs another separation pass and comes back with the
+    /// same inherent drift, so it is the wrong first suggestion for a result that is merely
+    /// imprecise - and it is the only thing that helps when the pasted words were wrong, so it stays.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void TimingsWorthKeepingOfferEditingBeforeAnotherRun()
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics
+            {
+                SongMetadataId = 1,
+                Status = SongLyricsStatus.NeedsReview,
+                Confidence = 0.41d,
+                TimingsBlobPath = "abc/abc-lyrics.json"
+            });
+
+        var cut = RenderDialog();
+        cut.WaitForState(() => cut.Markup.Contains("Fix the timing"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Fix the timing"));
+            Assert.That(cut.Markup, Does.Contain("Re-run timing"), "Still available - wrong words need it.");
+            Assert.That(
+                cut.Markup.IndexOf("Fix the timing", StringComparison.Ordinal),
+                Is.LessThan(cut.Markup.IndexOf("Re-run timing", StringComparison.Ordinal)),
+                "Editing is offered first.");
+        });
+    }
+
+    [Test]
+    public void ASongWithNoTimingsYetHasNothingToEdit()
+    {
+        // Nothing has been aligned, so an editor button would lead to an empty page.
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+
+        var cut = RenderDialog();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Fix the timing"));
+            Assert.That(cut.Markup, Does.Contain("Time lyrics"));
+        });
+    }
+
+    /// <summary>
+    /// A finished attempt clears the progress bar even when the parent's refresh fails.
+    ///
+    /// <para>
+    /// The regression this exists for: the terminal handler used to clear <c>_isRunning</c>, then
+    /// await the parent's <c>OnCompleted</c> grid reload, and only then repaint. A reload that threw
+    /// therefore left the component believing it had finished while the DOM still showed the bar
+    /// frozen at its last percent - and because the fallback poll stops once the attempt is no longer
+    /// running, nothing ever came back to correct it. The creator watched 96% until they refreshed.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void AFinishedAttemptClearsTheBarEvenIfTheParentRefreshThrows()
+    {
+        var jobId = Guid.NewGuid();
+
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LyricsAlignmentJob
+            {
+                JobId = jobId,
+                SongMetadataId = 1,
+                CreatorId = 7,
+                LyricsBlobPath = "abc/abc-lyrics.txt",
+                Step = MusicSalesApp.Common.Contracts.LyricsAlignmentStep.Saving
+            });
+
+        SetupRendererInfo();
+        SetupAuthorizedUser(1, "creator@example.com", "Creator");
+
+        var cut = TestContext.Render<LyricsEditorDialog>(parameters => parameters
+            .Add(p => p.IsVisible, true)
+            .Add(p => p.CreatorId, 7)
+            .Add(p => p.Song, new SongAdminViewModel
+            {
+                Id = "1",
+                SongTitle = "Night Drive",
+                MediaGuid = Guid.Parse("abc00000-0000-0000-0000-000000000000")
+            })
+            .Add(p => p.OnCompleted, EventCallback.Factory.Create(this, () =>
+                throw new InvalidOperationException("The song grid failed to reload."))));
+
+        cut.WaitForState(() => cut.Markup.Contains("progress-bar"), TimeSpan.FromSeconds(5));
+
+        // The attempt finishes. Only the terminal push arrives - the parent's reload then throws.
+        MockUploadProgressHubClient.Raise(
+            x => x.OnLyricsProgress += null,
+            new LyricsAlignmentProgress
+            {
+                JobId = jobId,
+                Step = MusicSalesApp.Common.Contracts.LyricsAlignmentStep.Completed,
+                OverallPercent = 100d
+            });
+
+        cut.WaitForState(() => !cut.Markup.Contains("progress-bar"), TimeSpan.FromSeconds(5));
+
+        Assert.That(
+            cut.Markup,
+            Does.Not.Contain("progress-bar"),
+            "The bar must clear on the dialog's own repaint, not depend on the parent's reload surviving.");
+    }
+
+    private IRenderedComponent<LyricsEditorDialog> RenderDialog()
+    {
+        // SfDialog reads RendererInfo, which bUnit does not populate by default. The base fixture
+        // exposes this helper precisely for dialog-hosting components.
+        SetupRendererInfo();
+        SetupAuthorizedUser(1, "creator@example.com", "Creator");
+
+        return TestContext.Render<LyricsEditorDialog>(parameters => parameters
+            .Add(p => p.IsVisible, true)
+            .Add(p => p.CreatorId, 7)
+            .Add(p => p.Song, new SongAdminViewModel
+            {
+                Id = "1",
+                SongTitle = "Night Drive",
+                MediaGuid = Guid.Parse("abc00000-0000-0000-0000-000000000000")
+            }));
+    }
+}
