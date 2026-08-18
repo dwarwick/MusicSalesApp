@@ -69,7 +69,14 @@ else
                         <strong>If one word is slightly off, nudge it.</strong> Click the word, then
                         the <strong>left arrow</strong> to make it come earlier, the
                         <strong>right arrow</strong> to make it come later. Each press moves it a
-                        twentieth of a second.
+                        twentieth of a second, without changing how long it is sung for.
+                    </li>
+                    <li>
+                        <strong>If a word flashes past, or hangs about, change its length.</strong>
+                        Click it and set <em>Starts</em> and <em>Ends</em> separately, in steps of
+                        1, 0.1 or 0.01 seconds. <em>Sung for</em> underneath shows what you have
+                        given it &mdash; anything near 0.05s will be gone before you see it. Press
+                        <strong>Esc</strong> when you have finished with that word.
                     </li>
                     <li>
                         <strong>Made a mess?</strong> Press <em>Undo</em>, or
@@ -243,29 +250,59 @@ else
                         <div class="lyrics-editor-span">
                             <div class="lyrics-editor-span-row">
                                 <span class="lyrics-editor-span-label">Starts</span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                        title="10 ms earlier"
-                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, -FineNudgeMs)">−</button>
                                 <span class="lyrics-editor-span-value">@FormatPrecise(_selectedStartMs)</span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                        title="10 ms later"
-                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, FineNudgeMs)">+</button>
+                            </div>
+                            <div class="lyrics-editor-span-steps">
+                                @foreach (var step in EdgeStepsMs)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            title="@FormatStep(step) seconds earlier"
+                                            @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, -step)">
+                                        −@FormatStep(step)
+                                    </button>
+                                }
+                                @* Reversed by index rather than with LINQ, so the steps stay defined
+                                   in exactly one place and read outwards from the value in the
+                                   middle: coarse, fine, value, fine, coarse. *@
+                                @for (var i = EdgeStepsMs.Length - 1; i >= 0; i--)
+                                {
+                                    var step = EdgeStepsMs[i];
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            title="@FormatStep(step) seconds later"
+                                            @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, step)">
+                                        +@FormatStep(step)
+                                    </button>
+                                }
                             </div>
 
                             <div class="lyrics-editor-span-row">
                                 <span class="lyrics-editor-span-label">Ends</span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                        title="10 ms earlier"
-                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, -FineNudgeMs)">−</button>
                                 <span class="lyrics-editor-span-value">@FormatPrecise(_selectedEndMs)</span>
-                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                        title="10 ms later"
-                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, FineNudgeMs)">+</button>
+                            </div>
+                            <div class="lyrics-editor-span-steps">
+                                @foreach (var step in EdgeStepsMs)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            title="@FormatStep(step) seconds earlier"
+                                            @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, -step)">
+                                        −@FormatStep(step)
+                                    </button>
+                                }
+                                @for (var i = EdgeStepsMs.Length - 1; i >= 0; i--)
+                                {
+                                    var step = EdgeStepsMs[i];
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            title="@FormatStep(step) seconds later"
+                                            @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, step)">
+                                        +@FormatStep(step)
+                                    </button>
+                                }
                             </div>
 
                             @* The number the "Hey!" problem is invisible without. *@
                             <div class="lyrics-editor-span-length">
                                 Sung for @(((_selectedEndMs - _selectedStartMs) / 1000d).ToString("0.00"))s
+                                &middot; steps are seconds
                             </div>
                         </div>
                         <div class="btn-group mt-2" role="group">

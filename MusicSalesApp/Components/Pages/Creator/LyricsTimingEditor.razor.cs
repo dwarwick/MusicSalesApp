@@ -99,14 +99,19 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected long _selectedEndMs;
 
     /// <summary>
-    /// The step the start/end controls move by, an order finer than <see cref="NudgeMs"/>.
+    /// The steps the start/end controls offer, coarsest first.
     /// </summary>
     /// <remarks>
-    /// 50 ms is a sensible step for placing a word by ear, and too coarse for setting its edges: the
-    /// case this exists for is a word the aligner gave a span of 60 ms, where one press of the
-    /// ordinary nudge overshoots the whole word.
+    /// Three of them because one cannot span the range this control is used over. The case it exists
+    /// for is a word given a span of 60 ms, which needs hundredths; getting there from a word that is
+    /// a second out at 10 ms a press is a hundred presses. Offered as separate buttons rather than a
+    /// step the creator selects first, because a mode to switch between is a thing to get wrong and
+    /// these are three cheap buttons.
     /// </remarks>
-    protected const long FineNudgeMs = 10;
+    protected static readonly long[] EdgeStepsMs = [1_000, 100, 10];
+
+    /// <summary>A step as the creator reads it: 1, 0.1, 0.01.</summary>
+    protected static string FormatStep(long ms) => (ms / 1000d).ToString("0.##");
 
     protected bool _isDirty;
     protected bool _isSaving;

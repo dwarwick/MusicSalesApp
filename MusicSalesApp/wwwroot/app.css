@@ -3068,23 +3068,36 @@ h1:focus {
 
 .lyrics-editor-span-row {
     display: flex;
-    align-items: center;
+    align-items: baseline;
+    justify-content: space-between;
     gap: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .lyrics-editor-span-label {
-    flex: 0 0 3.5em;
     font-size: 0.8rem;
     opacity: 0.75;
 }
 
 .lyrics-editor-span-value {
-    flex: 1 1 auto;
-    text-align: center;
     font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
     font-variant-numeric: tabular-nums;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+}
+
+/* Six buttons sharing the row equally, so the pair for a given step sits the same distance either
+   side of centre and the row can be aimed at without reading it. */
+.lyrics-editor-span-steps {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 8px;
+}
+
+.lyrics-editor-span-steps .btn {
+    flex: 1 1 0;
+    padding-inline: 0;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
 }
 
 .lyrics-editor-span-length {
