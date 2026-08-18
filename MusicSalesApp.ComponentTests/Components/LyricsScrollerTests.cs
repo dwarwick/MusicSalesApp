@@ -174,6 +174,45 @@ public class LyricsScrollerTests : BUnitTestBase
     // The payload handed to the loop
     // -----------------------------------------------------------------
 
+    /// <summary>
+    /// A word moved inside its line changes the stamp.
+    ///
+    /// <para>
+    /// The stamp is what decides whether the module is handed a new document at all, and it used to
+    /// hash only the line spans. Editing a word's start or end - which is most of what the timing
+    /// editor's controls do, and never changes the line unless the word leaves it - therefore
+    /// produced an identical stamp, the push was skipped, and playback carried on highlighting the
+    /// timings from before the edit. The creator saw their new numbers in the panel and heard the old
+    /// ones, which reads as the edit having silently failed.
+    /// </para>
+    /// </summary>
+    [Test]
+    public void MovingAWordWithinItsLineChangesTheStampSoTheChangeIsHandedOver()
+    {
+        var before = LyricsScrollerModel.DocumentStamp(Document());
+
+        var edited = Document();
+        var line = edited.Lines[1];
+        line.Words[0].EndMs = line.Words[0].EndMs!.Value + 250;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(line.StartMs, Is.EqualTo(1_000), "The line itself is untouched...");
+            Assert.That(line.EndMs, Is.EqualTo(3_000), "...which is exactly why this used to be missed.");
+            Assert.That(LyricsScrollerModel.DocumentStamp(edited), Is.Not.EqualTo(before));
+        });
+    }
+
+    [Test]
+    public void AnUneditedDocumentKeepsTheSameStamp()
+    {
+        // The other half of the contract: the guard exists so an unrelated re-render does not restart
+        // the module's loop mid-song, and that has to keep working.
+        Assert.That(
+            LyricsScrollerModel.DocumentStamp(Document()),
+            Is.EqualTo(LyricsScrollerModel.DocumentStamp(Document())));
+    }
+
     [Test]
     public void FlattenEmitsOneAscendingEntryPerTimedWord()
     {

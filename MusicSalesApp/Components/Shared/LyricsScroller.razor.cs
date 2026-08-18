@@ -198,7 +198,22 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
     /// <summary>
     /// A cheap fingerprint of the document's timings, so an edit is noticed but a re-render is not.
     /// </summary>
-    private static long DocumentStamp(LyricsTimingsDocument document)
+    /// <remarks>
+    /// <b>Words are included, and leaving them out was a bug that made the editor look broken.</b>
+    /// The stamp decides whether the module is handed a new document at all, so hashing only the line
+    /// spans meant every edit that moved a word WITHIN its line - which is what the arrow keys and
+    /// the start/end controls mostly do - produced an identical stamp. The push was skipped, the
+    /// module kept the arrays it already had, and the creator watched the panel show their new
+    /// numbers while playback carried on highlighting the old ones. It looked like the edit had not
+    /// been applied, or like it needed saving; in fact the document was correct all along and only
+    /// the highlighter was stale.
+    ///
+    /// <para>
+    /// Internal so a test can hold it to that: the failure is invisible from outside, since every
+    /// other surface shows the edited document correctly.
+    /// </para>
+    /// </remarks>
+    internal static long DocumentStamp(LyricsTimingsDocument document)
     {
         long stamp = 17;
 
@@ -206,6 +221,12 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
         {
             stamp = unchecked(stamp * 31 + (line.StartMs ?? -1));
             stamp = unchecked(stamp * 31 + (line.EndMs ?? -1));
+
+            foreach (var word in line.Words)
+            {
+                stamp = unchecked(stamp * 31 + (word.StartMs ?? -1));
+                stamp = unchecked(stamp * 31 + (word.EndMs ?? -1));
+            }
         }
 
         return stamp;
