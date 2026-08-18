@@ -12,6 +12,38 @@
 
 let state = null;
 
+/*
+ * THE SAME KEY THE SONG AND PLAYLIST PLAYERS USE, deliberately. A creator who has set a comfortable
+ * volume once has set it for this site, and a page that ignored that and opened at full every time
+ * is worse here than anywhere else: this is the page they open to listen closely, often on
+ * headphones, and the first thing it did was play at maximum.
+ */
+const VOLUME_STORAGE_KEY = 'streamtunes_volume';
+
+function getSavedVolume() {
+    try {
+        const saved = localStorage.getItem(VOLUME_STORAGE_KEY);
+        if (saved === null) {
+            return 1;
+        }
+
+        const value = parseFloat(saved);
+        return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+    } catch {
+        // Private browsing. Full volume is the browser's own default, so this is no worse than
+        // having never stored anything.
+        return 1;
+    }
+}
+
+function saveVolume(volume) {
+    try {
+        localStorage.setItem(VOLUME_STORAGE_KEY, volume.toString());
+    } catch {
+        /* Private browsing. The session still works; the preference just will not outlive it. */
+    }
+}
+
 export function init(audio, dotNetRef, progressBar, volumeBar) {
     if (!audio) {
         return;
@@ -35,11 +67,72 @@ export function init(audio, dotNetRef, progressBar, volumeBar) {
     on(audio, 'play', () => dotNetRef.invokeMethodAsync('UpdatePlaying', true));
     on(audio, 'pause', () => dotNetRef.invokeMethodAsync('UpdatePlaying', false));
     on(audio, 'ended', () => dotNetRef.invokeMethodAsync('UpdatePlaying', false));
-    on(audio, 'volumechange', () => dotNetRef.invokeMethodAsync('UpdateVolume', audio.volume, audio.muted));
+    on(audio, 'volumechange', () => {
+        saveVolume(audio.volume);
+        dotNetRef.invokeMethodAsync('UpdateVolume', audio.volume, audio.muted);
+    });
 
     state.progressBar = progressBar;
     state.volumeBar = volumeBar;
     state.recording = false;
+
+    // Before any listener can fire, so the restore is not itself broadcast as a change the creator
+    // made. The volumechange handler above still saves it back, which is harmless - it writes the
+    // value it just read.
+    audio.volume = getSavedVolume();
+
+    /*
+     * DRAGGABLE, not just clickable. Both bars used to seek only on click, which on this page is the
+     * wrong interaction: tapping a chorus means finding the same eight bars over and over, and
+     * hunting for them one click at a time is exactly the fiddly part.
+     *
+     * Pointer events rather than the mouse/touch pair the other players use, because
+     * setPointerCapture keeps the drag alive once the pointer leaves the bar - which it always does,
+     * since these bars are a few pixels tall.
+     */
+    const wireBar = (container, apply) => {
+        if (!container) {
+            return;
+        }
+
+        let dragging = false;
+
+        const ratioAt = (event) => {
+            const rect = container.getBoundingClientRect();
+            return Math.min(1, Math.max(0, (event.clientX - rect.left) / (rect.width || 1)));
+        };
+
+        on(container, 'pointerdown', (event) => {
+            dragging = true;
+            container.setPointerCapture?.(event.pointerId);
+            apply(ratioAt(event));
+            event.preventDefault();
+        });
+
+        on(container, 'pointermove', (event) => {
+            if (dragging) {
+                apply(ratioAt(event));
+            }
+        });
+
+        on(container, 'pointerup', (event) => {
+            dragging = false;
+            container.releasePointerCapture?.(event.pointerId);
+        });
+
+        on(container, 'pointercancel', () => { dragging = false; });
+    };
+
+    wireBar(progressBar, (ratio) => {
+        if (audio.duration) {
+            audio.currentTime = ratio * audio.duration;
+        }
+    });
+
+    wireBar(volumeBar, (ratio) => {
+        audio.volume = ratio;
+        audio.muted = ratio === 0;
+    });
 
     /*
      * KEYBOARD HANDLING LIVES HERE, NOT IN BLAZOR, AND THAT IS THE WHOLE POINT OF TAP-ALONG.

@@ -69,7 +69,14 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected string? _streamUrl;
 
     protected LyricsTimingsDocument? _document;
+    /// <summary>
+    /// What this page opened with - which is the saved draft when there is one, NOT the aligner's
+    /// output. "Start again" restores this; going further back means discarding the draft.
+    /// </summary>
     private LyricsTimingsDocument? _pristine;
+
+    /// <summary>Whether the revert button is waiting for a second press to confirm.</summary>
+    protected bool _confirmingRevert;
     private SongLyrics? _lyrics;
 
     protected bool _isPlaying;
@@ -429,12 +436,87 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     {
         if (_pristine is null) return;
 
-        // Back to what the aligner produced, not to the last save. "Start again" has to mean the
-        // thing a creator who has made a mess actually wants.
+        // Back to what this page OPENED with, which is the saved draft when there is one rather than
+        // the aligner's output. That is the right scope for a button sitting next to Undo - it
+        // reverses this sitting, not work the creator deliberately saved on a previous one. Getting
+        // behind a saved draft is RevertToAlignedAsync, which has to delete something and therefore
+        // asks first.
         _document = LyricsTimingEdits.CopyDocument(_pristine);
         _undo.Clear();
         _selected = null;
         AfterEdit(markDirty: true);
+    }
+
+    /// <summary>
+    /// Throw away the saved draft and go back to the timings the aligner produced.
+    ///
+    /// <para>
+    /// The one thing on this page that "Start again" cannot do, because a saved draft is what the
+    /// editor loads in place of the aligner's output - so once a creator has saved, every local
+    /// reset lands on their own edits. Discarding the draft is what makes the original reachable
+    /// again, and since the original was never overwritten there is nothing to rebuild: the aligner's
+    /// document is still sitting at <c>TimingsBlobPath</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Two presses, because this deletes work the creator chose to keep and there is no undo for it -
+    /// the undo stack covers edits, not the draft they were saved into.
+    /// </para>
+    /// </summary>
+    protected internal async Task RevertToAlignedAsync()
+    {
+        if (_creatorId is null)
+        {
+            return;
+        }
+
+        if (!_confirmingRevert)
+        {
+            _confirmingRevert = true;
+            return;
+        }
+
+        _confirmingRevert = false;
+        _isSaving = true;
+
+        try
+        {
+            var discarded = await LyricsService.DiscardDraftAsync(SongId, _creatorId.Value);
+            if (!discarded.Success)
+            {
+                _statusMessage = discarded.Message;
+                return;
+            }
+
+            // Re-read rather than keeping anything: with the draft gone this now returns the
+            // aligner's document, which is exactly what was asked for.
+            var editable = await LyricsService.GetEditableTimingsAsync(SongId, _creatorId.Value);
+
+            if (editable.Document is null)
+            {
+                _statusMessage = "The draft was discarded, but the original timings could not be "
+                                 + "read back. Please reload the page.";
+                return;
+            }
+
+            _document = editable.Document;
+            _pristine = LyricsTimingEdits.CopyDocument(editable.Document);
+            _lyrics = editable.Lyrics;
+            _hasUnpublishedChanges = editable.Lyrics?.HasUnpublishedChanges ?? false;
+            _isPublished = editable.Lyrics?.Status == SongLyricsStatus.Published;
+
+            _undo.Clear();
+            _selected = null;
+            _isDirty = false;
+
+            await BuildBannerAsync(editable.IsDraft);
+            _statusMessage = "Back to the timings we produced for you. Your saved changes are gone.";
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
     }
 
     private void AfterEdit(bool markDirty = true)

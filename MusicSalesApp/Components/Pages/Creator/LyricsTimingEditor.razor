@@ -267,6 +267,22 @@ else
                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ResetAll" disabled="@(!_canUndo && !_isDirty)">
                         Start again
                     </button>
+
+                    @* Only once something has been SAVED, because that is the only case "Start
+                       again" cannot reach: from then on the editor loads the draft, so every local
+                       reset lands on the creator's own edits rather than on the aligner's. Asks
+                       twice - it deletes saved work and the undo stack does not cover it. *@
+                    @if (_hasUnpublishedChanges)
+                    {
+                        <button type="button"
+                                class="btn @(_confirmingRevert ? "btn-danger" : "btn-outline-danger") btn-sm"
+                                @onclick="RevertToAlignedAsync"
+                                disabled="@_isSaving">
+                            @(_confirmingRevert
+                                ? "Delete my changes?"
+                                : "Back to original timing")
+                        </button>
+                    }
                     <button type="button" class="btn btn-secondary btn-sm" @onclick="SaveDraft" disabled="@(_isSaving || !_isDirty)">
                         Save
                     </button>
