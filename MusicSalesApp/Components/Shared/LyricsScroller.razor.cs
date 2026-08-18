@@ -69,6 +69,9 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
     /// <summary>Raised when a word is clicked, in editor mode only.</summary>
     [Parameter] public EventCallback<LyricsWordSelection> OnWordSelected { get; set; }
 
+    /// <summary>Raised when the creator clicks the panel but not a word, in editor mode only.</summary>
+    [Parameter] public EventCallback OnSelectionCleared { get; set; }
+
     /// <summary>What to show before any timings arrive.</summary>
     [Parameter] public string EmptyMessage { get; set; } = "No lyrics yet.";
 
@@ -361,6 +364,16 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
         if (OnWordSelected.HasDelegate)
         {
             await OnWordSelected.InvokeAsync(new LyricsWordSelection(lineIndex, wordIndex));
+        }
+    }
+
+    /// <summary>Called from JS when a creator clicks the panel away from any word.</summary>
+    [JSInvokable]
+    public async Task WordDeselected()
+    {
+        if (OnSelectionCleared.HasDelegate)
+        {
+            await OnSelectionCleared.InvokeAsync();
         }
     }
 

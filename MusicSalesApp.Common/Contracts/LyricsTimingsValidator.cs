@@ -81,13 +81,23 @@ public static class LyricsTimingsValidator
                 continue;
             }
 
-            // The line has to be wide enough to hold its own words; widening the line is right and
-            // squeezing the words is not, because the words are what the creator actually placed.
+            // THE LINE TRACKS ITS WORDS, in both directions. It used to only ever widen to contain
+            // them, on the reasoning that the words are what the creator placed and the line should
+            // give way - which is right about who wins, and wrong about it being one-way. A line that
+            // could grow but never shrink accumulated every span it had ever been given: a creator
+            // stretching a word and then bringing it back left the line at its widest, so a
+            // four-word "Hey!" of a third of a second sat inside a line still claiming seven seconds.
+            // That is visible in the editor, it decides whether lines overlap, and overlapping lines
+            // are what Validate refuses to publish.
+            //
+            // Safe for the tap pass, which is the only other thing that sets a line span: RescaleLine
+            // spreads the words across the whole span it just set, so the words already reach both
+            // ends, and EndPreviousLineAt only ever pulls an end earlier and clamps the words with it.
             var timedWords = line.Words.Where(word => word.IsTimed).ToList();
             if (timedWords.Count > 0)
             {
-                line.StartMs = Math.Min(line.StartMs!.Value, timedWords.Min(word => word.StartMs!.Value));
-                line.EndMs = Math.Max(line.EndMs!.Value, timedWords.Max(word => word.EndMs!.Value));
+                line.StartMs = timedWords.Min(word => word.StartMs!.Value);
+                line.EndMs = timedWords.Max(word => word.EndMs!.Value);
             }
 
             if (line.EndMs < line.StartMs)

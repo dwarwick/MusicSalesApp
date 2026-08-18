@@ -75,8 +75,17 @@ export function init(id, root, audio, dotNetRef, interactive) {
     if (interactive) {
         // ONE delegated listener, not one per word. A four-minute song is a few thousand words.
         on(root, 'click', (event) => {
+            if (!state.dotNetRef) {
+                return;
+            }
+
             const target = event.target.closest('[data-w]');
-            if (!target || !state.dotNetRef) {
+
+            // Clicking the panel but not a word means "I am done with that one". Without this the
+            // only ways out were a small close button and a key, and the obvious gesture - click off
+            // it, the way every other selection in the world works - did nothing at all.
+            if (!target) {
+                state.dotNetRef.invokeMethodAsync('WordDeselected');
                 return;
             }
 

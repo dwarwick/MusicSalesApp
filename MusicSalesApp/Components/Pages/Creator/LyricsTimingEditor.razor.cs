@@ -381,6 +381,17 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     {
         if (_document is null) return;
 
+        // Clicking the selected word again puts it down. The gesture a creator tries first, and
+        // without it the word stayed selected no matter what they clicked, which reads as the
+        // selection being stuck rather than as there being a particular way out of it.
+        if (_selected is not null
+            && _selected.Value.LineIndex == selection.LineIndex
+            && _selected.Value.WordIndex == selection.WordIndex)
+        {
+            await ClearSelectionAsync();
+            return;
+        }
+
         _selected = selection;
 
         var line = _document.Lines[selection.LineIndex];
