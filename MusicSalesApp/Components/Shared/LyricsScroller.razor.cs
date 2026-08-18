@@ -322,6 +322,17 @@ public class LyricsScrollerModel : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Drop the selection outline.
+    ///
+    /// <para>
+    /// Reuses the module's own setter with indices no word can have: it clears the previous outline
+    /// before looking up the new one, and finds nothing, which is exactly the wanted effect without
+    /// a second entry point that would have to keep in step with the first.
+    /// </para>
+    /// </summary>
+    public Task ClearSelectionAsync() => HighlightSelectionAsync(-1, -1);
+
     /// <summary>Called from JS when a creator clicks a word in editor mode.</summary>
     [JSInvokable]
     public async Task WordClicked(int lineIndex, int wordIndex)

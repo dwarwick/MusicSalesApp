@@ -220,6 +220,86 @@ public class LyricsTimingEditsTests
         }
 
         [Test]
+        public void MovingAWordsEndChangesHowLongItIsSungFor()
+        {
+            // The distinction from NudgeWord, and the reason this exists: a word the aligner squeezed
+            // into a few hundredths cannot be repaired by sliding it, because there is nothing to
+            // slide it to. Only its edges can be moved apart.
+            var document = ThreeLines();
+
+            LyricsTimingEdits.AdjustWordEdge(document, 0, 0, LyricsWordEdge.End, 500);
+
+            var word = document.Lines[0].Words[0];
+            Assert.Multiple(() =>
+            {
+                Assert.That(word.StartMs, Is.EqualTo(1_000), "The other edge does not move.");
+                Assert.That(word.EndMs, Is.EqualTo(2_500));
+            });
+        }
+
+        [Test]
+        public void MovingAWordsStartChangesHowLongItIsSungFor()
+        {
+            var document = ThreeLines();
+
+            LyricsTimingEdits.AdjustWordEdge(document, 0, 1, LyricsWordEdge.Start, -400);
+
+            var word = document.Lines[0].Words[1];
+            Assert.Multiple(() =>
+            {
+                Assert.That(word.StartMs, Is.EqualTo(1_600));
+                Assert.That(word.EndMs, Is.EqualTo(3_000), "The other edge does not move.");
+            });
+        }
+
+        [Test]
+        public void AWordCanBeShortenedToNothingButNeverTurnedInsideOut()
+        {
+            // A creator holding the button down past the far edge gets a zero-length word, which is
+            // recoverable by pressing the other way. A negative one is a document that renders
+            // nonsense and fails validation at Publish for a reason they could not act on.
+            var document = ThreeLines();
+
+            LyricsTimingEdits.AdjustWordEdge(document, 0, 0, LyricsWordEdge.Start, 99_000);
+
+            var word = document.Lines[0].Words[0];
+            Assert.Multiple(() =>
+            {
+                Assert.That(word.StartMs, Is.EqualTo(word.EndMs));
+                Assert.That(word.EndMs!.Value - word.StartMs!.Value, Is.Zero);
+            });
+        }
+
+        [Test]
+        public void WideningAWordPastItsLineWidensTheLineToo()
+        {
+            // Same contract NudgeWord has: the word is what the creator placed deliberately, so the
+            // line gives way rather than clipping it.
+            var document = ThreeLines();
+
+            LyricsTimingEdits.AdjustWordEdge(document, 0, 1, LyricsWordEdge.End, 1_000);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(document.Lines[0].Words[1].EndMs, Is.EqualTo(4_000));
+                Assert.That(document.Lines[0].EndMs, Is.EqualTo(4_000));
+            });
+        }
+
+        [Test]
+        public void AnUntimedWordHasNoEdgesToMove()
+        {
+            var document = ThreeLines();
+            document.Lines[0].Words[0].StartMs = null;
+            document.Lines[0].Words[0].EndMs = null;
+
+            Assert.DoesNotThrow(() =>
+                LyricsTimingEdits.AdjustWordEdge(document, 0, 0, LyricsWordEdge.End, 100));
+
+            Assert.That(document.Lines[0].Words[0].EndMs, Is.Null);
+        }
+
+        [Test]
         public void NudgingAWholeLineMovesItsWordsWithIt()
         {
             var document = ThreeLines();

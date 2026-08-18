@@ -2,6 +2,16 @@
 
 namespace MusicSalesApp.Common.Contracts;
 
+/// <summary>Which end of a word an edit moves.</summary>
+public enum LyricsWordEdge
+{
+    /// <summary>When the word begins being sung.</summary>
+    Start,
+
+    /// <summary>When it stops.</summary>
+    End
+}
+
 /// <summary>
 /// The edits a creator can make to a timings document, as pure functions over the document.
 ///
@@ -90,6 +100,62 @@ public static class LyricsTimingEdits
 
         word.StartMs += deltaMs;
         word.EndMs += deltaMs;
+
+        LyricsTimingsValidator.Normalize(document);
+    }
+
+    /// <summary>
+    /// Move one EDGE of a word, changing how long it is sung for.
+    ///
+    /// <para>
+    /// The counterpart to <see cref="NudgeWord"/>, and the difference is the whole point: that one
+    /// slides a word without changing its length, which cannot fix a word whose length is what is
+    /// wrong. A word the aligner squeezed into a few hundredths is unreachable by sliding - there is
+    /// nothing to slide it to. This is what widens it.
+    /// </para>
+    ///
+    /// <para>
+    /// The only clamp is the word's own other edge, so a word can be shortened to nothing but never
+    /// turned inside out. Overlap with its neighbours is deliberately allowed: this exists to be
+    /// precise, and a creator dragging one edge past the next word usually means it. The document is
+    /// repaired rather than judged here, exactly as everywhere else in this file - Publish is where
+    /// timings have to make sense.
+    /// </para>
+    /// </summary>
+    public static void AdjustWordEdge(
+        LyricsTimingsDocument document,
+        int lineIndex,
+        int wordIndex,
+        LyricsWordEdge edge,
+        long deltaMs)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (lineIndex < 0 || lineIndex >= document.Lines.Count)
+        {
+            return;
+        }
+
+        var line = document.Lines[lineIndex];
+        if (wordIndex < 0 || wordIndex >= line.Words.Count)
+        {
+            return;
+        }
+
+        var word = line.Words[wordIndex];
+        if (!word.IsTimed)
+        {
+            return;
+        }
+
+        if (edge == LyricsWordEdge.Start)
+        {
+            word.StartMs = Math.Min(word.StartMs!.Value + deltaMs, word.EndMs!.Value);
+        }
+        else
+        {
+            word.EndMs = Math.Max(word.EndMs!.Value + deltaMs, word.StartMs!.Value);
+        }
 
         LyricsTimingsValidator.Normalize(document);
     }

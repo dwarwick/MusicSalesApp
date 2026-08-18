@@ -172,9 +172,13 @@ export function init(audio, dotNetRef, progressBar, volumeBar) {
             return;
         }
 
-        if (event.key === 'Escape' && state.recording) {
+        if (event.key === 'Escape') {
             event.preventDefault();
-            dotNetRef.invokeMethodAsync('StopRecordingFromKeyboard');
+
+            // Stopping a tap pass outranks dropping a selection, since a pass is the mode you can be
+            // stuck in. With no pass running, Escape means "I am done with that word".
+            dotNetRef.invokeMethodAsync(
+                state.recording ? 'StopRecordingFromKeyboard' : 'ClearSelectionFromKeyboard');
         }
     });
 

@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inherits LyricsTimingEditorModel
 @using Microsoft.AspNetCore.Authorization
+@using MusicSalesApp.Common.Contracts
 @using MusicSalesApp.Common.Helpers
 @using MusicSalesApp.Components.Shared
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
@@ -227,7 +228,45 @@ else
                     {
                         <div class="lyrics-editor-selected-word">
                             <strong>@_selectedText</strong>
-                            <span class="text-muted ms-2">@FormatTime(_selectedStartMs / 1000d)</span>
+                            <button type="button"
+                                    class="btn-close btn-close-sm float-end"
+                                    aria-label="Stop editing this word"
+                                    title="Stop editing this word (Esc)"
+                                    @onclick="ClearSelectionAsync"></button>
+                        </div>
+
+                        @* Start and end MOVED SEPARATELY, which the arrow keys and the Earlier/Later
+                           buttons cannot do - those slide the word and keep its length, so a word the
+                           aligner squeezed into a few hundredths stays that width wherever it is put.
+                           10 ms a press, because the case this is for is smaller than one press of
+                           the ordinary 50 ms nudge. *@
+                        <div class="lyrics-editor-span">
+                            <div class="lyrics-editor-span-row">
+                                <span class="lyrics-editor-span-label">Starts</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        title="10 ms earlier"
+                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, -FineNudgeMs)">−</button>
+                                <span class="lyrics-editor-span-value">@FormatPrecise(_selectedStartMs)</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        title="10 ms later"
+                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.Start, FineNudgeMs)">+</button>
+                            </div>
+
+                            <div class="lyrics-editor-span-row">
+                                <span class="lyrics-editor-span-label">Ends</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        title="10 ms earlier"
+                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, -FineNudgeMs)">−</button>
+                                <span class="lyrics-editor-span-value">@FormatPrecise(_selectedEndMs)</span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        title="10 ms later"
+                                        @onclick="() => AdjustSelectedEdge(LyricsWordEdge.End, FineNudgeMs)">+</button>
+                            </div>
+
+                            @* The number the "Hey!" problem is invisible without. *@
+                            <div class="lyrics-editor-span-length">
+                                Sung for @(((_selectedEndMs - _selectedStartMs) / 1000d).ToString("0.00"))s
+                            </div>
                         </div>
                         <div class="btn-group mt-2" role="group">
                             <button type="button" class="btn btn-outline-secondary" @onclick="() => NudgeSelected(-NudgeMs)" title="Earlier">

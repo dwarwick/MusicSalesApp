@@ -96,6 +96,17 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected LyricsWordSelection? _selected;
     protected string _selectedText = string.Empty;
     protected long _selectedStartMs;
+    protected long _selectedEndMs;
+
+    /// <summary>
+    /// The step the start/end controls move by, an order finer than <see cref="NudgeMs"/>.
+    /// </summary>
+    /// <remarks>
+    /// 50 ms is a sensible step for placing a word by ear, and too coarse for setting its edges: the
+    /// case this exists for is a word the aligner gave a span of 60 ms, where one press of the
+    /// ordinary nudge overshoots the whole word.
+    /// </remarks>
+    protected const long FineNudgeMs = 10;
 
     protected bool _isDirty;
     protected bool _isSaving;
@@ -372,11 +383,80 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
         _selectedText = word?.Text ?? line.Text;
         _selectedStartMs = word?.StartMs ?? line.StartMs ?? 0;
+        _selectedEndMs = word?.EndMs ?? line.EndMs ?? 0;
 
         if (_scroller is not null)
         {
             await _scroller.HighlightSelectionAsync(selection.LineIndex, selection.WordIndex);
         }
+    }
+
+    /// <summary>
+    /// Put the selection down again.
+    ///
+    /// <para>
+    /// Clicking a word was a one-way door: the panel stayed on whatever was last clicked, and its
+    /// outline stayed on the word, with no way to say "I am done with that one". Escape does this
+    /// too, when a tap pass is not running to claim it.
+    /// </para>
+    /// </summary>
+    protected internal async Task ClearSelectionAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _selected = null;
+        _selectedText = string.Empty;
+        _selectedStartMs = 0;
+        _selectedEndMs = 0;
+
+        if (_scroller is not null)
+        {
+            await _scroller.ClearSelectionAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Move the start or the end of the selected word, leaving the other edge where it is.
+    /// </summary>
+    protected void AdjustSelectedEdge(LyricsWordEdge edge, long deltaMs)
+    {
+        if (_document is null || _selected is null) return;
+
+        PushUndo(_selected.Value.LineIndex);
+        LyricsTimingEdits.AdjustWordEdge(
+            _document, _selected.Value.LineIndex, _selected.Value.WordIndex, edge, deltaMs);
+
+        // Re-read rather than assuming the delta landed: the edge clamps against the word's other
+        // side, and Normalize may widen the line around it, so the panel must show what the document
+        // now says instead of what was asked for.
+        var line = _document.Lines[_selected.Value.LineIndex];
+        if (line.Words.Count > _selected.Value.WordIndex)
+        {
+            var word = line.Words[_selected.Value.WordIndex];
+            _selectedStartMs = word.StartMs ?? _selectedStartMs;
+            _selectedEndMs = word.EndMs ?? _selectedEndMs;
+        }
+
+        AfterEdit();
+    }
+
+    /// <summary>A word's span to the hundredth, which is the resolution this panel edits at.</summary>
+    protected static string FormatPrecise(long ms)
+    {
+        if (ms < 0)
+        {
+            ms = 0;
+        }
+
+        var minutes = ms / 60_000;
+        var seconds = (ms % 60_000) / 1000d;
+
+        return $"{minutes}:{seconds:00.00}";
     }
 
     protected void NudgeSelected(long deltaMs)
@@ -601,6 +681,9 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
     [JSInvokable]
     public async Task StopRecordingFromKeyboard() => await StopRecording();
+
+    [JSInvokable]
+    public async Task ClearSelectionFromKeyboard() => await ClearSelectionAsync();
 
     /// <summary>
     /// One tap: this line starts now, and the pass moves to the next.
