@@ -57,20 +57,6 @@
         height: calc(100vh - 6rem);
     }
 
-    /* SongPlayer - Container adjustments for extra small screens */
-    .song-player-container {
-        grid-template-rows: 1fr 80px;
-    }
-
-        .song-player-container .song-header {
-            padding: 16px;
-        }
-
-        .song-player-container .player-bar {
-            padding: 8px 12px;
-            gap: 4px;
-        }
-
     /* SongPlayer extra small adjustments */
     .song-title {
         font-size: 24px;
@@ -350,80 +336,6 @@
         fill: currentColor;
     }
 
-    /* SongPlayer - Player controls compact layout */
-    .song-player-container .controls-wrapper {
-        gap: 2px;
-        margin-bottom: 4px;
-        max-width: 100%;
-    }
-
-    .song-player-container .time-spacer {
-        display: none;
-        min-width: 0;
-    }
-
-    .song-player-container .player-controls-row {
-        gap: 4px;
-        width: 100%;
-    }
-
-    .song-player-container .player-controls {
-        gap: 2px;
-    }
-
-    .song-player-container .volume-controls {
-        gap: 4px;
-    }
-
-    .song-player-container .control-button {
-        width: 28px;
-        height: 28px;
-    }
-
-    .song-player-container .control-icon {
-        width: 14px;
-        height: 14px;
-    }
-
-    .song-player-container .play-button-small {
-        width: 28px;
-        height: 28px;
-    }
-
-    .song-player-container .play-icon-small {
-        width: 14px;
-        height: 14px;
-    }
-
-    .song-player-container .progress-container {
-        gap: 4px;
-        max-width: 100%;
-    }
-
-    .song-player-container .time-display {
-        min-width: 28px;
-        font-size: 10px;
-    }
-
-    .song-player-container .volume-bar-container {
-        width: 50px;
-    }
-
-    .song-player-container .action-controls {
-        flex-wrap: wrap;
-        gap: 12px;
-    }
-
-    .song-player-container .cart-button-large {
-        padding: 8px 16px;
-        font-size: 12px;
-    }
-
-    .song-player-container .cart-icon-large {
-        width: 16px;
-        height: 16px;
-    }
-
     /* PlaylistPlayer - Container adjustments for extra small screens */
     .playlist-player-container {
         grid-template-rows: auto auto auto 1fr 65px;
@@ -648,4 +560,69 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+}
+
+
+@media (max-width: 576px) {
+    /*
+     * SONG PLAYER - "Marquee" sizing: phone.
+     * The hero puts the art beside the title rather than above it, so the fold
+     * still reaches the lyrics. The transport pill wraps: seek bar on its own
+     * row, then five controls spread across the width at 46px, comfortably over
+     * the 44px touch-target floor.
+     */
+    .song-player-container { min-height: calc(100dvh - 58px); }
+    .song-player-container .song-header { min-height: 0; padding: 20px 20px 18px; }
+    .song-player-container .song-hero-inner {
+        grid-template-areas: "art text" "actions actions";
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        justify-items: start;
+        text-align: left;
+        gap: 16px;
+    }
+    .song-player-container .song-tag-row,
+    .song-player-container .song-meta-row,
+    .song-player-container .action-controls { justify-content: flex-start; }
+    .song-player-container .action-controls { gap: 8px; margin-top: 4px; }
+    .song-player-container .player-art-shell { width: 118px; height: 118px; }
+    .song-player-container .song-tag-row { gap: 5px; margin-bottom: 9px; }
+    .song-player-container .song-chip { height: 24px; padding: 0 10px; font-size: 10px; }
+    .song-player-container .song-title { font-size: 27px; letter-spacing: -.03em; line-height: 1.06; margin-bottom: 8px; }
+    .song-player-container .song-meta-row { gap: 10px; font-size: 12.5px; }
+    .song-player-container .artist-link { font-size: 14px; }
+    .song-player-container .subscription-badge,
+    .song-player-container .preview-label { font-size: 12.5px; }
+    .song-player-container .play-button-large { width: 54px; height: 54px; }
+    .song-player-container .play-button-large .play-icon { width: 25px; height: 25px; }
+
+    .song-player-container .song-stage { gap: 14px; padding: 12px 16px 0; }
+    .song-player-container .song-stage-panel { height: 300px; padding: 16px 18px; }
+    .song-player-container .song-panel-head { margin-bottom: 10px; }
+    .song-player-container .song-panel-body { height: 216px; }
+    .song-player-container .song-stage-art { max-height: 216px; }
+    .song-player-container .lyrics-scroller--player { font-size: 18px; }
+    .song-player-container .song-artist-panel { padding: 16px; }
+    .song-player-container .persona-image-sm { width: 46px; height: 46px; }
+    .song-player-container .persona-identity { gap: 12px; margin: 12px 0 10px; }
+    .song-player-container .persona-bio { font-size: 12.5px; line-height: 1.55; margin-bottom: 12px; }
+
+    .song-player-container .player-bar {
+        flex-wrap: wrap;
+        margin: 14px 14px 16px;
+        height: auto;
+        padding: 12px 16px 13px;
+        gap: 6px;
+        border-radius: 22px;
+    }
+    .song-player-container .progress-container { order: 1; width: 100%; flex: 0 0 100%; gap: 9px; }
+    .song-player-container .player-controls { order: 2; flex: 1; justify-content: space-between; gap: 0; }
+    /* Phones have hardware volume; the slider is dead weight on a small pill.
+       Hidden rather than removed - the element stays in the DOM. */
+    .song-player-container .volume-controls { display: none; }
+    .song-player-container .control-button { width: 46px; height: 46px; }
+    .song-player-container .control-icon { width: 19px; height: 19px; }
+    .song-player-container .play-button-small { width: 54px; height: 54px; }
+    .song-player-container .play-icon-small { width: 24px; height: 24px; }
+    .song-player-container .time-display { min-width: 36px; font-size: 11px; }
 }

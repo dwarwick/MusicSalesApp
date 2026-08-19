@@ -58,6 +58,20 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     protected MusicSalesApp.Common.Contracts.LyricsTimingsDocument _lyricsTimings;
     protected bool _showLyrics;
     private int? _currentUserId;
+
+    /// <summary>
+    /// The songs Previous/Next step through: this song's genre listing, in the order the
+    /// <c>/genre/{name}</c> page shows it.
+    ///
+    /// <para>
+    /// A single-song URL carries no record of where the listener came from, so the transport needs
+    /// a defined set to move within. Genre is the one context the page already puts on screen (the
+    /// chip under the title links straight to it), which makes the buttons predictable rather than
+    /// arbitrary. Empty when the genre has only this song, which is what disables both buttons.
+    /// </para>
+    /// </summary>
+    private List<Models.SongMetadata> _genreSiblings = new();
+
     private Action<int, int> _streamCountUpdatedHandler;
     private Action<int, int> _hubStreamCountHandler;
     protected SubscribeCtaDialogModel _subscribeCtaDialog;
@@ -262,6 +276,14 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             // document C# holds, so without this there is nothing on the page for the highlighter to
             // highlight and the panel sits on its empty message forever.
             _lyricsTimings = await LyricsService.GetPublishedTimingsAsync(_songMetadata.Id);
+
+            // The stage opens on lyrics when there are any. The artwork is already on screen in the
+            // hero band above, so opening on art would show the same image twice and bury the one
+            // thing this layout exists to surface. With no published lyrics this stays false and the
+            // stage shows the artwork large, with no toggle above it.
+            _showLyrics = HasPublishedLyrics();
+
+            await LoadGenreSiblings();
 
             _songInfo = new StorageFileInfo
             {
@@ -747,6 +769,141 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
             : null;
 
     protected void ToggleLyrics() => _showLyrics = !_showLyrics;
+
+    /// <summary>Segmented-control setters. Pressing the active segment is a no-op.</summary>
+    protected void ShowLyricsPanel() => _showLyrics = true;
+
+    /// <inheritdoc cref="ShowLyricsPanel" />
+    protected void ShowArtPanel() => _showLyrics = false;
+
+    /// <summary>
+    /// Whether the stage panel is showing lyrics rather than the artwork. Both are mounted at all
+    /// times; this only decides which one carries <c>is-hidden</c>.
+    /// </summary>
+    protected bool ShowingLyrics() => _showLyrics && HasPublishedLyrics();
+
+    // ---------------------------------------------------------------------------------------
+    // Previous / Next
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Loads the genre listing this song belongs to, filtered and ordered exactly as the
+    /// <c>/genre/{name}</c> page builds it, so the transport buttons and that page agree on what
+    /// "next" means. <see cref="ISongMetadataService.GetByGenreAsync"/> already special-cases
+    /// "Unknown Genre" the same way <see cref="GetGenre"/> reports it.
+    /// </summary>
+    private async Task LoadGenreSiblings()
+    {
+        _genreSiblings = new List<Models.SongMetadata>();
+
+        if (_songMetadata == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var genreSongs = await SongMetadataService.GetByGenreAsync(GetGenre());
+            if (genreSongs == null)
+            {
+                return;
+            }
+
+            _genreSiblings = genreSongs
+                .Where(s => !string.IsNullOrEmpty(s.Mp3BlobPath))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            // A failure here costs the listener two buttons, not the page. Disable and carry on.
+            Logger.LogWarning(ex, "SongPlayer: could not load genre siblings for {Genre}", GetGenre());
+            _genreSiblings = new List<Models.SongMetadata>();
+        }
+    }
+
+    private int CurrentSiblingIndex() =>
+        _songMetadata == null ? -1 : _genreSiblings.FindIndex(s => s.Id == _songMetadata.Id);
+
+    /// <summary>True when there is somewhere for Previous/Next to go.</summary>
+    protected bool HasSiblingSongs() => _genreSiblings.Count > 1 && CurrentSiblingIndex() >= 0;
+
+    /// <summary>
+    /// The song <paramref name="offset"/> places away, wrapping at both ends so the buttons never
+    /// dead-end. With shuffle on, Next lands on a random other song in the genre instead - Previous
+    /// always steps back in listing order, because there is no play history to step back through.
+    /// </summary>
+    private Models.SongMetadata SiblingAt(int offset)
+    {
+        if (!HasSiblingSongs())
+        {
+            return null;
+        }
+
+        var index = CurrentSiblingIndex();
+        var count = _genreSiblings.Count;
+
+        if (_shuffleEnabled && offset > 0)
+        {
+            var hop = Random.Shared.Next(1, count);
+            return _genreSiblings[(index + hop) % count];
+        }
+
+        var target = ((index + offset) % count + count) % count;
+        return _genreSiblings[target];
+    }
+
+    protected string GetSongUrl(Models.SongMetadata song) =>
+        $"/song/{Uri.EscapeDataString(SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath))}";
+
+    /// <summary>
+    /// Moves to an adjacent song.
+    ///
+    /// <para>
+    /// <b><c>forceLoad</c> is deliberate.</b> This module's audio listeners are attached once in
+    /// <c>initAudioPlayer</c> and never removed, and two of the values they depend on -
+    /// <c>isRestricted</c> and <c>maxDuration</c> - are captured in their closures rather than held
+    /// in module state. Swapping songs in place would therefore keep enforcing the previous song's
+    /// preview rules and attribute its plays to the previous <c>songMetadataId</c>. A full load
+    /// tears every listener down with the document. Making this a soft navigation means first
+    /// lifting that state out of the closures and adding a <c>changeSong</c> export, the way
+    /// PlaylistPlayerInteractive.razor.js already does with <c>changeTrack</c>.
+    /// </para>
+    /// </summary>
+    private void NavigateToSibling(int offset)
+    {
+        var target = SiblingAt(offset);
+        if (target == null)
+        {
+            return;
+        }
+
+        NavigationManager.NavigateTo(GetSongUrl(target), forceLoad: true);
+    }
+
+    protected void PlayPreviousSong() => NavigateToSibling(-1);
+
+    protected void PlayNextSong() => NavigateToSibling(1);
+
+    protected string PreviousSongTitleForTooltip() => SiblingTooltip("Previous", -1);
+
+    protected string NextSongTitleForTooltip() =>
+        _shuffleEnabled && HasSiblingSongs() ? "Next (shuffle)" : SiblingTooltip("Next", 1);
+
+    private string SiblingTooltip(string label, int offset)
+    {
+        if (!HasSiblingSongs())
+        {
+            return $"{label} - no other songs in {GetGenre()}";
+        }
+
+        // Read the neighbour positionally so the tooltip cannot disagree with where the button goes,
+        // and so shuffle's randomness never leaks into a label.
+        var index = CurrentSiblingIndex();
+        var count = _genreSiblings.Count;
+        var neighbour = _genreSiblings[((index + offset) % count + count) % count];
+
+        return $"{label}: {SongTitleHelper.GetEffectiveTitle(neighbour.SongTitle, neighbour.Mp3BlobPath, neighbour.BlobPath)}";
+    }
 
     protected double GetDisplayVolume()
     {

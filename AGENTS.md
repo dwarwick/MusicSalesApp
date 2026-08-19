@@ -188,6 +188,7 @@ Ensure these files are linked in `Components/App.razor` via `<link rel="styleshe
 Example structure:
 ```
 wwwroot/
+├── tokens.css        # Design tokens (--st-*). Loaded FIRST, before app.css
 ├── app.css           # Global base styles (layout, position, animation)
 ├── light.css         # Light theme color overrides
 ├── dark.css          # Dark theme color overrides
@@ -198,32 +199,59 @@ wwwroot/
 └── xl_app.css        # Extra large breakpoint (≥1200px)
 ```
 
+### Design tokens (`wwwroot/tokens.css`)
+
+**Reach for a `--st-*` token before writing a literal.** The file is loaded before `app.css`, so
+every later sheet — including `light.css`/`dark.css`, which `ThemeProvider` injects last — can read
+and override it.
+
+- **The brand blues are measured, not chosen.** `--st-blue` `#0186fd`, `--st-blue-bright` `#02b8fd`,
+  `--st-blue-pale` `#c8eafd` and the rest were sampled from the pixels of
+  `wwwroot/images/logo-dark-small.png`. Do not round them to tidier hex values; they are the logo.
+- **They replace `#1db954`**, which is Spotify's brand green and still appears elsewhere in the CSS.
+  New work uses the blue tokens. Treat a fresh `#1db954` in a code review as a bug.
+- **Two pairings are load-bearing for WCAG AA**, and both are easy to get wrong:
+  - Never put white label text on `--st-blue` — that is 3.6:1 and fails. Filled buttons with white
+    labels use `--st-blue-deep` (`#0166d6`, 5.42:1).
+  - The play button is `--st-blue-bright` with a **black** glyph (9.28:1).
+
+### The song player is deliberately dark in both themes
+
+`.song-player-container` keeps one dark palette whichever theme the listener has chosen; only the
+app bar above it changes. Its colour block is therefore **duplicated identically in `light.css` and
+`dark.css`** rather than living in `app.css`, because the theme sheet is injected after `app.css`
+and after the breakpoint sheets, so a colour set in `app.css` loses to any theme rule that happens
+to match. Change one copy, change the other — both carry a comment saying so.
+
+If you are tempted to add a light variant, note the reason it is dark: `--st-blue-bright` carries
+the active karaoke lyric line at 8.60:1 on the dark surface and 2.26:1 on white, so a light player
+would need a different accent and the signature moment of the design would change with a
+preference.
+
 ### Known CSS Duplications (As of Current State)
 
-The following CSS classes exist in multiple `.razor.css` files with **identical rules**. These are candidates for consolidation when refactoring is deemed safe:
+**Half of this is now done.** `SongPlayerInteractive.razor.css` has been **deleted** — the song
+player is styled entirely from the global sheets (`tokens.css`, `app.css`, `light.css`/`dark.css`
+and the five breakpoint files), with every rule scoped under `.song-player-container`. The dead
+cart/ownership styles (`.cart-button-*`, `.owned-badge`, `.music-note-float-player`) and the
+`.spotify-container` selector went with it; the cart feature was removed by migration
+`20260108000000_RemoveCartAndOwnedSongsTables`, so those rules had matched nothing for some time.
 
-**Player Components (AlbumPlayer.razor.css & SongPlayer.razor.css):**
-- `.play-button-large` - Identical in both files
-- `.cart-button-large` - Identical in both files (also partial definition in app.css)
-- `.controls-wrapper` - Identical in both files
-- `.player-controls-row` - Identical in both files
-- `.player-controls` - Identical in both files
-- `.volume-controls` - Identical in both files
-- `.control-button` - Identical in both files
-- `.progress-container` - Identical in both files
-- `.progress-bar-container` - Identical in both files
-- `.volume-bar-container` - Identical in both files
-- `.owned-badge` - Identical in both files
-- `.preview-label` - Identical in both files
-- All player bar related styles
+**Still outstanding — `PlaylistPlayerInteractive.razor.css` (468 lines).** It is a near-duplicate of
+what the song player's sheet used to be and still owns these:
 
-**Container Styles with Different Colors:**
-- `.spotify-container` - Used in AlbumPlayer and SongPlayer but with **different gradient backgrounds**
-  - AlbumPlayer: `#1a4b30` green theme
-  - SongPlayer: `#5c4b30` brown theme
-  - **DO NOT consolidate** - intentionally different per component
+- `.play-button-large`, `.play-button-small`, `.control-button`, `.control-icon`
+- `.controls-wrapper`, `.player-controls-row`, `.player-controls`, `.volume-controls`
+- `.progress-container`, `.progress-bar-container`, `.volume-bar-container`, and the thumbs
+- `.owned-badge`, `.cart-button-large`, `.music-note-float-player` — all dead, delete rather than migrate
+- `.preview-label`, `.subscription-badge`, and the rest of the player bar
 
-**Note**: When these duplications are consolidated, move layout/animation properties to `app.css` and color properties to theme files according to the organization rules above.
+When migrating it, note that the song player's rules are all `.song-player-container`-scoped
+precisely so the two pages could be moved independently. Scope the playlist player's under
+`.playlist-player-container` the same way, then look at what genuinely wants sharing.
+
+**Note**: follow the property-routing rules above — layout/animation to `app.css`, colour to the
+theme files, sizing to the breakpoint files — and prefer a `--st-*` token over a literal.
 
 ## Metadata Storage and File Management
 
