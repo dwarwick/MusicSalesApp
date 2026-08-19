@@ -859,14 +859,29 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
     /// Moves to an adjacent song.
     ///
     /// <para>
-    /// <b><c>forceLoad</c> is deliberate.</b> This module's audio listeners are attached once in
-    /// <c>initAudioPlayer</c> and never removed, and two of the values they depend on -
-    /// <c>isRestricted</c> and <c>maxDuration</c> - are captured in their closures rather than held
-    /// in module state. Swapping songs in place would therefore keep enforcing the previous song's
-    /// preview rules and attribute its plays to the previous <c>songMetadataId</c>. A full load
-    /// tears every listener down with the document. Making this a soft navigation means first
-    /// lifting that state out of the closures and adding a <c>changeSong</c> export, the way
-    /// PlaylistPlayerInteractive.razor.js already does with <c>changeTrack</c>.
+    /// <b><c>forceLoad</c> is correct here, not a workaround - please leave it.</b> This page plays
+    /// exactly one song, so moving to another one is genuinely leaving it: a different URL, a
+    /// different static-SSR SEO shell, a different share link and a different stream count. A full
+    /// navigation is what clicking any other link on the site already does. Turning this into a soft
+    /// navigation would be making a page transition pretend not to be one.
+    /// </para>
+    ///
+    /// <para>
+    /// It also happens to be the only safe option today, which is worth knowing before anyone tries.
+    /// <c>initAudioPlayer</c> attaches its audio listeners once and never removes them, and two of
+    /// the values they read - <c>isRestricted</c> and <c>maxDuration</c> - are captured in those
+    /// listeners' closures rather than held in module state, so they cannot be updated for a new
+    /// song. Swapping in place while reusing the element would keep enforcing the previous song's
+    /// preview rule and credit its plays to the previous <c>songMetadataId</c> - and re-running
+    /// <c>initAudioPlayer</c> instead would simply add a second set of listeners, double-counting
+    /// streams. Creators are paid per qualifying stream, so that is a real cost, not a cosmetic one.
+    /// A full load tears the whole document down and sidesteps all of it.
+    /// </para>
+    ///
+    /// <para>
+    /// The playlist player does swap in place, via <c>playerState</c> and <c>changeTrack</c> in
+    /// PlaylistPlayerInteractive.razor.js - but it has to, because there one page owns many tracks.
+    /// That is not this page.
     /// </para>
     /// </summary>
     private void NavigateToSibling(int offset)
