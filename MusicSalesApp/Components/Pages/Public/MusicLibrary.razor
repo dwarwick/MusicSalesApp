@@ -141,20 +141,30 @@ else
                         </div>
                     }
 
-                    <div class="@(cardLyrics && _showLyricsOnCard ? "is-hidden" : string.Empty)">
-                        @if (albumArtSource.HasImage)
-                        {
-                            @* The card art is fluid - width:100% inside a grid track - so the sizes
-                               preset is what lets the browser pick a rendition before layout runs. *@
-                            <CoverArt Source="albumArtSource" Sizes="@CoverArtSizes.Card" Alt="Album Art" />
-                        }
-                        else
-                        {
-                            <div class="card-album-art-animation">
-                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
-                            </div>
-                        }
-                    </div>
+                    @{
+                        // Put straight on each face rather than on a wrapper around them. Both are
+                        // sized against .card-album-art itself - the art by a DIRECT-CHILD rule, the
+                        // animation by height:100% - so a wrapper stops the first matching at all
+                        // and gives the second an auto-height parent to be 100% of, which is what
+                        // collapsed the animation to a sliver.
+                        var artHidden = cardLyrics && _showLyricsOnCard ? "is-hidden" : string.Empty;
+                    }
+
+                    @if (albumArtSource.HasImage)
+                    {
+                        @* The card art is fluid - width:100% inside a grid track - so the sizes
+                           preset is what lets the browser pick a rendition before layout runs. *@
+                        <CoverArt Source="albumArtSource"
+                                  Sizes="@CoverArtSizes.Card"
+                                  CssClass="@artHidden"
+                                  Alt="Album Art" />
+                    }
+                    else
+                    {
+                        <div class="card-album-art-animation @artHidden">
+                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
+                        </div>
+                    }
 
                     @if (cardLyrics)
                     {
