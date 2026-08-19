@@ -56,6 +56,24 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
     protected ElementReference _activeProgressBarElement;
     protected ElementReference _activeVolumeBarElement;
 
+    /// <summary>
+    /// Which songs have lyrics a listener may see, keyed by song id.
+    ///
+    /// <para>
+    /// One bulk query for the whole grid rather than a lookup per card, the same reason
+    /// <c>GetForSongsAsync</c> exists for the creator's list. Only the ROW is loaded here - deciding
+    /// whether to offer the toggle costs nothing, while reading the timings themselves is a blob
+    /// fetch and would be a hundred of them on a full page.
+    /// </para>
+    /// </summary>
+    private IReadOnlyDictionary<int, SongLyrics> _lyricsBySongId = new Dictionary<int, SongLyrics>();
+
+    /// <summary>The timings for the card now playing, read when it starts rather than up front.</summary>
+    protected MusicSalesApp.Common.Contracts.LyricsTimingsDocument _playingCardTimings;
+
+    /// <summary>Whether the playing card is showing its lyrics in place of its art.</summary>
+    protected bool _showLyricsOnCard;
+
     // Map file names to song art URL sets (full-size plus the pre-resized renditions)
     private Dictionary<string, CoverArtSource> _songArtSources = new Dictionary<string, CoverArtSource>();
     
@@ -241,6 +259,9 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
             // Auto-play when card is initialized
             await _jsModule.InvokeVoidAsync("playCard", _activeAudioElement);
             _isActuallyPlaying = true;
+
+            await LoadPlayingCardLyricsAsync(songMetadataId);
+
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -275,6 +296,62 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _dotNetRef = null;
     }
 
+    /// <summary>
+    /// Whether this song's lyrics are ones a listener may see.
+    ///
+    /// <para>
+    /// Gated on the row's status rather than on a timings path existing, for the reason
+    /// <c>IsPubliclyReadableAsync</c> spells out: timings held back for review sit at exactly the
+    /// blob path a published song would use, so the path proves nothing. Since alignment stopped
+    /// publishing, <c>NeedsReview</c> is where every successful run lands - it is the common case
+    /// here, not an edge one.
+    /// </para>
+    /// </summary>
+    protected bool HasPublishedLyrics(string fileName)
+    {
+        var songId = GetSongMetadataId(fileName);
+
+        return songId > 0
+            && _lyricsBySongId.TryGetValue(songId, out var lyrics)
+            && lyrics.Status == SongLyricsStatus.Published
+            && !string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath);
+    }
+
+    /// <summary>
+    /// Read the timings for the card that just started, if it has any.
+    ///
+    /// <para>
+    /// One blob read per song actually played, rather than one per card drawn. The words are
+    /// rendered server-side from this document, so it has to reach C# - a URL would only ever reach
+    /// the browser's highlighter, which can colour spans but cannot create them.
+    /// </para>
+    /// </summary>
+    private async Task LoadPlayingCardLyricsAsync(int songMetadataId)
+    {
+        // A new song starts on its art. Carrying the toggle over would open the next card on lyrics
+        // that have not loaded yet.
+        _showLyricsOnCard = false;
+        _playingCardTimings = null;
+
+        if (songMetadataId <= 0 || string.IsNullOrEmpty(_playingFileName) || !HasPublishedLyrics(_playingFileName))
+        {
+            return;
+        }
+
+        try
+        {
+            _playingCardTimings = await LyricsService.GetPublishedTimingsAsync(songMetadataId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex, "Could not read lyric timings for song {SongId} on a library card.", songMetadataId);
+        }
+    }
+
+    /// <summary>Swap the playing card between its art and its lyrics.</summary>
+    protected void ToggleCardLyrics() => _showLyricsOnCard = !_showLyricsOnCard;
+
     private async Task LoadFiles()
     {
         _loading = true; _error = null;
@@ -282,6 +359,22 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             // Load metadata from database - SQL is the source of truth
             var allMetadata = await SongMetadataService.GetAllAsync();
+
+            // Swallowed deliberately, following CreatorSongManagement: lyrics are supplementary to
+            // this page - the listener came for the songs - so a lyrics lookup that fails must cost
+            // the toggle, not the entire library.
+            try
+            {
+                // Coalesced rather than trusted: this feeds a TryGetValue on every card drawn, so a
+                // null here would take the whole library down over a column nobody had asked for.
+                _lyricsBySongId = await LyricsService.GetForSongsAsync(allMetadata.Select(m => m.Id))
+                                  ?? new Dictionary<int, SongLyrics>();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Could not load lyrics availability for the music library.");
+                _lyricsBySongId = new Dictionary<int, SongLyrics>();
+            }
             
             // Build StorageFileInfo list from metadata (no longer calling api/music List endpoint)
             var allFiles = new List<StorageFileInfo>();

@@ -117,19 +117,78 @@ else
             var albumArtSource = GetAlbumArtSource(f.Name);
 
             <SfCard CssClass="music-card">
+                @{
+                    // Only the playing card has an <audio> element, and the highlighting is driven
+                    // off that element's own clock - so the toggle belongs to the card being played
+                    // rather than to every card with lyrics.
+                    var cardLyrics = isPlaying && HasPublishedLyrics(f.Name);
+                }
+
                 <!-- Album Art -->
                 <div class="card-album-art">
+                    @if (cardLyrics)
+                    {
+                        @* Mounted whether or not it is showing, and hidden with a class - the same
+                           choice the player page makes. Unmounting would tear down the animation
+                           loop and the element cache and rebuild both mid-song, and visibility
+                           rather than display keeps offsetTop working, or the first line after a
+                           toggle would centre against a zero-height box. *@
+                        <div class="lyrics-scroller-overlay @(_showLyricsOnCard ? string.Empty : "is-hidden")">
+                            <LyricsScroller AudioElement="_activeAudioElement"
+                                            Mode="LyricsScrollerMode.Card"
+                                            Document="_playingCardTimings"
+                                            EmptyMessage="Lyrics are loading&hellip;" />
+                        </div>
+                    }
+
+                    @{
+                        // Put straight on each face rather than on a wrapper around them. Both are
+                        // sized against .card-album-art itself - the art by a DIRECT-CHILD rule, the
+                        // animation by height:100% - so a wrapper stops the first matching at all
+                        // and gives the second an auto-height parent to be 100% of, which is what
+                        // collapsed the animation to a sliver.
+                        var artHidden = cardLyrics && _showLyricsOnCard ? "is-hidden" : string.Empty;
+                    }
+
                     @if (albumArtSource.HasImage)
                     {
                         @* The card art is fluid - width:100% inside a grid track - so the sizes
                            preset is what lets the browser pick a rendition before layout runs. *@
-                        <CoverArt Source="albumArtSource" Sizes="@CoverArtSizes.Card" Alt="Album Art" />
+                        <CoverArt Source="albumArtSource"
+                                  Sizes="@CoverArtSizes.Card"
+                                  CssClass="@artHidden"
+                                  Alt="Album Art" />
                     }
                     else
                     {
-                        <div class="card-album-art-animation">
+                        <div class="card-album-art-animation @artHidden">
                             <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
                         </div>
+                    }
+
+                    @if (cardLyrics)
+                    {
+                        @* stopPropagation because the card itself is clickable - without it,
+                           reaching for the lyrics would open the song page instead. *@
+                        <button type="button"
+                                class="lyrics-toggle-button"
+                                @onclick="ToggleCardLyrics"
+                                @onclick:stopPropagation="true"
+                                title="@(_showLyricsOnCard ? "Show cover art" : "Show lyrics")"
+                                aria-pressed="@_showLyricsOnCard.ToString().ToLowerInvariant()">
+                            @if (_showLyricsOnCard)
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                                </svg>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
+                                </svg>
+                            }
+                        </button>
                     }
                 </div>
 

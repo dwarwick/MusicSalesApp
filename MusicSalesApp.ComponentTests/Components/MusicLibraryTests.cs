@@ -475,6 +475,97 @@ public class MusicLibraryTests : BUnitTestBase
         });
     }
 
+    /// <summary>
+    /// The lyrics toggle belongs to the card being played, and only when they are published.
+    ///
+    /// <para>
+    /// Both halves matter. The scroller follows the audio element's own clock, and only the playing
+    /// card has one, so offering the toggle anywhere else would open a panel that could never
+    /// highlight anything. And the gate is the row's status, not whether timings exist: since
+    /// alignment stopped publishing, every successful run lands in <c>NeedsReview</c> with its
+    /// timings at exactly the blob path a published song uses, so "there is a file" would show
+    /// listeners work no creator had approved.
+    /// </para>
+    /// </summary>
+    [TestCase(MusicSalesApp.Models.SongLyricsStatus.Published, true)]
+    [TestCase(MusicSalesApp.Models.SongLyricsStatus.NeedsReview, false)]
+    [TestCase(MusicSalesApp.Models.SongLyricsStatus.Pending, false)]
+    [TestCase(MusicSalesApp.Models.SongLyricsStatus.Failed, false)]
+    public void MusicLibrary_OffersTheLyricsToggle_OnlyForPublishedLyrics(
+        MusicSalesApp.Models.SongLyricsStatus status,
+        bool expected)
+    {
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 3,
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        MockLyricsService
+            .Setup(x => x.GetForSongsAsync(
+                It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<int, MusicSalesApp.Models.SongLyrics>
+            {
+                [3] = new MusicSalesApp.Models.SongLyrics
+                {
+                    SongMetadataId = 3,
+                    Status = status,
+                    TimingsBlobPath = "abc/abc-lyrics.json"
+                }
+            });
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Nothing is offered until the card is playing, whatever its status.
+        Assert.That(cut.FindAll(".lyrics-toggle-button"), Is.Empty, "Not before playback.");
+
+        cut.Find("button[title='play']").Click();
+
+        Assert.That(
+            cut.FindAll(".lyrics-toggle-button").Count > 0,
+            Is.EqualTo(expected),
+            $"Status {status} should {(expected ? "offer" : "not offer")} the toggle.");
+    }
+
+    [Test]
+    public void MusicLibrary_SurvivesALyricsLookupThatReturnsNothing()
+    {
+        // The lookup is best-effort and feeds a TryGetValue on every card drawn. A null answer must
+        // cost the toggle, not the library - this took the whole page down with a
+        // NullReferenceException before it was coalesced.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Id = 3,
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        MockLyricsService
+            .Setup(x => x.GetForSongsAsync(
+                It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyDictionary<int, MusicSalesApp.Models.SongLyrics>)null);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.DoesNotThrow(() => cut.Find("button[title='play']").Click());
+        Assert.That(cut.Markup, Does.Contain("card-mini-player"));
+    }
+
     [Test]
     public void MusicLibrary_KeepsLikeDislikeButtons_WhenCardIsPlaying()
     {
