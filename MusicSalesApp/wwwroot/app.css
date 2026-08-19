@@ -3151,3 +3151,427 @@ h1:focus {
     gap: 2px;
     font-size: 15px;
 }
+
+/* =========================================================================
+   SONG PLAYER - "Marquee" layout
+   =========================================================================
+   Structure, layout, animation and transition only. Colour lives in
+   light.css / dark.css (identical in both - see the note there). Sizing and
+   spacing live in xl/lg/md/sm/xs_app.css. This follows the property-routing
+   rule in AGENTS.md; the token values themselves are in tokens.css.
+
+   Everything is scoped under .song-player-container on purpose. The playlist
+   player still ships its own .razor.css and shares class names such as
+   .player-bar and .control-button with this page, so an unscoped rule here
+   would redesign a page that has not been redesigned yet.
+
+   Replaces Components/Players/SongPlayerInteractive.razor.css, now deleted:
+   it hard-coded Spotify's palette, carried dead cart/ownership styles, and
+   being scoped CSS it outranked the theme sheets, so the player could never
+   be themed at all.
+   ========================================================================= */
+
+.song-player-container {
+    display: flex;
+    flex-direction: column;
+    /* dvh, not vh: on mobile the browser chrome makes 100vh taller than the
+       visible viewport, which used to push the transport off-screen and clip
+       the page rather than scroll it. */
+    min-height: calc(100dvh - 66px);
+    position: relative;
+    font-family: var(--st-font);
+}
+
+.song-player-container .loading-state,
+.song-player-container .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+.song-player-container .loading-pulse {
+    border-radius: 50%;
+    animation: songPlayerPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes songPlayerPulse {
+    0%, 100% { transform: scale(.82); opacity: .45; }
+    50% { transform: scale(1); opacity: 1; }
+}
+
+/* ---- Hero band -------------------------------------------------------- */
+
+.song-player-container .song-header {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+.song-player-container .song-hero-backdrop {
+    position: absolute;
+    inset: -60px;
+    z-index: 0;
+    /* The artwork, blown up and blurred into an ambient wash. A deliberately
+       tiny rendition is requested for it - see CoverArtSizes.PlayerBackdrop. */
+    filter: blur(52px);
+    transform: scale(1.25);
+    pointer-events: none;
+}
+
+.song-player-container .song-hero-backdrop-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.song-player-container .song-hero-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.song-player-container .song-hero-inner {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-areas: "art text actions";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: flex-end;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.song-player-container .album-art-container { grid-area: art; }
+.song-player-container .song-text-details { grid-area: text; min-width: 0; }
+.song-player-container .action-controls { grid-area: actions; }
+
+/* .player-art-shell must stay relative + overflow:hidden - the art is clipped
+   to its rounded corners by it. */
+.song-player-container .player-art-shell {
+    position: relative;
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.song-player-container .song-hero-art {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.song-player-container .song-tag-row,
+.song-player-container .song-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.song-player-container .song-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--st-radius-pill);
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .song-title {
+    margin: 0;
+    text-wrap: balance;
+}
+
+.song-player-container .stream-count-info,
+.song-player-container .album-track-info,
+.song-player-container .subscription-badge,
+.song-player-container .preview-label,
+.song-player-container .artist-name-info {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+
+.song-player-container .action-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.song-player-container .song-action-cluster {
+    display: flex;
+    align-items: center;
+}
+
+.song-player-container .play-button-large {
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform var(--st-dur-fast) var(--st-ease), box-shadow var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .play-button-large:hover { transform: scale(1.05); }
+.song-player-container .play-button-large:active { transform: scale(.96); }
+
+/* ---- Stage: the lyrics/art panel, and the artist beside it ------------ */
+
+.song-player-container .song-stage {
+    display: grid;
+    align-items: start;
+    flex: 1;
+    min-height: 0;
+}
+
+.song-player-container .song-panel {
+    border-radius: var(--st-radius-lg);
+    border: 1px solid var(--st-player-line);
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+}
+
+.song-player-container .song-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.song-player-container .song-panel-caption {
+    text-transform: uppercase;
+    display: block;
+}
+
+.song-player-container .song-panel-switch {
+    display: flex;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid var(--st-player-line);
+}
+
+.song-player-container .lyrics-toggle-button,
+.song-player-container .art-toggle-button {
+    /* The unscoped .lyrics-toggle-button in app.css is the OLD control: a 28px
+       circle pinned absolutely to the bottom-right of the artwork. This is a
+       segment in a pill now, so every one of those has to be undone explicitly
+       or the Lyrics segment renders as a clipped bubble in the panel corner. */
+    position: static;
+    width: auto;
+    height: auto;
+    opacity: 1;
+    z-index: auto;
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    border-radius: var(--st-radius-pill);
+    cursor: pointer;
+    background: transparent;
+    white-space: nowrap;
+    transition: background-color var(--st-dur) var(--st-ease), color var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .lyrics-toggle-button:hover,
+.song-player-container .art-toggle-button:hover {
+    transform: none;
+}
+
+/* The scroller fills the stage panel rather than sitting in a box of its own. */
+.song-player-container .lyrics-scroller {
+    border-radius: 0;
+}
+
+.song-player-container .song-panel-body {
+    position: relative;
+}
+
+/* The scroller is absolutely positioned into this box by the shared
+   .lyrics-scroller-overlay rule, so the box needs a height of its own. */
+.song-player-container .song-panel-art {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.song-player-container .song-stage-art {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--st-radius-md);
+    object-fit: contain;
+}
+
+.song-player-container .song-artist-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.song-player-container .persona-identity {
+    display: flex;
+    align-items: center;
+}
+
+.song-player-container .song-tip-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--st-radius-pill);
+    cursor: pointer;
+    margin-top: auto;
+    transition: transform var(--st-dur-fast) var(--st-ease), background-color var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .song-tip-cta:hover { transform: scale(1.02); }
+
+/* ---- Transport: a floating pill ---------------------------------------
+   .controls-wrapper and .player-controls-row collapse with display:contents
+   so .player-controls, .progress-container and .volume-controls become direct
+   flex children of .player-bar and can be ordered independently. Both classes
+   are asserted by PlayerTransportRegressionTests, so they stay in the DOM -
+   they simply stop generating boxes. */
+
+.song-player-container .player-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    /* Both of these are load-bearing, not defaults. The unscoped .player-bar in
+       xl_app.css sets flex-direction:column for the playlist player, and without
+       restating it here that column wins: the seek row and the volume stack
+       underneath the buttons and spill out below the pill's fixed height. */
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid var(--st-player-line-strong);
+    box-sizing: border-box;
+}
+
+.song-player-container .controls-wrapper,
+.song-player-container .player-controls-row {
+    display: contents;
+}
+
+.song-player-container .player-controls {
+    order: 1;
+    display: flex;
+    align-items: center;
+}
+
+.song-player-container .progress-container {
+    order: 2;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.song-player-container .volume-controls {
+    order: 3;
+    display: flex;
+    align-items: center;
+}
+
+.song-player-container .control-button {
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: color var(--st-dur) var(--st-ease), background-color var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .control-button[disabled] {
+    cursor: default;
+    opacity: .38;
+}
+
+.song-player-container .play-button-small {
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform var(--st-dur-fast) var(--st-ease);
+}
+
+.song-player-container .play-button-small:hover { transform: scale(1.06); }
+
+.song-player-container .time-display {
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    flex: 0 0 auto;
+}
+
+.song-player-container .progress-bar-container,
+.song-player-container .volume-bar-container {
+    border-radius: var(--st-radius-xs);
+    cursor: pointer;
+    position: relative;
+    transition: height var(--st-dur-fast) var(--st-ease);
+}
+
+.song-player-container .progress-bar-container { flex: 1; min-width: 0; }
+
+.song-player-container .progress-bar,
+.song-player-container .volume-bar {
+    height: 100%;
+    border-radius: var(--st-radius-xs);
+    position: relative;
+    pointer-events: none;
+}
+
+.song-player-container .progress-thumb,
+.song-player-container .volume-thumb {
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .progress-bar-container:hover .progress-thumb,
+.song-player-container .volume-bar-container:hover .volume-thumb {
+    opacity: 1;
+}
+
+.song-player-container .progress-bar-container.restricted { position: relative; }
+
+.song-player-container .progress-limit-marker {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    border-radius: 2px;
+    z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .song-player-container .loading-pulse { animation: none; }
+
+    .song-player-container .play-button-large,
+    .song-player-container .play-button-small,
+    .song-player-container .song-tip-cta {
+        transition: none;
+    }
+
+    .song-player-container .play-button-large:hover,
+    .song-player-container .play-button-small:hover,
+    .song-player-container .song-tip-cta:hover {
+        transform: none;
+    }
+}

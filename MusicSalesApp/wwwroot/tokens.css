@@ -1,0 +1,102 @@
+/*
+ * StreamTunes design tokens
+ * =========================
+ *
+ * Loaded from Components/App.razor BEFORE app.css, so every later sheet - including
+ * light.css / dark.css, which ThemeProvider injects last - can read and override these.
+ *
+ * WHY THIS FILE EXISTS
+ * --------------------
+ * Before it, the app had 564 hard-coded hex literals, 19 different border radii and no
+ * authored custom properties at all. The de-facto primary was #1db954 - which is Spotify's
+ * brand green - used 92 times, while the StreamTunes logo is an electric-blue disc whose
+ * colour appeared in CSS exactly once.
+ *
+ * THE PALETTE IS MEASURED, NOT CHOSEN
+ * -----------------------------------
+ * Every --st-blue-* value below was sampled from the pixels of
+ * wwwroot/images/logo-dark-small.png. Do not "tidy" them into rounder hex values; they are
+ * the logo. The ratios in the comments are against --st-player-bg (#070d16) unless stated.
+ *
+ * TWO RULES THE MEASUREMENTS FORCE - violating either breaks WCAG AA
+ * ------------------------------------------------------------------
+ *   1. NEVER put white label text on --st-blue (#0186fd). That pair is 3.6:1 and fails AA.
+ *      Filled buttons carrying a white label use --st-blue-deep (#0166d6), which is 5.42:1.
+ *   2. The play button is --st-blue-bright with a BLACK glyph: 9.28:1, the strongest pairing
+ *      available, and the same shape as the green-with-black-glyph button it replaces.
+ */
+
+:root {
+    /* -- Brand blues, sampled from the logo disc ------------------------------- */
+    --st-blue: #0186fd; /* core logo blue      5.41:1  fills + icons, never white-on-this */
+    --st-blue-bright: #02b8fd; /* logo highlight      8.60:1  accent text, links, active states */
+    --st-blue-deep: #0166d6; /* action fill         white on it = 5.42:1 */
+    --st-blue-pale: #c8eafd; /* logo pale          15.44:1  secondary text */
+    --st-blue-tint: #e5fbff; /* logo highlight     12.68:1 */
+    --st-navy: #102e55; /* logo disc edge */
+    --st-brand-gradient: linear-gradient(135deg, var(--st-blue-bright), var(--st-blue-deep));
+
+    /* -- Secondary + status ---------------------------------------------------- */
+    --st-violet: #9b87f5; /* genre links         6.66:1 */
+    --st-violet-deep: #8e44ad; /* existing site CTA violet - kept for continuity */
+    --st-amber: #ffa500; /* preview limit       9.86:1  a warning, never brand colour */
+    --st-pink: #ff6b8b; /* tip heart */
+
+    /*
+     * -- Player surface --------------------------------------------------------
+     * The song/playlist player is DELIBERATELY DARK IN BOTH SITE THEMES. It is an
+     * immersive listening surface, not a themed page, so these are defined once here
+     * rather than twice in light.css/dark.css. The rest of the site still themes normally.
+     * If you find yourself adding a light variant of one of these, re-read this comment
+     * first - the decision was deliberate, see the redesign notes.
+     */
+    --st-player-bg: #070d16; /* page base, blue-tinted near-black */
+    --st-player-surface: #0d1727; /* panels + cards */
+    --st-player-surface-2: #142338; /* control chrome, segmented tracks */
+    --st-player-line: rgba(255, 255, 255, .09);
+    --st-player-line-strong: rgba(255, 255, 255, .14);
+    --st-player-text: #ffffff; /* 19.48:1 */
+    --st-player-text-2: #c8eafd; /* 15.44:1 */
+    --st-player-text-3: #8ba3c7; /* 7.57:1  - the dimmest that still passes AA */
+    --st-player-scrim: rgba(7, 13, 22, .72);
+
+    /* -- Radii ----------------------------------------------------------------- */
+    --st-radius-xs: 4px;
+    --st-radius-sm: 8px;
+    --st-radius-md: 12px;
+    --st-radius-lg: 18px;
+    --st-radius-pill: 999px;
+
+    /* -- Spacing scale --------------------------------------------------------- */
+    --st-space-1: 4px;
+    --st-space-2: 8px;
+    --st-space-3: 12px;
+    --st-space-4: 16px;
+    --st-space-5: 24px;
+    --st-space-6: 32px;
+    --st-space-7: 48px;
+    --st-space-8: 64px;
+
+    /* -- Elevation ------------------------------------------------------------- */
+    --st-shadow-card: 0 6px 22px rgba(0, 0, 0, .35);
+    --st-shadow-art: 0 22px 52px rgba(0, 0, 0, .7);
+    --st-shadow-float: 0 20px 50px rgba(0, 0, 0, .6);
+    --st-shadow-play: 0 10px 32px rgba(2, 184, 253, .4);
+
+    /* -- Type ------------------------------------------------------------------ */
+    --st-font: ui-sans-serif, -apple-system, "Segoe UI Variable Display", "Segoe UI", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --st-text-display: 68px;
+    --st-text-h1: 40px;
+    --st-text-h2: 24px;
+    --st-text-body: 15px;
+    --st-text-sm: 13px;
+    --st-text-micro: 11px;
+    --st-tracking-display: -.038em;
+    --st-tracking-micro: .16em;
+
+    /* -- Motion ---------------------------------------------------------------- */
+    --st-dur-fast: .12s;
+    --st-dur: .2s;
+    --st-dur-slow: .32s;
+    --st-ease: ease;
+}

@@ -50,20 +50,6 @@
         height: calc(100vh - 8rem);
     }
 
-    /* SongPlayer - Container adjustments for medium screens */
-    .song-player-container {
-        grid-template-rows: 1fr 85px;
-    }
-
-    .song-player-container .song-header {
-        padding: 20px;
-    }
-
-    .song-player-container .player-bar {
-        padding: 12px 20px;
-        gap: 6px;
-    }
-
     /* PlaylistPlayer - Container adjustments for medium screens */
     .playlist-player-container {
         grid-template-rows: auto auto auto 1fr 85px;
@@ -576,4 +562,36 @@
         flex: 1;
     }
 
+}
+
+
+@media (max-width: 992px) {
+    /*
+     * SONG PLAYER - "Marquee" sizing: tablet.
+     * The hero stacks and centres, and the stage drops to a single column so the
+     * lyrics panel keeps a readable measure instead of being squeezed beside the
+     * artist card.
+     */
+    .song-player-container .song-header { min-height: 0; padding: 30px 36px 26px; }
+    .song-player-container .song-hero-inner {
+        grid-template-areas: "art" "text" "actions";
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        text-align: center;
+        gap: 16px;
+    }
+    .song-player-container .song-tag-row,
+    .song-player-container .song-meta-row,
+    .song-player-container .action-controls { justify-content: center; }
+    .song-player-container .player-art-shell { width: 176px; height: 176px; }
+    .song-player-container .song-title { font-size: 50px; letter-spacing: -.034em; line-height: 1; }
+    .song-player-container .song-stage { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 20px 36px 0; }
+    .song-player-container .song-panel { height: auto; }
+    .song-player-container .song-stage-panel { height: 320px; padding: 22px 28px; }
+    .song-player-container .song-panel-body { height: 218px; }
+    .song-player-container .song-stage-art { max-height: 218px; }
+    .song-player-container .lyrics-scroller--player { font-size: 20px; }
+    .song-player-container .song-artist-panel { padding: 22px; }
+    .song-player-container .persona-identity { margin: 14px 0 12px; }
+    .song-player-container .player-bar { margin: 20px 36px 20px; height: 72px; padding: 0 22px; gap: 16px; }
 }

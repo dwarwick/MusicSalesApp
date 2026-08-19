@@ -68,20 +68,6 @@
         height: calc(100vh - 7rem);
     }
 
-    /* SongPlayer - Container adjustments for small screens */
-    .song-player-container {
-        grid-template-rows: 1fr 80px;
-    }
-
-    .song-player-container .song-header {
-        padding: 16px;
-    }
-
-    .song-player-container .player-bar {
-        padding: 10px 16px;
-        gap: 6px;
-    }
-
     /* SongPlayer mobile adjustments */
     .song-title {
         font-size: 36px;
@@ -109,28 +95,6 @@
     .action-controls { flex-wrap: wrap; gap: 16px; }
     .cart-button-large { padding: 10px 20px; font-size: 13px; }
     .cart-icon-large { width: 18px; height: 18px; }
-
-    /* SongPlayer - Player controls compact layout */
-    .song-player-container .controls-wrapper {
-        gap: 2px;
-        margin-bottom: 4px;
-        max-width: 100%;
-    }
-
-    .song-player-container .time-spacer {
-        display: none;
-        min-width: 0;
-    }
-
-    .song-player-container .player-controls-row {
-        gap: 4px;
-        width: 100%;
-    }
-
-    .song-player-container .progress-container {
-        gap: 4px;
-        max-width: 100%;
-    }
 
     /* PlaylistPlayer - Container adjustments for small screens */
     .playlist-player-container {
@@ -526,15 +490,6 @@
 
 /* Landscape Mobile Optimization - for devices with limited viewport height */
 @media (max-width: 1200px) and (max-height: 600px) and (orientation: landscape) {
-    /* SongPlayer - Landscape adjustments */
-    .song-player-container {
-        grid-template-rows: 1fr 70px;
-    }
-
-    .song-player-container .player-bar {
-        padding: 6px 12px;
-        gap: 2px;
-    }
 
     /* PlaylistPlayer - Landscape adjustments */
     .playlist-player-container {
@@ -978,3 +933,22 @@
    textarea shrinks rather than pushing the buttons out of reach. */
 .lyrics-dialog-textarea textarea { min-height: 160px; }
 .lyrics-dialog-footer { flex-wrap: wrap; }
+
+
+@media (max-width: 768px) {
+    /* SONG PLAYER - "Marquee" sizing: small tablet / large phone */
+    .song-player-container .song-header { padding: 24px 24px 20px; }
+    .song-player-container .player-art-shell { width: 140px; height: 140px; border-radius: 12px; }
+    .song-player-container .song-title { font-size: 38px; letter-spacing: -.03em; line-height: 1.04; }
+    .song-player-container .song-meta-row { gap: 14px; font-size: 13.5px; }
+    .song-player-container .song-stage { gap: 16px; padding: 16px 24px 0; }
+    .song-player-container .song-stage-panel { height: 300px; padding: 20px 22px; }
+    .song-player-container .song-panel-body { height: 202px; }
+    .song-player-container .song-stage-art { max-height: 202px; }
+    .song-player-container .lyrics-scroller--player { font-size: 19px; }
+    .song-player-container .play-button-large { width: 58px; height: 58px; }
+    .song-player-container .play-button-large .play-icon { width: 26px; height: 26px; }
+    .song-player-container .player-bar { margin: 16px 24px 16px; height: 68px; padding: 0 18px; gap: 12px; }
+    .song-player-container .volume-bar-container { width: 68px; }
+    .song-player-container .progress-container { gap: 10px; }
+}

@@ -30,17 +30,38 @@ public static class CoverArtSizes
         "(max-width:576px) 92vw, (max-width:768px) 46vw, (max-width:992px) 31vw, 210px";
 
     /// <summary>
-    /// The song player's hero artwork (<c>.playlist-art</c>).
+    /// The song player's hero artwork (<c>.song-hero-art</c>).
     ///
     /// <para>
-    /// Note the 225px band. It is not a typo: <c>md_app.css</c> sets <c>.playlist-art</c> to 225px,
-    /// which is <em>larger</em> than the 140px it gets on a desktop monitor, so the ladder across
-    /// breakpoints reads 85 - 95 - 225 - 130 - 140. Spelling it out here is what stops tablets from
-    /// under-fetching and rendering a visibly soft hero.
+    /// This is the small identity thumbnail in the hero band, not the main display surface - see
+    /// <see cref="PlayerStage"/> for that. The ladder reads 118 - 140 - 176 - 156 - 168 and tracks
+    /// <c>.song-hero-art</c> across the five breakpoint sheets. Keep the two in step: change one
+    /// without the other and the browser fetches the wrong rendition, which shows up as a
+    /// visibly soft hero rather than as an error.
     /// </para>
     /// </summary>
     public const string PlayerHero =
-        "(max-width:576px) 85px, (max-width:768px) 95px, (max-width:992px) 225px, (max-width:1200px) 130px, 140px";
+        "(max-width:576px) 118px, (max-width:768px) 140px, (max-width:992px) 176px, (max-width:1200px) 156px, 168px";
+
+    /// <summary>
+    /// The song player's stage panel artwork (<c>.song-stage-art</c>) - what the panel shows when
+    /// the listener flips the toggle to Art, and what it shows outright for the many songs that
+    /// have no published lyrics.
+    /// </summary>
+    public const string PlayerStage =
+        "(max-width:576px) 300px, (max-width:768px) 320px, (max-width:992px) 300px, 250px";
+
+    /// <summary>
+    /// The blurred hero backdrop (<c>.song-hero-backdrop-img</c>).
+    ///
+    /// <para>
+    /// Deliberately tiny. The image is scaled up and put behind a ~50px blur, so a large rendition
+    /// buys nothing a 160px one does not - the blur destroys the detail either way - while costing
+    /// a full-size download on every song page. Do not "fix" this to match the element's rendered
+    /// width.
+    /// </para>
+    /// </summary>
+    public const string PlayerBackdrop = "160px";
 
     /// <summary>
     /// The playlist player's hero artwork. Identical to <see cref="PlayerHero"/> except at the

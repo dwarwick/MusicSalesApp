@@ -9,201 +9,129 @@
 @if (_loading || IsProcessingTipReturn)
 {
     <div class="loading-state">
-        <p>Loading...</p>
+        <div class="loading-pulse" aria-hidden="true"></div>
+        <p>Loading&hellip;</p>
     </div>
 }
 else if (!string.IsNullOrEmpty(_error))
-    {
-        <div class="error-state">
-            <div class="alert alert-danger">@_error</div>
+{
+    <div class="error-state">
+        <div class="alert alert-danger">@_error</div>
+    </div>
+}
+else
+{
+    @* ------------------------------------------------------------------ *@
+    @* HERO - full-bleed band, the song's own cover art blurred behind it. *@
+    @* ------------------------------------------------------------------ *@
+    <div class="song-header">
+        <div class="song-hero-backdrop" aria-hidden="true">
+            @if (_albumArtSource.HasImage)
+            {
+                <CoverArt Source="_albumArtSource"
+                          Sizes="@CoverArtSizes.PlayerBackdrop"
+                          CssClass="song-hero-backdrop-img"
+                          Alt=""
+                          Eager="true" />
+            }
         </div>
-    }
-    else
-    {
-        <!-- Song Header Section -->
-        <div class="song-header">
+        <div class="song-hero-scrim" aria-hidden="true"></div>
+
+        <div class="song-hero-inner">
             <div class="album-art-container">
-                <div class="title-container">
-                    <div class="player-art-content">
-                        <div class="player-art-shell">
-                            @* The scroller stays MOUNTED while the toggle is on the art, hidden with a
-                               class rather than removed. Unmounting it would tear down its animation
-                               loop and element cache and rebuild both on every toggle, mid-song. *@
-                            @if (HasPublishedLyrics())
-                            {
-                                <div class="lyrics-scroller-overlay @(_showLyrics ? "" : "is-hidden")">
-                                    <LyricsScroller AudioElement="_audioElement"
-                                                    Mode="LyricsScrollerMode.Player"
-                                                    Document="_lyricsTimings"
-                                                    EmptyMessage="Lyrics are loading&hellip;" />
-                                </div>
-                            }
-
-                            <div class="@(_showLyrics && HasPublishedLyrics() ? "is-hidden" : "")">
-                                @if (_albumArtSource.HasImage)
-                                {
-                                    <CoverArt Source="_albumArtSource"
-                                              Sizes="@CoverArtSizes.PlayerHero"
-                                              CssClass="playlist-art"
-                                              Alt="Album Art"
-                                              Eager="true" />
-                                }
-                                else
-                                {
-                                    <div class="album-art-animation">
-                                        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
-                                    </div>
-                                }
-                            </div>
-
-                            @* Only offered where there is something to show. A toggle that reveals an
-                               empty panel is worse than no toggle. *@
-                            @if (HasPublishedLyrics())
-                            {
-                                <button type="button"
-                                        class="lyrics-toggle-button"
-                                        @onclick="ToggleLyrics"
-                                        title="@(_showLyrics ? "Show cover art" : "Show lyrics")"
-                                        aria-pressed="@_showLyrics.ToString().ToLowerInvariant()">
-                                    @if (_showLyrics)
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
-                                            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-                                        </svg>
-                                    }
-                                    else
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
-                                            <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
-                                        </svg>
-                                    }
-                                </button>
-                            }
-                        </div>
-                        <AiContentBadges IsAiMusic="IsAiGeneratedSong()"
-                                          IsAiVocals="IsAiVocalsSong()"
-                                          IsAiLyrics="IsAiLyricsSong()"
-                                          CssClass="player-ai-content-badges" />
-                    </div>
-                    <div class="song-text-details">
-                        <h1 class="song-title">@GetDisplayTitle()</h1>
-                        <span class="genre-info">
-                            <a href="@GetGenreUrl()" class="genre-link" title="View all @GetGenre() songs">@GetGenre()</a>
-                        </span>
-                        @if (!string.IsNullOrEmpty(GetArtistDisplayName()))
+                <div class="player-art-content">
+                    @* Must stay position:relative + overflow:hidden - see app.css. *@
+                    <div class="player-art-shell">
+                        @if (_albumArtSource.HasImage)
                         {
-                            <span class="artist-name-info">
-                                <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
-                            </span>
-                        }
-                    </div>
-                </div>
-            </div>            
-
-            <div class="song-info">
-
-                <!-- Play Button Section -->
-                <div class="action-controls">
-                    <button class="play-button-large" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
-                        @if (_isPlaying)
-                        {
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
-                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                            </svg>
+                            <CoverArt Source="_albumArtSource"
+                                      Sizes="@CoverArtSizes.PlayerHero"
+                                      CssClass="song-hero-art"
+                                      Alt="Cover art"
+                                      Eager="true" />
                         }
                         else
                         {
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
+                            <div class="album-art-animation">
+                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                            </div>
                         }
-                    </button>
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Facebook Share Button -->
-                    <FacebookShareButton ShareUrl="@GetShareUrl()" 
-                                       Layout="button_count" 
-                                       Size="large" 
-                                       CssClass="share-button-action" />
-
-                    <!-- Persona Section (shown below song art if song has a persona) -->
-                    @{
-                        var persona = GetPersona();
-                        var personaImageUrl = GetPersonaImageUrl();
-                        var creatorBio = GetCreatorBio();
-                    }
-                    @if (persona != null)
-                    {
-                        <div class="playlist-persona-section">
-                            @if (!string.IsNullOrEmpty(personaImageUrl))
-                            {
-                                <img src="@personaImageUrl" alt="@persona.Name" class="persona-image persona-image-sm" />
-                            }
-                            <div class="persona-details">
-                                <span class="artist-name-info">
-                                    <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
-                                </span>
-                                @if (!string.IsNullOrEmpty(persona.Bio))
-                                {
-                                    <p class="persona-bio">@persona.Bio</p>
-                                }
-                                @if (!string.IsNullOrEmpty(persona.WebsiteUrl))
-                                {
-                                    <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
-                                }
-                            </div>
-                        </div>
-                    }
-                    else if (!string.IsNullOrEmpty(creatorBio))
-                    {
-                        <div class="playlist-persona-section">
-                            <div class="persona-details">
-                                <span class="artist-name-info">
-                                    <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
-                                </span>
-                                <p class="persona-bio">@creatorBio</p>
-                            </div>
-                        </div>
-                    }
+            <div class="song-text-details">
+                <div class="song-tag-row">
+                    <a href="@GetGenreUrl()" class="genre-link song-chip song-chip-genre" title="View all @GetGenre() songs">@GetGenre()</a>
+                    <AiContentBadges IsAiMusic="IsAiGeneratedSong()"
+                                     IsAiVocals="IsAiVocalsSong()"
+                                     IsAiLyrics="IsAiLyricsSong()"
+                                     CssClass="player-ai-content-badges" />
                 </div>
 
+                <h1 class="song-title">@GetDisplayTitle()</h1>
 
-                @if (GetTrackLengthSeconds() is double trackLength)
-                {
-                    <span class="album-track-info">Duration: @FormatTime(trackLength)</span>
-                }
-                <span class="stream-count-info">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="stream-icon">
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                    </svg>
-                    @_streamCount.ToString("N0") streams
-                </span>
-                @if (_hasActiveSubscription)
-                {
-                    <span class="subscription-badge">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                <div class="song-meta-row">
+                    @if (!string.IsNullOrEmpty(GetArtistDisplayName()))
+                    {
+                        <span class="artist-name-info">
+                            <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
+                        </span>
+                    }
+                    <span class="stream-count-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="stream-icon">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
                         </svg>
-                        Unlimited Access (Subscribed)
+                        @_streamCount.ToString("N0") streams
                     </span>
-                }
-                else if (!IsProgressBarRestricted())
-                {
-                    <span class="subscription-badge">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                        </svg>
-                        Unlimited Access
-                    </span>
-                }
-                else
-                {
-                    <span class="preview-label">Preview Only (60 seconds)</span>
-                }
+                    @if (GetTrackLengthSeconds() is double trackLength)
+                    {
+                        <span class="album-track-info">@FormatTime(trackLength)</span>
+                    }
+                    @if (_hasActiveSubscription)
+                    {
+                        <span class="subscription-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                            Unlimited Access (Subscribed)
+                        </span>
+                    }
+                    else if (!IsProgressBarRestricted())
+                    {
+                        <span class="subscription-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                            Unlimited Access
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="preview-label">Preview Only (60 seconds)</span>
+                    }
+                </div>
+            </div>
 
-                <!-- Like/Dislike Buttons -->
+            <div class="action-controls">
+                <button class="play-button-large" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                    @if (_isPlaying)
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                    }
+                </button>
+
                 @if (GetSongMetadataId() > 0)
                 {
-                    <div class="d-flex">
+                    <div class="song-action-cluster">
                         <LikeDislikeButtons SongMetadataId="GetSongMetadataId()" />
                         <ReportButton SongMetadataId="GetSongMetadataId()" />
                         @if (CanShowTipButton())
@@ -216,104 +144,235 @@ else if (!string.IsNullOrEmpty(_error))
                         }
                     </div>
                 }
+
+                <FacebookShareButton ShareUrl="@GetShareUrl()"
+                                     Layout="button_count"
+                                     Size="large"
+                                     CssClass="share-button-action" />
             </div>
-        </div>        
+        </div>
+    </div>
 
-        <!-- Hidden Audio Element -->
-        <audio @ref="_audioElement"
-               src="@_streamUrl"
-               preload="auto"
-               style="display:none;"></audio>
+    @* ------------------------------------------------------------------ *@
+    @* STAGE - the lyrics/art panel, and the artist beside it.            *@
+    @* ------------------------------------------------------------------ *@
+    <div class="song-stage">
+        <section class="song-panel song-stage-panel">
+            <header class="song-panel-head">
+                <span class="song-panel-caption">@(ShowingLyrics() ? "Lyrics" : "Cover art")</span>
 
-        <!-- Bottom Player Bar -->
-        <div class="player-bar">
-            <div class="controls-wrapper">
-                <span class="time-spacer"></span>
-                <div class="player-controls-row">
-                    <div class="player-controls">
-                        <button class="control-button @(_shuffleEnabled ? "active" : "")" @onclick="ToggleShuffle" title="Shuffle">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
+                @* Only offered where there is something to show. A toggle that reveals an
+                   empty panel is worse than no toggle. *@
+                @if (HasPublishedLyrics())
+                {
+                    <div class="song-panel-switch">
+                        @* A segmented control, not two toggles: each button SETS a state rather
+                           than flipping it, so clicking the segment that is already active is a
+                           no-op instead of switching away from it. *@
+                        <button type="button"
+                                class="lyrics-toggle-button @(ShowingLyrics() ? "is-active" : "")"
+                                @onclick="ShowLyricsPanel"
+                                title="Show lyrics"
+                                aria-pressed="@ShowingLyrics().ToString().ToLowerInvariant()">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
                             </svg>
+                            <span>Lyrics</span>
                         </button>
-                        <button class="control-button" title="Previous">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                        <button type="button"
+                                class="art-toggle-button @(ShowingLyrics() ? "" : "is-active")"
+                                @onclick="ShowArtPanel"
+                                title="Show cover art"
+                                aria-pressed="@((!ShowingLyrics()).ToString().ToLowerInvariant())">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
                             </svg>
-                        </button>
-                        <button class="play-button-small" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
-                            @if (_isPlaying)
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
-                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                </svg>
-                            }
-                            else
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
-                                    <path d="M8 5v14l11-7z" />
-                                </svg>
-                            }
-                        </button>
-                        <button class="control-button" title="Next">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                            </svg>
-                        </button>
-                        <button class="control-button @(_repeatEnabled ? "active" : "")" @onclick="ToggleRepeat" title="Repeat">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
-                            </svg>
+                            <span>Art</span>
                         </button>
                     </div>
-                    <div class="volume-controls">
-                        <button class="control-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
-                            @if (_isMuted || GetDisplayVolume() == 0)
-                            {
-                                <!-- Muted icon -->
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                                </svg>
-                            }
-                            else if (GetDisplayVolume() < 0.5)
-                            {
-                                <!-- Low volume icon -->
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
-                                </svg>
-                            }
-                            else
-                            {
-                                <!-- High volume icon -->
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                                </svg>
-                            }
-                        </button>
-                        <div @ref="_volumeBarContainer" class="volume-bar-container" @onclick="OnVolumeBarClick">
-                            <div class="volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
-                                <div class="volume-thumb"></div>
-                            </div>
+                }
+            </header>
+
+            <div class="song-panel-body">
+                @* The scroller stays MOUNTED while the panel is showing art, hidden with a
+                   class rather than removed. Unmounting it would tear down its animation
+                   loop and element cache and rebuild both on every toggle, mid-song. *@
+                @if (HasPublishedLyrics())
+                {
+                    <div class="lyrics-scroller-overlay @(ShowingLyrics() ? "" : "is-hidden")">
+                        <LyricsScroller AudioElement="_audioElement"
+                                        Mode="LyricsScrollerMode.Player"
+                                        Document="_lyricsTimings"
+                                        EmptyMessage="Lyrics are loading&hellip;" />
+                    </div>
+                }
+
+                @* The stage always has something on it. With no lyrics published - which is most
+                   of the catalogue while the karaoke feature is still opt-in per song - this is
+                   what the panel shows, and no toggle renders above it. *@
+                <div class="song-panel-art @(ShowingLyrics() ? "is-hidden" : "")">
+                    @if (_albumArtSource.HasImage)
+                    {
+                        <CoverArt Source="_albumArtSource"
+                                  Sizes="@CoverArtSizes.PlayerStage"
+                                  CssClass="song-stage-art"
+                                  Alt="Cover art" />
+                    }
+                    else
+                    {
+                        <div class="album-art-animation">
+                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+
+        @{
+            var persona = GetPersona();
+            var personaImageUrl = GetPersonaImageUrl();
+            var creatorBio = GetCreatorBio();
+        }
+        @if (persona != null || !string.IsNullOrEmpty(creatorBio) || !string.IsNullOrEmpty(GetArtistDisplayName()))
+        {
+            <aside class="song-panel song-artist-panel playlist-persona-section">
+                <span class="song-panel-caption">The artist</span>
+
+                <div class="persona-identity">
+                    @if (!string.IsNullOrEmpty(personaImageUrl))
+                    {
+                        <img src="@personaImageUrl" alt="@persona.Name" class="persona-image persona-image-sm" />
+                    }
+                    <div class="persona-details">
+                        <span class="artist-name-info">
+                            <a href="@GetArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName()">@GetArtistDisplayName()</a>
+                        </span>
+                    </div>
+                </div>
+
+                @if (persona != null && !string.IsNullOrEmpty(persona.Bio))
+                {
+                    <p class="persona-bio">@persona.Bio</p>
+                }
+                else if (!string.IsNullOrEmpty(creatorBio))
+                {
+                    <p class="persona-bio">@creatorBio</p>
+                }
+
+                @if (persona != null && !string.IsNullOrEmpty(persona.WebsiteUrl))
+                {
+                    <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
+                }
+
+                @if (CanShowTipButton())
+                {
+                    <button class="song-tip-cta" @onclick="ShowTipDialog">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                        Tip this artist
+                    </button>
+                }
+            </aside>
+        }
+    </div>
+
+    <!-- Hidden Audio Element -->
+    <audio @ref="_audioElement"
+           src="@_streamUrl"
+           preload="auto"
+           style="display:none;"></audio>
+
+    @* ------------------------------------------------------------------ *@
+    @* TRANSPORT - a floating pill. The wrapper elements below are laid    *@
+    @* out with display:contents so .player-controls, .progress-container  *@
+    @* and .volume-controls become direct flex children of .player-bar and *@
+    @* can be ordered independently, without dropping any class the        *@
+    @* component tests pin.                                                *@
+    @* ------------------------------------------------------------------ *@
+    <div class="player-bar">
+        <div class="controls-wrapper">
+            <div class="player-controls-row">
+                <div class="player-controls">
+                    <button class="control-button @(_shuffleEnabled ? "active" : "")" @onclick="ToggleShuffle" title="@(_shuffleEnabled ? "Shuffle on" : "Shuffle off")">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
+                        </svg>
+                    </button>
+                    <button class="control-button" @onclick="PlayPreviousSong" disabled="@(!HasSiblingSongs())" title="@PreviousSongTitleForTooltip()">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                        </svg>
+                    </button>
+                    <button class="play-button-small" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                        @if (_isPlaying)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                                <path d="M8 5v14l11-7z" />
+                            </svg>
+                        }
+                    </button>
+                    <button class="control-button" @onclick="PlayNextSong" disabled="@(!HasSiblingSongs())" title="@NextSongTitleForTooltip()">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                        </svg>
+                    </button>
+                    <button class="control-button @(_repeatEnabled ? "active" : "")" @onclick="ToggleRepeat" title="@(_repeatEnabled ? "Repeat on" : "Repeat off")">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="volume-controls">
+                    <button class="control-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
+                        @if (_isMuted || GetDisplayVolume() == 0)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                            </svg>
+                        }
+                        else if (GetDisplayVolume() < 0.5)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                            </svg>
+                        }
+                    </button>
+                    <div @ref="_volumeBarContainer" class="volume-bar-container" @onclick="OnVolumeBarClick">
+                        <div class="volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
+                            <div class="volume-thumb"></div>
                         </div>
                     </div>
                 </div>
-                <span class="time-spacer"></span>
-            </div>
-            <div class="progress-container">
-                <span class="time-display">@FormatTime(_currentTime)</span>
-                <div @ref="_progressBarContainer" class="progress-bar-container @(IsProgressBarRestricted() ? "restricted" : "")" @onclick="OnProgressBarClick">
-                    <div class="progress-bar" style="width: @(GetProgressBarWidth())%;">
-                        <div class="progress-thumb"></div>
-                    </div>
-                    @if (IsProgressBarRestricted())
-                    {
-                        <div class="progress-limit-marker" style="left: @(GetPreviewLimitPercentage())%;"></div>
-                    }
-                </div>
-                <span class="time-display">@FormatTime(GetDisplayDuration())</span>
             </div>
         </div>
-    }
+        <div class="progress-container">
+            <span class="time-display">@FormatTime(_currentTime)</span>
+            <div @ref="_progressBarContainer" class="progress-bar-container @(IsProgressBarRestricted() ? "restricted" : "")" @onclick="OnProgressBarClick">
+                <div class="progress-bar" style="width: @(GetProgressBarWidth())%;">
+                    <div class="progress-thumb"></div>
+                </div>
+                @if (IsProgressBarRestricted())
+                {
+                    <div class="progress-limit-marker" style="left: @(GetPreviewLimitPercentage())%;"></div>
+                }
+            </div>
+            <span class="time-display">@FormatTime(GetDisplayDuration())</span>
+        </div>
+    </div>
+}
 </div>
 
 <SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">

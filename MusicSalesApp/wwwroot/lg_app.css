@@ -37,20 +37,6 @@
         height: calc(100vh - 9rem);
     }
 
-    /* SongPlayer - Container adjustments for large screens */
-    .song-player-container {
-        grid-template-rows: 1fr 88px;
-    }
-
-    .song-player-container .song-header {
-        padding: 24px;
-    }
-
-    .song-player-container .player-bar {
-        padding: 14px 24px;
-        gap: 8px;
-    }
-
     /* PlaylistPlayer - Container adjustments for large screens */
     .playlist-player-container {
         grid-template-rows: auto auto auto 1fr 88px;
@@ -499,4 +485,19 @@
         height: 75px;
         margin: 0 auto 1.5rem;
     }
+}
+
+
+@media (max-width: 1200px) {
+    /* SONG PLAYER - "Marquee" sizing: narrow desktop / large tablet landscape */
+    .song-player-container .song-header { padding: 30px 44px 26px; }
+    .song-player-container .song-hero-inner { gap: 26px; }
+    .song-player-container .player-art-shell { width: 156px; height: 156px; }
+    .song-player-container .song-title { font-size: 54px; }
+    .song-player-container .song-stage { grid-template-columns: minmax(0, 1fr) 340px; gap: 26px; padding: 22px 44px 0; }
+    .song-player-container .song-panel { height: 314px; }
+    .song-player-container .song-panel-body { height: 224px; }
+    .song-player-container .song-stage-art { max-height: 224px; }
+    .song-player-container .lyrics-scroller--player { font-size: 19px; }
+    .song-player-container .player-bar { margin: 20px 44px 20px; }
 }

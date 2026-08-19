@@ -198,21 +198,46 @@ public class SongPlayerLyricsToggleTests : BUnitTestBase
     }
 
     [Test]
-    public void TheArtIsWhatShowsBeforeAnybodyPressesTheToggle()
+    public void TheLyricsAreWhatShowBeforeAnybodyTouchesTheSwitch()
     {
-        // The lyrics panel is mounted from the start so its animation loop survives toggling, so
-        // "which one is showing" is a class rather than which one exists. Defaulting to lyrics would
-        // change what every listener sees on arrival.
+        // REVERSED in the "Marquee" redesign, deliberately. The old expectation was art-first,
+        // because art and lyrics shared ONE surface - the hero - so opening on lyrics meant the
+        // listener saw no artwork at all. The stage panel is now a separate region and the hero
+        // carries the artwork at all times, so opening on art would show the same image twice at
+        // two sizes and bury the one thing this layout exists to surface.
+        //
+        // Unchanged: both are mounted from the start so the scroller's animation loop survives
+        // switching, and "which one is showing" is still a class rather than which one exists.
         var cut = RenderWith(Lyrics(SongLyricsStatus.Published));
 
-        var overlay = cut.Find(".lyrics-scroller-overlay");
-
-        Assert.That(overlay.GetAttribute("class"), Does.Contain("is-hidden"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Find(".lyrics-scroller-overlay").GetAttribute("class"), Does.Not.Contain("is-hidden"));
+            Assert.That(cut.Find(".song-panel-art").GetAttribute("class"), Does.Contain("is-hidden"));
+        });
     }
 
     [Test]
-    public void PressingTheToggleSwapsWhichOneIsHidden()
+    public void PressingArtSwapsWhichOneIsHidden()
     {
+        var cut = RenderWith(Lyrics(SongLyricsStatus.Published));
+
+        cut.Find(".art-toggle-button").Click();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Find(".lyrics-scroller-overlay").GetAttribute("class"), Does.Contain("is-hidden"));
+            Assert.That(cut.Find(".song-panel-art").GetAttribute("class"), Does.Not.Contain("is-hidden"));
+            Assert.That(cut.FindAll(".lyrics-scroller"), Is.Not.Empty, "Still mounted, just hidden.");
+        });
+    }
+
+    [Test]
+    public void PressingTheSegmentThatIsAlreadyActiveChangesNothing()
+    {
+        // The two buttons SET a state rather than flipping one. Wiring both to a toggle - which is
+        // the obvious way to build this out of the old single-button markup - makes clicking the
+        // lit segment switch away from it, which reads as the control being broken.
         var cut = RenderWith(Lyrics(SongLyricsStatus.Published));
 
         cut.Find(".lyrics-toggle-button").Click();
@@ -220,7 +245,7 @@ public class SongPlayerLyricsToggleTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Find(".lyrics-scroller-overlay").GetAttribute("class"), Does.Not.Contain("is-hidden"));
-            Assert.That(cut.FindAll(".lyrics-scroller"), Is.Not.Empty, "Still mounted, now visible.");
+            Assert.That(cut.Find(".song-panel-art").GetAttribute("class"), Does.Contain("is-hidden"));
         });
     }
 }

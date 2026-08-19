@@ -18,6 +18,8 @@
     
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <!-- Design tokens. Must load before app.css so every later sheet can read them. -->
+    <link rel="stylesheet" href="@Assets["tokens.css"]" />
     <!-- Theme CSS is injected dynamically by ThemeProvider component -->
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["MusicSalesApp.styles.css"]" />

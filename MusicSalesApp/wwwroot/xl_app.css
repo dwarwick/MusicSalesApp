@@ -266,20 +266,6 @@
         height: calc(100vh - 10rem);
     }
 
-    /* SongPlayer - Container adjustments for extra large screens */
-    .song-player-container {
-        grid-template-rows: 1fr 88px;
-    }
-
-    .song-player-container .song-header {
-        padding: 24px;
-    }
-
-    .song-player-container .player-bar {
-        padding: 16px 24px;
-        gap: 8px;
-    }
-
     /* PlaylistPlayer - Container adjustments for extra large screens */
     .playlist-player-container {
         grid-template-rows: auto auto auto 1fr 88px;
@@ -1018,3 +1004,75 @@
 .lyrics-dialog-progress { gap: 0.35rem; margin: 0.75rem 0; }
 .lyrics-dialog-progress-label { font-size: 0.85rem; }
 .lyrics-dialog-footer { gap: 0.5rem; }
+
+
+/* =========================================================================
+   SONG PLAYER - "Marquee" sizing: desktop base
+   Unwrapped, so it is the base every narrower sheet overrides. Sizing and
+   spacing only - structure is in app.css, colour in light.css/dark.css.
+   NOTE: .player-art-shell and .song-stage-art widths are mirrored in
+   Components/Shared/CoverArtSizes.cs (PlayerHero / PlayerStage). Change one
+   without the other and the browser fetches the wrong rendition.
+   ========================================================================= */
+
+/* No min-height. The band is sized by its content plus this padding: a fixed
+   336px left roughly 90px of dead space above the artwork, because the hero
+   bottom-aligns and the content only comes to ~240px. */
+.song-player-container .song-header { padding: 34px 56px 30px; }
+.song-player-container .song-hero-inner { gap: 30px; }
+.song-player-container .player-art-shell { width: 168px; height: 168px; border-radius: 14px; }
+.song-player-container .song-tag-row { gap: 7px; margin-bottom: 12px; }
+.song-player-container .song-chip { height: 27px; padding: 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .07em; }
+.song-player-container .song-title { font-size: 68px; letter-spacing: -.038em; line-height: .96; margin-bottom: 12px; }
+.song-player-container .song-meta-row { gap: 18px; font-size: 14.5px; }
+.song-player-container .stream-count-info { gap: 7px; }
+.song-player-container .stream-icon { width: 17px; height: 17px; }
+.song-player-container .artist-link { font-size: 16px; font-weight: 700; }
+.song-player-container .subscription-badge { gap: 6px; font-size: 14px; }
+.song-player-container .subscription-badge svg { width: 15px; height: 15px; }
+.song-player-container .preview-label { font-size: 14px; font-weight: 600; }
+.song-player-container .action-controls { gap: 10px; }
+.song-player-container .song-action-cluster { gap: 8px; }
+.song-player-container .play-button-large { width: 62px; height: 62px; }
+.song-player-container .play-button-large .play-icon { width: 28px; height: 28px; margin-left: 3px; }
+
+.song-player-container .song-stage { grid-template-columns: minmax(0, 1fr) 400px; gap: 34px; padding: 26px 56px 0; }
+.song-player-container .song-panel { padding: 24px; height: 336px; }
+.song-player-container .song-stage-panel { padding: 24px 30px; }
+.song-player-container .song-panel-head { margin-bottom: 14px; }
+.song-player-container .song-panel-caption { font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.song-player-container .song-panel-switch { gap: 3px; padding: 3px; }
+.song-player-container .lyrics-toggle-button,
+.song-player-container .art-toggle-button { gap: 6px; height: 28px; padding: 0 13px; font-size: 12px; font-weight: 600; }
+.song-player-container .lyrics-toggle-icon { width: 14px; height: 14px; }
+.song-player-container .song-panel-body { height: 246px; }
+.song-player-container .lyrics-scroller--player { font-size: 21px; }
+.song-player-container .song-stage-art { max-height: 246px; }
+.song-player-container .persona-identity { gap: 14px; margin: 16px 0 14px; }
+.song-player-container .persona-image-sm { width: 62px; height: 62px; }
+.song-player-container .persona-bio { margin: 0 0 14px; font-size: 14px; line-height: 1.65; }
+.song-player-container .persona-website { font-size: 13px; }
+.song-player-container .song-tip-cta { gap: 9px; height: 46px; font-size: 14px; font-weight: 700; margin-top: auto; }
+.song-player-container .song-tip-cta svg { width: 18px; height: 18px; }
+
+.song-player-container .player-bar { margin: 24px 56px 22px; height: 74px; padding: 0 26px; gap: 20px; }
+.song-player-container .player-controls { gap: 5px; }
+.song-player-container .control-button { width: 40px; height: 40px; }
+.song-player-container .control-icon { width: 18px; height: 18px; }
+.song-player-container .play-button-small { width: 46px; height: 46px; margin: 0 3px; }
+.song-player-container .play-icon-small { width: 20px; height: 20px; }
+.song-player-container .progress-container { gap: 14px; }
+.song-player-container .time-display { min-width: 40px; font-size: 11.5px; }
+.song-player-container .progress-bar-container { height: 5px; }
+.song-player-container .progress-bar-container:hover { height: 7px; }
+.song-player-container .volume-controls { gap: 8px; }
+.song-player-container .volume-bar-container { width: 92px; height: 5px; }
+.song-player-container .progress-thumb,
+.song-player-container .volume-thumb { width: 13px; height: 13px; }
+.song-player-container .progress-limit-marker { width: 3px; }
+
+/* The shared .album-art-animation is a fixed 200x200 - it is the library card
+   size. In the hero it overflows the 168px shell and gets clipped, and in the
+   stage panel it sits marooned in the middle. Fill whichever box it is in. */
+.song-player-container .player-art-shell .album-art-animation { width: 100%; height: 100%; }
+.song-player-container .song-panel-art .album-art-animation { width: 100%; height: 100%; max-width: 250px; max-height: 250px; }
