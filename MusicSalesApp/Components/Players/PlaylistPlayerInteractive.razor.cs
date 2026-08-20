@@ -113,31 +113,9 @@ namespace MusicSalesApp.Components.Players
             return 0;
         }
 
-        protected bool CanShowTipButton()
-        {
-            if (!_isAuthenticated) return false;
-            if (_playlistInfo == null || _currentTrackIndex >= _playlistInfo.Tracks.Count) return false;
-            var track = _playlistInfo.Tracks[_currentTrackIndex];
-            if (_metadataLookup.TryGetValue(track.Name, out var metadata))
-            {
-                if (metadata.CreatorId == null || metadata.CreatorId <= 0) return false;
-                // Check if current user is the creator (via nav prop or creator ID lookup)
-                if (metadata.Creator != null && _currentUserId.HasValue && metadata.Creator.UserId == _currentUserId.Value) return false;
-                if (_currentUserCreatorId.HasValue && metadata.CreatorId == _currentUserCreatorId.Value) return false;
-                return true;
-            }
-            return false;
-        }
-
-        protected async Task ShowTipDialog()
-        {
-            _tipCreatorId = GetCurrentTrackCreatorId();
-            _tipSongMetadataId = GetCurrentTrackMetadataId();
-            if (_tipDialog != null)
-            {
-                await _tipDialog.ShowAsync();
-            }
-        }
+        // The non-indexed CanShowTipButton()/ShowTipDialog() pair was removed with the redesign:
+        // every tip on this page is for a specific row, so the ...ForTrack(index) versions below
+        // are the only ones the markup ever called.
 
         protected bool CanShowTipButtonForTrack(int trackIndex)
         {
@@ -408,7 +386,12 @@ namespace MusicSalesApp.Components.Players
                 ? await LyricsService.GetPublishedTimingsAsync(songId)
                 : null;
 
-            // The toggle appears or disappears with the track, so the page has to be told.
+            // The stage opens on lyrics whenever the new track has them. The artwork is already in
+            // the hero, so opening on art would show the same image twice and bury the one thing
+            // the panel exists for. With no lyrics this stays false and the panel shows the art.
+            _showLyrics = HasPublishedLyrics();
+
+            // The switch appears or disappears with the track, so the page has to be told.
             await InvokeAsync(StateHasChanged);
         }
 
@@ -431,7 +414,88 @@ namespace MusicSalesApp.Components.Players
 
         protected void ToggleLyrics() => _showLyrics = !_showLyrics;
 
+        /// <summary>Segmented-control setters. Pressing the active segment is a no-op.</summary>
+        protected void ShowLyricsPanel() => _showLyrics = true;
+
+        /// <inheritdoc cref="ShowLyricsPanel" />
+        protected void ShowArtPanel() => _showLyrics = false;
+
+        /// <summary>
+        /// Whether the stage panel is showing lyrics rather than the artwork. Both stay mounted;
+        /// this only decides which one carries <c>is-hidden</c>.
+        /// </summary>
+        protected bool ShowingLyrics() => _showLyrics && HasPublishedLyrics();
+
         protected bool _showLyrics;
+
+        // -----------------------------------------------------------------------------------
+        // Mode presentation
+        // -----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Whether this route is presenting an ARTIST rather than a catalogue.
+        ///
+        /// <para>
+        /// <c>/artist/{name}</c> and <c>/creator/{id}</c> are the only pages StreamTunes has for an
+        /// artist, so in those two the persona takes the hero, the side artist card is replaced by
+        /// the full bio, and the track list drops its Artist column - every row is the same person.
+        /// The other three routes list many artists and keep the catalogue treatment.
+        /// </para>
+        /// </summary>
+        protected bool IsArtistTreatment() => _isArtistMode || _isCreatorMode;
+
+        /// <summary>The chip above the title, naming what kind of listing this is.</summary>
+        protected string GetModeLabel()
+        {
+            if (_isGenreMode) return "Genre";
+            if (_isArtistMode || _isCreatorMode) return "Artist";
+            if (_isRecommendedMode) return "For you";
+            return "Playlist";
+        }
+
+        /// <summary>Streams across every track, for the artist hero.</summary>
+        protected int GetTotalStreamCount()
+        {
+            var total = 0;
+            for (var i = 0; i < _playlistInfo.Tracks.Count; i++)
+            {
+                total += GetTrackStreamCount(i);
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// The current track's biography - the persona's if there is one, otherwise the creator's.
+        /// Persona bios run to 2,000 characters and creator bios to 1,000, so callers must clamp or
+        /// give it a panel; see .persona-bio in app.css.
+        /// </summary>
+        protected string GetCurrentTrackBio()
+        {
+            var persona = GetCurrentTrackPersona();
+            if (persona != null && !string.IsNullOrEmpty(persona.Bio))
+            {
+                return persona.Bio;
+            }
+            return GetCurrentTrackCreatorBio();
+        }
+
+        /// <summary>
+        /// Artist and genre on one line, for the track row's small-screen subtitle. Below 992px the
+        /// dedicated columns are hidden and this carries their content instead, so the table sheds
+        /// columns rather than shrinking its type.
+        /// </summary>
+        protected string GetTrackSubtitle(int index)
+        {
+            var artist = GetTrackArtistName(index);
+            var genre = GetTrackGenre(index);
+
+            if (IsArtistTreatment())
+            {
+                return genre;
+            }
+
+            return string.IsNullOrEmpty(artist) ? genre : $"{artist} · {genre}";
+        }
 
         public async ValueTask DisposeAsync()
         {
@@ -1264,7 +1328,11 @@ namespace MusicSalesApp.Components.Players
         /// </summary>
         protected string GetTrackArtistName(int trackIndex)
         {
-            if (trackIndex < 0 || trackIndex >= _playlistInfo?.Tracks?.Count)
+            // Test the null separately. `trackIndex >= _playlistInfo?.Tracks?.Count` looks like a
+            // guard but is not one: when the left side of the ?. is null the comparison lifts to
+            // false, so the method fell straight through to dereferencing _playlistInfo.Tracks and
+            // threw. Every other bounds check on this page compares against a non-null count.
+            if (_playlistInfo?.Tracks == null || trackIndex < 0 || trackIndex >= _playlistInfo.Tracks.Count)
                 return ArtistDisplayNames.UnknownArtist;
 
             var track = _playlistInfo.Tracks[trackIndex];
@@ -1377,12 +1445,6 @@ namespace MusicSalesApp.Components.Players
             return _duration;
         }
 
-        private bool IsImageFile(string fileName)
-        {
-            var ext = Path.GetExtension(fileName).ToLowerInvariant();
-            return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp";
-        }
-
         private string SafeEncodePath(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
@@ -1419,23 +1481,8 @@ namespace MusicSalesApp.Components.Players
             return _playlistName ?? _playlistInfo?.PlaylistName ?? "Unknown Playlist";
         }
 
-        protected string GetShareUrl()
-        {
-            var baseUrl = NavigationManager.BaseUri.TrimEnd('/');
-            if (_isRecommendedMode)
-            {
-                // Recommended playlists are personal and shouldn't be shared publicly
-                // Return empty string to disable sharing functionality
-                return string.Empty;
-            }
-            return $"{baseUrl}/playlist/{PlaylistId}";
-        }
-
-        /// <summary>
-        /// Indicates if the current content can be shared (playlists can be shared, 
-        /// but recommended playlists are personal and cannot be shared)
-        /// </summary>
-        protected bool CanShare => !_isRecommendedMode;
+        // GetShareUrl()/CanShare were removed with the redesign: this page has never rendered a
+        // share button, so both were unreachable. The song player is where sharing lives.
 
         protected string GetTrackTitle(int index)
         {
@@ -1616,14 +1663,6 @@ namespace MusicSalesApp.Components.Players
             return tracks.Select(t => GetTrackStreamUrl(t.Name)).ToList();
         }
 
-        protected string GetTrackAlbumArtUrl(int index)
-        {
-            if (_playlistInfo == null || index >= _playlistInfo.Tracks.Count) return "";
-
-            // For now, all tracks share the album cover art
-            return _playlistInfo.CoverArtUrl;
-        }
-
         protected bool IsCurrentTrack(int index)
         {
             return _currentTrackIndex == index;
@@ -1765,15 +1804,6 @@ namespace MusicSalesApp.Components.Players
             {
                 _isPlaying = false;
                 await InvokeAsync(StateHasChanged);
-            }
-        }
-
-        protected async Task SeekTo(double percentage)
-        {
-            if (_jsModule != null && _duration > 0)
-            {
-                var newTime = _duration * (percentage / 100);
-                await _jsModule.InvokeVoidAsync("seekTo", _audioElement, newTime);
             }
         }
 

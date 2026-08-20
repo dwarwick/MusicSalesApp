@@ -111,18 +111,6 @@
             margin-left: 0;
         }
 
-    .playlist-art {
-        width: 85px;
-        object-fit: cover;
-        border-radius: 4px;
-    }
-
-    .title-container {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-    }
-
     .ai-content-badge-icon {
         width: 26px;
         height: 26px;
@@ -157,169 +145,6 @@
         padding: 0;
     }
 
-    .track-list {
-        width: 100%;
-        border-collapse: collapse;
-        color: #b3b3b3;
-        font-size: 8px;
-    }
-
-        .track-list thead {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .track-list th {
-            font-size: 8px;
-            font-weight: 400;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            padding: 6px 12px;
-            text-align: left;
-        }
-
-            .track-list th.track-number {
-                width: 50px;
-                text-align: center;
-            }
-
-            .track-list th.track-image {
-                width: 60px;
-                padding-left: 0;
-                padding-right: 0;
-            }
-
-            .track-list th.track-duration {
-                width: 80px;
-                text-align: right;
-            }
-
-            .track-list th.track-actions {
-                width: 50px;
-            }
-
-    .track-row {
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-
-        .track-row:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .track-row.current-track {
-            background-color: rgba(29, 185, 84, 0.2);
-        }
-
-        .track-row td {
-            padding: 8px 12px;
-        }
-
-            .track-row td.track-number {
-                text-align: center;
-                position: relative;
-            }
-
-    .track-index {
-        display: inline;
-    }
-
-    .track-play-btn {
-        display: none;
-        background: none;
-        border: none;
-        color: #fff;
-        cursor: pointer;
-        padding: 0;
-        width: 16px;
-        height: 16px;
-    }
-
-        .track-play-btn svg {
-            width: 16px;
-            height: 16px;
-        }
-
-    .track-row:hover .track-index {
-        display: none;
-    }
-
-    .track-row:hover .track-play-btn {
-        display: inline;
-    }
-
-    .track-row.current-track .track-index {
-        display: none;
-    }
-
-    /* Playing Indicator */
-    .playing-indicator {
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        gap: 2px;
-        height: 16px;
-    }
-
-        .playing-indicator span {
-            width: 3px;
-            background-color: #1db954;
-            border-radius: 1px;
-            animation: soundBars 0.5s ease infinite alternate;
-        }
-
-            .playing-indicator span:nth-child(1) {
-                height: 60%;
-                animation-delay: 0s;
-            }
-
-            .playing-indicator span:nth-child(2) {
-                height: 100%;
-                animation-delay: 0.1s;
-            }
-
-            .playing-indicator span:nth-child(3) {
-                height: 40%;
-                animation-delay: 0.2s;
-            }
-
-    @keyframes soundBars {
-        0% {
-            height: 20%;
-        }
-
-        100% {
-            height: 100%;
-        }
-    }
-
-    .track-image {
-        padding: 8px !important;
-    }
-
-    .track-thumbnail {
-        width: 40px;
-        height: 40px;
-        object-fit: cover;
-        border-radius: 2px;
-    }
-
-    .track-thumbnail-placeholder {
-        width: 40px;
-        height: 40px;
-        background: #282828;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 2px;
-    }
-
-        .track-thumbnail-placeholder svg {
-            width: 24px;
-            height: 24px;
-            fill: #b3b3b3;
-        }
-
     /* Stream Count on Card */
     .card-stream-count {
         display: flex;
@@ -334,176 +159,6 @@
         width: 10px;
         height: 10px;
         fill: currentColor;
-    }
-
-    /* PlaylistPlayer - Container adjustments for extra small screens */
-    .playlist-player-container {
-        grid-template-rows: auto auto auto 1fr 65px;
-        height: calc(100vh - 115px);
-    }
-
-        .playlist-player-container .playlist-image-title-row {
-            padding: 8px 12px;
-        }
-
-        .playlist-player-container .action-buttons-row {
-            padding: 4px 12px;
-        }
-
-        .playlist-player-container .status-info-row {
-            padding: 4px 12px;
-        }
-
-        .playlist-player-container .player-bar {
-            padding: 6px 8px;
-            gap: 2px;
-        }
-
-        /* PlaylistPlayer - Player controls compact layout */
-        .playlist-player-container .controls-wrapper {
-            gap: 2px;
-            margin-bottom: 4px;
-            max-width: 100%;
-        }
-
-        .playlist-player-container .time-spacer {
-            display: none;
-            min-width: 0;
-        }
-
-        .playlist-player-container .player-controls-row {
-            gap: 4px;
-            width: 100%;
-        }
-
-        .playlist-player-container .player-controls {
-            gap: 2px;
-        }
-
-        .playlist-player-container .volume-controls {
-            gap: 4px;
-        }
-
-        .playlist-player-container .control-button {
-            width: 28px;
-            height: 28px;
-        }
-
-        .playlist-player-container .control-icon {
-            width: 14px;
-            height: 14px;
-        }
-
-        .playlist-player-container .play-button-small {
-            width: 28px;
-            height: 28px;
-        }
-
-        .playlist-player-container .play-icon-small {
-            width: 14px;
-            height: 14px;
-        }
-
-        .playlist-player-container .progress-container {
-            gap: 4px;
-            max-width: 100%;
-        }
-
-        .playlist-player-container .time-display {
-            min-width: 28px;
-            font-size: 10px;
-        }
-
-        .playlist-player-container .volume-bar-container {
-            width: 50px;
-        }
-
-        #grid-container .playlist-player-container .action-controls {
-            flex-wrap: wrap;
-            gap: 12px;
-            height: auto;
-        }
-
-        .playlist-player-container .cart-button-large {
-            padding: 8px 16px;
-            font-size: 12px;
-        }
-
-        .playlist-player-container .cart-icon-large {
-            width: 16px;
-            height: 16px;
-        }
-
-    /* PlaylistPlayer - Make action buttons smaller on XS */
-    .playlist-player-container .play-button-large {
-        width: 36px;
-        height: 36px;
-    }
-
-    .playlist-player-container .play-icon {
-        width: 20px;
-        height: 20px;
-    }
-
-    .playlist-player-container .cart-button-large {
-        padding: 6px 12px;
-        font-size: 11px;
-    }
-
-    .playlist-player-container .cart-button-large span {
-        display: none;
-    }
-
-    .playlist-player-container .cart-button-large.in-cart span {
-        display: inline;
-    }
-
-    .playlist-player-container .fb-share-btn {
-        padding: 6px 10px;
-        font-size: 11px;
-        gap: 4px;
-    }
-
-    .playlist-player-container .fb-share-btn .fb-logo-box {
-        width: 16px;
-        height: 16px;
-        font-size: 11px;
-    }
-
-    .playlist-player-container .fb-share-btn .share-text {
-        display: none;
-    }
-
-    /* Make status text smaller */
-    .playlist-player-container .preview-label,
-    .playlist-player-container .subscription-badge {
-        font-size: 11px;
-    }
-
-    .playlist-player-container .subscription-badge svg {
-        width: 12px;
-        height: 12px;
-    }
-
-    .playlist-player-container .playlist-track-info {
-        font-size: 11px;
-    }
-
-    /* Make track preview badge smaller on XS screens */
-    .track-preview-badge {
-        font-size: 8px;
-        padding: 1px 4px;
-        margin-left: 4px;
-    }
-
-    /* Now Playing info smaller */
-    .playlist-player-container .now-playing-info {
-        display: none;
-    }
-
-    /* Hide like/dislike buttons on XS to save space */
-    .playlist-player-container .track-like-dislike {
-        /*display: none;*/
     }
 
     .app-logo {
@@ -534,25 +189,6 @@
     .persona-bio {
         max-height: 3em;
         font-size: 0.8rem;
-    }
-
-    /* Album image smaller on XS */
-    .playlist-player-container .playlist-art {
-        width: 70px;
-        height: 70px;
-    }
-
-    /* Title container adjustments */
-    .playlist-player-container .title-container {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .playlist-player-container .song-title {
-        font-size: 14px;
-        margin: 0;
     }
 
     .home-container {
@@ -625,4 +261,78 @@
     .song-player-container .play-button-small { width: 54px; height: 54px; }
     .song-player-container .play-icon-small { width: 24px; height: 24px; }
     .song-player-container .time-display { min-width: 36px; font-size: 11px; }
+}
+
+@media (max-width: 576px) {
+    .song-player-container .persona-bio { -webkit-line-clamp: 2; }
+    .song-player-container .persona-more { font-size: 12px; margin-bottom: 10px; }
+}
+
+
+@media (max-width: 576px) {
+    /*
+     * PLAYLIST PLAYER - phone. Art beside the title rather than above it, so
+     * the fold still reaches the track list. The transport pill wraps: seek bar
+     * on its own row, five controls spread across the width at 46px, over the
+     * 44px touch-target floor. Volume is hidden - phones have hardware volume -
+     * but the element stays in the DOM.
+     */
+    .playlist-player-container { min-height: calc(100dvh - 58px); }
+    .playlist-player-container .playlist-header { padding: 18px 16px 16px; }
+    .playlist-player-container .playlist-hero-inner {
+        grid-template-areas: "art text" "actions actions";
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        justify-items: start;
+        text-align: left;
+        gap: 14px;
+    }
+    .playlist-player-container .playlist-tag-row,
+    .playlist-player-container .playlist-meta-row,
+    .playlist-player-container .action-controls { justify-content: flex-start; }
+    .playlist-player-container .action-controls { gap: 8px; margin-top: 2px; }
+    .playlist-player-container .player-art-shell { width: 96px; height: 96px; }
+    .playlist-player-container .playlist-tag-row { gap: 5px; margin-bottom: 8px; }
+    .playlist-player-container .playlist-chip { height: 23px; padding: 0 10px; font-size: 10px; }
+    .playlist-player-container .song-title { font-size: 30px; letter-spacing: -.03em; line-height: 1.06; margin-bottom: 7px; }
+    .playlist-player-container .playlist-meta-row { gap: 9px; font-size: 12px; }
+    .playlist-player-container .subscription-badge,
+    .playlist-player-container .preview-label { font-size: 12px; }
+    .playlist-player-container .play-button-large { width: 52px; height: 52px; }
+    .playlist-player-container .play-button-large .play-icon { width: 24px; height: 24px; }
+
+    .playlist-player-container .playlist-stage { gap: 12px; padding: 12px 14px 0; }
+    .playlist-player-container .playlist-panel { padding: 16px; }
+    .playlist-player-container .playlist-panel-head { margin-bottom: 10px; }
+    .playlist-player-container .playlist-stage-panel { height: 190px; }
+    .playlist-player-container .playlist-stage-panel .playlist-panel-body { height: 118px; }
+    .playlist-player-container .playlist-stage-art { max-height: 118px; }
+    .playlist-player-container .lyrics-scroller--player { font-size: 15px; }
+    .playlist-player-container .persona-image-sm { width: 42px; height: 42px; }
+
+    .playlist-player-container .track-list th { font-size: 10px; padding: 0 8px 8px; }
+    .playlist-player-container .track-list th.track-number { width: 34px; }
+    .playlist-player-container .track-list th.track-image { width: 48px; }
+    .playlist-player-container .track-list th.track-duration { width: 52px; }
+    .playlist-player-container .track-row td { padding: 8px; font-size: 13.5px; }
+    .playlist-player-container .track-name { font-size: 14px; }
+    .playlist-player-container .track-sub { font-size: 12px; }
+    .playlist-player-container .track-index { font-size: 13px; }
+
+    .playlist-player-container .player-bar {
+        flex-wrap: wrap;
+        margin: 14px 12px 16px;
+        height: auto;
+        padding: 12px 16px 13px;
+        gap: 6px;
+        border-radius: 22px;
+    }
+    .playlist-player-container .progress-container { order: 1; width: 100%; flex: 0 0 100%; gap: 9px; }
+    .playlist-player-container .player-controls { order: 2; flex: 1; justify-content: space-between; gap: 0; }
+    .playlist-player-container .volume-controls { display: none; }
+    .playlist-player-container .control-button { width: 46px; height: 46px; }
+    .playlist-player-container .control-icon { width: 19px; height: 19px; }
+    .playlist-player-container .play-button-small { width: 54px; height: 54px; }
+    .playlist-player-container .play-icon-small { width: 24px; height: 24px; }
+    .playlist-player-container .time-display { min-width: 36px; font-size: 11px; }
 }

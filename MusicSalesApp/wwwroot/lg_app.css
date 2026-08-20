@@ -37,97 +37,6 @@
         height: calc(100vh - 9rem);
     }
 
-    /* PlaylistPlayer - Container adjustments for large screens */
-    .playlist-player-container {
-        grid-template-rows: auto auto auto 1fr 88px;
-    }
-
-    .playlist-player-container .playlist-image-title-row {
-        padding: 0px 24px;
-    }
-
-    .playlist-player-container .action-buttons-row {
-        padding: 8px 24px;
-    }
-
-    .playlist-player-container .status-info-row {
-        padding: 8px 24px;
-    }
-
-    .playlist-player-container .player-bar {
-        padding: 14px 24px;
-        gap: 8px;
-    }
-
-    /* PlaylistPlayer - Player controls layout for large screens */
-    .playlist-player-container .controls-wrapper {
-        gap: 8px;
-        margin-bottom: 8px;
-        max-width: 600px;
-    }
-
-    .playlist-player-container .time-spacer {
-        min-width: 40px;
-    }
-
-    .playlist-player-container .player-controls-row {
-        gap: 16px;
-    }
-
-    .playlist-player-container .player-controls {
-        gap: 16px;
-    }
-
-    .playlist-player-container .volume-controls {
-        gap: 8px;
-    }
-
-    .playlist-player-container .control-button {
-        width: 32px;
-        height: 32px;
-    }
-
-    .playlist-player-container .control-icon {
-        width: 16px;
-        height: 16px;
-    }
-
-    .playlist-player-container .play-button-small {
-        width: 32px;
-        height: 32px;
-    }
-
-    .playlist-player-container .play-icon-small {
-        width: 16px;
-        height: 16px;
-    }
-
-    .playlist-player-container .progress-container {
-        gap: 8px;
-        max-width: 600px;
-    }
-
-    .playlist-player-container .time-display {
-        min-width: 40px;
-        font-size: 11px;
-    }
-
-    .playlist-player-container .volume-bar-container {
-        width: 100px;
-    }
-
-    .playlist-art {
-        width: 130px;
-        object-fit: cover;
-        border-radius: 4px;
-    }
-
-    .title-container {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-    }
-
     .song-text-details {
         display: flex;
         flex-direction: column;
@@ -146,162 +55,6 @@
         margin: 0 15px 0 15px;
         padding: 0;
     }
-
-    .track-list thead {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .track-list th {
-        font-size: 12px;
-        font-weight: 400;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        padding: 8px 16px;
-        text-align: left;
-    }
-
-        .track-list th.track-number {
-            width: 50px;
-            text-align: center;
-        }
-
-        .track-list th.track-image {
-            width: 60px;
-            padding-left: 0;
-            padding-right: 0;
-        }
-
-        .track-list th.track-duration {
-            width: 80px;
-            text-align: right;
-        }
-
-        .track-list th.track-actions {
-            width: 50px;
-        }
-
-    .track-row {
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-
-        .track-row:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .track-row.current-track {
-            background-color: rgba(29, 185, 84, 0.2);
-        }
-
-        .track-row td {
-            padding: 12px 16px;
-        }
-
-            .track-row td.track-number {
-                text-align: center;
-                position: relative;
-            }
-
-    .track-index {
-        display: inline;
-    }
-
-    .track-play-btn {
-        display: none;
-        background: none;
-        border: none;
-        color: #fff;
-        cursor: pointer;
-        padding: 0;
-        width: 16px;
-        height: 16px;
-    }
-
-        .track-play-btn svg {
-            width: 16px;
-            height: 16px;
-        }
-
-    .track-row:hover .track-index {
-        display: none;
-    }
-
-    .track-row:hover .track-play-btn {
-        display: inline;
-    }
-
-    .track-row.current-track .track-index {
-        display: none;
-    }
-
-    /* Playing Indicator */
-    .playing-indicator {
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        gap: 2px;
-        height: 16px;
-    }
-
-        .playing-indicator span {
-            width: 3px;
-            background-color: #1db954;
-            border-radius: 1px;
-            animation: soundBars 0.5s ease infinite alternate;
-        }
-
-            .playing-indicator span:nth-child(1) {
-                height: 60%;
-                animation-delay: 0s;
-            }
-
-            .playing-indicator span:nth-child(2) {
-                height: 100%;
-                animation-delay: 0.1s;
-            }
-
-            .playing-indicator span:nth-child(3) {
-                height: 40%;
-                animation-delay: 0.2s;
-            }
-
-    @keyframes soundBars {
-        0% {
-            height: 20%;
-        }
-
-        100% {
-            height: 100%;
-        }
-    }
-
-    .track-image {
-        padding: 8px !important;
-    }
-
-    .track-thumbnail {
-        width: 40px;
-        height: 40px;
-        object-fit: cover;
-        border-radius: 2px;
-    }
-
-    .track-thumbnail-placeholder {
-        width: 40px;
-        height: 40px;
-        background: #282828;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 2px;
-    }
-
-        .track-thumbnail-placeholder svg {
-            width: 24px;
-            height: 24px;
-            fill: #b3b3b3;
-        }
 
     /* Stream Count on Card */
     .card-stream-count {
@@ -500,4 +253,16 @@
     .song-player-container .song-stage-art { max-height: 224px; }
     .song-player-container .lyrics-scroller--player { font-size: 19px; }
     .song-player-container .player-bar { margin: 20px 44px 20px; }
+}
+
+
+@media (max-width: 1200px) {
+    /* PLAYLIST PLAYER - narrow desktop / large tablet landscape */
+    .playlist-player-container .playlist-header { padding: 30px 44px 26px; }
+    .playlist-player-container .playlist-hero-inner { gap: 26px; }
+    .playlist-player-container .player-art-shell { width: 156px; height: 156px; }
+    .playlist-player-container .song-title { font-size: 54px; }
+    .playlist-player-container .playlist-stage { grid-template-columns: minmax(0, 1fr) 340px; gap: 26px; padding: 20px 44px 0; }
+    .playlist-player-container .track-list th.track-streams { width: 80px; }
+    .playlist-player-container .player-bar { margin: 20px 44px 20px; }
 }

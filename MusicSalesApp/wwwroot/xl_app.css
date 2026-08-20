@@ -236,16 +236,6 @@
     height: 24px;
 }
 
-/* 1. The Wrapper (Router Container) - Base styles for all breakpoints */
-.playlist-player-container {
-    display: grid;
-    grid-template-rows: auto auto auto 1fr 88px;
-    grid-template-columns: 100%;
-    height: calc(100vh - 66px);
-    width: 100%;
-    overflow: hidden;
-}
-
 .player-bar {
     background: linear-gradient(to top, #181818 0%, #282828 100%);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -264,97 +254,6 @@
     #grid-container {
         width: 100%;
         height: calc(100vh - 10rem);
-    }
-
-    /* PlaylistPlayer - Container adjustments for extra large screens */
-    .playlist-player-container {
-        grid-template-rows: auto auto auto 1fr 88px;
-    }
-
-    .playlist-player-container .playlist-image-title-row {
-        padding: 0px 24px;
-    }
-
-    .playlist-player-container .action-buttons-row {
-        padding: 8px 24px;
-    }
-
-    .playlist-player-container .status-info-row {
-        padding: 8px 24px;
-    }
-
-    .playlist-player-container .player-bar {
-        padding: 16px 24px;
-        gap: 8px;
-    }
-
-    /* PlaylistPlayer - Player controls layout for extra large screens */
-    .playlist-player-container .controls-wrapper {
-        gap: 8px;
-        margin-bottom: 8px;
-        max-width: 600px;
-    }
-
-    .playlist-player-container .time-spacer {
-        min-width: 40px;
-    }
-
-    .playlist-player-container .player-controls-row {
-        gap: 16px;
-    }
-
-    .playlist-player-container .player-controls {
-        gap: 16px;
-    }
-
-    .playlist-player-container .volume-controls {
-        gap: 8px;
-    }
-
-    .playlist-player-container .control-button {
-        width: 32px;
-        height: 32px;
-    }
-
-    .playlist-player-container .control-icon {
-        width: 16px;
-        height: 16px;
-    }
-
-    .playlist-player-container .play-button-small {
-        width: 32px;
-        height: 32px;
-    }
-
-    .playlist-player-container .play-icon-small {
-        width: 16px;
-        height: 16px;
-    }
-
-    .playlist-player-container .progress-container {
-        gap: 8px;
-        max-width: 600px;
-    }
-
-    .playlist-player-container .time-display {
-        min-width: 40px;
-        font-size: 11px;
-    }
-
-    .playlist-player-container .volume-bar-container {
-        width: 100px;
-    }
-
-    .playlist-art {
-        width: 140px;
-        object-fit: cover;
-        border-radius: 8px;
-    }
-
-    .title-container {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
     }
 
     .song-text-details {
@@ -422,112 +321,6 @@
         fill: currentColor;
     }
 
-    
-    .track-list {
-        width: 100%;
-        border-collapse: collapse;
-        color: #b3b3b3;
-    }
-
-        .track-list thead {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .track-list th {
-            font-size: 12px;
-            font-weight: 400;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            padding: 8px 16px;
-            text-align: left;
-        }
-
-            .track-list th.track-number {
-                width: 50px;
-                text-align: center;
-            }
-
-            .track-list th.track-image {
-                width: 60px;
-                padding-left: 0;
-                padding-right: 0;
-            }
-
-            .track-list th.track-duration {
-                width: 80px;
-                text-align: right;
-            }
-
-            .track-list th.track-streams {
-                width: 80px;
-                text-align: right;
-            }
-
-            .track-list th.track-actions {
-                width: 50px;
-            }
-
-    .track-row {
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-
-        .track-row:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .track-row.current-track {
-            background-color: rgba(29, 185, 84, 0.2);
-        }
-
-        .track-row td {
-            padding: 12px 16px;
-        }
-
-            .track-row td.track-number {
-                text-align: center;
-                position: relative;
-            }
-
-    .track-index {
-        display: inline;
-    }
-
-    .track-play-btn {
-        display: none;
-        background: none;
-        border: none;
-        color: #fff;
-        cursor: pointer;
-        padding: 0;
-        width: 16px;
-        height: 16px;
-    }
-
-        .track-play-btn svg {
-            width: 16px;
-            height: 16px;
-        }
-
-    .track-row:hover .track-index {
-        display: none;
-    }
-
-    .track-row:hover .track-play-btn {
-        display: inline;
-    }
-
-    .track-row.current-track .track-index {
-        display: none;
-    }
-
-    .playlist-track-info {
-        color: #b3b3b3;
-        font-size: 14px;
-        font-weight: 500;
-    }
-
     .stream-count-info {
         display: flex;
         align-items: center;
@@ -557,129 +350,6 @@
         height: 16px;
         fill: currentColor;
     }
-
-    .track-title-cell {
-        text-align: left;
-    }
-
-    .track-title-content {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-    }
-
-    .track-name {
-        color: #fff;
-        font-size: 16px;
-        font-weight: 400;
-    }
-
-        .track-name.playing {
-            color: #1db954;
-        }
-
-    .track-preview-badge {
-        font-size: 10px;
-        font-weight: 600;
-        color: #ffa500;
-        background-color: rgba(255, 165, 0, 0.15);
-        padding: 2px 6px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-left: 8px;
-        white-space: nowrap;
-    }
-
-    .track-duration {
-        text-align: right;
-        font-size: 14px;
-    }
-
-    .track-streams {
-        text-align: right;
-        font-size: 14px;        
-    }
-
-    .track-artist {
-        text-align: left;
-        font-size: 14px;
-        color: #b3b3b3;
-    }
-
-    .track-genre {
-        text-align: left;
-        font-size: 14px;
-        color: #a0a0a0;
-    }
-
-    /* Playing Indicator */
-    .playing-indicator {
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        gap: 2px;
-        height: 16px;
-    }
-
-        .playing-indicator span {
-            width: 3px;
-            background-color: #1db954;
-            border-radius: 1px;
-            animation: soundBars 0.5s ease infinite alternate;
-        }
-
-            .playing-indicator span:nth-child(1) {
-                height: 60%;
-                animation-delay: 0s;
-            }
-
-            .playing-indicator span:nth-child(2) {
-                height: 100%;
-                animation-delay: 0.1s;
-            }
-
-            .playing-indicator span:nth-child(3) {
-                height: 40%;
-                animation-delay: 0.2s;
-            }
-
-    @keyframes soundBars {
-        0% {
-            height: 20%;
-        }
-
-        100% {
-            height: 100%;
-        }
-    }
-
-    .track-image {
-        padding: 8px !important;
-    }
-
-    .track-thumbnail {
-        width: 40px;
-        height: 40px;
-        object-fit: cover;
-        border-radius: 2px;
-    }
-
-    .track-thumbnail-placeholder {
-        width: 40px;
-        height: 40px;
-        background: #282828;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 2px;
-    }
-
-        .track-thumbnail-placeholder svg {
-            width: 24px;
-            height: 24px;
-            fill: #b3b3b3;
-        }
 
     /* Featured Music Carousel - XL breakpoint: show ~5 cards */
     .featured-music-carousel {
@@ -1076,3 +746,104 @@
    stage panel it sits marooned in the middle. Fill whichever box it is in. */
 .song-player-container .player-art-shell .album-art-animation { width: 100%; height: 100%; }
 .song-player-container .song-panel-art .album-art-animation { width: 100%; height: 100%; max-width: 250px; max-height: 250px; }
+
+/* Bio clamp. Mirrors .song-player-container .persona-bio in app.css - see the comment
+   there for why the inherited 4.5em scroll box had to go. */
+.song-player-container .persona-bio { -webkit-line-clamp: 3; }
+.song-player-container .persona-more { gap: 5px; font-size: 12.5px; font-weight: 600; margin-bottom: 12px; }
+.song-player-container .persona-more svg { width: 13px; height: 13px; }
+
+
+/* =========================================================================
+   PLAYLIST PLAYER - "Marquee" sizing: desktop base
+   Unwrapped, so it is the base every narrower sheet overrides.
+   NOTE: .player-art-shell and .playlist-stage-art widths are mirrored in
+   Components/Shared/CoverArtSizes.cs (PlaylistPlayerHero / PlayerStage), and
+   .track-thumbnail in TrackThumbnail. Change one without the other and the
+   browser fetches the wrong rendition - it renders soft, it does not error.
+   ========================================================================= */
+
+.playlist-player-container .playlist-header { padding: 34px 56px 30px; }
+.playlist-player-container .playlist-hero-inner { gap: 30px; }
+.playlist-player-container .player-art-shell { width: 168px; height: 168px; border-radius: 14px; }
+.playlist-player-container .playlist-tag-row { gap: 7px; margin-bottom: 12px; }
+.playlist-player-container .playlist-chip { height: 27px; padding: 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .07em; }
+.playlist-player-container .song-title { font-size: 68px; letter-spacing: -.038em; line-height: .96; margin-bottom: 12px; }
+.playlist-player-container .playlist-meta-row { gap: 18px; font-size: 14.5px; }
+.playlist-player-container .now-playing-info { gap: 6px; }
+.playlist-player-container .now-playing-label { font-weight: 500; }
+.playlist-player-container .now-playing-track { font-weight: 600; }
+.playlist-player-container .stream-count-info { gap: 7px; }
+.playlist-player-container .stream-icon { width: 17px; height: 17px; }
+.playlist-player-container .subscription-badge { gap: 6px; font-size: 14px; }
+.playlist-player-container .subscription-badge svg { width: 15px; height: 15px; }
+.playlist-player-container .preview-label { font-size: 14px; font-weight: 600; }
+.playlist-player-container .persona-website { font-size: 13px; }
+.playlist-player-container .action-controls { gap: 10px; }
+.playlist-player-container .track-like-dislike { display: flex; align-items: center; }
+.playlist-player-container .play-button-large { width: 62px; height: 62px; }
+.playlist-player-container .play-button-large .play-icon { width: 28px; height: 28px; margin-left: 3px; }
+
+.playlist-player-container .playlist-stage { grid-template-columns: minmax(0, 1fr) 400px; gap: 34px; padding: 22px 56px 0; }
+.playlist-player-container .playlist-side { gap: 16px; }
+.playlist-player-container .playlist-panel { padding: 20px 22px; }
+.playlist-player-container .playlist-panel-head { margin-bottom: 14px; }
+.playlist-player-container .playlist-panel-caption { font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.playlist-player-container .playlist-panel-count { font-size: 12px; }
+.playlist-player-container .playlist-panel-switch { gap: 3px; padding: 3px; }
+.playlist-player-container .lyrics-toggle-button,
+.playlist-player-container .art-toggle-button { gap: 6px; height: 28px; padding: 0 13px; font-size: 12px; font-weight: 600; }
+.playlist-player-container .lyrics-toggle-icon { width: 14px; height: 14px; }
+.playlist-player-container .playlist-stage-panel { height: 232px; }
+.playlist-player-container .playlist-stage-panel .playlist-panel-body { height: 146px; }
+.playlist-player-container .lyrics-scroller--player { font-size: 17px; }
+.playlist-player-container .playlist-stage-art { max-height: 146px; }
+.playlist-player-container .playlist-artist-panel,
+.playlist-player-container .playlist-about-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.playlist-player-container .persona-identity { gap: 13px; margin-bottom: 11px; }
+.playlist-player-container .persona-image-sm { width: 48px; height: 48px; }
+.playlist-player-container .persona-bio { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; -webkit-line-clamp: 2; }
+.playlist-player-container .persona-bio-full { -webkit-line-clamp: none; font-size: 13.5px; line-height: 1.7; margin: 0 0 10px; }
+.playlist-player-container .persona-more { gap: 5px; font-size: 12.5px; font-weight: 600; }
+.playlist-player-container .persona-more svg { width: 13px; height: 13px; }
+.playlist-player-container .playlist-tip-cta { gap: 9px; height: 44px; font-size: 14px; font-weight: 700; margin-top: auto; }
+.playlist-player-container .playlist-tip-cta svg { width: 18px; height: 18px; }
+
+.playlist-player-container .track-list th { font-size: 11px; font-weight: 700; letter-spacing: .12em; padding: 0 12px 10px; }
+.playlist-player-container .track-list th.track-number { width: 46px; }
+.playlist-player-container .track-list th.track-image { width: 52px; }
+.playlist-player-container .track-list th.track-streams { width: 90px; }
+.playlist-player-container .track-list th.track-duration { width: 70px; }
+.playlist-player-container .track-row td { padding: 9px 12px; font-size: 14px; }
+.playlist-player-container .track-row td:first-child { border-radius: 8px 0 0 8px; }
+.playlist-player-container .track-row td:last-child { border-radius: 0 8px 8px 0; }
+.playlist-player-container .track-index { font-size: 14px; }
+.playlist-player-container .track-play-btn { width: 22px; height: 22px; }
+.playlist-player-container .track-play-btn svg { width: 15px; height: 15px; }
+.playlist-player-container .track-title-content { gap: 8px; }
+.playlist-player-container .track-name { font-size: 14px; font-weight: 500; }
+.playlist-player-container .track-preview-badge { height: 19px; padding: 0 7px; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.playlist-player-container .track-artist,
+.playlist-player-container .track-genre { font-size: 13.5px; }
+.playlist-player-container .track-thumbnail,
+.playlist-player-container .track-thumbnail-animation { width: 40px; height: 40px; }
+.playlist-player-container .playing-indicator { gap: 2px; height: 14px; }
+.playlist-player-container .playing-indicator span { width: 3px; }
+.playlist-player-container .tip-heart-inline { margin-left: 7px; }
+.playlist-player-container .tip-heart-inline .tip-heart-icon { width: 15px; height: 15px; }
+
+.playlist-player-container .player-bar { margin: 22px 56px 22px; height: 74px; padding: 0 26px; gap: 20px; }
+.playlist-player-container .player-controls { gap: 5px; }
+.playlist-player-container .control-button { width: 40px; height: 40px; }
+.playlist-player-container .control-icon { width: 18px; height: 18px; }
+.playlist-player-container .play-button-small { width: 46px; height: 46px; margin: 0 3px; }
+.playlist-player-container .play-icon-small { width: 20px; height: 20px; }
+.playlist-player-container .progress-container { gap: 14px; }
+.playlist-player-container .time-display { min-width: 40px; font-size: 11.5px; }
+.playlist-player-container .progress-bar-container { height: 5px; }
+.playlist-player-container .progress-bar-container:hover { height: 7px; }
+.playlist-player-container .volume-controls { gap: 8px; }
+.playlist-player-container .volume-bar-container { width: 92px; height: 5px; }
+.playlist-player-container .progress-thumb,
+.playlist-player-container .volume-thumb { width: 13px; height: 13px; }
+.playlist-player-container .progress-limit-marker { width: 3px; }
