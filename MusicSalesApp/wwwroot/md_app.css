@@ -58,13 +58,10 @@
     }
 
     /* Stream Count on Card */
+    /* See the note in lg_app.css: dead colour and a fighting margin, both removed. */
     .card-stream-count {
-        display: flex;
-        align-items: center;
         gap: 4px;
-        color: #b3b3b3;
         font-size: 12px;
-        margin-bottom: 4px;
     }
 
     .stream-icon {

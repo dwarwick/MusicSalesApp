@@ -116,7 +116,13 @@ else
             var isPlaying = IsCardPlaying(cardId);
             var albumArtSource = GetAlbumArtSource(f.Name);
 
-            <SfCard CssClass="music-card">
+            @* @key is load-bearing, not tidiness. _activeAudioElement, _activeProgressBarElement
+               and _activeVolumeBarElement are SINGLE fields shared by whichever card is playing.
+               Unkeyed, Blazor diffs this list positionally, so changing a filter mid-playback
+               reuses the playing card's DOM for a different song and silently re-binds those
+               refs to the wrong elements. Keyed on the file name, the playing card keeps its
+               own DOM or is disposed outright. *@
+            <SfCard CssClass="music-card" @key="f.Name">
                 @{
                     // Only the playing card has an <audio> element, and the highlighting is driven
                     // off that element's own clock - so the toggle belongs to the card being played
@@ -155,7 +161,7 @@ else
                         @* The card art is fluid - width:100% inside a grid track - so the sizes
                            preset is what lets the browser pick a rendition before layout runs. *@
                         <CoverArt Source="albumArtSource"
-                                  Sizes="@CoverArtSizes.Card"
+                                  Sizes="@(ShowHomePageFeatured ? CoverArtSizes.CardCarousel : CoverArtSizes.Card)"
                                   CssClass="@artHidden"
                                   Alt="Album Art" />
                     }
@@ -327,12 +333,17 @@ else
                 else
                 {
                     <!-- Card Actions: Play button and View button (like/dislike live in the AI badges row above) -->
+                    @* Play is the card's primary action and carries the accent fill; View is the
+                       quiet outline beside it. Both were identical outlines, which left the card
+                       with no primary at all - and made the Facebook share bar below the loudest
+                       thing on it. The modifier classes are what the CSS keys off; the title
+                       attributes stay because MusicLibraryTests selects on them. *@
                     <div class="card-actions-with-likes">
-                        <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
+                        <div class="action-column action-column-play">
+                            <SfButton CssClass="action-button action-button-play" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
                         </div>
                         <div class="action-column">
-                            <SfButton CssClass="action-button" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
+                            <SfButton CssClass="action-button action-button-view" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
                         </div>
                     </div>
                 }
@@ -357,10 +368,6 @@ else
 <SubscribeCtaDialog @ref="_subscribeCtaDialog" IsAuthenticated="_isAuthenticated" HasActiveSubscription="_hasActiveSubscription" />
 <TipDialog @ref="_tipDialog" CreatorId="_tipCreatorId" SongMetadataId="_tipSongMetadataId" IsAuthenticated="_isAuthenticated" />
 
-<style>
-    .e-card.music-card {
-        border-radius: 12px;
-        overflow: hidden;
-        padding: 8px;
-    }
-</style>
+@* The inline <style> that used to sit here now lives in app.css under "CARDS - structure".
+   Being injected only when this component rendered, it made the SAME playlist card 8px-padded
+   on / (where this component is embedded) and 16px-padded on /my-playlists (where it is not). *@

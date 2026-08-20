@@ -21,13 +21,31 @@ namespace MusicSalesApp.Components.Shared;
 public static class CoverArtSizes
 {
     /// <summary>
-    /// Library grid and home carousel. The art is fluid: <c>.card-album-art</c> is
+    /// The library grid (<c>.music-cards-grid</c>). The art is fluid: <c>.card-album-art</c> is
     /// <c>width:100%; aspect-ratio:1</c> inside a card whose width comes from the grid track -
-    /// <c>minmax(210px,1fr)</c> by default, <c>minmax(150px,1fr)</c> at 768, and a single full-width
-    /// column at 576. The vw values approximate the track width net of the gap and card padding.
+    /// <c>minmax(210px,1fr)</c> by default and <c>minmax(150px,1fr)</c> at 768. The vw values
+    /// approximate the track width net of the gap and card padding.
+    ///
+    /// <para>
+    /// The 576 stop is a FIXED 84px, not a vw: below that breakpoint the grid card turns
+    /// horizontal and the art moves into an 84px left column (<c>xs_app.css</c>). It used to read
+    /// <c>92vw</c>, which was right when one square card filled the phone screen.
+    /// </para>
     /// </summary>
     public const string Card =
-        "(max-width:576px) 92vw, (max-width:768px) 46vw, (max-width:992px) 31vw, 210px";
+        "(max-width:576px) 84px, (max-width:768px) 46vw, (max-width:992px) 31vw, 210px";
+
+    /// <summary>
+    /// The home / signup featured carousel (<c>.featured-music-carousel</c>), which keeps the tall
+    /// square card at every width - so it needs its own ladder, not <see cref="Card"/>.
+    ///
+    /// <para>
+    /// Tracks the "show ~N cards" widths in the breakpoint sheets: 220px fixed at xl, then
+    /// <c>100vw/4.2</c>, <c>/3.2</c>, <c>/2.2</c> and <c>/1.2</c> as the viewport narrows.
+    /// </para>
+    /// </summary>
+    public const string CardCarousel =
+        "(max-width:576px) 83vw, (max-width:768px) 45vw, (max-width:992px) 31vw, (max-width:1200px) 24vw, 220px";
 
     /// <summary>
     /// The song player's hero artwork (<c>.song-hero-art</c>).

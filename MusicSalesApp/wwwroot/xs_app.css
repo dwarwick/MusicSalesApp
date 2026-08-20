@@ -76,10 +76,6 @@
         gap: 12px;
     }
 
-    .music-library-container {
-        padding: 16px;
-    }
-
     /* Featured Music Carousel - XS breakpoint: show 1.2 cards with peek */
     .featured-music-carousel {
         gap: 12px;
@@ -146,13 +142,10 @@
     }
 
     /* Stream Count on Card */
+    /* See the note in lg_app.css: dead colour and a fighting margin, both removed. */
     .card-stream-count {
-        display: flex;
-        align-items: center;
         gap: 3px;
-        color: #b3b3b3;
         font-size: 10px;
-        margin-bottom: 4px;
     }
 
     .stream-icon {
@@ -335,4 +328,49 @@
     .playlist-player-container .play-button-small { width: 54px; height: 54px; }
     .playlist-player-container .play-icon-small { width: 24px; height: 24px; }
     .playlist-player-container .time-display { min-width: 36px; font-size: 11px; }
+}
+
+
+@media (max-width: 576px) {
+    /*
+     * CARDS — phone. THE CARD TURNS HORIZONTAL.
+     *
+     * The grid is a single 1fr column here, so the card's 1:1 artwork became about
+     * 338px tall and ONE card filled the screen. The same children reflow into a
+     * grid instead - art in a fixed left column spanning every row, everything else
+     * stacked beside it - so several fit. No markup change: this is
+     * grid-template-columns plus grid-row on the art.
+     *
+     * Only inside .music-cards-grid. The carousel keeps the tall card, because there
+     * the artwork IS the point and you swipe rather than scan.
+     */
+    /* The single 1fr column and its gap are already set higher up in this file. */
+    .music-cards-grid .music-card {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        gap: 3px 12px;
+        align-items: center;
+        padding: 10px;
+    }
+
+    .music-cards-grid .music-card > *:not(.card-album-art) { grid-column: 2; }
+
+    .music-cards-grid .card-album-art {
+        grid-column: 1;
+        grid-row: 1 / -1;
+        width: 84px;
+        height: 84px;
+        align-self: center;
+    }
+
+    .music-cards-grid .card-song-title { font-size: 14.5px; }
+    .music-cards-grid .card-artist-name { font-size: 12.5px; }
+    .music-cards-grid .card-genre { font-size: 11.5px; }
+    .music-cards-grid .card-stream-count { font-size: 11px; }
+    .music-cards-grid .card-ai-actions-row { min-height: 0; margin: 0; }
+    .music-cards-grid .action-button { height: 44px; }
+
+    .filter-pill { height: 34px; padding: 0 13px; font-size: 13px; }
+    .music-library-sticky-header { gap: 8px; padding: 10px 0; }
+    .music-library-sticky-header h3 { font-size: 19px; }
 }

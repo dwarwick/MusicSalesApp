@@ -275,45 +275,11 @@
         padding: 0;
     }
 
-    /* Song Title */
-    .card-song-title {
-        color: #fff;
-        font-size: 14px;
-        font-weight: 600;
-        margin-bottom: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .card-artist-name {
-        font-size: 12px;
-        color: #b3b3b3;
-        margin-bottom: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    /* Genre on Card */
-    .card-genre {
-        font-size: 11px;
-        color: #a0a0a0;
-        margin-bottom: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    /* Stream Count on Card */
-    .card-stream-count {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        color: #b3b3b3;
-        font-size: 12px;
-        margin-bottom: 4px;
-    }
+    /* The card title / artist / genre / stream-count rules that used to sit here are gone.
+       Their colours were dark-theme greys hardcoded in a BREAKPOINT sheet, so they only
+       existed above 1200px and were dead anyway (the theme sheet loads last and wins), and
+       their margin-bottom:4px was quietly beating the margin:0 in app.css. Colour is now in
+       light.css/dark.css and sizing is at the bottom of this file. */
 
     .stream-icon {
         width: 12px;
@@ -591,16 +557,25 @@
     margin-bottom: 20px;
 }
 
+/* NOTE: everything from here to the end of the "Playlists Page Spacing" group is OUTSIDE the
+   @media (min-width:1200px) block that closes above - it applies at every width. That was not
+   obvious and it caused the two bugs fixed below. */
+
 .playlists-page-grid {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    /* min() so the track can collapse below 300px. A bare minmax(300px,1fr) cannot: on a 360px
+       phone it still demanded a 300px column and the grid overflowed. */
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
     gap: 20px;
     margin-bottom: 20px;
 }
 
 .playlists-page-card {
+    /* Was width:300px !important and border-radius:16px !important. The fixed width fought the
+       track at every size below desktop, and the radius overrode the shared .music-card radius -
+       so on the home page a playlist card and a song card sat side by side at 16px and 14px.
+       These cards carry .music-card (Home.razor, MyPlaylists.razor.cs:311, PlaylistCard.razor),
+       so the shared surface should govern both. */
     height: 100%;
-    width: 300px !important;
-    border-radius: 16px !important;
 }
 
 .playlists-page-info {
@@ -847,3 +822,40 @@
 .playlist-player-container .progress-thumb,
 .playlist-player-container .volume-thumb { width: 13px; height: 13px; }
 .playlist-player-container .progress-limit-marker { width: 3px; }
+
+
+/* =========================================================================
+   CARDS — sizing, desktop base
+   Unwrapped, so it is the base every narrower sheet overrides.
+   NOTE: the grid track and carousel widths below are mirrored in
+   Components/Shared/CoverArtSizes.cs (Card). Change one without the other and
+   the browser fetches the wrong rendition — it renders soft, it does not error.
+   ========================================================================= */
+
+.music-cards-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 24px; }
+/* The carousel's per-breakpoint widths are NOT restated here — the existing
+   "show ~N cards" rules above (and in lg/md/sm/xs) already own them. */
+
+.music-library-sticky-header { gap: 16px; padding: 12px 0; }
+.music-library-sticky-header h3 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
+.filter-pill { gap: 6px; height: 32px; padding: 0 14px; font-size: 14px; font-weight: 500; }
+.filter-pill-count { width: 20px; height: 20px; font-size: 11px; font-weight: 700; }
+
+.card-song-title { font-size: 14px; font-weight: 650; }
+.card-artist-name { gap: 6px; font-size: 12.5px; }
+.card-persona-image { width: 18px; height: 18px; }
+.card-genre { font-size: 11.5px; }
+.card-stream-count { font-size: 11.5px; }
+.card-stream-info { gap: 5px; }
+.card-stream-actions { gap: 8px; }
+.card-actions-with-likes { gap: 6px; }
+.action-button { height: 34px; }
+.action-button .e-btn-icon,
+.action-button svg { width: 16px; height: 16px; }
+
+/* Deliberately shorter than the 34px action buttons above it - Share is a secondary action
+   and the approved layout has it as a small pill, not a bar. */
+.card-bottom-row .fb-share-btn { height: 28px; padding: 0 10px; font-size: 12.5px; gap: 5px; }
+.card-bottom-row .fb-share-btn .fb-logo-box { width: 17px; height: 17px; font-size: 12px; }
+
+.contact-icon { width: 26px; height: 26px; }

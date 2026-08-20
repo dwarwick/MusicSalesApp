@@ -57,13 +57,11 @@
     }
 
     /* Stream Count on Card */
+    /* Colour was a dark-theme grey in a breakpoint sheet (dead - the theme sheet loads last),
+       and margin-bottom fought the margin:0 in app.css. Both gone; sizing only. */
     .card-stream-count {
-        display: flex;
-        align-items: center;
         gap: 4px;
-        color: #b3b3b3;
         font-size: 12px;
-        margin-bottom: 4px;
     }
 
     .stream-icon {

@@ -999,6 +999,141 @@ public class MusicLibraryTests : BUnitTestBase
         }
     }
 
+    [Test]
+    public void MusicLibrary_KeepsTheMiniPlayerOnThePlayingCard_WhenAFilterRemovesAnEarlierCard()
+    {
+        // The card loop is keyed on the file name. Without @key, Blazor diffs the list
+        // POSITIONALLY, so filtering out a card that sits before the playing one shifts every
+        // later card's DOM up a slot - and _activeAudioElement, _activeProgressBarElement and
+        // _activeVolumeBarElement are single shared fields, so they would silently re-bind to
+        // a different song's elements while that song kept playing.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "AlphaSong.mp3", SongTitle = "Alpha Song", Genre = "Rock", UpdatedAt = DateTime.Now },
+            new() { Id = 2, Mp3BlobPath = "BravoSong.mp3", SongTitle = "Bravo Song", Genre = "Jazz", UpdatedAt = DateTime.Now },
+            new() { Id = 3, Mp3BlobPath = "CharlieSong.mp3", SongTitle = "Charlie Song", Genre = "Rock", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        // Play the SECOND card, so there is a card before it for the filter to remove.
+        var playButtons = cut.FindAll("button[title='play']");
+        Assert.That(playButtons, Has.Count.EqualTo(3), "expected one play button per card");
+        playButtons[1].Click();
+
+        Assert.That(CardContainingMiniPlayer(cut).TextContent, Does.Contain("Bravo Song"),
+            "the mini player should start on the card that was clicked");
+
+        // Narrow to Jazz, which drops AlphaSong (before the playing card) and CharlieSong (after).
+        FindFilterPill(cut, "Genres").Click();
+        cut.FindAll(".filter-pill-dropdown-item input[type='checkbox']")
+            .First(cb => cb.ParentElement!.TextContent.Contains("Jazz", StringComparison.Ordinal))
+            .Change(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("AlphaSong"));
+            Assert.That(cut.Markup, Does.Not.Contain("CharlieSong"));
+            // The surviving card is still the one that is playing, and it still owns the audio
+            // element the JS module was handed a reference to.
+            Assert.That(CardContainingMiniPlayer(cut).TextContent, Does.Contain("Bravo Song"));
+            Assert.That(cut.FindAll(".card-mini-player"), Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_UsesTheCarouselSizesLadder_OnlyWhenRenderedAsTheHomeCarousel()
+    {
+        // The two containers size their art completely differently below 576px: the grid card
+        // turns horizontal with 84px art, while the carousel card stays square at ~83vw. One
+        // sizes string cannot describe both, so the component picks per mode.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new()
+            {
+                Id = 1,
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                ImageBlobPath = "art/test.jpg",
+                DisplayOnHomePage = true,
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        // The base fixture returns CoverArtSource.None, which sends the card down the Lottie
+        // fallback branch - and CoverArt is then never rendered at all.
+        MockCoverArtUrlBuilder
+            .Setup(b => b.BuildProxy(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+            .Returns(new MusicSalesApp.Services.CoverArtSource(
+                "/api/music/art/test.jpg",
+                Array.Empty<MusicSalesApp.Services.CoverArtVariantUrl>()));
+
+        SetupRendererInfo();
+
+        var grid = TestContext.Render<MusicLibrary>();
+        var carousel = TestContext.Render<MusicLibrary>(p => p.Add(c => c.ShowHomePageFeatured, true));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(grid.Markup, Does.Contain("music-cards-grid"));
+            Assert.That(carousel.Markup, Does.Contain("featured-music-carousel"));
+            Assert.That(
+                grid.FindComponent<MusicSalesApp.Components.Shared.CoverArt>().Instance.Sizes,
+                Is.EqualTo(MusicSalesApp.Components.Shared.CoverArtSizes.Card));
+            Assert.That(
+                carousel.FindComponent<MusicSalesApp.Components.Shared.CoverArt>().Instance.Sizes,
+                Is.EqualTo(MusicSalesApp.Components.Shared.CoverArtSizes.CardCarousel));
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_ShipsNoInlineStyleBlock()
+    {
+        // It used to carry an inline <style> setting .e-card.music-card padding to 8px. Being
+        // injected only when this component rendered, it made the SAME playlist card 8px-padded
+        // on / (where this is embedded) and 16px-padded on /my-playlists (where it is not).
+        MockSongMetadataService.Setup(x => x.GetAllAsync())
+            .ReturnsAsync(new List<MusicSalesApp.Models.SongMetadata>());
+
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.Markup, Does.Not.Contain("<style"),
+            "card styling belongs in the global sheets, not in per-component markup");
+    }
+
+    [Test]
+    public void MusicLibrary_MarksPlayAsThePrimaryAction_AndViewAsSecondary()
+    {
+        // The CSS keys the accent fill off .action-button-play. Both buttons used to carry the
+        // identical .action-button outline, which left the card with no primary action at all -
+        // and made the full-width Facebook share bar the loudest control on it.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "TestSong.mp3", SongTitle = "Test Song", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Find("button[title='play']").ClassList, Does.Contain("action-button-play"));
+            Assert.That(cut.Find("button[title='view']").ClassList, Does.Contain("action-button-view"));
+            Assert.That(cut.Find("button[title='view']").ClassList, Does.Not.Contain("action-button-play"));
+        });
+    }
+
+    private static IElement CardContainingMiniPlayer(IRenderedComponent<MusicLibrary> cut)
+    {
+        return cut.FindAll(".music-card").Single(card => card.QuerySelector(".card-mini-player") != null);
+    }
+
     private static IElement FindFilterPill(IRenderedComponent<MusicLibrary> cut, string label)
     {
         return cut.FindAll(".filter-pill")
