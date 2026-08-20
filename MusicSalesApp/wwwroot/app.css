@@ -506,28 +506,6 @@ h1:focus {
     vertical-align: middle;
 }
 
-/* PlaylistPlayer - 5-row layout structure */
-.playlist-image-title-row {
-    display: flex;
-    flex-direction: column;
-}
-
-.action-buttons-row {
-    display: flex;
-    align-items: center;
-}
-
-.status-info-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-}
-
-.playlist-art-container {
-    position: relative;
-}
-
 /* Add to Cart Button Layout */
 .card-cart-button {
     display: flex;
@@ -890,21 +868,6 @@ h1:focus {
 }
 
 .player-lottie-animation {
-    width: 100%;
-    height: 100%;
-}
-
-.track-thumbnail-animation {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.track-lottie-animation {
     width: 100%;
     height: 100%;
 }
@@ -2364,12 +2327,6 @@ h1:focus {
     height: 20px;
 }
 
-/* Tip heart inline in track list */
-.tip-heart-inline {
-    margin-left: 6px;
-    vertical-align: middle;
-}
-
 /* Tip heart in song card */
 .tip-heart-card {
     margin-left: 4px;
@@ -2613,11 +2570,6 @@ h1:focus {
     gap: 4px;
 }
 
-.persona-name {
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-
 .persona-bio {
     font-size: 0.9rem;
     margin: 0;
@@ -2687,16 +2639,6 @@ h1:focus {
 }
 
 .genre-link:hover {
-    color: #b8a8f8;
-    text-decoration: underline;
-}
-
-.track-genre-link {
-    color: #9b87f5;
-    text-decoration: none;
-}
-
-.track-genre-link:hover {
     color: #b8a8f8;
     text-decoration: underline;
 }
@@ -3418,6 +3360,40 @@ h1:focus {
     align-items: center;
 }
 
+/*
+ * A persona bio runs to 2,000 characters and a creator bio to 1,000 - several paragraphs.
+ * The unscoped .persona-bio above caps it at 4.5em with its OWN scrollbar and dims it to
+ * opacity .8; all three have to be undone explicitly, because this rule setting only
+ * font-size and margin is exactly how those leaked in in the first place.
+ *
+ * Do not simply unset the height: .song-panel is overflow:hidden at a fixed height, so an
+ * unclamped bio would be silently CLIPPED rather than scrolled. The clamp below is the
+ * deliberate version - the line count lives in the breakpoint sheets - and the
+ * .persona-more link sends anyone who wants the rest to /artist, which shows it in full.
+ */
+.song-player-container .persona-bio {
+    max-height: none;
+    max-width: none;
+    opacity: 1;
+    /* Razor encodes the string, so without pre-line every newline the creator typed
+       collapses and a multi-paragraph bio renders as one run-on blob. */
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.song-player-container .persona-more {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: color var(--st-dur) var(--st-ease);
+}
+
+.song-player-container .persona-more svg {
+    flex: 0 0 auto;
+}
+
 .song-player-container .song-tip-cta {
     display: inline-flex;
     align-items: center;
@@ -3574,4 +3550,568 @@ h1:focus {
     .song-player-container .song-tip-cta:hover {
         transform: none;
     }
+}
+
+/* =========================================================================
+   PLAYLIST PLAYER - "Marquee" layout
+   =========================================================================
+   The song player's sibling, on the same design language and the same
+   tokens. Structure, layout, animation and transition only; colour is in
+   light.css / dark.css (identical in both), sizing in the breakpoint sheets.
+
+   Scoped under .playlist-player-container throughout, mirroring
+   .song-player-container, so the two pages stay independent.
+
+   Replaces Components/Players/PlaylistPlayerInteractive.razor.css, deleted -
+   and with it 283 rules across the global sheets, including five identical
+   copies of @keyframes soundBars, five of .track-thumbnail, and the
+   cart/ownership styles left dead by migration
+   20260108000000_RemoveCartAndOwnedSongsTables.
+
+   ONE TRAP, THE SAME ONE THAT BIT THE SONG PLAYER: the bare .player-bar in
+   xl_app.css is unwrapped and sets flex-direction: column. The scoped sheet
+   used to outrank it; now that the scoped sheet is gone it is live, so every
+   property it sets has to be restated here, not just the ones being changed.
+   ========================================================================= */
+
+.playlist-player-container {
+    display: flex;
+    flex-direction: column;
+    /* dvh, not vh: 100vh is taller than the visible viewport on mobile, which
+       is what pushed the transport off-screen and clipped the page. */
+    min-height: calc(100dvh - 66px);
+    position: relative;
+    font-family: var(--st-font);
+}
+
+.playlist-player-container .loading-state,
+.playlist-player-container .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+.playlist-player-container .loading-pulse {
+    border-radius: 50%;
+    animation: songPlayerPulse 1.4s ease-in-out infinite;
+}
+
+/* ---- Hero -------------------------------------------------------------- */
+
+.playlist-player-container .playlist-header {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+.playlist-player-container .playlist-hero-backdrop {
+    position: absolute;
+    inset: -60px;
+    z-index: 0;
+    filter: blur(52px);
+    transform: scale(1.25);
+    pointer-events: none;
+}
+
+.playlist-player-container .playlist-hero-backdrop-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.playlist-player-container .playlist-hero-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.playlist-player-container .playlist-hero-inner {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-areas: "art text actions";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: flex-end;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.playlist-player-container .playlist-art-container { grid-area: art; }
+.playlist-player-container .playlist-text-details { grid-area: text; min-width: 0; }
+.playlist-player-container .action-controls { grid-area: actions; }
+
+.playlist-player-container .player-art-shell {
+    position: relative;
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+/* Artist and creator routes put a persona portrait here instead of cover art. */
+.playlist-player-container .player-art-shell.is-round { border-radius: 50%; }
+
+.playlist-player-container .playlist-hero-art {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.playlist-player-container .playlist-tag-row,
+.playlist-player-container .playlist-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.playlist-player-container .playlist-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--st-radius-pill);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.playlist-player-container .song-title {
+    margin: 0;
+    text-wrap: balance;
+}
+
+.playlist-player-container .now-playing-info,
+.playlist-player-container .stream-count-info,
+.playlist-player-container .playlist-track-info,
+.playlist-player-container .subscription-badge,
+.playlist-player-container .preview-label {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+
+.playlist-player-container .action-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.playlist-player-container .play-button-large {
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform var(--st-dur-fast) var(--st-ease), box-shadow var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .play-button-large:hover { transform: scale(1.05); }
+.playlist-player-container .play-button-large:active { transform: scale(.96); }
+
+/* ---- Stage: track list leads, lyrics and artist beside it -------------- */
+
+.playlist-player-container .playlist-stage {
+    display: grid;
+    align-items: start;
+    flex: 1;
+    min-height: 0;
+}
+
+.playlist-player-container .playlist-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.playlist-player-container .playlist-panel {
+    border-radius: var(--st-radius-lg);
+    border: 1px solid var(--st-player-line);
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+}
+
+.playlist-player-container .track-list-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* The one scrolling region on the page. */
+.playlist-player-container .track-list-scroll {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1;
+}
+
+.playlist-player-container .playlist-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+}
+
+.playlist-player-container .playlist-panel-caption {
+    text-transform: uppercase;
+    display: block;
+}
+
+.playlist-player-container .playlist-panel-switch {
+    display: flex;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid var(--st-player-line);
+}
+
+/* The unscoped .lyrics-toggle-button is the OLD control - a 28px circle pinned
+   absolutely to the bottom-right of the artwork. Every one of those has to be
+   undone or the Lyrics segment renders as a clipped bubble in the corner. */
+.playlist-player-container .lyrics-toggle-button,
+.playlist-player-container .art-toggle-button {
+    position: static;
+    width: auto;
+    height: auto;
+    opacity: 1;
+    z-index: auto;
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    border-radius: var(--st-radius-pill);
+    cursor: pointer;
+    background: transparent;
+    white-space: nowrap;
+    transition: background-color var(--st-dur) var(--st-ease), color var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .lyrics-toggle-button:hover,
+.playlist-player-container .art-toggle-button:hover { transform: none; }
+
+.playlist-player-container .playlist-panel-body { position: relative; }
+
+.playlist-player-container .playlist-panel-art {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.playlist-player-container .playlist-stage-art {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--st-radius-md);
+    object-fit: contain;
+}
+
+.playlist-player-container .lyrics-scroller { border-radius: 0; }
+
+/* ---- Track list -------------------------------------------------------- */
+
+.playlist-player-container .track-list {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.playlist-player-container .track-list th {
+    text-align: left;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.playlist-player-container .track-list th.track-number { text-align: center; }
+.playlist-player-container .track-list th.track-streams,
+.playlist-player-container .track-list th.track-duration { text-align: right; }
+
+.playlist-player-container .track-row {
+    cursor: pointer;
+    transition: background-color var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .track-row td { vertical-align: middle; }
+.playlist-player-container .track-row td.track-number { text-align: center; position: relative; }
+.playlist-player-container .track-row td.track-streams,
+.playlist-player-container .track-row td.track-duration { text-align: right; font-variant-numeric: tabular-nums; }
+
+.playlist-player-container .track-index { display: inline; font-variant-numeric: tabular-nums; }
+
+.playlist-player-container .track-play-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.playlist-player-container .track-row:hover .track-index { display: none; }
+.playlist-player-container .track-row:hover .track-play-btn { display: inline-flex; }
+.playlist-player-container .track-row.current-track .track-index { display: none; }
+
+/*
+ * THE FIX. .current-track .track-index is hidden unconditionally, but the play
+ * button used to appear only on :hover - so a current track that was PAUSED
+ * rendered a completely blank number cell until you moused over it. Show the
+ * button for the current row whether or not it is hovered.
+ */
+.playlist-player-container .track-row.current-track .track-play-btn { display: inline-flex; }
+
+.playlist-player-container .track-title-cell { text-align: left; }
+
+.playlist-player-container .track-title-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+}
+
+.playlist-player-container .track-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-player-container .track-preview-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--st-radius-xs);
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+/* Carries the artist/genre that the dedicated columns show on wide screens.
+   Hidden here, switched on by the md/sm/xs sheets - which is how the table
+   sheds columns instead of shrinking its type to 8px. */
+.playlist-player-container .track-sub {
+    display: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-player-container .track-genre-link { text-decoration: none; }
+
+.playlist-player-container .track-thumbnail { display: block; border-radius: var(--st-radius-xs); object-fit: cover; }
+
+.playlist-player-container .track-thumbnail-animation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--st-radius-xs);
+    overflow: hidden;
+}
+
+.playlist-player-container .playing-indicator {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.playlist-player-container .playing-indicator span {
+    border-radius: 1px;
+    animation: soundBars .5s ease infinite alternate;
+}
+
+.playlist-player-container .playing-indicator span:nth-child(1) { height: 60%; animation-delay: 0s; }
+.playlist-player-container .playing-indicator span:nth-child(2) { height: 100%; animation-delay: .1s; }
+.playlist-player-container .playing-indicator span:nth-child(3) { height: 40%; animation-delay: .2s; }
+
+/* Was declared five times, once per breakpoint sheet, with identical bodies. */
+@keyframes soundBars {
+    0% { height: 20%; }
+    100% { height: 100%; }
+}
+
+/* ---- Artist / About panel --------------------------------------------- */
+
+.playlist-player-container .persona-identity {
+    display: flex;
+    align-items: center;
+}
+
+/*
+ * A persona bio runs to 2,000 characters and a creator bio to 1,000. The
+ * unscoped .persona-bio caps it at 4.5em with its own scrollbar and dims it to
+ * opacity .8 - undo all three explicitly. In CATALOGUE mode it is clamped and
+ * .persona-more points at /artist; in ARTIST mode .persona-bio-full lifts the
+ * clamp, because that route is the artist's own page.
+ */
+.playlist-player-container .persona-bio {
+    max-height: none;
+    max-width: none;
+    opacity: 1;
+    /* Razor encodes the string, so without this a multi-paragraph bio collapses
+       into one run-on line. */
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.playlist-player-container .persona-bio-full {
+    display: block;
+    -webkit-line-clamp: none;
+    overflow: visible;
+}
+
+.playlist-player-container .playlist-about-panel {
+    overflow-y: auto;
+}
+
+.playlist-player-container .persona-more {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    transition: color var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .persona-more svg { flex: 0 0 auto; }
+
+.playlist-player-container .playlist-tip-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--st-radius-pill);
+    cursor: pointer;
+    margin-top: auto;
+    transition: transform var(--st-dur-fast) var(--st-ease), background-color var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .playlist-tip-cta:hover { transform: scale(1.02); }
+
+/* ---- Transport: a floating pill ---------------------------------------- */
+
+.playlist-player-container .player-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    /* Both restated on purpose - see the trap note at the top of this block. */
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid var(--st-player-line-strong);
+    border-top: 1px solid var(--st-player-line-strong);
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.playlist-player-container .controls-wrapper,
+.playlist-player-container .player-controls-row {
+    display: contents;
+}
+
+.playlist-player-container .player-controls {
+    order: 1;
+    display: flex;
+    align-items: center;
+}
+
+.playlist-player-container .progress-container {
+    order: 2;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.playlist-player-container .volume-controls {
+    order: 3;
+    display: flex;
+    align-items: center;
+}
+
+.playlist-player-container .control-button {
+    border-radius: 50%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: color var(--st-dur) var(--st-ease), background-color var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .play-button-small {
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    transition: transform var(--st-dur-fast) var(--st-ease);
+}
+
+.playlist-player-container .play-button-small:hover { transform: scale(1.06); }
+
+.playlist-player-container .time-display {
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    flex: 0 0 auto;
+}
+
+.playlist-player-container .progress-bar-container,
+.playlist-player-container .volume-bar-container {
+    border-radius: var(--st-radius-xs);
+    cursor: pointer;
+    position: relative;
+    transition: height var(--st-dur-fast) var(--st-ease);
+}
+
+.playlist-player-container .progress-bar-container { flex: 1; min-width: 0; }
+
+.playlist-player-container .progress-bar,
+.playlist-player-container .volume-bar {
+    height: 100%;
+    border-radius: var(--st-radius-xs);
+    position: relative;
+    pointer-events: none;
+}
+
+.playlist-player-container .progress-thumb,
+.playlist-player-container .volume-thumb {
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity var(--st-dur) var(--st-ease);
+}
+
+.playlist-player-container .progress-bar-container:hover .progress-thumb,
+.playlist-player-container .volume-bar-container:hover .volume-thumb { opacity: 1; }
+
+.playlist-player-container .progress-bar-container.restricted { position: relative; }
+
+.playlist-player-container .progress-limit-marker {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    border-radius: 2px;
+    z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .playlist-player-container .loading-pulse,
+    .playlist-player-container .playing-indicator span { animation: none; }
+
+    .playlist-player-container .play-button-large,
+    .playlist-player-container .play-button-small,
+    .playlist-player-container .playlist-tip-cta { transition: none; }
+
+    .playlist-player-container .play-button-large:hover,
+    .playlist-player-container .play-button-small:hover,
+    .playlist-player-container .playlist-tip-cta:hover { transform: none; }
 }

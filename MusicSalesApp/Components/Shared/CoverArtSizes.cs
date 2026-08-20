@@ -64,12 +64,18 @@ public static class CoverArtSizes
     public const string PlayerBackdrop = "160px";
 
     /// <summary>
-    /// The playlist player's hero artwork. Identical to <see cref="PlayerHero"/> except at the
-    /// smallest breakpoint, where <c>.playlist-player-container .playlist-art</c> wins on
-    /// specificity and pins it to 70px.
+    /// The playlist player's hero artwork (<c>.playlist-player-container .player-art-shell</c>) -
+    /// the current track's cover, or the persona portrait on the artist and creator routes.
+    ///
+    /// <para>
+    /// The ladder reads 96 - 128 - 150 - 156 - 168 and descends cleanly, unlike the one it
+    /// replaced, which bulged to 225px at the medium breakpoint because the old tablet layout
+    /// stacked the art larger than the desktop one did. Keep this in step with
+    /// <c>.playlist-player-container .player-art-shell</c> across the five breakpoint sheets.
+    /// </para>
     /// </summary>
     public const string PlaylistPlayerHero =
-        "(max-width:576px) 70px, (max-width:768px) 95px, (max-width:992px) 225px, (max-width:1200px) 130px, 140px";
+        "(max-width:576px) 96px, (max-width:768px) 128px, (max-width:992px) 150px, (max-width:1200px) 156px, 168px";
 
     /// <summary>Playlist track rows: 40x40 at every breakpoint.</summary>
     public const string TrackThumbnail = "40px";

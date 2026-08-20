@@ -228,30 +228,46 @@ the active karaoke lyric line at 8.60:1 on the dark surface and 2.26:1 on white,
 would need a different accent and the signature moment of the design would change with a
 preference.
 
-### Known CSS Duplications (As of Current State)
+### Player CSS: the migration is complete
 
-**Half of this is now done.** `SongPlayerInteractive.razor.css` has been **deleted** — the song
-player is styled entirely from the global sheets (`tokens.css`, `app.css`, `light.css`/`dark.css`
-and the five breakpoint files), with every rule scoped under `.song-player-container`. The dead
-cart/ownership styles (`.cart-button-*`, `.owned-badge`, `.music-note-float-player`) and the
-`.spotify-container` selector went with it; the cart feature was removed by migration
-`20260108000000_RemoveCartAndOwnedSongsTables`, so those rules had matched nothing for some time.
+**Both players are off `.razor.css`.** `SongPlayerInteractive.razor.css` (220 lines) and
+`PlaylistPlayerInteractive.razor.css` (468 lines) are deleted. Each page is styled entirely from
+the global sheets — `tokens.css`, `app.css`, `light.css`/`dark.css` and the five breakpoint files —
+with every rule scoped under `.song-player-container` or `.playlist-player-container` respectively.
 
-**Still outstanding — `PlaylistPlayerInteractive.razor.css` (468 lines).** It is a near-duplicate of
-what the song player's sheet used to be and still owns these:
+The two remain deliberately separate rather than sharing a block. They are the same design language
+but different pages, and premature sharing is what produced the duplication in the first place. If
+a third surface ever needs the transport, extract it then, from two working examples.
 
-- `.play-button-large`, `.play-button-small`, `.control-button`, `.control-icon`
-- `.controls-wrapper`, `.player-controls-row`, `.player-controls`, `.volume-controls`
-- `.progress-container`, `.progress-bar-container`, `.volume-bar-container`, and the thumbs
-- `.owned-badge`, `.cart-button-large`, `.music-note-float-player` — all dead, delete rather than migrate
-- `.preview-label`, `.subscription-badge`, and the rest of the player bar
+Removed along the way, none of it matching any markup: the cart/ownership styles
+(`.cart-button-*`, `.owned-badge`, `.music-note-float-player`, `.cart-icon-large`) left dead by
+migration `20260108000000_RemoveCartAndOwnedSongsTables`; `.spotify-container`;
+`.playlist-art-large`; `.playlist-art-placeholder`; `.song-info`; `.song-label`; `.genre-info`;
+five copies of `.track-thumbnail-placeholder`; and **five identical copies of
+`@keyframes soundBars`**, one per breakpoint sheet.
 
-When migrating it, note that the song player's rules are all `.song-player-container`-scoped
-precisely so the two pages could be moved independently. Scope the playlist player's under
-`.playlist-player-container` the same way, then look at what genuinely wants sharing.
+#### Two traps this migration hit, both worth knowing before the next one
+
+1. **Deleting a scoped sheet promotes whatever it was suppressing.** Scoped CSS wins on
+   specificity via its `[b-xxxxx]` attribute, so an unscoped rule can sit inert for years and go
+   live the moment the scoped sheet is removed. The bare `.player-bar` in `xl_app.css` is
+   unwrapped — it applies at every width — and sets `flex-direction: column`. Both players' pills
+   broke on it. **When you replace a scoped rule, restate every property the unscoped one sets,
+   not only the ones you are changing.** The same trap hit `.lyrics-toggle-button`
+   (`position: absolute`, 28px circle) and `.persona-bio` (`max-height: 4.5em; overflow-y: auto`).
+2. **A grouped selector may be half shared.** `.music-card, .playlist-art` carries the
+   music-library card shadow; `.album-art-animation, .playlist-art-animation` is the *song*
+   player's Lottie. Deleting either because one half looked playlist-only would have broken a page
+   nobody was looking at. Split on commas before deciding.
 
 **Note**: follow the property-routing rules above — layout/animation to `app.css`, colour to the
 theme files, sizing to the breakpoint files — and prefer a `--st-*` token over a literal.
+
+#### Remaining `.razor.css` files
+
+`NavMenu` (130 lines) is the largest and the obvious next candidate. `ReconnectModal` is genuine
+framework suppression and should stay scoped. `Home`, `AdminLogs`, `MainLayout`,
+`AdminSongManagement` and `MusicLibrary` are 11–37 lines each.
 
 ## Metadata Storage and File Management
 

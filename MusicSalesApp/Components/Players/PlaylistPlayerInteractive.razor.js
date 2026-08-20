@@ -136,11 +136,9 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
     }
 }
 
-// Update the restriction state (called when track ownership changes)
-export function updateRestrictionState(isRestricted) {
-    playerState.isRestricted = isRestricted;
-    playerState.hasReachedLimit = false;
-}
+// updateRestrictionState() was removed with the redesign: it was exported but never invoked
+// from C#. changeTrack() already refreshes playerState.isRestricted on every track change,
+// which is the only moment the restriction can differ.
 
 export function play(audioElement) {
     audioElement = resolveAudioElement(audioElement);

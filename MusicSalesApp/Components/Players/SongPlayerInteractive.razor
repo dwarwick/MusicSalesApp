@@ -250,13 +250,24 @@ else
                     </div>
                 </div>
 
-                @if (persona != null && !string.IsNullOrEmpty(persona.Bio))
-                {
-                    <p class="persona-bio">@persona.Bio</p>
+                @* A persona bio runs to 2,000 characters and a creator bio to 1,000 - several
+                   paragraphs. This panel is a fixed height inside overflow:hidden, so the bio is
+                   clamped here and the link sends anyone who wants the rest to the artist page,
+                   which shows it in full. See .persona-bio in app.css. *@
+                @{
+                    var bioText = persona != null && !string.IsNullOrEmpty(persona.Bio)
+                        ? persona.Bio
+                        : creatorBio;
                 }
-                else if (!string.IsNullOrEmpty(creatorBio))
+                @if (!string.IsNullOrEmpty(bioText))
                 {
-                    <p class="persona-bio">@creatorBio</p>
+                    <p class="persona-bio">@bioText</p>
+                    <a href="@GetArtistUrl()" class="persona-more">
+                        More about @GetArtistDisplayName()
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                        </svg>
+                    </a>
                 }
 
                 @if (persona != null && !string.IsNullOrEmpty(persona.WebsiteUrl))

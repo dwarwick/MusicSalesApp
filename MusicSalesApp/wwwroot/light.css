@@ -561,10 +561,6 @@ body {
     color: #282828;
 }
 
-.track-streams, .track-name {
-    color: #b3b3b3;
-}
-
 /* Home Page - Light Theme Colors */
 .hero-title {
     color: #1a1a2e;
@@ -1194,3 +1190,219 @@ body {
         radial-gradient(560px 380px at 78% 12%, rgba(2, 184, 253, .18), transparent 72%),
         radial-gradient(620px 420px at 60% 90%, rgba(155, 135, 245, .16), transparent 74%);
 }
+
+.song-player-container .persona-more {
+    color: var(--st-blue-bright);
+}
+
+.song-player-container .persona-more:hover {
+    color: var(--st-blue-pale);
+}
+
+/* =========================================================================
+   PLAYLIST PLAYER - "Marquee" colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css, DELIBERATELY - same reasoning as the
+   song player block above: this page is an immersive listening surface and
+   stays dark whichever theme the listener picked, and the theme sheet is
+   injected after app.css and the breakpoint sheets, so a colour set anywhere
+   else would lose to whatever theme rule happens to match.
+
+   light.css still carries unscoped .song-title { color:#282828 } and
+   .stream-count-info/.playlist-track-info { color:#282828 } with no dark.css
+   counterpart. Without the overrides below those paint near-black text on the
+   dark hero in light theme.
+
+   Change one copy, change the other.
+   ========================================================================= */
+
+.playlist-player-container {
+    background-color: var(--st-player-bg);
+    color: var(--st-player-text);
+}
+
+.playlist-player-container .loading-state,
+.playlist-player-container .error-state { color: var(--st-player-text-3); }
+
+.playlist-player-container .loading-pulse { background-color: var(--st-blue-bright); }
+
+/* ---- Hero -------------------------------------------------------------- */
+
+.playlist-player-container .playlist-hero-backdrop {
+    background:
+        radial-gradient(680px 420px at 22% 30%, rgba(1, 134, 253, .34), transparent 70%),
+        radial-gradient(560px 380px at 78% 12%, rgba(2, 184, 253, .18), transparent 72%),
+        radial-gradient(620px 420px at 60% 90%, rgba(155, 135, 245, .16), transparent 74%);
+}
+
+.playlist-player-container .playlist-hero-scrim {
+    background: linear-gradient(180deg, rgba(7, 13, 22, .42) 0%, rgba(7, 13, 22, .72) 55%, var(--st-player-bg) 100%);
+}
+
+.playlist-player-container .player-art-shell {
+    box-shadow: var(--st-shadow-art), 0 0 0 1px rgba(255, 255, 255, .12);
+}
+
+.playlist-player-container .player-art-shell.is-round {
+    box-shadow: var(--st-shadow-art), 0 0 0 3px rgba(2, 184, 253, .35);
+}
+
+.playlist-player-container .playlist-chip {
+    background-color: rgba(155, 135, 245, .24);
+    color: #c8b9ff;
+    border: 1px solid rgba(155, 135, 245, .45);
+}
+
+.playlist-player-container .song-title {
+    color: var(--st-player-text);
+    text-shadow: 0 4px 30px rgba(0, 0, 0, .5);
+}
+
+.playlist-player-container .playlist-track-info,
+.playlist-player-container .stream-count-info,
+.playlist-player-container .now-playing-info { color: var(--st-player-text-3); }
+
+.playlist-player-container .now-playing-track { color: var(--st-blue-bright); }
+
+.playlist-player-container .subscription-badge { color: var(--st-blue-bright); }
+.playlist-player-container .preview-label { color: var(--st-amber); }
+
+.playlist-player-container .artist-link { color: var(--st-blue-bright); }
+.playlist-player-container .artist-link:hover { color: var(--st-blue-pale); }
+
+.playlist-player-container .play-button-large {
+    background-color: var(--st-blue-bright);
+    box-shadow: var(--st-shadow-play);
+}
+
+.playlist-player-container .play-button-large .play-icon { color: #000000; }
+
+/* ---- Panels ------------------------------------------------------------ */
+
+.playlist-player-container .playlist-panel {
+    background-color: var(--st-player-surface);
+    border-color: var(--st-player-line);
+}
+
+.playlist-player-container .playlist-panel-caption,
+.playlist-player-container .playlist-panel-count { color: var(--st-player-text-3); }
+
+.playlist-player-container .playlist-panel-switch {
+    background-color: var(--st-player-surface-2);
+    border-color: var(--st-player-line);
+}
+
+.playlist-player-container .lyrics-toggle-button,
+.playlist-player-container .art-toggle-button { color: var(--st-player-text-3); }
+
+.playlist-player-container .lyrics-toggle-button:hover,
+.playlist-player-container .art-toggle-button:hover { color: var(--st-player-text); }
+
+.playlist-player-container .lyrics-toggle-button.is-active,
+.playlist-player-container .art-toggle-button.is-active {
+    background-color: var(--st-blue-bright);
+    color: #04121f;
+}
+
+.playlist-player-container .playlist-stage-art {
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .09);
+}
+
+.playlist-player-container .lyrics-scroller {
+    background-color: transparent;
+    color: var(--st-player-text-3);
+}
+
+.playlist-player-container .lyrics-scroller-empty { color: var(--st-player-text-3); }
+.playlist-player-container .lyrics-line--active { color: var(--st-player-text); }
+.playlist-player-container .lyrics-word--active { color: var(--st-blue-bright); }
+.playlist-player-container .lyrics-line--untimed { color: rgba(200, 234, 253, .45); }
+
+/* ---- Track list -------------------------------------------------------- */
+
+.playlist-player-container .track-list th {
+    color: var(--st-player-text-3);
+    background-color: var(--st-player-surface);
+    border-bottom: 1px solid var(--st-player-line);
+}
+
+.playlist-player-container .track-row td { color: var(--st-player-text-2); }
+.playlist-player-container .track-row:hover td { background-color: rgba(255, 255, 255, .06); }
+
+/*
+ * The current track was signalled three ways in #1db954 - Spotify's brand
+ * green. All three are the brand accent now.
+ */
+.playlist-player-container .track-row.current-track td { background-color: rgba(2, 184, 253, .10); }
+.playlist-player-container .track-row.current-track td:first-child { box-shadow: inset 2px 0 0 var(--st-blue-bright); }
+.playlist-player-container .track-name { color: var(--st-player-text); }
+.playlist-player-container .track-name.playing { color: var(--st-blue-bright); }
+.playlist-player-container .playing-indicator span { background-color: var(--st-blue-bright); }
+
+.playlist-player-container .track-index,
+.playlist-player-container .track-sub,
+.playlist-player-container .track-artist,
+.playlist-player-container .track-streams,
+.playlist-player-container .track-duration { color: var(--st-player-text-3); }
+
+.playlist-player-container .track-play-btn { color: var(--st-player-text); }
+
+.playlist-player-container .track-genre-link { color: var(--st-violet); }
+.playlist-player-container .track-genre-link:hover { color: #b8a8f8; }
+
+.playlist-player-container .track-preview-badge {
+    color: var(--st-amber);
+    background-color: rgba(255, 165, 0, .15);
+}
+
+.playlist-player-container .tip-heart-inline { color: var(--st-pink); }
+
+/* ---- Artist / About ---------------------------------------------------- */
+
+.playlist-player-container .persona-bio { color: var(--st-player-text-2); }
+.playlist-player-container .persona-website { color: var(--st-violet); }
+.playlist-player-container .persona-more { color: var(--st-blue-bright); }
+.playlist-player-container .persona-more:hover { color: var(--st-blue-pale); }
+
+.playlist-player-container .playlist-tip-cta {
+    background-color: var(--st-blue-deep);
+    color: #ffffff;
+}
+
+.playlist-player-container .playlist-tip-cta:hover { background-color: var(--st-blue); }
+
+/* ---- Transport pill ---------------------------------------------------- */
+
+.playlist-player-container .player-bar {
+    background: rgba(13, 23, 39, .92);
+    border-color: var(--st-player-line-strong);
+    box-shadow: var(--st-shadow-float);
+}
+
+.playlist-player-container .control-button { color: var(--st-player-text-3); }
+
+.playlist-player-container .control-button:hover {
+    color: var(--st-player-text);
+    background-color: rgba(255, 255, 255, .07);
+}
+
+.playlist-player-container .control-button.active { color: var(--st-blue-bright); }
+
+.playlist-player-container .play-button-small { background-color: #ffffff; }
+.playlist-player-container .play-button-small .play-icon-small { color: #000000; }
+
+.playlist-player-container .time-display { color: var(--st-player-text-3); }
+
+.playlist-player-container .progress-bar-container,
+.playlist-player-container .volume-bar-container { background-color: rgba(255, 255, 255, .16); }
+
+.playlist-player-container .progress-bar { background-color: var(--st-blue-bright); }
+.playlist-player-container .volume-bar { background-color: var(--st-blue-pale); }
+
+.playlist-player-container .progress-thumb,
+.playlist-player-container .volume-thumb {
+    background-color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .7);
+}
+
+.playlist-player-container .progress-limit-marker { background-color: var(--st-amber); }

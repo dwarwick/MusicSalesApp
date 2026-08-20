@@ -9,93 +9,128 @@
 @if (_loading || IsProcessingTipReturn)
 {
     <div class="loading-state">
+        <div class="loading-pulse" aria-hidden="true"></div>
         <p>Loading...</p>
     </div>
 }
 else if (!string.IsNullOrEmpty(_error))
-    {
-        <div class="error-state">
-            <div class="alert alert-danger">@_error</div>
+{
+    <div class="error-state">
+        <div class="alert alert-danger">@_error</div>
+    </div>
+}
+else
+{
+    var persona = GetCurrentTrackPersona();
+    var personaImageUrl = GetCurrentTrackPersonaImageUrl();
+    var bioText = GetCurrentTrackBio();
+    var artistName = GetArtistDisplayName(GetCurrentTrackMetadata());
+
+    @* ------------------------------------------------------------------ *@
+    @* HERO - the current track's art, blurred behind a scrim. In artist    *@
+    @* and creator mode the persona takes the hero instead, because those   *@
+    @* two routes ARE this site's artist page.                              *@
+    @* ------------------------------------------------------------------ *@
+    <div class="playlist-header">
+        <div class="playlist-hero-backdrop" aria-hidden="true">
+            @if (GetTrackArtSource(_currentTrackIndex).HasImage)
+            {
+                <CoverArt Source="GetTrackArtSource(_currentTrackIndex)"
+                          Sizes="@CoverArtSizes.PlayerBackdrop"
+                          CssClass="playlist-hero-backdrop-img"
+                          Alt=""
+                          Eager="true" />
+            }
         </div>
-    }
-    else
-    {
-        <!-- Row 1: Playlist Image and Title -->
-        <div class="playlist-image-title-row">
+        <div class="playlist-hero-scrim" aria-hidden="true"></div>
+
+        <div class="playlist-hero-inner">
             <div class="playlist-art-container">
-                <div class="title-container">
-                    @{
-                        var displayArtSource = GetTrackArtSource(_currentTrackIndex);
-                    }
-                    <div class="player-art-content">
-                        <div class="player-art-shell">
-                            @* Mounted alongside the art rather than instead of it, so toggling does
-                               not tear down the highlighting loop mid-song. A track change swaps the
-                               URL, which the scroller notices and re-fetches. *@
-                            @if (HasPublishedLyrics())
-                            {
-                                <div class="lyrics-scroller-overlay @(_showLyrics ? "" : "is-hidden")">
-                                    <LyricsScroller AudioElement="_audioElement"
-                                                    Mode="LyricsScrollerMode.Player"
-                                                    Document="_currentTrackTimings"
-                                                    EmptyMessage="Lyrics are loading&hellip;" />
-                                </div>
-                            }
-
-                            <div class="@(_showLyrics && HasPublishedLyrics() ? "is-hidden" : "")">
-                                @if (displayArtSource.HasImage)
-                                {
-                                    <CoverArt Source="displayArtSource"
-                                              Sizes="@CoverArtSizes.PlaylistPlayerHero"
-                                              CssClass="playlist-art"
-                                              Alt="Track Art"
-                                              Eager="true" />
-                                }
-                                else
-                                {
-                                    <div class="playlist-art-animation">
-                                        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
-                                    </div>
-                                }
+                <div class="player-art-content">
+                    @* Must stay position:relative + overflow:hidden - see app.css. *@
+                    <div class="player-art-shell @(IsArtistTreatment() ? "is-round" : "")">
+                        @if (IsArtistTreatment() && !string.IsNullOrEmpty(personaImageUrl))
+                        {
+                            <img src="@personaImageUrl" alt="@artistName" class="playlist-hero-art" />
+                        }
+                        else if (GetTrackArtSource(_currentTrackIndex).HasImage)
+                        {
+                            <CoverArt Source="GetTrackArtSource(_currentTrackIndex)"
+                                      Sizes="@CoverArtSizes.PlaylistPlayerHero"
+                                      CssClass="playlist-hero-art"
+                                      Alt="Track art"
+                                      Eager="true" />
+                        }
+                        else
+                        {
+                            <div class="playlist-art-animation">
+                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
                             </div>
-
-                            @* Per track, not per playlist: the toggle comes and goes as the playlist
-                               moves between songs that have published lyrics and songs that do not. *@
-                            @if (HasPublishedLyrics())
-                            {
-                                <button type="button"
-                                        class="lyrics-toggle-button"
-                                        @onclick="ToggleLyrics"
-                                        title="@(_showLyrics ? "Show cover art" : "Show lyrics")"
-                                        aria-pressed="@_showLyrics.ToString().ToLowerInvariant()">
-                                    @if (_showLyrics)
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
-                                            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-                                        </svg>
-                                    }
-                                    else
-                                    {
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
-                                            <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
-                                        </svg>
-                                    }
-                                </button>
-                            }
-                        </div>
-                        <AiContentBadges IsAiMusic="IsCurrentTrackAiGenerated()"
-                                          IsAiVocals="IsCurrentTrackAiVocals()"
-                                          IsAiLyrics="IsCurrentTrackAiLyrics()"
-                                          CssClass="player-ai-content-badges" />
+                        }
                     </div>
-                    <h1 class="song-title">@GetDisplayTitle()</h1>
                 </div>
             </div>
-            
-        </div>
 
-        
-        <div class="action-buttons-row">
+            <div class="playlist-text-details">
+                <div class="playlist-tag-row">
+                    <span class="playlist-chip">@GetModeLabel()</span>
+                    <AiContentBadges IsAiMusic="IsCurrentTrackAiGenerated()"
+                                     IsAiVocals="IsCurrentTrackAiVocals()"
+                                     IsAiLyrics="IsCurrentTrackAiLyrics()"
+                                     CssClass="player-ai-content-badges" />
+                </div>
+
+                <h1 class="song-title">@GetDisplayTitle()</h1>
+
+                <div class="playlist-meta-row">
+                    <span class="playlist-track-info">@_playlistInfo.Tracks.Count track@(_playlistInfo.Tracks.Count != 1 ? "s" : "")</span>
+
+                    @if (IsArtistTreatment())
+                    {
+                        <span class="stream-count-info">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="stream-icon">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                            </svg>
+                            @GetTotalStreamCount().ToString("N0") streams
+                        </span>
+                        @if (persona != null && !string.IsNullOrEmpty(persona.WebsiteUrl))
+                        {
+                            <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
+                        }
+                    }
+                    else if (_isPlaying || _currentTime > 0)
+                    {
+                        <span class="now-playing-info">
+                            <span class="now-playing-label">Now playing:</span>
+                            <span class="now-playing-track">@GetTrackTitle(_currentTrackIndex)</span>
+                        </span>
+                    }
+
+                    @if (_hasActiveSubscription)
+                    {
+                        <span class="subscription-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                            Unlimited Access (Subscribed)
+                        </span>
+                    }
+                    else if (!IsCurrentTrackRestricted())
+                    {
+                        <span class="subscription-badge">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                            </svg>
+                            Unlimited Access
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="preview-label">Preview Only (60 seconds per track)</span>
+                    }
+                </div>
+            </div>
+
             <div class="action-controls">
                 <button class="play-button-large" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
                     @if (_isPlaying)
@@ -112,318 +147,353 @@ else if (!string.IsNullOrEmpty(_error))
                     }
                 </button>
 
-                <!-- Now Playing Track Info -->
-                @if (_isPlaying || _currentTime > 0)
-                {
-                    <div class="now-playing-info">
-                        <span class="now-playing-label">Now Playing:</span>
-                        <span class="now-playing-track">@GetTrackTitle(_currentTrackIndex)</span>
-                    </div>
-                }
-
-                <!-- Like/Dislike Buttons for current track -->
                 @if (_currentTrackIndex >= 0 && _currentTrackIndex < _playlistInfo.Tracks.Count)
                 {
                     <div class="track-like-dislike">
                         <LikeDislikeButtons SongMetadataId="GetCurrentTrackMetadataId()" />
                     </div>
                 }
-
-                <!-- Persona info for playlist/genre mode -->
-                @if (!_isArtistMode)
-                {
-                    var playlistPersona = GetCurrentTrackPersona();
-                    var playlistCreatorBio = GetCurrentTrackCreatorBio();
-                    if (playlistPersona != null)
-                    {
-                        var playlistPersonaImgUrl = GetCurrentTrackPersonaImageUrl();
-                        <div class="playlist-persona-section">
-                            @if (!string.IsNullOrEmpty(playlistPersonaImgUrl))
-                            {
-                                <img src="@playlistPersonaImgUrl" alt="@playlistPersona.Name" class="persona-image persona-image-sm" />
-                            }
-                            <div class="persona-details">
-                                <span class="persona-name">@playlistPersona.Name</span>
-                                @if (!string.IsNullOrEmpty(playlistPersona.Bio))
-                                {
-                                    <p class="persona-bio">@playlistPersona.Bio</p>
-                                }
-                                @if (!string.IsNullOrEmpty(playlistPersona.WebsiteUrl))
-                                {
-                                    <a href="@playlistPersona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@playlistPersona.WebsiteUrl</a>
-                                }
-                            </div>
-                        </div>
-                    }
-                    else if (!string.IsNullOrEmpty(playlistCreatorBio))
-                    {
-                        <div class="playlist-persona-section">
-                            <div class="persona-details">
-                                <span class="artist-name-info">
-                                    <a href="@GetCurrentTrackArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName(GetCurrentTrackMetadata())">@GetArtistDisplayName(GetCurrentTrackMetadata())</a>
-                                </span>
-                                <p class="persona-bio">@playlistCreatorBio</p>
-                            </div>
-                        </div>
-                    }
-                }
-                else                              
-                { @*<!-- Persona info for artist mode (playing all songs by an artist) -->*@  
-                    var currentPersona = GetCurrentTrackPersona();
-                    var artistCreatorBio = GetCurrentTrackCreatorBio();
-                    if (currentPersona != null)
-                    {
-                        var personaImgUrl = GetCurrentTrackPersonaImageUrl();
-                        <div class="playlist-persona-section">
-                            @if (!string.IsNullOrEmpty(personaImgUrl))
-                            {
-                                <img src="@personaImgUrl" alt="@currentPersona.Name" class="persona-image persona-image-sm" />
-                            }
-                            <div class="persona-details">
-                                <span class="persona-name">@currentPersona.Name</span>
-                                @if (!string.IsNullOrEmpty(currentPersona.Bio))
-                                {
-                                    <p class="persona-bio">@currentPersona.Bio</p>
-                                }
-                                @if (!string.IsNullOrEmpty(currentPersona.WebsiteUrl))
-                                {
-                                    <a href="@currentPersona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@currentPersona.WebsiteUrl</a>
-                                }
-                            </div>
-                        </div>
-                    }
-                    else if (!string.IsNullOrEmpty(artistCreatorBio))
-                    {
-                        <div class="playlist-persona-section">
-                            <div class="persona-details">
-                                <span class="artist-name-info">
-                                    <a href="@GetCurrentTrackArtistUrl()" class="artist-link" title="View all songs by @GetArtistDisplayName(GetCurrentTrackMetadata())">@GetArtistDisplayName(GetCurrentTrackMetadata())</a>
-                                </span>
-                                <p class="persona-bio">@artistCreatorBio</p>
-                            </div>
-                        </div>
-                    }
-                }
             </div>
         </div>
+    </div>
 
-        <!-- Row 3: Preview Only / Subscribed text and Track Count -->
-        <div class="status-info-row">
-            @if (_hasActiveSubscription)
-            {
-                <span class="subscription-badge">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                    </svg>
-                    Unlimited Access (Subscribed)
-                </span>
-            }
-            else if (!IsCurrentTrackRestricted())
-            {
-                <span class="subscription-badge">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                    </svg>
-                    Unlimited Access
-                </span>
-            }
-            else
-            {
-                <span class="preview-label">Preview Only (60 seconds per track)</span>
-            }
-            <span class="playlist-track-info">@_playlistInfo.Tracks.Count track@(_playlistInfo.Tracks.Count != 1 ? "s" : "")</span>                
-        </div>
+    @* ------------------------------------------------------------------ *@
+    @* STAGE - the track list leads; lyrics and the artist sit beside it.  *@
+    @* ------------------------------------------------------------------ *@
+    <div class="playlist-stage">
 
-        <!-- Row 4: Track List -->
-        <div class="track-list-container">
-            <table class="track-list">
-                <thead>
-                    <tr>
-                        <th class="track-number">#</th>
-                        <th class="track-image"></th>
-                        <th class="track-title">Title</th>
-                        <th class="track-artist">Artist Name</th>
-                        <th class="track-genre">Genre</th>
-                        <th class="track-streams">Streams</th>
-                        <th class="track-duration">Duration</th>
-                        <th class="track-actions"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @for (int i = 0; i < _playlistInfo.Tracks.Count; i++)
-                    {
-                        var index = i;
-                        var track = _playlistInfo.Tracks[i];
-                        var isCurrentTrack = IsCurrentTrack(index);
+        <section class="playlist-panel track-list-container">
+            <header class="playlist-panel-head">
+                <span class="playlist-panel-caption">@(IsArtistTreatment() ? "Songs" : "Tracks")</span>
+                <span class="playlist-panel-count">@_playlistInfo.Tracks.Count track@(_playlistInfo.Tracks.Count != 1 ? "s" : "")</span>
+            </header>
 
-                        <tr class="track-row @(isCurrentTrack ? "current-track" : "")" @onclick="() => PlayTrack(index)">
-                            <td class="track-number">
-                                @if (isCurrentTrack && _isPlaying)
-                                {
-                                    <div class="playing-indicator">
-                                        <span></span><span></span><span></span>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="track-index">@GetTrackNumber(index)</span>
-                                    <button class="track-play-btn" @onclick="() => PlayTrack(index)" @onclick:stopPropagation="true">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                    </button>
-                                }
-                            </td>
-                            <td class="track-image">
-                                @{
-                                    var trackArtSource = GetTrackArtSource(index);
-                                }
-                                @if (trackArtSource.HasImage)
-                                {
-                                    <CoverArt Source="trackArtSource"
-                                              Sizes="@CoverArtSizes.TrackThumbnail"
-                                              CssClass="track-thumbnail"
-                                              Alt="Track art"
-                                              IntrinsicWidth="40"
-                                              IntrinsicHeight="40" />
-                                }
-                                else
-                                {
-                                    <div class="track-thumbnail-animation">
-                                        <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="track-lottie-animation" autoplay loop></dotlottie-wc>
-                                    </div>
-                                }
-                            </td>
-                            <td class="track-title-cell">
-                                <div class="track-title-content">
-                                    <span class="track-name @(isCurrentTrack ? "playing" : "")">@GetTrackTitle(index)</span>
-                                    @if (IsTrackRestricted(index))
-                                    {
-                                        <span class="track-preview-badge">Preview</span>
-                                    }
-                                </div>
-                            </td>
-                            <td class="track-artist">
-                                <span>@GetTrackArtistName(index)</span>
-                                @if (CanShowTipButtonForTrack(index))
-                                {
-                                    <button class="tip-heart-button tip-heart-inline" @onclick="() => ShowTipDialogForTrack(index)" @onclick:stopPropagation="true" title="Tip Creator">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="tip-heart-icon">
-                                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                                        </svg>
-                                    </button>
-                                }
-                            </td>
-                            <td class="track-genre">
-                                @{
-                                    var trackGenre = GetTrackGenre(index);
-                                }
-                                <a href="@GetGenreUrl(trackGenre)" class="track-genre-link" @onclick:stopPropagation="true" title="View all @trackGenre songs">@trackGenre</a>
-                            </td>
-                            <td class="track-streams">@GetTrackStreamCount(index).ToString("N0")</td>
-                            <td class="track-duration">@GetTrackDuration(index)</td>
-                            <td class="track-actions">
-                                <!-- Reserved for future per-track actions -->
-                            </td>
+            <div class="track-list-scroll">
+                <table class="track-list">
+                    <thead>
+                        <tr>
+                            <th class="track-number">#</th>
+                            <th class="track-image"></th>
+                            <th class="track-title">Title</th>
+                            @if (!IsArtistTreatment())
+                            {
+                                <th class="track-artist">Artist</th>
+                            }
+                            <th class="track-genre">Genre</th>
+                            <th class="track-streams">Streams</th>
+                            <th class="track-duration">Time</th>
                         </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _playlistInfo.Tracks.Count; i++)
+                        {
+                            var index = i;
+                            var isCurrentTrack = IsCurrentTrack(index);
+                            var trackArtSource = GetTrackArtSource(index);
+                            var trackGenre = GetTrackGenre(index);
+
+                            <tr class="track-row @(isCurrentTrack ? "current-track" : "")" @onclick="() => PlayTrack(index)">
+                                <td class="track-number">
+                                    @if (isCurrentTrack && _isPlaying)
+                                    {
+                                        <div class="playing-indicator">
+                                            <span></span><span></span><span></span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @* The play button is shown for the current track even without
+                                           hover - see .track-row.current-track .track-play-btn. Before
+                                           that rule a paused current track had a blank number cell. *@
+                                        <span class="track-index">@GetTrackNumber(index)</span>
+                                        <button class="track-play-btn" @onclick="() => PlayTrack(index)" @onclick:stopPropagation="true" title="Play @GetTrackTitle(index)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M8 5v14l11-7z" />
+                                            </svg>
+                                        </button>
+                                    }
+                                </td>
+                                <td class="track-image">
+                                    @if (trackArtSource.HasImage)
+                                    {
+                                        <CoverArt Source="trackArtSource"
+                                                  Sizes="@CoverArtSizes.TrackThumbnail"
+                                                  CssClass="track-thumbnail"
+                                                  Alt="Track art"
+                                                  IntrinsicWidth="40"
+                                                  IntrinsicHeight="40" />
+                                    }
+                                    else
+                                    {
+                                        <div class="track-thumbnail-animation">
+                                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="track-lottie-animation" autoplay loop></dotlottie-wc>
+                                        </div>
+                                    }
+                                </td>
+                                <td class="track-title-cell">
+                                    <div class="track-title-content">
+                                        <span class="track-name @(isCurrentTrack ? "playing" : "")">@GetTrackTitle(index)</span>
+                                        @if (IsTrackRestricted(index))
+                                        {
+                                            <span class="track-preview-badge">Preview</span>
+                                        }
+                                    </div>
+                                    @* Carries the artist/genre that the dedicated columns show on wide
+                                       screens. Hidden above 992px, shown below it - which is how the
+                                       table sheds columns instead of shrinking its font to 8px. *@
+                                    <span class="track-sub">@GetTrackSubtitle(index)</span>
+                                </td>
+                                @if (!IsArtistTreatment())
+                                {
+                                    <td class="track-artist">
+                                        <span>@GetTrackArtistName(index)</span>
+                                        @if (CanShowTipButtonForTrack(index))
+                                        {
+                                            <button class="tip-heart-button tip-heart-inline" @onclick="() => ShowTipDialogForTrack(index)" @onclick:stopPropagation="true" title="Tip Creator">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="tip-heart-icon">
+                                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                                                </svg>
+                                            </button>
+                                        }
+                                    </td>
+                                }
+                                <td class="track-genre">
+                                    <a href="@GetGenreUrl(trackGenre)" class="track-genre-link" @onclick:stopPropagation="true" title="View all @trackGenre songs">@trackGenre</a>
+                                </td>
+                                <td class="track-streams">@GetTrackStreamCount(index).ToString("N0")</td>
+                                <td class="track-duration">@GetTrackDuration(index)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="playlist-side">
+            <section class="playlist-panel playlist-stage-panel">
+                <header class="playlist-panel-head">
+                    <span class="playlist-panel-caption">@(ShowingLyrics() ? "Lyrics" : "Cover art")</span>
+
+                    @* Per track, not per playlist: the switch comes and goes as the playlist moves
+                       between songs that have published lyrics and songs that do not. *@
+                    @if (HasPublishedLyrics())
+                    {
+                        <div class="playlist-panel-switch">
+                            <button type="button"
+                                    class="lyrics-toggle-button @(ShowingLyrics() ? "is-active" : "")"
+                                    @onclick="ShowLyricsPanel"
+                                    title="Show lyrics"
+                                    aria-pressed="@ShowingLyrics().ToString().ToLowerInvariant()">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z" />
+                                </svg>
+                                <span>Lyrics</span>
+                            </button>
+                            <button type="button"
+                                    class="art-toggle-button @(ShowingLyrics() ? "" : "is-active")"
+                                    @onclick="ShowArtPanel"
+                                    title="Show cover art"
+                                    aria-pressed="@((!ShowingLyrics()).ToString().ToLowerInvariant())">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="lyrics-toggle-icon">
+                                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                                </svg>
+                                <span>Art</span>
+                            </button>
+                        </div>
                     }
-                </tbody>
-            </table>
-        </div>             
+                </header>
 
-        <!-- Hidden Audio Element -->
-        <audio id="playlist-audio-player" @ref="_audioElement"
-               preload="auto"
-               style="display:none;"></audio>
+                <div class="playlist-panel-body">
+                    @* Mounted alongside the art rather than instead of it, so toggling does not tear
+                       down the highlighting loop mid-song. A track change swaps the document, which
+                       the scroller notices. *@
+                    @if (HasPublishedLyrics())
+                    {
+                        <div class="lyrics-scroller-overlay @(ShowingLyrics() ? "" : "is-hidden")">
+                            <LyricsScroller AudioElement="_audioElement"
+                                            Mode="LyricsScrollerMode.Player"
+                                            Document="_currentTrackTimings"
+                                            EmptyMessage="Lyrics are loading&hellip;" />
+                        </div>
+                    }
 
-        
-
-        <!-- Row 5: Bottom Player Bar -->
-        <div class="player-bar">
-            <div class="controls-wrapper">
-                <span class="time-spacer"></span>
-                <div class="player-controls-row">
-                    <div class="player-controls">
-                        <button class="control-button @(_shuffleEnabled ? "active" : "")" @onclick="ToggleShuffle" title="Shuffle">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
-                            </svg>
-                        </button>
-                        <button class="control-button" @onclick="PlayPreviousTrack" title="Previous">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-                            </svg>
-                        </button>
-                        <button class="play-button-small" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
-                            @if (_isPlaying)
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
-                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                </svg>
-                            }
-                            else
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
-                                    <path d="M8 5v14l11-7z" />
-                                </svg>
-                            }
-                        </button>
-                        <button class="control-button" @onclick="PlayNextTrack" title="Next">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                            </svg>
-                        </button>
-                        <button class="control-button @(_repeatEnabled ? "active" : "")" @onclick="ToggleRepeat" title="Repeat">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="volume-controls">
-                        <button class="control-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
-                            @if (_isMuted || GetDisplayVolume() == 0)
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                                </svg>
-                            }
-                            else if (GetDisplayVolume() < 0.5)
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
-                                </svg>
-                            }
-                            else
-                            {
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
-                                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                                </svg>
-                            }
-                        </button>
-                        <div @ref="_volumeBarContainer" class="volume-bar-container" @onclick="OnVolumeBarClick">
-                            <div class="volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
-                                <div class="volume-thumb"></div>
+                    <div class="playlist-panel-art @(ShowingLyrics() ? "is-hidden" : "")">
+                        @if (GetTrackArtSource(_currentTrackIndex).HasImage)
+                        {
+                            <CoverArt Source="GetTrackArtSource(_currentTrackIndex)"
+                                      Sizes="@CoverArtSizes.PlayerStage"
+                                      CssClass="playlist-stage-art"
+                                      Alt="Cover art" />
+                        }
+                        else
+                        {
+                            <div class="playlist-art-animation">
+                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
                             </div>
+                        }
+                    </div>
+                </div>
+            </section>
+
+            @if (IsArtistTreatment())
+            {
+                @* The bio is not repetition, it is content - and it runs to 2,000 characters. In
+                   artist mode it gets a panel of its own rather than the clamp the catalogue card
+                   uses, because this route IS the artist's page. *@
+                @if (!string.IsNullOrEmpty(bioText))
+                {
+                    <section class="playlist-panel playlist-about-panel">
+                        <header class="playlist-panel-head">
+                            <span class="playlist-panel-caption">About</span>
+                        </header>
+                        <p class="persona-bio persona-bio-full">@bioText</p>
+                    </section>
+                }
+            }
+            else if (persona != null || !string.IsNullOrEmpty(bioText) || !string.IsNullOrEmpty(artistName))
+            {
+                <section class="playlist-panel playlist-artist-panel playlist-persona-section">
+                    <header class="playlist-panel-head">
+                        <span class="playlist-panel-caption">The artist</span>
+                    </header>
+
+                    <div class="persona-identity">
+                        @if (!string.IsNullOrEmpty(personaImageUrl))
+                        {
+                            <img src="@personaImageUrl" alt="@artistName" class="persona-image persona-image-sm" />
+                        }
+                        <div class="persona-details">
+                            <span class="artist-name-info">
+                                <a href="@GetCurrentTrackArtistUrl()" class="artist-link" title="View all songs by @artistName">@artistName</a>
+                            </span>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(bioText))
+                    {
+                        <p class="persona-bio">@bioText</p>
+                        <a href="@GetCurrentTrackArtistUrl()" class="persona-more">
+                            More about @artistName
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                            </svg>
+                        </a>
+                    }
+
+                    @if (persona != null && !string.IsNullOrEmpty(persona.WebsiteUrl))
+                    {
+                        <a href="@persona.WebsiteUrl" target="_blank" rel="noopener noreferrer" class="persona-website">@persona.WebsiteUrl</a>
+                    }
+
+                    @if (CanShowTipButtonForTrack(_currentTrackIndex))
+                    {
+                        <button class="playlist-tip-cta" @onclick="() => ShowTipDialogForTrack(_currentTrackIndex)">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                            </svg>
+                            Tip this artist
+                        </button>
+                    }
+                </section>
+            }
+        </div>
+    </div>
+
+    @* The id is load-bearing: PlaylistPlayerInteractive.razor.js falls back to
+       getElementById when the ElementReference arrives unresolved, which happens after a
+       PayPal redirect. Do not rename or remove it. *@
+    <audio id="playlist-audio-player" @ref="_audioElement"
+           preload="auto"
+           style="display:none;"></audio>
+
+    @* ------------------------------------------------------------------ *@
+    @* TRANSPORT - a floating pill. .controls-wrapper and .player-controls- *@
+    @* row are display:contents so .player-controls, .progress-container    *@
+    @* and .volume-controls order independently as direct flex children.    *@
+    @* ------------------------------------------------------------------ *@
+    <div class="player-bar">
+        <div class="controls-wrapper">
+            <div class="player-controls-row">
+                <div class="player-controls">
+                    <button class="control-button @(_shuffleEnabled ? "active" : "")" @onclick="ToggleShuffle" title="@(_shuffleEnabled ? "Shuffle on" : "Shuffle off")">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" />
+                        </svg>
+                    </button>
+                    <button class="control-button" @onclick="PlayPreviousTrack" title="Previous">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                        </svg>
+                    </button>
+                    <button class="play-button-small" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                        @if (_isPlaying)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon-small">
+                                <path d="M8 5v14l11-7z" />
+                            </svg>
+                        }
+                    </button>
+                    <button class="control-button" @onclick="PlayNextTrack" title="Next">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                        </svg>
+                    </button>
+                    <button class="control-button @(_repeatEnabled ? "active" : "")" @onclick="ToggleRepeat" title="@(_repeatEnabled ? "Repeat on" : "Repeat off")">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                            <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="volume-controls">
+                    <button class="control-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
+                        @if (_isMuted || GetDisplayVolume() == 0)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                            </svg>
+                        }
+                        else if (GetDisplayVolume() < 0.5)
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                            </svg>
+                        }
+                    </button>
+                    <div @ref="_volumeBarContainer" class="volume-bar-container" @onclick="OnVolumeBarClick">
+                        <div class="volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
+                            <div class="volume-thumb"></div>
                         </div>
                     </div>
                 </div>
-                <span class="time-spacer"></span>
-            </div>
-            <div class="progress-container">
-                <span class="time-display">@FormatTime(_currentTime)</span>
-                <div @ref="_progressBarContainer" class="progress-bar-container @(IsProgressBarRestricted() ? "restricted" : "")" @onclick="OnProgressBarClick">
-                    <div class="progress-bar" style="width: @(GetProgressBarWidth())%;">
-                        <div class="progress-thumb"></div>
-                    </div>
-                    @if (IsProgressBarRestricted())
-                    {
-                        <div class="progress-limit-marker" style="left: @(GetPreviewLimitPercentage())%;"></div>
-                    }
-                </div>
-                <span class="time-display">@FormatTime(GetDisplayDuration())</span>
             </div>
         </div>
-    }
+        <div class="progress-container">
+            <span class="time-display">@FormatTime(_currentTime)</span>
+            <div @ref="_progressBarContainer" class="progress-bar-container @(IsProgressBarRestricted() ? "restricted" : "")" @onclick="OnProgressBarClick">
+                <div class="progress-bar" style="width: @(GetProgressBarWidth())%;">
+                    <div class="progress-thumb"></div>
+                </div>
+                @if (IsProgressBarRestricted())
+                {
+                    <div class="progress-limit-marker" style="left: @(GetPreviewLimitPercentage())%;"></div>
+                }
+            </div>
+            <span class="time-display">@FormatTime(GetDisplayDuration())</span>
+        </div>
+    </div>
+}
 </div>
 
 <SfToast @ref="_toastRef" ShowCloseButton="true" NewestOnTop="true" ShowProgressBar="true" Timeout="5000">
