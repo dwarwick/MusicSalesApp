@@ -1,4 +1,4 @@
-namespace MusicSalesApp.Models;
+﻿namespace MusicSalesApp.Models;
 
 #nullable enable
 
@@ -72,6 +72,22 @@ public class MobilePlaylistSongDto
     public int PersonaImageVersion { get; set; }
 
     public string? PersonaBio { get; set; }
+
+    /// <summary>
+    /// The persona's own website, or null. No creator-level fallback exists - only a persona
+    /// can have one - and the value is stored exactly as typed, so do not assume a scheme.
+    /// </summary>
+    public string? PersonaWebsiteUrl { get; set; }
+
+    /// <summary>
+    /// The blob path of this song's word-level lyric timings, or null when a listener may not
+    /// see any. Fetch from <c>api/music/{path}?v={LyricsVersion}</c>. Only ever set for
+    /// published lyrics; the status itself is deliberately not shipped.
+    /// </summary>
+    public string? LyricsTimingsPath { get; set; }
+
+    /// <summary>Cache-buster for the timings, whose blob path never changes between publishes.</summary>
+    public int LyricsVersion { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
     public int StreamQualifyingSeconds { get; set; }
