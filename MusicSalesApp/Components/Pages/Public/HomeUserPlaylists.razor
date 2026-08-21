@@ -1,0 +1,70 @@
+@rendermode InteractiveServer
+@inherits HomeUserPlaylistsModel
+
+@*
+    The "Your Playlists" section, split out of Home.razor into an island of its own.
+
+    WHY THIS IS A SEPARATE COMPONENT. Home.razor has no @rendermode, so it is static SSR, and
+    static SSR never calls OnAfterRenderAsync - which is where this data has to load, because
+    AGENTS.md mandates that lifecycle hook over OnInitializedAsync for DbContext safety. The two
+    facts together meant the section could not render for anybody: _isAuthenticated stayed false
+    forever. Two HomeTests were [Ignore]d citing exactly that.
+
+    Home stays static SSR; only this section is interactive, matching how HomeSubscriptionOffer
+    and MusicLibrary already work on that page.
+*@
+
+@if (HasUserPlaylists)
+{
+    <section class="user-playlists-section">
+        <div class="section-head">
+            <div>
+                <div class="section-eyebrow">Signed in</div>
+                <h2 class="section-title">Your Playlists</h2>
+            </div>
+            @* Literal, like the two card links below it - AppPageRoutes has no MyPlaylists entry. *@
+            <a href="/my-playlists" class="section-link">
+                All playlists
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z" /></svg>
+            </a>
+        </div>
+        <div class="playlists-page-grid">
+            @if (_recommendedPlaylist.Any())
+            {
+                <a href="/recommended-playlist/@_currentUserId" class="e-card playlists-page-card music-card recommended-playlist-card playlist-card-link">
+                    <div class="e-card-header">
+                        <div class="e-card-header-title">Recommended For You</div>
+                    </div>
+                    <div class="e-card-content">
+                        <p>@_recommendedPlaylist.Count song(s)</p>
+                        <p class="playlist-description">Songs you might enjoy based on your preferences</p>
+                    </div>
+                </a>
+            }
+            @if (HasLikedSongsToShow)
+            {
+                <a href="/playlist/@_likedSongsPlaylist.Id" class="e-card playlists-page-card music-card liked-songs-playlist-card playlist-card-link">
+                    <div class="e-card-header">
+                        <div class="e-card-header-title">Liked Songs</div>
+                    </div>
+                    <div class="e-card-content">
+                        <p>@_likedSongsCount song(s)</p>
+                        <p class="playlist-description">Songs you've liked</p>
+                    </div>
+                </a>
+            }
+        </div>
+    </section>
+}
+else if (_isAuthenticated && _loadingRecommendations)
+{
+    <section class="user-playlists-section">
+        <div class="section-head">
+            <div>
+                <div class="section-eyebrow">Signed in</div>
+                <h2 class="section-title">Your Playlists</h2>
+            </div>
+        </div>
+        <p class="loading-text">Loading your personalized content...</p>
+    </section>
+}

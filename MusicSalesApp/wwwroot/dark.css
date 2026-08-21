@@ -33,6 +33,9 @@
     --st-page: #212529;
     /* Only ever carries white text or white icons, so both stops clear 4.5:1 on white. */
     --st-brand-gradient: linear-gradient(135deg, #0166d6 0%, #0186fd 100%);
+    /* Scrollbar: a quiet gutter, not branding. Lifted just off the dark page. */
+    --st-scrollbar-thumb: #3f4a59;
+    --st-scrollbar-thumb-hover: #55637a;
     /*
      * FILL family - read the note in light.css. Dark is where getting this wrong showed:
      * a white icon on --st-accent measured 2.26:1 and the hover state 1.26:1, i.e. gone.
@@ -86,12 +89,6 @@ body {
 .mobile-app-install-store-text:hover {
     background-color: #ffffff;
     color: #111111;
-}
-
-.creator-trust-note {
-    color: #d8eaff;
-    background-color: #142336;
-    border-color: #31567d;
 }
 
 .creator-settings-page {
@@ -241,97 +238,6 @@ body {
 
 .count-text {
     color: inherit;
-}
-
-/* Home Page - Dark Theme Colors */
-.hero-title {
-    color: #ffffff;
-}
-
-.hero-subtitle {
-    color: #b3b3b3;
-}
-
-/* Section Colors - Dark Theme */
-.section-title {
-    color: #ffffff;
-}
-
-.section-subtitle {
-    color: #b3b3b3;
-}
-
-/* Feature Cards - Dark Theme */
-.feature-card {
-    background: #2a2a2a;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.feature-card:hover {
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-}
-
-.feature-card h3 {
-    color: #ffffff;
-}
-
-.feature-card p {
-    color: #b3b3b3;
-}
-
-/* User Playlists Section - Dark Theme */
-.user-playlists-section .section-title {
-    color: #ffffff;
-}
-
-.loading-text {
-    color: #b3b3b3;
-}
-
-.subscription-cta-content h2 {
-    color: #fff;
-}
-
-.subscription-price-highlight {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.subscription-price-highlight .price {
-    color: #fff;
-}
-
-.subscription-benefits li {
-    color: #fff;
-}
-
-.subscription-benefits li svg {
-    color: #fff;
-}
-
-/* CTA Split Section Colors - Dark Theme */
-.cta-card {
-    background: #2a2a2a;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.cta-card:hover {
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-}
-
-.cta-title {
-    color: #ffffff;
-}
-
-.cta-description {
-    color: #b3b3b3;
-}
-
-.cta-benefits li {
-    color: #e0e0e0;
-}
-
-.cta-auth-text {
-    color: #ffffff;
 }
 
 /* Subscribe CTA Dialog */
@@ -1209,12 +1115,6 @@ body {
 
 .filter-pill-option-indicator { color: var(--st-accent); }
 
-.music-type-filter {
-    background-color: var(--st-surface);
-    border-color: var(--st-line);
-    color: var(--st-text-2);
-}
-
 /* ---- Playlist cards ----------------------------------------------------
    Same surface as the song card; only the left accent stripe differs. */
 
@@ -1263,10 +1163,6 @@ body {
 .feature-icon {
     background: var(--st-brand-gradient);
     color: #fff;
-}
-
-.subscription-cta-section {
-    background: linear-gradient(135deg, var(--st-accent) 0%, #024a9e 100%);
 }
 
 .music-library-link:hover { color: var(--st-accent-hover); }
@@ -1422,4 +1318,115 @@ body {
     background: var(--st-accent-fill-hover);
     border-color: var(--st-accent-fill-hover);
     color: var(--st-on-accent);
+}
+
+/* =========================================================================
+   SECTION HEADERS AND PAGE STATES — colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+   ========================================================================= */
+
+.section-eyebrow { color: var(--st-accent); }
+.section-link { color: var(--st-accent); }
+.section-link:hover { color: var(--st-accent-hover); }
+
+.empty-state-icon {
+    background: var(--st-surface-hover);
+    color: var(--st-text-3);
+}
+
+.empty-state-title { color: var(--st-text); }
+.empty-state-body { color: var(--st-text-2); }
+
+.state-action {
+    background: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.state-action:hover {
+    background: var(--st-accent-fill-hover);
+    border-color: var(--st-accent-fill-hover);
+}
+
+.cta-group-note { color: var(--st-text-2); }
+
+/* =========================================================================
+   HOME SURFACES AND HEADINGS — colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+
+   Replaces the last un-migrated block on the site. Home was half done: buttons and accents
+   were already on --st-*, while every surface, heading and body colour was a raw hex - which
+   is why the page could not follow the card surfaces it sits above.
+
+   Two of those literals were plainly wrong rather than merely untokenised:
+     .cta-card    box-shadow: 0 4px 20px #b3b3b3   - an OPAQUE grey, not an alpha shadow
+     .feature-card  had no border at all, so it had no edge on a light page
+   ========================================================================= */
+
+.hero-title { color: var(--st-text); }
+.hero-subtitle { color: var(--st-text-2); }
+
+.section-title { color: var(--st-text); }
+.section-subtitle { color: var(--st-text-2); }
+.loading-text { color: var(--st-text-2); }
+
+.feature-card,
+.cta-card {
+    background: var(--st-surface);
+    border: 1px solid var(--st-line);
+    box-shadow: var(--st-elev);
+}
+
+.feature-card:hover,
+.cta-card:hover { box-shadow: var(--st-elev-hover); }
+
+.feature-card h3 { color: var(--st-text); }
+.feature-card p { color: var(--st-text-2); }
+
+.cta-title { color: var(--st-text); }
+.cta-description { color: var(--st-text-2); }
+.cta-benefits li { color: var(--st-text); }
+.cta-auth-text { color: var(--st-text); }
+
+/* =========================================================================
+   SCROLLBAR — colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+
+   Two separate mechanisms, one per engine: scrollbar-color is Firefox, the ::-webkit-*
+   pseudo-elements are Chromium and Safari. Both are needed; neither is a fallback for the other.
+   ========================================================================= */
+
+html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
+
+::-webkit-scrollbar-track { background: var(--st-page); }
+::-webkit-scrollbar-thumb { background-color: var(--st-scrollbar-thumb); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--st-scrollbar-thumb-hover); }
+
+/* ---- Listener-side button tiers ----------------------------------------
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.cta-outline {
+    background-color: transparent !important;
+    border: 1px solid var(--st-line) !important;
+    color: var(--st-text) !important;
+}
+
+.cta-outline:hover {
+    background-color: var(--st-surface-hover) !important;
+    border-color: var(--st-accent) !important;
+    color: var(--st-accent) !important;
+}
+
+.cta-quiet {
+    background-color: transparent !important;
+    border: 1px solid transparent !important;
+    color: var(--st-text-2) !important;
+}
+
+.cta-quiet:hover {
+    background-color: var(--st-surface-hover) !important;
+    color: var(--st-text) !important;
 }

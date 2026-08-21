@@ -47,9 +47,15 @@ public class HomeTests : BUnitTestBase
         var loginButton = cut.Find("a.hero-login-button");
 
         Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
-        Assert.That(browseButton.ClassList.Contains("hero-secondary-cta"), Is.True);
         Assert.That(loginButton.TextContent, Does.Contain("Log In"));
-        Assert.That(loginButton.ClassList.Contains("hero-secondary-cta"), Is.True);
+
+        // These two used to assert hero-secondary-cta, which is the VIOLET reserved by AGENTS.md
+        // for creator and account actions. Browse Music is the primary listener action on the
+        // landing page, so the old assertions were pinning the defect in place.
+        Assert.That(browseButton.ClassList.Contains("hero-secondary-cta"), Is.False,
+            "Browse Music is a listener action and must not wear the creator violet");
+        Assert.That(browseButton.ClassList.Contains("cta-outline"), Is.True);
+        Assert.That(loginButton.ClassList.Contains("cta-quiet"), Is.True);
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
     }
 
@@ -88,7 +94,9 @@ public class HomeTests : BUnitTestBase
         var browseButton = cut.Find("a.hero-browse-music-button");
         Assert.That(browseButton.TextContent, Does.Contain("Browse Music"));
         Assert.That(browseButton.GetAttribute("href"), Is.EqualTo("/music-library"));
-        Assert.That(browseButton.ClassList.Contains("hero-secondary-cta"), Is.True);
+        // Same reason as the assertion in Home_ShowsHeroSection_WithCallToAction: Browse Music is
+        // a listener action, so it takes the outline tier rather than the creator violet.
+        Assert.That(browseButton.ClassList.Contains("cta-outline"), Is.True);
     }
 
     [Test]
@@ -295,12 +303,12 @@ public class HomeTests : BUnitTestBase
     }
 
     [Test]
-    [Ignore("Skipped: bUnit does not reliably trigger OnAfterRenderAsync data loading. This test requires component refactoring to use a different lifecycle pattern.")]
-    public void Home_ShowsLikedSongsPlaylist_WhenUserIsAuthenticated()
+    public async Task HomeUserPlaylists_ShowsLikedSongsPlaylist_WhenUserIsAuthenticated()
     {
-        // This test validates that authenticated users see the Liked Songs playlist on the home page.
-        // Currently skipped because the Home component loads data in OnAfterRenderAsync,
-        // which doesn't execute properly in bUnit's synchronous test model.
+        // Was [Ignore]d as "bUnit does not reliably trigger OnAfterRenderAsync". The real cause
+        // was that Home is static SSR, so that hook never ran there - in production either, which
+        // is why this section rendered for nobody. It is its own interactive island now, and
+        // rendering the island directly exercises the lifecycle properly.
         
         // Arrange
         SetupRendererInfo();
@@ -308,14 +316,11 @@ public class HomeTests : BUnitTestBase
         var userId = 1;
         var testUser = new ApplicationUser { Id = userId, UserName = "test@user.com" };
 
-        var identity = new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Name, "test@user.com")
-        }, "TestAuthType");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(claimsPrincipal);
-        MockAuthStateProvider.Setup(x => x.GetAuthenticationStateAsync()).ReturnsAsync(authState);
+        // SetupAuthorizedUser rather than a bare MockAuthStateProvider.Setup: BUnitTestBase calls
+        // TestContext.AddAuthorization() AFTER registering the mock, so bUnit's own provider is what
+        // the component actually resolves. Configuring only the mock leaves it unauthenticated -
+        // which is the real reason these two tests never passed.
+        SetupAuthorizedUser(userId, "test@user.com");
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(testUser);
 
         var likedSongsPlaylist = new Playlist
@@ -338,7 +343,10 @@ public class HomeTests : BUnitTestBase
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
 
         // Act
-        var cut = TestContext.Render<Home>();
+        var cut = TestContext.Render<HomeUserPlaylists>();
+
+        // Let OnAfterRenderAsync and both of its awaits settle.
+        await cut.InvokeAsync(() => { });
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Liked Songs"));
@@ -346,12 +354,9 @@ public class HomeTests : BUnitTestBase
     }
 
     [Test]
-    [Ignore("Skipped: bUnit does not reliably trigger OnAfterRenderAsync data loading. This test requires component refactoring to use a different lifecycle pattern.")]
-    public async Task Home_DoesNotShowLikedSongsPlaylist_WhenEmpty()
+    public async Task HomeUserPlaylists_DoesNotShowLikedSongsPlaylist_WhenEmpty()
     {
-        // This test validates that Liked Songs playlist is hidden when empty.
-        // Currently skipped because the Home component loads data in OnAfterRenderAsync,
-        // which doesn't execute properly in bUnit's synchronous test model.
+        // Companion to the test above - same reason it was ignored, same fix.
         
         // Arrange
         SetupRendererInfo();
@@ -359,14 +364,11 @@ public class HomeTests : BUnitTestBase
         var userId = 1;
         var testUser = new ApplicationUser { Id = userId, UserName = "test@user.com" };
 
-        var identity = new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Name, "test@user.com")
-        }, "TestAuthType");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
-        var authState = new AuthenticationState(claimsPrincipal);
-        MockAuthStateProvider.Setup(x => x.GetAuthenticationStateAsync()).ReturnsAsync(authState);
+        // SetupAuthorizedUser rather than a bare MockAuthStateProvider.Setup: BUnitTestBase calls
+        // TestContext.AddAuthorization() AFTER registering the mock, so bUnit's own provider is what
+        // the component actually resolves. Configuring only the mock leaves it unauthenticated -
+        // which is the real reason these two tests never passed.
+        SetupAuthorizedUser(userId, "test@user.com");
         MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(testUser);
 
         var likedSongsPlaylist = new Playlist
@@ -384,9 +386,9 @@ public class HomeTests : BUnitTestBase
         MockSubscriptionService.Setup(x => x.HasActiveSubscriptionAsync(userId)).ReturnsAsync(false);
 
         // Act
-        var cut = TestContext.Render<Home>();
-        
-        // Wait for OnAfterRenderAsync to complete
+        var cut = TestContext.Render<HomeUserPlaylists>();
+
+        // Let OnAfterRenderAsync and both of its awaits settle.
         await cut.InvokeAsync(() => { });
 
         // Assert - Liked Songs should not be shown when the playlist is empty

@@ -1129,6 +1129,72 @@ public class MusicLibraryTests : BUnitTestBase
         });
     }
 
+    [Test]
+    public void MusicLibrary_ExplainsItself_WhenFiltersExcludeEverything()
+    {
+        // Before this the page rendered an EMPTY GRID: no message, and no hint that a filter was
+        // responsible. The only recovery cue was spotting the small clear glyph on each pill.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "HumanSong.mp3", SongTitle = "Human Song", Genre = "Folk", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.FindAll(".empty-state"), Is.Empty, "nothing is filtered yet");
+
+        // Narrow to AI music, of which there is none.
+        FindFilterPill(cut, "Music Type").Click();
+        cut.FindAll(".filter-pill-dropdown-option")
+            .First(o => o.TextContent.Contains("AI Music", StringComparison.Ordinal))
+            .Click();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Human Song"));
+            Assert.That(cut.Find(".empty-state-title").TextContent, Is.EqualTo("No songs match these filters"));
+        });
+
+        // ...and the state can undo itself.
+        cut.Find(".empty-state .state-action").Click();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".empty-state"), Is.Empty);
+            Assert.That(cut.Markup, Does.Contain("Human Song"));
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_RecoversFromAFailedLoad_WhenRetryIsClicked()
+    {
+        // _error was set but never cleared - LoadFiles's finally resets only _loading - so one
+        // transient failure blanked the page for the rest of the circuit with no way back.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "TestSong.mp3", SongTitle = "Test Song", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.SetupSequence(x => x.GetAllAsync())
+            .ThrowsAsync(new InvalidOperationException("catalogue unavailable"))
+            .ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.That(cut.Find(".error-state").TextContent, Does.Contain("catalogue unavailable"));
+
+        cut.Find(".error-state .state-action").Click();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".error-state"), Is.Empty, "the error must clear, not just re-run underneath it");
+            Assert.That(cut.Markup, Does.Contain("Test Song"));
+        });
+    }
+
     private static IElement CardContainingMiniPlayer(IRenderedComponent<MusicLibrary> cut)
     {
         return cut.FindAll(".music-card").Single(card => card.QuerySelector(".card-mini-player") != null);

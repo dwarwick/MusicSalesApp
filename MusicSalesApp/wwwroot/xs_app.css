@@ -88,11 +88,6 @@
         min-width: calc(100vw / 1.2 - 32px);
     }
 
-    .creator-trust-note {
-        padding: 0.875rem;
-        margin: 1rem 0;
-    }
-
     /* NavMenu */
     .cart-link {
         margin-right: 70px;
@@ -373,4 +368,16 @@
     .filter-pill { height: 34px; padding: 0 13px; font-size: 13px; }
     .music-library-sticky-header { gap: 8px; padding: 10px 0; }
     .music-library-sticky-header h3 { font-size: 19px; }
+}
+
+@media (max-width: 576px) {
+    /* Section headers and page states — phone. The header stacks so a long title and its
+       action link stop fighting for one line. */
+    .section-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .section-eyebrow { font-size: 10.5px; }
+    .empty-state { padding: 40px 16px; }
+    .empty-state-icon { width: 54px; height: 54px; }
+    .empty-state-icon svg { width: 26px; height: 26px; }
+    .empty-state-title { font-size: 16.5px; }
+    .state-action { height: 44px; width: 100%; }
 }

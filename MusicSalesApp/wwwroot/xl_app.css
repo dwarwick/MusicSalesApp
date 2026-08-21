@@ -442,41 +442,6 @@
         margin-bottom: 1.5rem;
     }
 
-    .creator-trust-note {
-        padding: 1rem;
-        margin: 1.5rem 0;
-    }
-
-    /* Subscription CTA Section - XL Breakpoint */
-    .subscription-cta-section {
-        padding: 4rem;
-        margin: 3rem 0;
-    }
-
-    .subscription-cta-content h2 {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-    }
-
-    .subscription-price-highlight {
-        font-size: 1.5rem;
-        margin-bottom: 2rem;
-    }
-
-    .subscription-price-highlight .price {
-        font-size: 3rem;
-    }
-
-    .subscription-benefits {
-        margin-bottom: 2rem;
-    }
-
-    .subscription-benefits li {
-        font-size: 1.125rem;
-        gap: 12px;
-        margin-bottom: 1rem;
-    }
-
     /* CTA Split Section Spacing */
     .cta-split-section {
         margin: 3rem 0;
@@ -859,3 +824,34 @@
 .card-bottom-row .fb-share-btn .fb-logo-box { width: 17px; height: 17px; font-size: 12px; }
 
 .contact-icon { width: 26px; height: 26px; }
+
+/* Section headers and page states — sizing. Unwrapped, like the card block above. */
+.section-head { gap: 16px; margin-bottom: 6px; }
+.section-eyebrow { font-size: 11.5px; letter-spacing: .10em; margin-bottom: 5px; }
+.section-link { gap: 5px; font-size: 13.5px; }
+.section-link svg { width: 14px; height: 14px; }
+
+.loading-state,
+.error-state,
+.empty-state { gap: 14px; min-height: 200px; padding: 32px 24px; }
+
+.empty-state { gap: 12px; padding: 56px 24px; }
+.empty-state-icon { width: 64px; height: 64px; margin-bottom: 4px; }
+.empty-state-icon svg { width: 30px; height: 30px; }
+.empty-state-title { font-size: 18px; }
+.empty-state-body { font-size: 14px; line-height: 1.55; }
+
+.state-action { gap: 8px; height: 40px; padding: 0 20px; font-size: 14px; margin-top: 6px; }
+.state-action svg { width: 16px; height: 16px; }
+
+/* Creator funnel — spacing that used to be inline style= attributes. */
+.cta-button-group { margin: 24px 0; }
+.cta-group-note { font-size: 14px; }
+.process-steps { display: flex; flex-direction: column; gap: 8px; }
+.back-link { gap: 6px; font-size: 13.5px; margin-bottom: 18px; }
+.back-link svg { width: 14px; height: 14px; }
+
+/* Hero — the second headline line matches the first, and the two new button tiers match the
+   .cta-primary/.cta-secondary geometry defined inside the min-width:1200px block above. */
+.cta-outline,
+.cta-quiet { padding: 14px 32px; font-size: 1rem; }

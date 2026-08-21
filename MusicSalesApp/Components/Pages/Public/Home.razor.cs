@@ -1,91 +1,25 @@
 using MusicSalesApp.Components.Base;
-using MusicSalesApp.Models;
 
 #nullable enable
 
 namespace MusicSalesApp.Components.Pages.Public;
 
+/// <summary>
+/// Code-behind for the home page.
+///
+/// <para>
+/// Deliberately empty of data loading. Home renders as static SSR - it declares no
+/// <c>@rendermode</c> - so <c>OnAfterRenderAsync</c> is never called on it, and AGENTS.md
+/// mandates that hook over <c>OnInitializedAsync</c> for anything touching the DbContext.
+/// Everything on this page that needs data is therefore an island: <c>HomeSubscriptionOffer</c>,
+/// the embedded <c>MusicLibrary</c>, and <c>HomeUserPlaylists</c>.
+/// </para>
+///
+/// <para>
+/// The playlist loading that used to live here moved to <see cref="HomeUserPlaylistsModel"/>
+/// unchanged; it had never run in production from this class.
+/// </para>
+/// </summary>
 public partial class HomeModel : BlazorBase
 {
-    private bool _hasLoadedData;
-    protected bool _isAuthenticated;
-    protected List<RecommendedPlaylist> _recommendedPlaylist = new();
-    protected Playlist _likedSongsPlaylist = null!;
-    protected int _likedSongsCount;
-    protected bool _loadingRecommendations;
-    protected int _currentUserId;
-
-    protected bool HasUserPlaylists => _isAuthenticated && 
-        (_recommendedPlaylist.Any() || (_likedSongsPlaylist != null && _likedSongsCount > 0));
-
-    protected bool HasLikedSongsToShow => _likedSongsPlaylist != null && _likedSongsCount > 0;
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender || _hasLoadedData)
-        {
-            return;
-        }
-
-        _hasLoadedData = true;
-        try
-        {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            if (authState.User?.Identity?.IsAuthenticated == true)
-            {
-                _isAuthenticated = true;
-                var appUser = await UserManager.GetUserAsync(authState.User);
-                if (appUser != null)
-                {
-                    _currentUserId = appUser.Id;
-                }
-
-                await LoadRecommendedPlaylistAsync();
-                await LoadLikedSongsPlaylistAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load personalized home page content.");
-        }
-        finally
-        {
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task LoadRecommendedPlaylistAsync()
-    {
-        if (_currentUserId == 0) return;
-
-        try
-        {
-            _loadingRecommendations = true;
-            _recommendedPlaylist = await RecommendationService.GetRecommendedPlaylistAsync(_currentUserId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load recommended playlist for user {UserId}", _currentUserId);
-        }
-        finally
-        {
-            _loadingRecommendations = false;
-        }
-    }
-
-    private async Task LoadLikedSongsPlaylistAsync()
-    {
-        if (_currentUserId == 0) return;
-
-        try
-        {
-            _likedSongsPlaylist = await PlaylistService.GetOrCreateLikedSongsPlaylistAsync(_currentUserId);
-            var playlistSongs = await PlaylistService.GetPlaylistSongsAsync(_likedSongsPlaylist.Id);
-            _likedSongsCount = playlistSongs.Count;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load Liked Songs playlist for user {UserId}", _currentUserId);
-        }
-    }
-
 }

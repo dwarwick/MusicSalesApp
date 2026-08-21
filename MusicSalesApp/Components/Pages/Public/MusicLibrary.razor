@@ -104,10 +104,28 @@ else if (_error != null)
 {
     <div class="error-state">
         <div class="alert alert-danger">@_error</div>
+        <button type="button" class="state-action" @onclick="RetryLoadAsync">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M17.65 6.35A8 8 0 1 0 6 18.36l1.42-1.42A6 6 0 1 1 12 18v3l4-4-4-4v3a8 8 0 0 0 5.65-13.65z" /></svg>
+            Try again
+        </button>
     </div>
 }
 else
 {
+    @* An empty grid with no explanation was the whole feedback a filtered-out library gave.
+       Only for the grid: the carousel is driven by DisplayOnHomePage, not by these filters. *@
+    @if (!ShowHomePageFeatured && HasAnyActiveFilter() && !GetFilteredFiles().Any())
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19 15.5 14zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" /></svg>
+            </div>
+            <p class="empty-state-title">No songs match these filters</p>
+            <p class="empty-state-body">Try widening your search, or clear the filters and start again.</p>
+            <button type="button" class="state-action" @onclick="ClearAllFilters">Clear all filters</button>
+        </div>
+    }
+
     <div class="@(ShowHomePageFeatured ? "featured-music-carousel" : "music-cards-grid")">
         @* Individual Song Cards *@
         @foreach (var f in GetFilteredFiles())

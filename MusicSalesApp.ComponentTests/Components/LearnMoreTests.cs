@@ -1,5 +1,6 @@
 using Bunit;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Pages.Public;
 using MusicSalesApp.Models;
@@ -104,6 +105,43 @@ public class NewCreatorSignUpTests : BUnitTestBase
     [Test]
     public void NewCreatorSignupQuestions_KeepsItsCallsToAction_OnTheVioletCtaClasses()
         => AssertCreatorActionsAreViolet(TestContext.Render<NewCreatorSignupQuestions>().FindAll("a.cta-button-register, a.cta-button-login"));
+
+    [Test]
+    public void NewCreatorSignUp_DoesNotLinkToTheQuestionsPage()
+    {
+        // DELIBERATE, and this test exists so it stays that way. Splitting the long pitch onto
+        // /new-creator-signup-questions measurably raised sign-ups, so nothing is placed between
+        // a reader and the call to action - no panel, no card, no text link. The detail page
+        // earns its own traffic through sitemap.xml instead.
+        var cut = TestContext.Render<NewCreatorSignUp>();
+
+        Assert.That(cut.Markup, Does.Not.Contain(AppPageRoutes.NewCreatorSignupQuestions));
+    }
+
+    [Test]
+    public void NewCreatorSignupQuestions_LinksBackToTheSignupPage()
+    {
+        // The reverse direction IS safe: it points toward the call to action, and a reader who
+        // arrived from search and got this far is already warm. Today the bottom CTA is the only
+        // way onward.
+        var cut = TestContext.Render<NewCreatorSignupQuestions>();
+
+        Assert.That(cut.FindAll($"a[href='{AppPageRoutes.NewCreatorSignup}']"), Is.Not.Empty);
+    }
+
+    [Test]
+    public void NewCreatorSignupQuestions_DrawsTheContactIconAsSvg_NotAnEmoji()
+    {
+        // The sibling page was converted in the card pass and guarded by a test; this one was
+        // left on the 2.5em emoji with nothing watching it.
+        var cut = TestContext.Render<NewCreatorSignupQuestions>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("U0001F4E7"));
+            Assert.That(cut.Find(".contact-line svg.contact-icon"), Is.Not.Null);
+        });
+    }
 
     /// <summary>
     /// AGENTS.md: creator and account actions use <c>cta-secondary hero-secondary-cta</c>. Without

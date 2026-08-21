@@ -365,176 +365,6 @@
         height: 160px;
     }
 
-    /* Features Section - SM Breakpoint */
-    .features-section {
-        padding: 2rem 0;
-    }
-
-    .features-section .section-title {
-        font-size: 1.75rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .features-grid {
-        gap: 1rem;
-    }
-
-    .feature-card {
-        padding: 1.5rem;
-    }
-
-    .feature-icon {
-        width: 60px;
-        height: 60px;
-        margin-bottom: 1rem;
-    }
-
-    .feature-icon svg {
-        width: 32px;
-        height: 32px;
-    }
-
-    .feature-card h3 {
-        font-size: 1.25rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .feature-card p {
-        font-size: 0.9rem;
-        margin: 0;
-    }
-
-    /* User Playlists Section - SM Breakpoint */
-    .user-playlists-section {
-        gap: 1rem;
-        padding: 1.5rem 0;
-    }
-
-    .user-playlists-section .section-title {
-        font-size: 1.5rem;
-    }
-
-    /* Featured Music Section - SM Breakpoint */
-    .featured-music-section {
-        padding: 1.5rem 0;
-    }
-
-    .featured-music-section .section-title {
-        font-size: 1.5rem;
-    }
-
-    .featured-music-section .section-subtitle {
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
-
-    .creator-trust-note {
-        padding: 0.875rem;
-        margin: 1.25rem 0;
-    }
-
-    /* Subscription CTA Section - SM Breakpoint */
-    .subscription-cta-section {
-        padding: 2rem 1.5rem;
-        margin: 2rem 0;
-    }
-
-    .subscription-cta-content h2 {
-        font-size: 1.75rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .subscription-price-highlight {
-        font-size: 1.125rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .subscription-price-highlight .price {
-        font-size: 2.25rem;
-    }
-
-    .subscription-benefits {
-        margin-bottom: 1.5rem;
-    }
-
-    .subscription-benefits li {
-        font-size: 1rem;
-        gap: 10px;
-        margin-bottom: 0.75rem;
-    }
-
-    /* CTA Split Section - Stack vertically on small screens */
-    .cta-split-section {
-        margin: 2rem 0;
-    }
-
-    .cta-split-container {
-        flex-direction: column;
-        gap: 1.5rem;
-        padding: 0 1rem;
-    }
-
-    .cta-card {
-        padding: 2rem 1.5rem;
-        width: 100%;
-    }
-
-    .cta-icon {
-        width: 60px;
-        height: 60px;
-        margin: 0 auto 1rem;
-    }
-
-    .cta-title {
-        font-size: 1.5rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .cta-description {
-        font-size: 1rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .cta-benefits {
-        margin-bottom: 1.5rem;
-        max-width: 100%;
-    }
-
-    .cta-benefits li {
-        font-size: 0.95rem;
-        gap: 10px;
-        margin-bottom: 0.75rem;
-    }
-
-    .cta-price-highlight {
-        font-size: 1.125rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .cta-price-highlight .price {
-        font-size: 1.75rem;
-    }
-
-    .cta-auth-text {
-        font-size: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .cta-button {
-        padding: 0.875rem 2rem;
-        font-size: 1rem;
-        width: 100%;
-    }
-
-    .cta-button-group {
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-
-    .cta-button-group .cta-button {
-        width: 100%;
-        min-width: auto;
-    }
 
     /* Dashboard responsive */
     .dashboard-controls {
@@ -634,4 +464,157 @@
     .music-card { padding: 10px; }
     .card-song-title { font-size: 13.5px; }
     .action-button { height: 44px; }
+}
+
+
+/*
+ * HOME AT <=768px, PORTRAIT INCLUDED.
+ *
+ * These rules used to sit inside the
+ *   @media (max-width:1200px) and (max-height:600px) and (orientation: landscape)
+ * block above, despite their own comments calling them "SM Breakpoint". So they only ever
+ * fired on a SHORT LANDSCAPE viewport, and a portrait phone fell through to md_app.css.
+ *
+ * The most visible symptom was .cta-button-group keeping flex-direction:row in portrait, so
+ * the signup and subscribe buttons squeezed side by side instead of stacking.
+ *
+ * What stayed behind in the landscape block is the part that genuinely is landscape-specific:
+ * the card/library vertical compaction, and the hero deliberately staying side-by-side.
+ */
+@media (max-width: 768px) {
+    /* Features Section - SM Breakpoint */
+    .features-section {
+        padding: 2rem 0;
+    }
+
+    .features-section .section-title {
+        font-size: 1.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .features-grid {
+        gap: 1rem;
+    }
+
+    .feature-card {
+        padding: 1.5rem;
+    }
+
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        margin-bottom: 1rem;
+    }
+
+    .feature-icon svg {
+        width: 32px;
+        height: 32px;
+    }
+
+    .feature-card h3 {
+        font-size: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .feature-card p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* User Playlists Section - SM Breakpoint */
+    .user-playlists-section {
+        gap: 1rem;
+        padding: 1.5rem 0;
+    }
+
+    .user-playlists-section .section-title {
+        font-size: 1.5rem;
+    }
+
+    /* Featured Music Section - SM Breakpoint */
+    .featured-music-section {
+        padding: 1.5rem 0;
+    }
+
+    .featured-music-section .section-title {
+        font-size: 1.5rem;
+    }
+
+    .featured-music-section .section-subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    /* CTA Split Section - Stack vertically on small screens */
+    .cta-split-section {
+        margin: 2rem 0;
+    }
+
+    .cta-split-container {
+        flex-direction: column;
+        gap: 1.5rem;
+        padding: 0 1rem;
+    }
+
+    .cta-card {
+        padding: 2rem 1.5rem;
+        width: 100%;
+    }
+
+    .cta-icon {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 1rem;
+    }
+
+    .cta-title {
+        font-size: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .cta-description {
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cta-benefits {
+        margin-bottom: 1.5rem;
+        max-width: 100%;
+    }
+
+    .cta-benefits li {
+        font-size: 0.95rem;
+        gap: 10px;
+        margin-bottom: 0.75rem;
+    }
+
+    .cta-price-highlight {
+        font-size: 1.125rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .cta-price-highlight .price {
+        font-size: 1.75rem;
+    }
+
+    .cta-auth-text {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .cta-button {
+        padding: 0.875rem 2rem;
+        font-size: 1rem;
+        width: 100%;
+    }
+
+    .cta-button-group {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .cta-button-group .cta-button {
+        width: 100%;
+        min-width: auto;
+    }
 }

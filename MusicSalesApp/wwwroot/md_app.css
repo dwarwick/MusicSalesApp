@@ -201,41 +201,6 @@
         margin-bottom: 1rem;
     }
 
-    .creator-trust-note {
-        padding: 1rem;
-        margin: 1.25rem 0;
-    }
-
-    /* Subscription CTA Section - MD Breakpoint */
-    .subscription-cta-section {
-        padding: 3rem 2rem;
-        margin: 2rem 0;
-    }
-
-    .subscription-cta-content h2 {
-        font-size: 2rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .subscription-price-highlight {
-        font-size: 1.25rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .subscription-price-highlight .price {
-        font-size: 2.5rem;
-    }
-
-    .subscription-benefits {
-        margin-bottom: 1.5rem;
-    }
-
-    .subscription-benefits li {
-        font-size: 1rem;
-        gap: 10px;
-        margin-bottom: 0.75rem;
-    }
-
     /* CTA Split Section - Stack vertically on medium screens */
     .cta-split-section {
         margin: 2rem 0;
