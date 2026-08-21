@@ -417,7 +417,7 @@ public class AuthenticationService : IAuthenticationService
 
     private void NotifyAuthenticationStateChange()
     {
-        if (_authenticationStateProvider is ServerAuthenticationStateProvider serverAuthStateProvider)
+        if (_authenticationStateProvider is CircuitAuthenticationStateProvider serverAuthStateProvider)
         {
             serverAuthStateProvider.NotifyAuthenticationStateChanged();
         }

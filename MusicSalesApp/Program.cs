@@ -307,8 +307,19 @@ try
 
     builder.Services.AddSingleton(TimeProvider.System);
 
-    builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
-    builder.Services.AddScoped<ServerAuthenticationStateProvider>();
+    // One instance per scope, surfaced under three service types. The previous pair of
+    // registrations built TWO separate objects per scope - AddScoped<TService, TImpl>() and
+    // AddScoped<TImpl>() are independent - so whoever resolved the concrete type was talking to a
+    // different object than the components were.
+    //
+    // IHostEnvironmentAuthenticationStateProvider is the load-bearing one: Blazor resolves it when
+    // a circuit starts and hands it the connection user. Without it, interactive components see
+    // nobody signed in, because there is no HttpContext once the circuit is running.
+    builder.Services.AddScoped<CircuitAuthenticationStateProvider>();
+    builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
+        sp.GetRequiredService<CircuitAuthenticationStateProvider>());
+    builder.Services.AddScoped<IHostEnvironmentAuthenticationStateProvider>(sp =>
+        sp.GetRequiredService<CircuitAuthenticationStateProvider>());
     builder.Services.AddScoped<IAuthenticationService, AuthenticationService>(); // RoleManager injected automatically
     builder.Services.AddSingleton<IMobileExternalAuthTokenService, MobileExternalAuthTokenService>();
     builder.Services.AddSingleton<IWebGoogleAuthTokenService, WebGoogleAuthTokenService>();
