@@ -1,4 +1,4 @@
-namespace MusicSalesApp.Models;
+﻿namespace MusicSalesApp.Models;
 
 /// <summary>
 /// DTO returned by the songs list API endpoint for the MAUI Android app.
@@ -52,6 +52,38 @@ public class SongListItemDto
     public int PersonaImageVersion { get; set; }
 
     public string PersonaBio { get; set; }
+
+    /// <summary>
+    /// The persona's own website, or null when they have not given one.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="PersonaBio"/> there is NO creator-level fallback, because a Creator has
+    /// no website column - only a persona can have one. Stored exactly as the creator typed it,
+    /// with no scheme normalisation, so a client must not assume it begins with https://.
+    /// </remarks>
+    public string PersonaWebsiteUrl { get; set; }
+
+    /// <summary>
+    /// The blob path of this song's word-level lyric timings, or null when a listener may not
+    /// see any. Fetch it from <c>api/music/{path}?v={LyricsVersion}</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>The status is deliberately not shipped, only the resolved path.</b> Timings held back
+    /// for review sit at exactly the blob path a published song would use, so a client handed a
+    /// path plus a status would 404 on it anyway - and would have been told that a withheld
+    /// alignment exists, which is not its business.
+    /// </remarks>
+    public string LyricsTimingsPath { get; set; }
+
+    /// <summary>
+    /// As <see cref="AlbumArtVersion"/>, for the lyric timings.
+    /// </summary>
+    /// <remarks>
+    /// Load-bearing: the timings blob path never changes between re-publishes and the response
+    /// carries a year-long immutable cache header, so without this a creator's corrected timings
+    /// would be invisible forever to any client that had already fetched the old ones.
+    /// </remarks>
+    public int LyricsVersion { get; set; }
     public string StreamUrl { get; set; } = string.Empty;
     public int StreamCount { get; set; }
     public int StreamQualifyingSeconds { get; set; }

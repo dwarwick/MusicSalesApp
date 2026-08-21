@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -85,9 +85,26 @@ namespace MusicSalesApp.Controllers
             var sasLifetime = TimeSpan.FromHours(24);
             var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
 
-            var songs = allMetadata
+            var playable = allMetadata
                 .Where(m => !string.IsNullOrEmpty(m.Mp3BlobPath))
-                .Select(m => _songMapper.MapToSongListItem(m, sasLifetime, defaultStreamQualifyingSeconds))
+                .ToList();
+
+            // One query for the whole page rather than one per song, the same shape the web's
+            // library uses. Only the published ones come back with a usable path; the mapper
+            // does that gating so no caller has to remember it.
+            // Coalesced, and that is not defensive noise: this feeds a TryGetValue for every song
+            // on the page, so a null here would turn a missing lyrics column into an empty song
+            // list. Lyrics are supplementary to the catalogue - a failure costs the lyrics, not
+            // the songs.
+            var lyrics = await _lyricsService.GetForSongsAsync(playable.Select(m => m.Id))
+                         ?? new Dictionary<int, SongLyrics>();
+
+            var songs = playable
+                .Select(m => _songMapper.MapToSongListItem(
+                    m,
+                    sasLifetime,
+                    defaultStreamQualifyingSeconds,
+                    lyrics.TryGetValue(m.Id, out var songLyrics) ? songLyrics : null))
                 .ToList();
 
             return Ok(songs);
@@ -516,7 +533,8 @@ namespace MusicSalesApp.Controllers
 
             var sasLifetime = TimeSpan.FromHours(24);
             var defaultStreamQualifyingSeconds = await _appSettingsService.GetStreamQualifyingSecondsAsync();
-            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, defaultStreamQualifyingSeconds);
+            var songLyrics = await _lyricsService.GetForSongAsync(song.Id);
+            var mappedSong = _songMapper.MapToSongListItem(song, sasLifetime, defaultStreamQualifyingSeconds, songLyrics);
             mappedSong.StreamUrl = _storageService.GetReadSasUri(song.Mp3BlobPath!, TimeSpan.FromHours(2)).ToString();
 
             var streamCount = await _streamCountService.GetStreamCountAsync(song.Id);
@@ -537,6 +555,9 @@ namespace MusicSalesApp.Controllers
                 personaImageHeroUrl = mappedSong.PersonaImageHeroUrl,
                 personaImageVersion = mappedSong.PersonaImageVersion,
                 personaBio = mappedSong.PersonaBio,
+                personaWebsiteUrl = mappedSong.PersonaWebsiteUrl,
+                lyricsTimingsPath = mappedSong.LyricsTimingsPath,
+                lyricsVersion = mappedSong.LyricsVersion,
                 streamUrl = mappedSong.StreamUrl,
                 streamCount,
                 streamQualifyingSeconds = mappedSong.StreamQualifyingSeconds,

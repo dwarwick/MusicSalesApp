@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Models;
 
@@ -12,8 +12,14 @@ namespace MusicSalesApp.Services;
 /// </summary>
 public interface IMobileSongMapper
 {
-    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds);
-    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds);
+    /// <param name="lyrics">
+    /// This song's lyrics row, when the caller has loaded one. Optional because most callers do
+    /// not need it; pass it and the response carries a fetchable timings path.
+    /// </param>
+    SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null);
+
+    /// <param name="lyrics">See <see cref="MapToSongListItem"/>.</param>
+    MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null);
 }
 
 public class MobileSongMapper : IMobileSongMapper
@@ -29,7 +35,7 @@ public class MobileSongMapper : IMobileSongMapper
         _creatorPersonaService = creatorPersonaService;
     }
 
-    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds)
+    public SongListItemDto MapToSongListItem(SongMetadata m, TimeSpan sasLifetime, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null)
     {
         return new SongListItemDto
         {
@@ -46,6 +52,9 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
             PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
             PersonaBio = ResolvePersonaBio(m),
+            PersonaWebsiteUrl = ResolvePersonaWebsiteUrl(m),
+            LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
+            LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
             StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
@@ -60,7 +69,7 @@ public class MobileSongMapper : IMobileSongMapper
         };
     }
 
-    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds)
+    public MobilePlaylistSongDto MapToPlaylistSong(SongMetadata m, TimeSpan sasLifetime, int? userPlaylistId, int defaultStreamQualifyingSeconds, SongLyrics? lyrics = null)
     {
         return new MobilePlaylistSongDto
         {
@@ -78,6 +87,9 @@ public class MobileSongMapper : IMobileSongMapper
             PersonaImageHeroUrl = ResolvePersonaImageVariantUrl(m, sasLifetime, ImageVariantSizes.MobileHeroWidth),
             PersonaImageVersion = m.Persona?.ImageVariantVersion ?? 0,
             PersonaBio = ResolvePersonaBio(m),
+            PersonaWebsiteUrl = ResolvePersonaWebsiteUrl(m),
+            LyricsTimingsPath = ResolveLyricsTimingsPath(lyrics),
+            LyricsVersion = ResolveLyricsVersion(lyrics),
             StreamUrl = _storageService.GetReadSasUri(m.Mp3BlobPath!, sasLifetime).ToString(),
             StreamCount = m.NumberOfStreams,
             StreamQualifyingSeconds = ResolveStreamQualifyingSeconds(m, defaultStreamQualifyingSeconds),
@@ -133,6 +145,33 @@ public class MobileSongMapper : IMobileSongMapper
         m.Persona is { IsEnabled: true, Bio: not null and not "" }
             ? m.Persona.Bio
             : m.Creator?.Bio;
+
+    /// <summary>
+    /// The persona's website, or null. No creator fallback - a Creator has no website column.
+    /// </summary>
+    private static string? ResolvePersonaWebsiteUrl(SongMetadata m) =>
+        m.Persona is { IsEnabled: true, WebsiteUrl: not null and not "" }
+            ? m.Persona.WebsiteUrl
+            : null;
+
+    /// <summary>
+    /// The timings path a listener may fetch, or null.
+    /// </summary>
+    /// <remarks>
+    /// Gated on the row's STATUS rather than on a path existing, for the same reason
+    /// <c>IsPubliclyReadableAsync</c> is: withheld timings sit at the identical blob path, so
+    /// "there is a file" proves nothing. Since alignment stopped publishing, NeedsReview is where
+    /// every successful run lands - it is the common case here, not an edge one.
+    /// </remarks>
+    private static string? ResolveLyricsTimingsPath(SongLyrics? lyrics) =>
+        lyrics is { Status: SongLyricsStatus.Published }
+        && !string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath)
+            ? lyrics.TimingsBlobPath
+            : null;
+
+    /// <summary>Zero whenever there is no readable path, so the two always travel together.</summary>
+    private static int ResolveLyricsVersion(SongLyrics? lyrics) =>
+        ResolveLyricsTimingsPath(lyrics) is null ? 0 : lyrics!.Version;
 
     private static int ResolveStreamQualifyingSeconds(SongMetadata m, int defaultStreamQualifyingSeconds) =>
         m.Creator?.StreamQualifyingSeconds ?? defaultStreamQualifyingSeconds;
