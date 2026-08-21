@@ -1,7 +1,52 @@
 ﻿/* Dark theme customizations */
 
 :root {
-    --color-sf-appbar-bg-color-alt1: #181c1f;    
+    --color-sf-appbar-bg-color-alt1: #181c1f;
+
+    /*
+     * THEMED TOKENS — the DARK half. The light half is the matching :root in light.css.
+     * Read the longer comment there; keep the two in step.
+     *
+     * --st-surface is LIGHTER than the #212529 body on purpose. A card is raised, in both
+     * themes. Before this, light made the card darker than the page (a grey hole) while
+     * dark made it lighter - the same component reading as recessed in one theme and
+     * raised in the other.
+     */
+    --st-surface: #2a323d; /* lighter than the page, and tinted toward the brand */
+    --st-surface-hover: #333c49;
+    --st-line: rgba(255, 255, 255, .10);
+    --st-text: #e9eef5; /* 11.10:1 on --st-surface */
+    --st-text-2: #a8b6c8; /*  6.28:1 */
+    --st-text-3: #8ba3c7; /*  5.03:1 */
+    --st-accent: #02b8fd; /*  5.72:1 */
+    --st-accent-hover: #c8eafd;
+    --st-accent-soft: rgba(2, 184, 253, .14);
+    /*
+     * NOT the players' #9b87f5. This card surface is lighter than the player surface, and
+     * that violet measures 4.43:1 here - it fails AA. Same hue, one step up.
+     */
+    --st-genre: #a594f6; /*  5.03:1 */
+    --st-warn: #ffa500; /*  6.56:1 */
+    --st-warn-soft: rgba(255, 165, 0, .15);
+    --st-track: rgba(255, 255, 255, .16);
+    /* The page behind the cards, so a sticky header can hide what scrolls under it. */
+    --st-page: #212529;
+    /* Only ever carries white text or white icons, so both stops clear 4.5:1 on white. */
+    --st-brand-gradient: linear-gradient(135deg, #0166d6 0%, #0186fd 100%);
+    /*
+     * FILL family - read the note in light.css. Dark is where getting this wrong showed:
+     * a white icon on --st-accent measured 2.26:1 and the hover state 1.26:1, i.e. gone.
+     * The fill stays bright and the FOREGROUND goes near-black, which is the same pattern
+     * the players already use for an active pill segment.
+     */
+    --st-accent-fill: #02b8fd;
+    --st-accent-fill-hover: #45cbff;
+    --st-on-accent: #04121f; /* 8.35:1 on the fill, 10.11:1 on the hover */
+    --st-on-accent-soft: rgba(0, 0, 0, .22);
+    --st-genre-fill: #a594f6;
+    --st-on-genre: #17102e; /* 7.10:1 */
+    --st-elev: 0 2px 6px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .38);
+    --st-elev-hover: 0 4px 10px rgba(0, 0, 0, .38), 0 14px 34px rgba(0, 0, 0, .48);
 }
 
 body {
@@ -17,10 +62,6 @@ body {
 .e-btn:hover {
     background: #495057;
     color: #ffffff;
-}
-
-.music-card {
-    box-shadow: 2px 2px 8px rgba(255, 255, 255, 0.3);
 }
 
 .mobile-app-install-banner {
@@ -45,145 +86,6 @@ body {
 .mobile-app-install-store-text:hover {
     background-color: #ffffff;
     color: #111111;
-}
-
-/* Add to Cart Button Colors - Dark Theme */
-.card-cart-button {
-    background-color: transparent;
-    border: 1px solid #6c757d;
-    color: #e0e0e0;
-}
-
-    .card-cart-button:hover {        
-        color: #ffffff;
-        background-color: #495057;
-    }
-
-.card-cart-button.in-cart {
-    background-color: #1db954;
-    border-color: #1db954;
-    color: #fff;
-}
-
-.card-cart-button.in-cart:hover {
-    background-color: #1ed760;
-    border-color: #1ed760;
-}
-
-/* MusicLibrary Colors - Dark Theme */
-.music-library-container {
-    background: #1a1a1a;
-}
-
-.music-library-container h3 {
-    color: #e0e0e0;
-}
-
-/* Genre Filter Colors - Dark Theme */
-.music-library-sticky-header {
-    background-color: #212529;
-}
-
-.filter-pill {
-    background-color: #1db954;
-    border-color: #1db954;
-    color: #fff;
-}
-
-.filter-pill:hover {
-    background-color: #1ed760;
-    border-color: #1ed760;
-}
-
-.filter-pill.active {
-    background-color: #1db954;
-    border-color: #1db954;
-    color: #fff;
-    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
-}
-
-.filter-pill.active:hover {
-    background-color: #1ed760;
-    border-color: #1ed760;
-}
-
-.filter-pill-clear {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.filter-pill-clear:hover {
-    color: #fff;
-}
-
-.filter-pill-count {
-    background-color: rgba(255, 255, 255, 0.3);
-    color: #fff;
-}
-
-.filter-pill-dropdown {
-    background-color: #2a2a2a;
-    border-color: #444;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.filter-pill-search-input {
-    background-color: #333;
-    border-color: #555;
-    color: #e0e0e0;
-}
-
-.filter-pill-search-input:focus {
-    border-color: #1db954;
-}
-
-.filter-pill-dropdown-item:hover {
-    background-color: #353535;
-}
-
-.filter-pill-dropdown-item span {
-    color: #e0e0e0;
-}
-
-.filter-pill-dropdown-option {
-    color: #e0e0e0;
-}
-
-.filter-pill-dropdown-option:hover,
-.filter-pill-dropdown-option.selected {
-    background-color: #353535;
-}
-
-.filter-pill-option-indicator {
-    color: #1ed760;
-}
-
-.music-type-filter {
-    background-color: #1db954;
-    border-color: #1db954;
-    color: #fff;
-}
-
-.music-type-filter:hover,
-.music-type-filter.active {
-    background-color: #1ed760;
-    border-color: #1ed760;
-}
-
-.music-type-filter.active {
-    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
-}
-
-.loading-state,
-.error-state {
-    color: #e0e0e0;
-}
-
-.music-card {
-    background: #2a2a2a;
-}
-
-.music-card:hover {
-    background: #353535;
 }
 
 .creator-trust-note {
@@ -295,141 +197,6 @@ body {
     box-shadow: 0 0 0 0.2rem rgba(192, 132, 252, 0.22) !important;
 }
 
-.card-album-art-placeholder {
-    background: #353535;
-}
-
-.card-placeholder-icon {
-    color: #8a8a8a;
-}
-
-.card-play-button {
-    background-color: #1db954;
-    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.5);
-}
-
-.card-play-button:hover {
-    background-color: #1ed760;
-}
-
-.card-play-icon {
-    color: #000;
-}
-
-.card-view-button {
-    color: #8a8a8a;
-}
-
-.card-view-button:hover {
-    color: #e0e0e0;
-}
-
-.card-mini-play-button,
-.card-mini-stop-button {
-    background-color: #e0e0e0;
-}
-
-.card-mini-play-icon,
-.card-mini-stop-icon {
-    color: #000;
-}
-
-.card-volume-button {
-    color: #8a8a8a;
-}
-
-.card-volume-button:hover {
-    color: #e0e0e0;
-}
-
-.card-volume-bar-container {
-    background-color: #555555;
-}
-
-.card-volume-bar {
-    background-color: #9a9a9a;
-}
-
-.card-volume-bar-container:hover .card-volume-bar {
-    background-color: #1db954;
-}
-
-.card-volume-thumb {
-    background-color: #e0e0e0;
-}
-
-.card-time-display {
-    color: #8a8a8a;
-}
-
-.card-progress-bar-container {
-    background-color: #555555;
-}
-
-.card-progress-bar {
-    background-color: #9a9a9a;
-}
-
-.card-progress-bar-container:hover .card-progress-bar {
-    background-color: #1db954;
-}
-
-.card-progress-thumb {
-    background-color: #e0e0e0;
-}
-
-.card-progress-limit-marker {
-    background-color: #ffa500;
-}
-
-.filter-option {
-    color: #8a8a8a;
-}
-
-.filter-option:hover {
-    color: #e0e0e0;
-}
-
-.filter-option input[type="radio"] {
-    border: 2px solid #8a8a8a;
-}
-
-.filter-option input[type="radio"]:checked {
-    border-color: #1db954;
-}
-
-.filter-option input[type="radio"]:checked::after {
-    background-color: #1db954;
-}
-
-.owned-badge {
-    background-color: #1db954;
-}
-
-.owned-badge svg {
-    color: #fff;
-}
-
-.music-note-float {
-    color: #1db954;
-}
-
-.REMOVED_album-badge {
-    background-color: rgba(29, 185, 84, 0.9);
-    color: #fff;
-}
-
-.card-track-count {
-    color: white;
-}
-
-.card-now-playing {
-    color: #1db954;
-}
-
-.card-song-title {
-    color: white;
-}
 /* Playlists Page Colors - Dark Theme */
 .playlists-page-date {
     opacity: 0.7;
@@ -481,37 +248,8 @@ body {
     color: #ffffff;
 }
 
-.hero-highlight {
-    color: #1db954;
-}
-
-.hero-background {
-    background-color: #1db954;
-}
-
 .hero-subtitle {
     color: #b3b3b3;
-}
-
-/* CTA Button Colors - Dark Theme */
-.cta-primary {
-    background-color: #1db954 !important;
-    color: #fff !important;
-    border: none !important;
-}
-
-.cta-primary:hover {
-    background-color: #1ed760 !important;
-    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
-}
-
-.cta-secondary {
-    background-color: #8e44ad !important;
-    color: #ffffff !important;    
-}
-
-.cta-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Section Colors - Dark Theme */
@@ -533,11 +271,6 @@ body {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-.feature-icon {
-    background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
-    color: #fff;
-}
-
 .feature-card h3 {
     color: #ffffff;
 }
@@ -553,11 +286,6 @@ body {
 
 .loading-text {
     color: #b3b3b3;
-}
-
-/* Subscription CTA Section - Dark Theme */
-.subscription-cta-section {
-    background: linear-gradient(135deg, #1db954 0%, #169c46 100%);
 }
 
 .subscription-cta-content h2 {
@@ -590,11 +318,6 @@ body {
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-.subscriber-cta .cta-icon {
-    background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
-    color: #fff;
-}
-
 .cta-title {
     color: #ffffff;
 }
@@ -607,42 +330,8 @@ body {
     color: #e0e0e0;
 }
 
-.cta-benefits li svg {
-    color: #1db954;
-}
-
-.cta-price-highlight {
-    color: #1ed760;
-}
-
-.cta-price-highlight .price {
-    color: #1ed760;
-}
-
 .cta-auth-text {
     color: #ffffff;
-}
-
-.cta-button {
-    background-color: #1db954 !important;
-    color: #fff !important;
-    border: none !important;
-}
-
-.cta-button:hover {
-    background-color: #1ed760 !important;
-    box-shadow: 0 8px 20px rgba(29, 185, 84, 0.4);
-}
-
-.hero-secondary-cta {
-    background-color: #8e44ad !important;
-    color: #fff !important;
-    border: none !important;
-}
-
-.hero-secondary-cta:hover {
-    background-color: #9b59b6 !important;
-    box-shadow: 0 8px 20px rgba(142, 68, 173, 0.4);
 }
 
 /* Subscribe CTA Dialog */
@@ -662,22 +351,8 @@ body {
     color: #fff;
 }
 
-.subscribe-cta-dialog-content .cta-price-highlight .price {
-    color: #1db954;
-}
-
 .subscribe-cta-dialog-content .cta-auth-text {
     color: #fff;
-}
-
-.subscribe-cta-dialog-content .cta-button {
-    background-color: #1db954 !important;
-    color: #fff !important;
-    border: none !important;
-}
-
-.subscribe-cta-dialog-content .cta-button:hover {
-    background-color: #1ed760 !important;
 }
 
 .subscribe-cta-dialog .e-dlg-closeicon-btn {
@@ -892,15 +567,6 @@ body {
    is drawn to one place rather than reading the whole panel at once. */
 .lyrics-line--active {
     color: #e6e6e6;
-}
-
-.lyrics-word--active {
-    color: #1db954;
-}
-
-.lyrics-word--selected {
-    background-color: rgba(29, 185, 84, 0.22);
-    outline: 1px solid #1db954;
 }
 
 .lyrics-line--untimed {
@@ -1398,3 +1064,362 @@ body {
 }
 
 .playlist-player-container .progress-limit-marker { background-color: var(--st-amber); }
+
+/* =========================================================================
+   CARDS, FILTER PILLS AND CTAs — colour
+   =========================================================================
+   THIS BLOCK IS IDENTICAL IN light.css AND dark.css, and that is the point:
+   every value is a --st-* token, and the tokens are what differ between the
+   two sheets. Change one copy, change the other.
+
+   That is the opposite arrangement to the players, whose colour block is
+   also duplicated but with LITERAL values, because those pages are dark in
+   both themes. Here the page follows the toggle, so the tokens carry it.
+
+   Replaces ~73 scattered colour rules, including several that were plainly
+   wrong on a light page: .loading-state was #fff on #f8f9fa (invisible),
+   .music-card was rgba(0,0,0,.125) on #f8f9fa (a grey hole), and the dark
+   card's "shadow" was rgba(255,255,255,.3) — white, so a halo.
+   ========================================================================= */
+
+.loading-state,
+.error-state { color: var(--st-text-2); }
+
+/* ---- The card surface -------------------------------------------------- */
+
+.music-card,
+.e-card.music-card {
+    background: var(--st-surface);
+    border-color: var(--st-line);
+    box-shadow: var(--st-elev);
+    color: var(--st-text);
+}
+
+.music-card:hover,
+.e-card.music-card:hover {
+    background: var(--st-surface-hover);
+    box-shadow: var(--st-elev-hover);
+}
+
+.card-album-art { background: var(--st-surface-hover); }
+
+/* Was a raw #06acfc — the only place the logo blue appeared unmediated. */
+.card-album-art-animation { border: 3px solid var(--st-accent); }
+
+.card-song-title { color: var(--st-text); }
+.card-artist-name { color: var(--st-text-3); }
+.card-artist-name a { color: var(--st-accent); }
+.card-artist-name a:hover { color: var(--st-accent-hover); }
+.card-genre a { color: var(--st-genre); }
+.card-genre a:hover { color: var(--st-text); }
+.card-stream-count,
+.card-stream-info { color: var(--st-text-3); }
+
+.action-button {
+    background: transparent;
+    border: 1px solid var(--st-line);
+    color: var(--st-text-2);
+}
+
+.action-button:hover {
+    background: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}
+
+/* ---- The in-card mini player -------------------------------------------
+   Unscoped on purpose: Creator/LyricsTimingEditor.razor renders these same
+   classes and is asserted on them. A card ancestor here would leave that
+   page's controls unstyled. */
+
+.card-volume-button,
+.card-time-display { color: var(--st-text-3); }
+
+.card-volume-button:hover { color: var(--st-text); }
+
+.card-volume-bar-container,
+.card-progress-bar-container { background-color: var(--st-track); }
+
+.card-volume-bar,
+.card-progress-bar { background-color: var(--st-accent); }
+
+.card-volume-thumb,
+.card-progress-thumb {
+    background-color: var(--st-surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+
+.card-progress-limit-marker { background-color: var(--st-warn); }
+
+/* ---- Filter pills -------------------------------------------------------
+   These were solid #1db954 and BYTE-IDENTICAL in both theme sheets, so they
+   get a real light/dark split here for the first time. Resting state is now
+   quiet and only the active state carries the accent — a header of six
+   saturated pills was reading as six primary actions. */
+
+.music-library-sticky-header { background-color: var(--st-page, transparent); }
+
+.filter-pill {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    color: var(--st-text-2);
+}
+
+.filter-pill:hover {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-text);
+}
+
+.filter-pill.active,
+.filter-pill.active:hover,
+.music-type-filter.active {
+    background-color: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+/* These sit INSIDE the active pill, so they take its foreground, not a fixed white. */
+.filter-pill-clear { color: inherit; opacity: .78; }
+.filter-pill-clear:hover { opacity: 1; }
+.filter-pill-count { background-color: var(--st-on-accent-soft); color: inherit; }
+
+.filter-pill-dropdown {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    box-shadow: var(--st-elev-hover);
+}
+
+.filter-pill-search-input {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    color: var(--st-text);
+}
+
+.filter-pill-search-input:focus { border-color: var(--st-accent); }
+
+.filter-pill-dropdown-item:hover,
+.filter-pill-dropdown-option:hover,
+.filter-pill-dropdown-option.selected { background-color: var(--st-surface-hover); }
+
+.filter-pill-dropdown-item span,
+.filter-pill-dropdown-option { color: var(--st-text); }
+
+.filter-pill-dropdown-item input[type="checkbox"] { accent-color: var(--st-accent); }
+
+.filter-pill-option-indicator { color: var(--st-accent); }
+
+.music-type-filter {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    color: var(--st-text-2);
+}
+
+/* ---- Playlist cards ----------------------------------------------------
+   Same surface as the song card; only the left accent stripe differs. */
+
+.recommended-playlist-card { border-left: 4px solid var(--st-accent); }
+.liked-songs-playlist-card { border-left: 4px solid #d81b60; }
+
+/* ---- CTAs ---------------------------------------------------------------
+   The last large block of #1db954 on a public page. From AGENTS.md:
+   destructive actions stay on e-danger, and cta-secondary/hero-secondary-cta
+   stay the documented VIOLET for creator and account actions - which on a
+   light page must be --st-genre (#7d3c98, 7.07:1), not #8e44ad. */
+
+.cta-primary,
+.cta-button {
+    background-color: var(--st-accent-fill) !important;
+    color: var(--st-on-accent) !important;
+    border: none !important;
+}
+
+.cta-primary:hover,
+.cta-button:hover {
+    background-color: var(--st-accent-fill-hover) !important;
+    box-shadow: var(--st-elev-hover);
+}
+
+.cta-secondary,
+.hero-secondary-cta {
+    background-color: var(--st-genre-fill) !important;
+    color: var(--st-on-genre) !important;
+    border: none !important;
+}
+
+.cta-secondary:hover,
+.hero-secondary-cta:hover {
+    background-color: var(--st-genre-fill) !important;
+    box-shadow: var(--st-elev-hover);
+}
+
+.hero-highlight { color: var(--st-accent); }
+
+.cta-benefits li svg { color: var(--st-accent); }
+
+.cta-price-highlight,
+.cta-price-highlight .price { color: var(--st-accent); }
+
+.feature-icon {
+    background: var(--st-brand-gradient);
+    color: #fff;
+}
+
+.subscription-cta-section {
+    background: linear-gradient(135deg, var(--st-accent) 0%, #024a9e 100%);
+}
+
+.music-library-link:hover { color: var(--st-accent-hover); }
+
+.contact-icon { color: var(--st-accent); }
+
+/* =========================================================================
+   PUBLIC LINK AND CTA COLOUR — the tail of the green
+   =========================================================================
+   ALSO IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+
+   Everything here previously lived as a hex literal in app.css, which is a
+   structure sheet - so it could not follow the theme at all, and the artist
+   and genre links rendered the same colour on both. The declarations were
+   removed from app.css; the structural half (text-decoration, weight, size,
+   transition) stayed behind.
+   ========================================================================= */
+
+.music-library-link { color: var(--st-accent); }
+.artist-link { color: var(--st-accent); }
+.artist-link:hover { color: var(--st-accent-hover); }
+.genre-link { color: var(--st-genre); }
+.genre-link:hover { color: var(--st-text); }
+
+/* The card's own karaoke highlight, and the lyrics editor's selection. These are the
+   UNSCOPED copies - both players override them at higher specificity, so this pair only
+   ever paints inside a card or the timing editor. Still Spotify green until now: dark
+   #1db954, light #0f7a37. */
+.lyrics-word--active { color: var(--st-accent); }
+
+.lyrics-word--selected {
+    background-color: var(--st-accent-soft);
+    outline: 1px solid var(--st-accent);
+}
+
+/* The subscribe dialog is a LISTENER action, so it takes the accent rather than the
+   creator violet. Scoped, so it outranks the .cta-button rule above. */
+.subscriber-cta .cta-icon { background: var(--st-brand-gradient); }
+
+.subscribe-cta-dialog-content .cta-price-highlight .price { color: var(--st-accent); }
+
+.subscribe-cta-dialog-content .cta-button {
+    background-color: var(--st-accent-fill) !important;
+    color: var(--st-on-accent) !important;
+}
+
+.subscribe-cta-dialog-content .cta-button:hover {
+    background-color: var(--st-accent-fill-hover) !important;
+}
+
+/* =========================================================================
+   CARD ACTION HIERARCHY — colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+
+   Play is the card's primary action and takes the accent fill. View stays the
+   quiet outline defined further up. Before this both were the same outline, so
+   the card had no primary at all and the Facebook share bar - full width and
+   solid - read as the most important control on it.
+   ========================================================================= */
+
+.action-button-play {
+    background: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.action-button-play:hover,
+.action-button-play:focus {
+    background: var(--st-accent-fill-hover);
+    border-color: var(--st-accent-fill-hover);
+    color: var(--st-on-accent);
+}
+
+/* Syncfusion paints .e-btn on hover/focus/active; these have to win or the fill flashes
+   back to the default grey mid-interaction. */
+.e-btn.action-button-play,
+.e-btn.action-button-play:hover,
+.e-btn.action-button-play:focus,
+.e-btn.action-button-play:active {
+    background: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.e-btn.action-button-play:hover,
+.e-btn.action-button-play:focus {
+    background: var(--st-accent-fill-hover);
+    border-color: var(--st-accent-fill-hover);
+}
+
+/* The approved layout has these as bare icon + count, with no button chrome - the card
+   already carries enough boxes. Scoped to the row, which only the song card renders. */
+.card-ai-actions-row .like-button,
+.card-ai-actions-row .dislike-button {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--st-text-3);
+}
+
+.card-ai-actions-row .like-button:hover,
+.card-ai-actions-row .dislike-button:hover {
+    background: transparent;
+    color: var(--st-accent);
+}
+
+.card-ai-actions-row .like-button.active,
+.card-ai-actions-row .dislike-button.active {
+    background: transparent;
+    color: var(--st-accent);
+}
+
+/* =========================================================================
+   MINI-PLAYER TRANSPORT — colour
+   =========================================================================
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference.
+
+   These were bare Syncfusion .e-btn — a light grey box with a dark glyph,
+   which on a dark card read as two white blocks. Now they mirror the resting
+   card exactly: primary filled, secondary outlined, same shapes and colours,
+   so the eye does not have to re-find the control when playback starts.
+
+   Also styles Creator/LyricsTimingEditor.razor, which renders the same row.
+   ========================================================================= */
+
+.card-mini-controls .e-btn,
+.card-mini-controls .e-btn:hover,
+.card-mini-controls .e-btn:focus,
+.card-mini-controls .e-btn:active {
+    background: transparent;
+    border-color: var(--st-line);
+    color: var(--st-text-2);
+}
+
+.card-mini-controls .e-btn:hover,
+.card-mini-controls .e-btn:focus {
+    background: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}
+
+/* Play/pause — the row's primary, matching .action-button-play on the resting card. */
+.card-mini-controls .e-btn:first-child,
+.card-mini-controls .e-btn:first-child:active {
+    background: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.card-mini-controls .e-btn:first-child:hover,
+.card-mini-controls .e-btn:first-child:focus {
+    background: var(--st-accent-fill-hover);
+    border-color: var(--st-accent-fill-hover);
+    color: var(--st-on-accent);
+}

@@ -506,40 +506,6 @@ h1:focus {
     vertical-align: middle;
 }
 
-/* Add to Cart Button Layout */
-.card-cart-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 100%;
-    padding: 8px 12px;
-    margin-top: 8px;    
-    border-radius: 500px;   
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.card-cart-button:hover {        
-    transform: scale(1.02);
-}
-
-.card-cart-button.animating {
-    animation: cartPulse 0.3s ease-out;
-}
-
-@keyframes cartPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-}
-
-/* MusicLibrary Layout Styles */
-.music-library-container {
-    padding: 24px;
-    min-height: calc(100vh - 80px);
-}
-
 .loading-state,
 .error-state {
     display: flex;
@@ -548,12 +514,8 @@ h1:focus {
     min-height: 200px;
 }
 
-.music-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 24px;
-    width: 100%;
-}
+/* The grid's display/width live in the CARDS - structure block at the end of this file;
+   its track size and gap are sizing, so they live in xl_app.css with the other breakpoints. */
 
 /* Music Library Sticky Header */
 .music-library-sticky-header {
@@ -656,7 +618,6 @@ h1:focus {
     width: 16px;
     height: 16px;
     cursor: pointer;
-    accent-color: #1db954;
 }
 
 .filter-pill-dropdown-compact {
@@ -754,7 +715,6 @@ h1:focus {
 }
 
 .music-library-link {
-    color: #1db954;
     text-decoration: none;
     font-weight: 500;
     font-size: 14px;
@@ -762,7 +722,6 @@ h1:focus {
 }
 
 .music-library-link:hover {
-    color: #1ed760;
     text-decoration: underline;
 }
 
@@ -805,39 +764,8 @@ h1:focus {
     border-width: 1px;
 }
 
-.music-card {
-    border-radius: 8px;
-    padding: 16px;
-    transition: background-color 0.3s ease;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-}
-
-.card-album-art {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: 4px;
-    margin-bottom: 16px;
-    position: relative;
-    overflow: hidden;
-}
-
-.card-album-art > img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 4px;
-}
-
-.card-album-art-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 4px;
-}
+/* .music-card, .card-album-art and .card-album-art > img are defined once, in the
+   "CARDS - structure" block at the end of this file. */
 
 /* Lottie animation styles for songs without cover art */
 .card-album-art-animation {
@@ -934,43 +862,6 @@ h1:focus {
     color: inherit;
 }
 
-.card-play-button {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: transform 0.1s ease, background-color 0.2s ease;
-}
-
-.card-play-button:hover {
-    transform: scale(1.05);
-}
-
-.card-play-button:active {
-    transform: scale(0.95);
-}
-
-.card-view-button {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: color 0.2s ease, transform 0.1s ease;
-}
-
-.card-view-button:hover {
-    transform: scale(1.05);
-}
-
 .card-mini-player {
     display: flex;
     flex-direction: column;
@@ -989,14 +880,6 @@ h1:focus {
     height: 18px;
 }
 
-.card-now-playing {
-    font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .card-mini-controls-row {
     display: flex;
     align-items: center;
@@ -1008,22 +891,6 @@ h1:focus {
     display: flex;
     align-items: center;
     gap: 4px;
-}
-
-.card-mini-button {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: transform 0.1s ease;
-}
-
-.card-mini-button:hover {
-    transform: scale(1.05);
 }
 
 .card-volume-controls {
@@ -1174,53 +1041,11 @@ h1:focus {
     border-radius: 50%;
 }
 
-.owned-badge {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
 
-.cart-button-wrapper {
-    position: relative;
-    display: inline-block;
-}
 
-.music-note-float {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    pointer-events: none;
-    animation: musicNoteFloat 0.8s ease-out forwards;
-    z-index: 10;
-}
-
-@keyframes musicNoteFloat {
-    0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
-    50% { opacity: 1; transform: translate(10px, -20px) rotate(15deg) scale(1.3); }
-    100% { opacity: 0; transform: translate(20px, -50px) rotate(30deg) scale(0.5); }
-}
-
-/* Song Title */
-.card-song-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: -8px;
-    margin-top: -18px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.card-stream-count {
-    justify-content: space-between;
-    width: 100%;
-}
+/* .card-song-title and .card-stream-count are defined once, in the "CARDS - structure" block
+   at the end of this file. The negative margins that used to live here are gone with them - see
+   the note there about Syncfusion's line-height. */
 
 .card-stream-info {
     display: inline-flex;
@@ -1254,9 +1079,7 @@ h1:focus {
     margin-left: 0;
 }
 
-.card-genre {
-    margin: -8px 0 -14px 0;
-}
+/* .card-genre is defined once, in the "CARDS - structure" block at the end of this file. */
 
 /* Playlists Page Layout */
 .playlists-page-header {
@@ -1405,10 +1228,6 @@ h1:focus {
     cursor: pointer;
 }
 
-.recommended-playlist-card {
-    border-left: 4px solid #1db954; /* Spotify-style green accent */
-}
-
 .playlist-description {
     font-size: 0.85rem;
     opacity: 0.7;
@@ -1482,9 +1301,9 @@ h1:focus {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 28px;
-    margin-top: -8px;
-    margin-bottom: 10px;
+    /* The -8px/+10px margins that used to be here were cancelling Syncfusion's line-height,
+       which the card now neutralises at source. See "CARDS - structure". */
+    min-height: 24px;
 }
 
 .card-ai-actions-row .like-dislike-container {
@@ -1592,38 +1411,9 @@ h1:focus {
     gap: 6px;
 }
 
-/* Card bottom row - contains cart button and share button */
-.card-bottom-row {
-    display: flex;
-    justify-content: center;
-    align-items: stretch;
-    gap: 8px;
-    margin-top: 4px;
-}
-
-.card-bottom-row .cart-button-wrapper {
-    flex: 1;
-    display: flex;
-}
-
-.card-bottom-row .cart-button-wrapper .card-cart-button {
-    width: 100%;
-    height: 36px;
-    margin-top: 0;
-    padding: 0 12px;
-    box-sizing: border-box;
-}
-
-.card-bottom-row .fb-share-btn {
-    flex: 1;
-    height: 36px;
-    padding: 0 12px;
-    box-sizing: border-box;
-    align-self: stretch;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
+/* .card-bottom-row and its share button are defined once, in the "CARDS - structure" block at
+   the end of this file. The cart button the old comment here mentioned was removed by migration
+   20260108000000_RemoveCartAndOwnedSongsTables. */
 
 /* Home Page - Hero Section Layout */
 .hero-section {
@@ -2604,42 +2394,34 @@ h1:focus {
 
 /* Artist / genre link colours — applied at all breakpoints */
 .card-artist-name a {
-    color: #1db954;
     text-decoration: none;
 }
 
 .card-artist-name a:hover {
-    color: #1ed760;
     text-decoration: underline;
 }
 
 .card-genre a {
-    color: #9b87f5;
     text-decoration: none;
 }
 
 .card-genre a:hover {
-    color: #b8a8f8;
     text-decoration: underline;
 }
 
 .artist-link {
-    color: #1db954;
     text-decoration: none;
 }
 
 .artist-link:hover {
-    color: #1ed760;
     text-decoration: underline;
 }
 
 .genre-link {
-    color: #9b87f5;
     text-decoration: none;
 }
 
 .genre-link:hover {
-    color: #b8a8f8;
     text-decoration: underline;
 }
 
@@ -2910,31 +2692,71 @@ h1:focus {
     pointer-events: none;
 }
 
-.lyrics-toggle-button {
+/*
+ * The CARD's lyrics/art toggle.
+ *
+ * SCOPED TO .card-album-art on purpose. Three components render .lyrics-toggle-button - the two
+ * players and MusicLibrary - and only the card's is a control pinned to the corner of artwork;
+ * in the players it is a segment in a pill. It used to be unscoped, which is why the players
+ * each carry a long explicit undo block. Scoping it here means it cannot reach them at all.
+ * MusicLibrary.razor puts the button INSIDE .card-album-art, so this matches exactly the one
+ * instance that wants it.
+ *
+ * It sits on top of a photograph, so it cannot use the card's own colours: at 28px with
+ * border:none, no background and opacity .75 it was invisible against dark artwork. A fixed
+ * dark scrim and a white icon read on any cover in either theme - hence literals, not tokens.
+ */
+.card-album-art .lyrics-toggle-button {
     position: absolute;
-    right: 6px;
-    bottom: 6px;
-    z-index: 3;
-    width: 28px;
-    height: 28px;
-    border: none;
+    right: 8px;
+    bottom: 8px;
+    z-index: 4;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, .55);
     border-radius: 50%;
+    background: rgba(8, 12, 20, .62);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    opacity: 0.75;
-    transition: opacity 0.2s ease, transform 0.1s ease;
+    opacity: 1;
+    transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease), transform var(--st-dur) var(--st-ease);
 }
 
-.lyrics-toggle-button:hover {
-    opacity: 1;
-    transform: scale(1.08);
+.card-album-art .lyrics-toggle-button:hover {
+    background: rgba(8, 12, 20, .85);
+    border-color: #fff;
+    transform: scale(1.06);
+}
+
+.card-album-art .lyrics-toggle-button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+/* The icon is drawn with fill="currentColor", so the white comes from the button above. */
+.card-album-art .lyrics-toggle-icon {
+    width: 17px;
+    height: 17px;
 }
 
 .lyrics-toggle-icon {
     width: 15px;
     height: 15px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card-album-art .lyrics-toggle-button,
+    .card-album-art .lyrics-toggle-button:hover {
+        transition: none;
+        transform: none;
+    }
 }
 
 /* ============================================================
@@ -3300,10 +3122,11 @@ h1:focus {
 
 .song-player-container .lyrics-toggle-button,
 .song-player-container .art-toggle-button {
-    /* The unscoped .lyrics-toggle-button in app.css is the OLD control: a 28px
-       circle pinned absolutely to the bottom-right of the artwork. This is a
-       segment in a pill now, so every one of those has to be undone explicitly
-       or the Lyrics segment renders as a clipped bubble in the panel corner. */
+    /* This block used to be an explicit undo of an UNSCOPED .lyrics-toggle-button - a 28px
+       circle pinned absolutely to the corner of the artwork - which otherwise rendered the
+       Lyrics segment as a clipped bubble in the panel corner. That rule is now scoped to
+       .card-album-art, so it can no longer reach here. These declarations are kept as the
+       segment's own definition, not as a defence. */
     position: static;
     width: auto;
     height: auto;
@@ -3768,6 +3591,8 @@ h1:focus {
 /* The unscoped .lyrics-toggle-button is the OLD control - a 28px circle pinned
    absolutely to the bottom-right of the artwork. Every one of those has to be
    undone or the Lyrics segment renders as a clipped bubble in the corner. */
+/* See the matching .song-player-container block above: these are the pill segment's own
+   declarations. The corner-circle rule they used to fight is scoped to .card-album-art now. */
 .playlist-player-container .lyrics-toggle-button,
 .playlist-player-container .art-toggle-button {
     position: static;
@@ -4115,3 +3940,274 @@ h1:focus {
     .playlist-player-container .play-button-small:hover,
     .playlist-player-container .playlist-tip-cta:hover { transform: none; }
 }
+
+/* =========================================================================
+   CARDS — structure
+   =========================================================================
+   Song cards (MusicLibrary.razor) and playlist cards (PlaylistCard.razor,
+   MyPlaylists, Home) share .music-card as their surface. Colour is in
+   light.css / dark.css via the themed --st-* tokens declared at the top of
+   each; sizing is in the breakpoint sheets.
+
+   NOT SCOPED, on purpose. Unlike the two players, these class names are
+   already unique to cards, so an extra ancestor would only start a
+   specificity fight. Two exceptions matter:
+
+     .card-mini-*, .card-progress-*, .card-audio-hidden are ALSO used by
+     Creator/LyricsTimingEditor.razor and asserted in its tests. Do not put a
+     card ancestor in front of them — app.css already documents the identical
+     trap for .control-icon.
+
+     .card-actions belongs to the PLAYLIST cards, never the song card, which
+     uses .card-actions-with-likes.
+
+   Folded in here: the inline <style> that used to live at the bottom of
+   MusicLibrary.razor. Being injected only when that component rendered, it
+   made the same playlist card 8px-padded on / and 16px-padded on
+   /my-playlists.
+   ========================================================================= */
+
+.music-card,
+.e-card.music-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    padding: 10px;
+    overflow: hidden;
+    box-sizing: border-box;
+    /*
+     * THE FOUR LINES BELOW UNDO SYNCFUSION'S .e-card BASE. Do not remove them.
+     *
+     * bootstrap5.css ships:
+     *     .e-card { justify-content:center; line-height:36px; min-height:36px; font-size:15px }
+     *
+     * line-height:36px is the important one. Every text row in the card - title, artist, genre,
+     * stream count - inherits it, so a 14px title sits in a 36px box. Six rows of that added
+     * ~130px of dead space and made the card absurdly tall on a desktop.
+     *
+     * The pre-redesign CSS hid this with negative margins stacked against each other
+     * (.card-song-title had margin-top:-18px/margin-bottom:-8px, .card-genre -8px/-14px,
+     * .card-ai-actions-row -8px). Those read as sloppy spacing and were removed; they were
+     * actually cancelling this. Fixing it at the source is what lets them stay gone.
+     *
+     * justify-content:center matters too: a grid row stretches every card to the tallest one,
+     * and centred content floats in the middle of the slack instead of sitting under the art.
+     */
+    justify-content: flex-start;
+    line-height: 1.35;
+    font-size: 14px;
+    min-height: 0;
+    transition: background-color var(--st-dur) var(--st-ease),
+                box-shadow var(--st-dur) var(--st-ease),
+                transform var(--st-dur) var(--st-ease);
+}
+
+/* Lifts without moving anything around it, so a grid does not jitter under
+   the cursor. */
+.music-card:hover { transform: translateY(-2px); }
+
+.card-album-art {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+/* Direct child, deliberately — see the comment in MusicLibrary.razor. A
+   wrapper here stops this matching and collapses the animation beside it. */
+.card-album-art > img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.card-album-art-animation {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* The card body used to be spaced by negative margins stacked against each
+   other (.card-song-title had margin-top:-18px, .card-genre -8px/-14px).
+   The flex gap above does that job now, so they are zeroed. */
+.card-song-title,
+.card-artist-name,
+.card-genre,
+.card-stream-count {
+    margin: 0;
+}
+
+.card-song-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-artist-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.card-artist-name a,
+.card-genre a {
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-persona-image {
+    border-radius: 50%;
+    flex: 0 0 auto;
+    object-fit: cover;
+}
+
+.card-stream-count {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.card-stream-info,
+.card-stream-actions {
+    display: flex;
+    align-items: center;
+}
+
+.card-actions-with-likes {
+    display: flex;
+}
+
+.action-column { display: flex; flex: 1; }
+
+.action-button {
+    width: 100%;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease);
+}
+
+/*
+ * Share sits on its own row, LEFT-ALIGNED AND AUTO-WIDTH - not stretched.
+ *
+ * .card-bottom-row .fb-share-btn used to be flex:1, which made a full-bleed blue bar the
+ * loudest element on the card while Play, the actual primary action, was a quiet outline.
+ * The approved layout has it as a small pill under the two action buttons.
+ */
+.card-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: auto;
+}
+
+.card-bottom-row .fb-share-btn {
+    flex: 0 0 auto;
+    width: auto;
+    /* margin-right:auto, not just the row's justify-content. An auto margin on a flex item
+       absorbs the free space itself, so this pins the button left even if something else wins
+       the justify-content declaration - which is exactly what kept happening. */
+    margin-right: auto;
+    align-self: flex-start;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Play is wider than View, as approved. */
+.action-column-play { flex: 1.3; }
+
+/*
+ * The mini player's transport buttons. Styled on the ROW, not with a modifier class, because
+ * Creator/LyricsTimingEditor.razor renders the same .card-mini-controls with plain <button
+ * class="e-btn"> children - a class would have fixed the card and left the editor on raw
+ * Syncfusion grey. :first-child is play/pause in both, and is the row's primary action.
+ */
+.card-mini-controls .e-btn {
+    min-width: 0;
+    min-height: 0;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+    transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease);
+}
+
+.card-mini-controls .e-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+/* ---- Containers -------------------------------------------------------- */
+
+.music-cards-grid { display: grid; width: 100%; }
+
+.featured-music-carousel {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+}
+
+.featured-music-carousel .music-card { flex: 0 0 auto; scroll-snap-align: start; }
+
+.music-library-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ---- Filter pills ------------------------------------------------------ */
+
+.filter-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--st-dur) var(--st-ease), border-color var(--st-dur) var(--st-ease), color var(--st-dur) var(--st-ease);
+}
+
+.filter-pill-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .music-card { transition: none; }
+    .music-card:hover { transform: none; }
+}
+
+/* Replaces a 2.5em U+1F4E7 emoji used as an icon on /new-creator-signup: an emoji
+   ignores currentColor and renders in whatever the platform font decides. */
+.contact-line { display: flex; align-items: center; gap: 10px; }
+.contact-icon { flex: 0 0 auto; }

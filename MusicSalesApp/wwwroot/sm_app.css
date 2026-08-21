@@ -107,9 +107,6 @@
 
     .music-card { padding: 12px; }
     .card-song-title { font-size: 13px; }
-    .card-play-button, .card-view-button { width: 36px; height: 36px; }
-    .card-play-icon { width: 18px; height: 18px; }
-    .card-view-icon { width: 20px; height: 20px; }
     .card-volume-bar-container { width: 40px; }
 
     .song-text-details {
@@ -132,13 +129,10 @@
     }
 
     /* Stream Count on Card */
+    /* See the note in lg_app.css: dead colour and a fighting margin, both removed. */
     .card-stream-count {
-        display: flex;
-        align-items: center;
         gap: 4px;
-        color: #b3b3b3;
         font-size: 11px;
-        margin-bottom: 3px;
     }
 
     .stream-icon {
@@ -220,26 +214,14 @@
     }
 
     /* Reduce album art size to fit more content vertically */
-    .card-album-art {
-        margin-bottom: 8px;
-    }
-
-    /* Reduce title spacing */
+    /* The margins that used to be here (art 8px, title 6px, actions 6px) stacked on top of the
+       card's own flex gap. The gap owns spacing now. */
     .card-song-title {
         font-size: 12px;
-        margin-bottom: 6px;
     }
 
-    /* Reduce track count spacing */
-    .card-track-count {
-        font-size: 11px;
-        margin-bottom: 6px;
-    }
-
-    /* Compact card actions */
     .card-actions-with-likes {
         gap: 4px;
-        margin-top: 6px;
     }
 
     /* Reduce action button sizes */
@@ -290,34 +272,6 @@
         font-size: 0.7rem !important;
     }
 
-    /* Compact cart button */
-    .card-cart-button {
-        padding: 6px 10px;
-        margin-top: 6px;
-        font-size: 12px;
-    }
-
-    /* Reduce owned badge size */
-    .owned-badge {
-        width: 20px;
-        height: 20px;
-        top: 6px;
-        right: 6px;
-    }
-
-    .owned-badge svg {
-        width: 12px;
-        height: 12px;
-    }
-
-    /* Reduce album badge size */
-    .album-badge {
-        font-size: 9px;
-        padding: 3px 6px;
-        bottom: 6px;
-        left: 6px;
-    }
-
     /* Compact mini player controls */
     .card-mini-player {
         gap: 6px;
@@ -345,15 +299,6 @@
 
     .card-time-display {
         font-size: 10px;
-    }
-
-    .card-now-playing {
-        font-size: 11px;
-    }
-
-    /* Reduce library container padding */
-    .music-library-container {
-        padding: 12px;
     }
 
     .app-logo {
@@ -679,4 +624,14 @@
     .playlist-player-container .player-bar { margin: 16px 24px 16px; height: 68px; padding: 0 18px; gap: 12px; }
     .playlist-player-container .volume-bar-container { width: 68px; }
     .playlist-player-container .progress-container { gap: 10px; }
+}
+
+
+@media (max-width: 768px) {
+    /* CARDS — small tablet / large phone. The grid track, the gaps and the carousel widths
+       are already set higher up in this file; the only change needed here is the touch
+       target: the play and view buttons were 36px, under the 44px floor. */
+    .music-card { padding: 10px; }
+    .card-song-title { font-size: 13.5px; }
+    .action-button { height: 44px; }
 }

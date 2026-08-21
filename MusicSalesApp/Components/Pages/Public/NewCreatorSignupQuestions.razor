@@ -234,7 +234,7 @@
             {
                 <div class="cta-button-group" style="margin-top: 1.5rem;">
                     <a href="@CreatorRegisterUrl"
-                       class="e-control e-btn cta-button cta-button-register"
+                       class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register"
                        data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
                        data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
                        data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupQuestionsBottomRegister">
@@ -242,7 +242,7 @@
                     </a>
                     <p style="margin-top: 1rem;">Already registered?</p>
                     <a href="@CreatorLoginUrl"
-                       class="e-control e-btn cta-button cta-button-login"
+                       class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-login"
                        data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
                        data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
                        data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupQuestionsBottomLogin">
@@ -256,7 +256,7 @@
                     @if (_isEmailVerified)
                     {
                         <a href="@AppPageRoutes.CreatorSettings"
-                           class="e-control e-btn cta-button cta-button-register"
+                           class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register"
                            data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
                            data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
                            data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupQuestionsBottomCreatorSettings">
@@ -265,7 +265,7 @@
                     }
                     else
                     {
-                        <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button cta-button-register">
+                        <a href="@AppPageRoutes.ValidateEmail" class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register">
                             Validate Your Email for Full Functionality
                         </a>
                     }

@@ -263,11 +263,88 @@ five copies of `.track-thumbnail-placeholder`; and **five identical copies of
 **Note**: follow the property-routing rules above — layout/animation to `app.css`, colour to the
 theme files, sizing to the breakpoint files — and prefer a `--st-*` token over a literal.
 
+### Card CSS: two token families, and they are not interchangeable
+
+The cards (`.music-card` — song cards in `MusicLibrary.razor`, playlist cards in
+`PlaylistCard.razor`, `MyPlaylists` and `Home`) came off `.razor.css` in the same sweep, but they
+differ from the players in one way that governs every colour decision:
+
+> **The players are dark in BOTH site themes. Cards are page content on pages that honour the
+> light/dark toggle.**
+
+So there are two families:
+
+| Family | Declared | Use for |
+| --- | --- | --- |
+| `--st-player-*`, `--st-blue*`, `--st-violet`, `--st-amber` | **once**, in `tokens.css` | the two player pages only |
+| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-soft`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
+
+**Never point a card rule at a `--st-player-*` token.** Measured on white, `--st-blue-bright` is
+~2.1:1, `--st-violet` ~2.9:1, `--st-amber` ~2.1:1 — all fail AA. That is why `--st-warn` is
+`#9a5c00` on light and `#ffa500` on dark, and why the dark genre violet is `#a594f6` rather than
+the players' `#9b87f5` (which measures 4.43:1 on the lighter card surface and fails).
+
+**A colour token is measured in one direction only.** `--st-accent` means *this text is legible on
+`--st-surface`*. It says nothing about what is legible **on top of it**, and using it as a button
+fill under `#fff` is the opposite measurement. In dark that shipped three failures at once — white
+on `--st-accent` `#02b8fd` is **2.26:1**, white on the hover `--st-accent-hover` `#c8eafd` is
+**1.26:1** (the hover state was effectively invisible), and white on `--st-genre` `#a594f6` is
+**2.57:1**. All are below even the 3:1 floor for graphics.
+
+So fills have their own family, and `--st-on-*` is the **only** foreground permitted on them:
+
+| | Light | Dark |
+|---|---|---|
+| `--st-accent-fill` | `#0166d6` | `#02b8fd` |
+| `--st-accent-fill-hover` | `#0159b8` | `#45cbff` |
+| `--st-on-accent` | `#ffffff` (5.42 / 6.73) | `#04121f` (8.35 / 10.11) |
+| `--st-on-accent-soft` | `rgba(255,255,255,.28)` | `rgba(0,0,0,.22)` |
+| `--st-genre-fill` | `#7d3c98` | `#a594f6` |
+| `--st-on-genre` | `#ffffff` (7.07) | `#17102e` (7.10) |
+
+Note dark keeps the **bright** fill and flips the *foreground* to near-black, rather than dimming
+the fill — the same pattern the players already use for an active pill segment. Anything sitting
+inside a filled control (`.filter-pill-count`, `.filter-pill-clear`) takes `color: inherit` and
+`--st-on-accent-soft`, never a hardcoded white.
+
+Three more rules that fall out of this:
+
+1. **Measure against the surface, not the page.** Every value in those two `:root` blocks carries
+   its measured ratio in a comment. Add the measurement when you add a token.
+2. **A card is raised in both themes, and a shadow is always dark.** Light used to make the card
+   *darker* than the page (a grey hole at `rgba(0,0,0,.125)` on `#f8f9fa`) while dark made it
+   lighter — and dark's "shadow" was `rgba(255,255,255,.3)`, i.e. a halo.
+3. **The card colour block is duplicated verbatim between the two theme sheets** and every value
+   in it is a token — the tokens carry the difference. Change one copy, change the other. This is
+   the *opposite* arrangement to the players, whose duplicated block holds literals.
+
+Two card-specific traps, on top of the two player ones above:
+
+- **`.card-mini-*`, `.card-progress-*`, `.card-volume-*` and `.card-audio-hidden` are also used by
+  `Creator/LyricsTimingEditor.razor`** and asserted in `LyricsTimingEditorTests`. Leave them
+  unscoped. Scoping them under a card ancestor leaves the timing editor's controls with no size at
+  all — exactly the failure `app.css` already documents for `.control-icon`. The same fact is why
+  the transport buttons are styled as `.card-mini-controls .e-btn` rather than with a modifier
+  class: the editor renders plain `<button class="e-btn">` there, and a class would have fixed the
+  card while leaving the editor on raw Syncfusion grey.
+- **Syncfusion's `.e-card` base is hostile to card layout.** `bootstrap5.css` ships
+  `.e-card { justify-content:center; line-height:36px; min-height:36px; font-size:15px }`. The
+  `line-height` is inherited by every text row, so a 14px title sits in a 36px box — six rows of
+  that added ~130px of dead height. The `.music-card` block neutralises all four at source; the
+  pre-redesign CSS instead hid it behind negative margins on `.card-song-title`, `.card-genre` and
+  `.card-ai-actions-row`, which look like sloppy spacing and are not. Do not remove those four
+  declarations.
+- **`CoverArtSizes.Card` and `CoverArtSizes.CardCarousel` track the CSS by hand.** Below 576px the
+  grid card turns horizontal and its art moves into an **84px** column, while the carousel card
+  stays square at ~83vw — which is why they are two constants and `MusicLibrary.razor` picks by
+  `ShowHomePageFeatured`. Change a grid track or a carousel width without updating these and the
+  browser fetches the wrong rendition: it renders soft, it does not error.
+
 #### Remaining `.razor.css` files
 
 `NavMenu` (130 lines) is the largest and the obvious next candidate. `ReconnectModal` is genuine
-framework suppression and should stay scoped. `Home`, `AdminLogs`, `MainLayout`,
-`AdminSongManagement` and `MusicLibrary` are 11–37 lines each.
+framework suppression and should stay scoped. `Home`, `AdminLogs`, `MainLayout` and
+`AdminSongManagement` are 11–37 lines each. `MusicLibrary.razor.css` is gone.
 
 ## Metadata Storage and File Management
 
