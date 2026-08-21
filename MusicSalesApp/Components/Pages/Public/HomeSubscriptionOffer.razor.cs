@@ -53,18 +53,24 @@ public partial class HomeSubscriptionOfferModel : BlazorBase
             if (authState.User.Identity?.IsAuthenticated == true)
             {
                 _isAuthenticated = true;
-                var appUser = await UserManager.GetUserAsync(authState.User);
-                if (appUser == null)
+                // Claims, not UserManager. GetUserAsync and IsInRoleAsync are both DB round-trips
+                // on the circuit's single scoped AppDbContext, and this island first-renders
+                // concurrently with HomeUserPlaylists - two in-flight calls throw "a second
+                // operation was started on this context". The id and the roles are already
+                // claims on the cookie principal; MusicLibrary.razor.cs reads IsInRole(Admin)
+                // off the claims the same way. (Role claims refresh at sign-in, which is what
+                // the /account/refresh-signin flow already exists for.)
+                userId = GetUserId(authState.User);
+                if (userId is null)
                 {
                     return;
                 }
 
-                userId = appUser.Id;
-                _isEmailVerified = !await UserManager.IsInRoleAsync(appUser, Roles.NonValidatedUser);
+                _isEmailVerified = !authState.User.IsInRole(Roles.NonValidatedUser);
                 await PayPalSubscriptionManagementService.RefreshIfNeededAsync(
-                    appUser.Id,
+                    userId.Value,
                     NavigationManager.BaseUri);
-                ShouldShowSubscriptionOffer = !await SubscriptionService.HasActiveSubscriptionAsync(appUser.Id);
+                ShouldShowSubscriptionOffer = !await SubscriptionService.HasActiveSubscriptionAsync(userId.Value);
             }
             else
             {

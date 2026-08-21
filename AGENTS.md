@@ -61,6 +61,14 @@ Syncfusion components should still look like StreamTunes, not Syncfusion default
 - For prominent page actions on public, account, creator setup, and creator settings surfaces, prefer the existing site CTA classes over plain `IsPrimary="true"` when `IsPrimary` renders the default Syncfusion blue.
 - Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`, plus a page-specific hook when needed (for example `creator-settings-cta`).
 - Keep destructive actions on `e-danger`; do not restyle stop/delete/destructive buttons as purple CTAs.
+- **The purple is for CREATOR surfaces, not for every button that happens to be secondary.** There are four tiers, and picking by prominence rather than by audience is how the home hero ended up with its main listener action wearing the creator colour:
+  | Tier | Classes | For |
+  |---|---|---|
+  | Primary, accent fill | `cta-primary` / `cta-button` | subscribe, register, play — listener actions |
+  | Primary, violet fill | `cta-secondary hero-secondary-cta` | creator and account actions |
+  | Secondary outline | `cta-outline` | a listener action beside a filled one, e.g. hero "Browse Music" |
+  | Tertiary quiet | `cta-quiet` | hero "Log In" |
+- **One documented exception**: the home hero's Log In is nominally an account action but takes `cta-quiet`, not the violet. Three button colours in one row is noise, and the hero is a listener surface. `HomeTests` asserts both tiers so this cannot drift back.
 - Keep secondary utility/navigation actions visually quieter unless the workflow clearly treats them as the primary next step.
 - If Syncfusion checkboxes, text boxes, or focused inputs appear in a themed page, scope overrides to the page container and put the purple/brand color values in `light.css` and `dark.css`. Checked checkbox states, hover states, and input focus rings should follow the site palette instead of the default blue.
 - Put only structural/layout pieces for those controls in `app.css`; put spacing/sizing in the breakpoint CSS files.
@@ -340,11 +348,50 @@ Two card-specific traps, on top of the two player ones above:
   `ShowHomePageFeatured`. Change a grid track or a carousel width without updating these and the
   browser fetches the wrong rendition: it renders soft, it does not error.
 
+### Three traps that are not about CSS values at all
+
+1. **A "SM Breakpoint" comment is not proof of a breakpoint.** `sm_app.css` had ~135 lines of home
+   rules — features, user playlists, featured music, the CTA split — sitting inside
+   `@media (max-width:1200px) and (max-height:600px) and (orientation: landscape)` while their own
+   comments called them "SM Breakpoint". They fired only on a short landscape viewport; a portrait
+   phone fell through to `md_app.css`, which is why `.cta-button-group` stayed a squeezed row
+   there. **Check which `@media` a rule is actually inside before trusting the comment above it.**
+2. **Some tests read the `.razor` file as TEXT, not as rendered markup.**
+   `MusicSalesApp.Tests/Components/PublicFeaturedMusicTests.cs` asserts the literal
+   `<section class="featured-music-section">` appears, and that it precedes
+   `<HomeSubscriptionOffer` in `Home.razor` and `<h1` in `NewCreatorSignUp.razor`. Attribute order,
+   extra classes and line breaks all matter there in a way they never do for a bUnit test.
+3. **Configuring `MockAuthStateProvider` alone does not authenticate a component.** `BUnitTestBase`
+   calls `TestContext.AddAuthorization()` *after* registering that mock, so bUnit's own provider is
+   what a component resolves. Use `SetupAuthorizedUser(...)`, which does both. Two home-page tests
+   sat `[Ignore]`d for months blaming `OnAfterRenderAsync` when this was the actual cause.
+
+### Static SSR pages cannot load data
+
+`Home.razor` declares no `@rendermode`, so it is **static SSR** — and static SSR never calls
+`OnAfterRenderAsync`, which the DbContext rule above mandates for data loading. The two facts
+together mean **a statically rendered page cannot load anything**. Its "Your Playlists" section was
+unreachable for every visitor until it became `HomeUserPlaylists`, an `InteractiveServer` island.
+
+If a static page needs data, give the section its own island rather than adding `@rendermode` to
+the page — that is how `HomeSubscriptionOffer`, `MusicLibrary` and `HomeUserPlaylists` all work.
+
+### The creator funnel has no forward link, on purpose
+
+`/new-creator-signup` does **not** link to `/new-creator-signup-questions`, and that is a measured
+decision, not an oversight: splitting the long pitch onto its own page raised sign-ups, so nothing
+is placed between a reader and the CTA — no panel, no card, no text link.
+`NewCreatorSignUp_DoesNotLinkToTheQuestionsPage` guards it, and
+`FunnelAnalyticsLabels.NewCreatorSignupBottom*` stay defined and unused for the same reason. The
+detail page earns its own traffic through `sitemap.xml` and carries its own bottom CTA; the link
+*back* to signup is fine, because it points toward the CTA.
+
 #### Remaining `.razor.css` files
 
 `NavMenu` (130 lines) is the largest and the obvious next candidate. `ReconnectModal` is genuine
-framework suppression and should stay scoped. `Home`, `AdminLogs`, `MainLayout` and
-`AdminSongManagement` are 11–37 lines each. `MusicLibrary.razor.css` is gone.
+framework suppression and should stay scoped. `AdminLogs`, `MainLayout` and `AdminSongManagement`
+are 11–37 lines each. `MusicLibrary.razor.css` and `Home.razor.css` are gone — the latter was 21
+lines matching nothing at all.
 
 ## Metadata Storage and File Management
 
@@ -716,6 +763,51 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 3. **Use a `_hasLoadedData` flag** to prevent multiple loads
 4. **Call `StateHasChanged()`** after data loads to update UI
 5. **Use `InvokeAsync()`** when updating UI from async context
+
+### UserManager is a scoped-DbContext consumer — use claims in interactive hooks
+
+`UserManager.GetUserAsync` and `IsInRoleAsync` are database round-trips through the circuit's
+SINGLE scoped `AppDbContext`. On a cold circuit (a hard refresh) every island first-renders in
+one batch, and two in-flight UserManager calls throw "a second operation was started on this
+context" — the exception lands in whatever catch block wraps the hook, and the section silently
+renders nothing. Warm circuits (enhanced navigation) stagger the calls and usually get away with
+it, which made the home page's playlists section appear on a nav click and vanish on refresh.
+
+In interactive component hooks, read identity from the cookie principal instead — it costs no
+database call at all:
+
+- `GetUserId(authState.User)` (BlazorBase helper; `UserManager.GetUserId` reads the claim)
+- `authState.User.IsInRole(Roles.X)` (role claims are in the cookie; they refresh at sign-in,
+  which is what `/account/refresh-signin` exists for)
+
+`MusicLibrary.razor.cs`, `HomeSubscriptionOffer.razor.cs` and `HomeUserPlaylists.razor.cs` all
+use this pattern now. Reach for `GetUserAsync` only when you need columns that are not claims,
+and never in a first-render hook that runs concurrently with other islands.
+
+### Reading the signed-in user from an interactive component
+
+`OnAfterRenderAsync` only ever runs **inside the circuit**, never during prerendering — and there
+is **no `HttpContext` in a running Blazor Server circuit**. So the two rules above collide with
+authentication unless the provider is circuit-aware:
+
+- **Never resolve the user through `IHttpContextAccessor` in interactive code.** It is `null` there.
+- `CircuitAuthenticationStateProvider` implements `IHostEnvironmentAuthenticationStateProvider`,
+  which is how Blazor hands an identity to a circuit at start-up. That, not the HttpContext read,
+  is what makes `GetAuthenticationStateAsync()` work after first render. The HttpContext path
+  remains only for static SSR.
+- It must stay registered under **all three** service types in `Program.cs`. Dropping the
+  `IHostEnvironmentAuthenticationStateProvider` registration silently returns every interactive
+  component to "nobody is signed in".
+
+This shipped broken for a long time and read as flakiness rather than as a bug: refreshing a page
+ran the hook in the circuit with no context and the user came back anonymous, while arriving by a
+nav link used enhanced navigation — a real GET that *does* carry a context — so the same code saw
+the user. The symptom was the home page's "Your Playlists" appearing on a nav click and vanishing
+on refresh. `CircuitAuthenticationStateProviderTests` pins every branch of it.
+
+Also note the DI shape. `AddScoped<TService, TImpl>()` and `AddScoped<TImpl>()` build **two
+separate objects per scope**; forward the extra registrations with a factory
+(`sp => sp.GetRequiredService<T>()`) so every consumer shares one instance.
 
 ### When to Use Each Lifecycle Method
 

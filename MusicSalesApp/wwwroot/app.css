@@ -2,35 +2,27 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
-/* Global Scrollbar Styling — green track, purple thumb/arrows */
-html {
-    scrollbar-color: #8e44ad #1db954; /* Firefox: thumb track */
-}
-
+/*
+ * Global scrollbar — STRUCTURE ONLY. Colour lives in light.css / dark.css.
+ *
+ * This was a #1db954 track with a #8e44ad thumb AND matching arrow buttons: a saturated
+ * green-and-purple stripe down the edge of every page, next to the cover art. It was the last
+ * of the Spotify green and the loudest chrome on the site.
+ *
+ * ::-webkit-scrollbar-button is deleted rather than recoloured — those are the stepper arrows,
+ * the worst of it, and no current platform draws them by default.
+ */
 ::-webkit-scrollbar {
     width: 12px;
     height: 12px;
 }
 
-::-webkit-scrollbar-track {
-    background: #1db954;
-}
-
 ::-webkit-scrollbar-thumb {
-    background-color: #8e44ad;
     border-radius: 6px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background-color: #9b59b6;
-}
-
-::-webkit-scrollbar-button {
-    background-color: #8e44ad;
-}
-
-::-webkit-scrollbar-button:hover {
-    background-color: #9b59b6;
+    /* A transparent border plus content-box clipping insets the thumb inside the 12px gutter,
+       so the bar reads as a slim handle while keeping a full-width grab target. */
+    border: 3px solid transparent;
+    background-clip: content-box;
 }
 
 .e-sidebar {
@@ -655,27 +647,6 @@ h1:focus {
     user-select: none;
 }
 
-.music-type-filter-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.music-type-filter {
-    border-radius: 500px;
-    border: 1px solid;
-    padding: 6px 14px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
-}
-
-.music-type-filter:hover {
-    transform: scale(1.04);
-}
-
 .player-art-shell {
     position: relative;
     display: inline-flex;
@@ -756,12 +727,6 @@ h1:focus {
 .featured-music-carousel .music-card {
     flex: 0 0 auto;
     scroll-snap-align: start;
-}
-
-.creator-trust-note {
-    border-radius: 8px;
-    border-style: solid;
-    border-width: 1px;
 }
 
 /* .music-card, .card-album-art and .card-album-art > img are defined once, in the
@@ -1541,62 +1506,6 @@ h1:focus {
 
 .loading-text {
     text-align: center;
-}
-
-/* Subscription CTA Section Layout */
-.subscription-cta-section {
-    border-radius: 24px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-}
-
-.subscription-cta-section::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    opacity: 0.1;
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    pointer-events: none;
-}
-
-.subscription-cta-content {
-    position: relative;
-    z-index: 1;
-}
-
-.subscription-cta-content h2 {
-    font-weight: 700;
-    margin: 0;
-}
-
-.subscription-price-highlight {
-    font-weight: 500;
-}
-
-.subscription-price-highlight .price {
-    font-weight: 900;
-}
-
-.subscription-benefits {
-    list-style: none;
-    padding: 0;
-    margin: 0 auto;
-    text-align: left;
-    display: inline-block;
-}
-
-.subscription-benefits li {
-    display: flex;
-    align-items: center;
-    font-weight: 500;
-}
-
-.subscription-benefits li svg {
-    flex-shrink: 0;
 }
 
 /* CTA Split Section Layout */
@@ -4211,3 +4120,144 @@ h1:focus {
    ignores currentColor and renders in whatever the platform font decides. */
 .contact-line { display: flex; align-items: center; gap: 10px; }
 .contact-icon { flex: 0 0 auto; }
+
+/* =========================================================================
+   SECTION HEADERS AND PAGE STATES — structure
+   =========================================================================
+   The header trio (eyebrow / title / action link) is the one pattern shared by home, the
+   library and the creator funnel. It is the players' micro-caption header, extended.
+
+   .empty-state already existed in MyPlaylists.razor with NO css anywhere, so it rendered as a
+   bare paragraph. Styling it here fixes that page too.
+   ========================================================================= */
+
+.section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+.section-eyebrow {
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.section-link {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.section-link svg {
+    flex: 0 0 auto;
+}
+
+/* The error state gains a retry button, so it stacks rather than centring one child. */
+.loading-state,
+.error-state,
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.empty-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.empty-state-title {
+    font-weight: 700;
+    margin: 0;
+}
+
+.empty-state-body {
+    margin: 0;
+    max-width: 42ch;
+}
+
+.state-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--st-radius-pill);
+    border: 1px solid transparent;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color var(--st-dur) var(--st-ease);
+}
+
+.state-action svg {
+    flex: 0 0 auto;
+}
+
+/* ---- Creator funnel ------------------------------------------------------
+   Replaces the 8 inline style= attributes the two signup pages carried. Inline styles beat
+   every stylesheet including the theme sheets, so they could not be themed or overridden. */
+
+.process-steps {
+    list-style: none;
+    padding-left: 0;
+}
+
+/* Between the two buttons in a row above 768px, a caption below them under it. */
+.cta-group-note {
+    margin: 0;
+    text-align: center;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* ---- Hero and the two new button tiers -----------------------------------
+   .cta-outline and .cta-quiet complete the set: .cta-primary / .cta-button fill with the accent,
+   .cta-secondary / .hero-secondary-cta fill with the creator violet, and these two are the
+   listener-side secondary and tertiary. Same pill geometry as the group above them. */
+
+.cta-outline,
+.cta-quiet {
+    border-radius: 500px;
+    font-weight: 700;
+    text-transform: none;
+    cursor: pointer;
+    transition: transform .2s ease, background-color .2s ease, border-color .2s ease;
+}
+
+.cta-outline:hover,
+.cta-quiet:hover { transform: scale(1.04); }
+
+.section-head-centred {
+    justify-content: center;
+    text-align: center;
+}
+
+/* The single remaining CTA card: centre it instead of stretching it across a two-card row. */
+.cta-split-single {
+    justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cta-outline,
+    .cta-quiet,
+    .cta-outline:hover,
+    .cta-quiet:hover { transition: none; transform: none; }
+}
+
+/*
+ * The hero headline is TWO elements rendering as one sentence, so the gap belongs below the
+ * pair, not between the lines. Every breakpoint sheet sets margin-bottom on .hero-title and
+ * both lines now carry that class, so the first line needs its bottom margin zeroed.
+ *
+ * Element-qualified (h1./h2.) on purpose: that is specificity 0,1,1, which beats the plain
+ * .hero-title rules in xl/lg/md/sm regardless of the fact that those sheets load later.
+ */
+h1.hero-title { margin-bottom: 0; }
+h2.hero-title-line-2 { margin-top: 0; }

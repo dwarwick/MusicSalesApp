@@ -720,6 +720,35 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         _selectedArtists.Clear();
     }
 
+    /// <summary>
+    /// True when any of the three filters is narrowing the list. Used to tell an empty catalogue
+    /// apart from a catalogue the filters have emptied - the second is recoverable and needs to
+    /// say so, the first does not.
+    /// </summary>
+    protected bool HasAnyActiveFilter()
+        => _selectedGenres.Count > 0 || _selectedArtists.Count > 0 || HasActiveAiFilter();
+
+    /// <summary>Clears all three filters at once, for the empty-results state.</summary>
+    protected void ClearAllFilters()
+    {
+        _selectedGenres.Clear();
+        _selectedArtists.Clear();
+        SetAiFilter(AiFilterAll);
+        _aiFilterDropdownOpen = false;
+    }
+
+    /// <summary>
+    /// Retry after a failed load. LoadFiles clears _error on entry, but nothing else ever did -
+    /// its finally resets only _loading - so before this a single transient failure left the page
+    /// blank for the rest of the circuit with no way back.
+    /// </summary>
+    protected async Task RetryLoadAsync()
+    {
+        _error = null;
+        await LoadFiles();
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task LoadSubscriptionStatus()
     {
         try

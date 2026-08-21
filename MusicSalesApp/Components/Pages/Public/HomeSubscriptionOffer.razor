@@ -2,10 +2,14 @@
 
 <section class="hero-section">
     <div class="hero-content">
+        <p class="section-eyebrow">Independent music, streamed</p>
+        @* Two elements, one sentence. The <h2> keeps the heading structure and the string both
+           HomeTests and search engines expect, but it carried NO css rule anywhere, so it fell to
+           the browser default (~24px) beside a 4rem <h1>. .hero-title-line-2 sizes it to match. *@
         <h1 class="hero-title">
             <span class="hero-highlight">Discover your</span>
         </h1>
-        <h2>next favorite artist!</h2>
+        <h2 class="hero-title hero-title-line-2">next favorite artist!</h2>
         <p class="hero-subtitle">
             @if (_audienceLoaded && ShouldShowSubscriptionOffer && HasFreeTrialOffer)
             {
@@ -27,13 +31,18 @@
             }
         </p>
         <div class="hero-cta">
-            <a href="@AppPageRoutes.MusicLibrary" class="e-control e-btn cta-secondary hero-secondary-cta hero-browse-music-button">
+            @* Browse Music is the primary LISTENER action on this page, so it must not wear
+               cta-secondary/hero-secondary-cta - AGENTS.md reserves that violet for creator and
+               account actions. It is the outline beside the accent-filled register/subscribe CTA. *@
+            <a href="@AppPageRoutes.MusicLibrary" class="e-control e-btn cta-outline hero-browse-music-button">
                 Browse Music
             </a>
             @if (_audienceLoaded && ShouldShowSubscriptionOffer && !_isAuthenticated)
             {
+                @* Quiet tertiary. Nominally an account action, but three button colours in one
+                   row is noise and the hero is a listener surface - see AGENTS.md. *@
                 <a href="@SubscriberLoginUrl"
-                   class="e-control e-btn cta-secondary hero-secondary-cta hero-login-button"
+                   class="e-control e-btn cta-quiet hero-login-button"
                    data-analytics-event="@FunnelAnalyticsEvents.SubscriberLoginClicked"
                    data-analytics-category="subscriber"
                    data-analytics-label="home_hero_login">
@@ -72,8 +81,11 @@
 
 @if (ShouldShowSubscriptionOffer)
 {
+    @* .cta-split-* was a flex ROW built for two cards; only the subscriber one has existed since
+       the creator card was removed. Both class names stay - HomeTests asserts exactly one
+       .cta-card inside a .cta-split-section - but the container now centres a single panel. *@
     <section class="cta-split-section">
-        <div class="cta-split-container">
+        <div class="cta-split-container cta-split-single">
             <div class="cta-card subscriber-cta"
                  data-analytics-page-event="@FunnelAnalyticsEvents.SubscriberCtaViewed"
                  data-analytics-category="subscriber"
@@ -169,7 +181,12 @@
     </section>
 
     <section class="features-section">
-        <h2 class="section-title">Why Stream Tunes?</h2>
+        <div class="section-head section-head-centred">
+            <div>
+                <p class="section-eyebrow">What you get</p>
+                <h2 class="section-title">Why Stream Tunes?</h2>
+            </div>
+        </div>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon">

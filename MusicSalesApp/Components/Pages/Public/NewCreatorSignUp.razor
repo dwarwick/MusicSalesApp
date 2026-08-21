@@ -24,7 +24,7 @@
 
         @if (!_isAuthenticated)
         {
-            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="cta-button-group">
                 <a href="@CreatorRegisterUrl"
                    class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register"
                    data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
@@ -32,7 +32,7 @@
                    data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupTopRegister">
                     Start Creator Signup
                 </a>
-                <p style="margin-top: 1rem;">Already registered?</p>
+                <p class="cta-group-note">Already registered?</p>
                 <a href="@CreatorLoginUrl"
                    class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-login"
                    data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
@@ -44,7 +44,7 @@
         }
         else if (!_isActiveCreator)
         {
-            <div class="cta-button-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="cta-button-group">
                 @if (_isEmailVerified)
                 {
                     <a href="@AppPageRoutes.CreatorSettings"
@@ -63,7 +63,26 @@
                 }
             </div>
         }
+        else
+        {
+            @* An active creator used to fall through BOTH branches and get no call to action
+               at all - the page just stopped after the copy. *@
+            <div class="cta-button-group">
+                <a href="@AppPageRoutes.UploadFiles" class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register">
+                    Upload Music
+                </a>
+                <a href="@AppPageRoutes.CreatorDashboard" class="e-control e-btn cta-button cta-secondary hero-secondary-cta">
+                    Creator Dashboard
+                </a>
+            </div>
+        }
 
+        @* NO LINK TO /new-creator-signup-questions, AND THAT IS DELIBERATE.
+           Splitting the long pitch onto that page measurably raised sign-ups, so nothing goes
+           between a reader and the call to action above - no panel, no card, no text link. The
+           detail page earns its own traffic from search: it is in sitemap.xml at priority 0.8 and
+           carries its own bottom CTA. FunnelAnalyticsLabels.NewCreatorSignupBottom* stay defined
+           and unused for the same reason. *@
         <p class="contact-line">
             <svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">

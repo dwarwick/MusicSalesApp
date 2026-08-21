@@ -7,6 +7,11 @@
      data-analytics-page-event="@FunnelAnalyticsEvents.CreatorLandingViewed"
      data-analytics-category="@FunnelAnalyticsLabels.CreatorCategory"
      data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupQuestions">
+    <a href="@AppPageRoutes.NewCreatorSignup" class="section-link back-link">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4-4.6-4.6z" /></svg>
+        Back to creator signup
+    </a>
+
     <div class="terms-content learn-more-content">
         <section class="mb-4">
             <h2>🚀 Why Streamtunes Exists</h2>
@@ -203,7 +208,7 @@
 
         <section class="mb-4">
             <h2>🎬 The Process Is Simple</h2>
-            <ul style="list-style: none; padding-left: 0;">
+            <ul class="process-steps">
                 <li>1️⃣ Create a free account</li>
                 <li>2️⃣ Upload original music</li>
                 <li>3️⃣ Go live and start earning</li>
@@ -232,7 +237,7 @@
             </p>
             @if (!_isAuthenticated)
             {
-                <div class="cta-button-group" style="margin-top: 1.5rem;">
+                <div class="cta-button-group">
                     <a href="@CreatorRegisterUrl"
                        class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register"
                        data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
@@ -240,7 +245,7 @@
                        data-analytics-label="@FunnelAnalyticsLabels.NewCreatorSignupQuestionsBottomRegister">
                         Start Creator Signup
                     </a>
-                    <p style="margin-top: 1rem;">Already registered?</p>
+                    <p class="cta-group-note">Already registered?</p>
                     <a href="@CreatorLoginUrl"
                        class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-login"
                        data-analytics-event="@FunnelAnalyticsEvents.CreatorRegisterClicked"
@@ -252,7 +257,7 @@
             }
             else if (!_isActiveCreator)
             {
-                <div class="cta-button-group" style="margin-top: 1.5rem;">
+                <div class="cta-button-group">
                     @if (_isEmailVerified)
                     {
                         <a href="@AppPageRoutes.CreatorSettings"
@@ -271,8 +276,28 @@
                     }
                 </div>
             }
+            else
+            {
+                @* An active creator used to fall through BOTH branches and get no call to action
+                   at all - the page just stopped after the copy. *@
+                <div class="cta-button-group">
+                    <a href="@AppPageRoutes.UploadFiles" class="e-control e-btn cta-button cta-secondary hero-secondary-cta cta-button-register">
+                        Upload Music
+                    </a>
+                    <a href="@AppPageRoutes.CreatorDashboard" class="e-control e-btn cta-button cta-secondary hero-secondary-cta">
+                        Creator Dashboard
+                    </a>
+                </div>
+            }
         </section>
 
-        <p><span style="font-size: 2.5em; vertical-align: middle;">📧</span> Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.</p>
+        <p class="contact-line">
+            <svg class="contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+                <path d="m3 6.5 8.4 6.2a1 1 0 0 0 1.2 0L21 6.5" />
+            </svg>
+            Questions? Email us at <a href="mailto:customerservice@streamtunes.net">customerservice@streamtunes.net</a>.
+        </p>
     </div>
 </div>

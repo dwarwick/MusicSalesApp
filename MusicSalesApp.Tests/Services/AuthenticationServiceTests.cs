@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -18,7 +19,7 @@ public class AuthenticationServiceTests
     private Mock<ILogger<AuthenticationService>> _mockLogger;
     private Mock<IHttpContextAccessor> _mockHttpContextAccessor;
     private Mock<IEmailService> _mockEmailService;
-    private ServerAuthenticationStateProvider _serverAuthStateProvider;
+    private CircuitAuthenticationStateProvider _serverAuthStateProvider;
     private AuthenticationService _service;
     private Mock<RoleManager<IdentityRole<int>>> _mockRoleManager;
     private StubHttpMessageHandler _stubHandler;
@@ -49,7 +50,7 @@ public class AuthenticationServiceTests
         _stubHandler = new StubHttpMessageHandler();
         _httpClient = new HttpClient(_stubHandler) { BaseAddress = new Uri("http://localhost/") };
 
-        _serverAuthStateProvider = new ServerAuthenticationStateProvider(_mockHttpContextAccessor.Object);
+        _serverAuthStateProvider = new CircuitAuthenticationStateProvider(_mockHttpContextAccessor.Object, NullLogger<CircuitAuthenticationStateProvider>.Instance);
 
         _service = new AuthenticationService(
             _serverAuthStateProvider,
