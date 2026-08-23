@@ -449,6 +449,29 @@ public partial class ManageAccountModel : BlazorBase
     protected string OfferRegularTermsDisplay => _payPalOfferQuote == null
         ? string.Empty
         : $"{OfferPriceDisplay} {OfferCadenceDisplay}";
+    /// <summary>
+    /// What the subscription section is called right now. It names the problem when there is
+    /// one, which the old markup did in a bare paragraph below the heading.
+    /// </summary>
+    protected string SubscriptionCardTitle => HasUnresolvedPayPalAgreement
+        ? "PayPal billing needs attention"
+        : CanCreateNewSubscription && !_hasSubscription
+            ? SubscriptionOfferHeadline
+            : "Manage your subscription";
+
+    /// <summary>The offer headline, which the section head shows before the card body.</summary>
+    protected string SubscriptionOfferHeadline => HasFreeTrialOffer
+        ? $"Try unlimited music free for {TrialDurationDisplay}."
+        : _payPalOfferQuote?.IsFirstTimeSubscriber == false
+            ? $"Restart unlimited streaming for {OfferRegularTermsDisplay}."
+            : $"Subscribe for {OfferRegularTermsDisplay}.";
+
+    protected string SubscriptionOfferLead => HasFreeTrialOffer
+        ? "Stream every full song during your free trial. You will not be charged until the trial ends."
+        : _payPalOfferQuote?.IsFirstTimeSubscriber == false
+            ? "As a returning subscriber, you will receive the current subscription price."
+            : "Enjoy unlimited streaming of all music on our platform.";
+
     protected string SubscribeButtonLabel => HasFreeTrialOffer
         ? $"Start My {TrialHeadlineDisplay} Free Trial"
         : _payPalOfferQuote?.IsFirstTimeSubscriber == false

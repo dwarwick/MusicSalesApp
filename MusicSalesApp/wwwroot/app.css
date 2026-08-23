@@ -4565,3 +4565,128 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .auth-rule { height: 1px; }
 .auth-subhead { font-weight: 700; margin: 0; }
 .auth-subhead-note { margin: 0; }
+
+/* =========================================================================
+   SETTINGS SURFACES - structure
+   =========================================================================
+   Manage Account and Creator Settings are the same kind of page: a single column of sections,
+   each headed by the eyebrow/title trio, with a nav rail beside it on wide viewports. The
+   vocabulary is settings-* rather than manage-* so the second page reuses it rather than
+   growing a parallel set.
+   ========================================================================= */
+
+.settings-page {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+/* Dropped below 1200px rather than collapsed into a dropdown: a 212px rail plus its gutter
+   needs about 1030px beside a readable column, and the six section heads are already legible
+   while scrolling. */
+.settings-nav {
+    display: none;
+    flex: 0 0 auto;
+    flex-direction: column;
+}
+
+.settings-nav-heading { font-weight: 700; text-transform: uppercase; margin: 0; }
+
+.settings-nav-link {
+    display: block;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.settings-main { flex: 1 1 auto; min-width: 0; }
+.settings-head-eyebrow { font-weight: 700; text-transform: uppercase; margin: 0; }
+.settings-head-title { font-weight: 750; margin: 0; }
+.settings-head-note { margin: 0; }
+
+.settings-column { display: flex; flex-direction: column; }
+
+.settings-card {
+    border-style: solid;
+    border-width: 1px;
+    scroll-margin-top: 24px;
+}
+
+.settings-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.settings-eyebrow { font-weight: 700; text-transform: uppercase; margin: 0; }
+.settings-title { font-weight: 700; margin: 0; }
+.settings-note { margin: 0; }
+.settings-prose { margin: 0; }
+.settings-tz { margin: 0; }
+.settings-subhead { font-weight: 700; margin: 0; }
+.settings-hint { margin: 0; }
+.settings-working { margin: 0; font-weight: 600; }
+
+/* Status is a pill with a dot, never a bare coloured word - the state has to survive being
+   read in greyscale. */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    border-radius: var(--st-radius-pill);
+    border-style: solid;
+    border-width: 1px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status-pill-dot { border-radius: 50%; flex: 0 0 auto; }
+
+/* A read-only fact. Not a disabled input: there is nothing to type. */
+.fact-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.fact-label { flex: 0 0 auto; font-weight: 600; }
+.fact-value { text-align: right; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+
+.terms-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.terms-list li { position: relative; }
+
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; }
+
+.settings-page .e-btn.settings-btn {
+    border-radius: var(--st-radius-pill);
+    font-weight: 700;
+    text-transform: none;
+}
+
+.passkey-rows { display: flex; flex-direction: column; }
+.passkey-row { display: flex; align-items: center; }
+.passkey-icon { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 9px; }
+.passkey-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.passkey-name { font-weight: 700; overflow-wrap: anywhere; }
+.passkey-actions { flex: 0 0 auto; display: flex; }
+
+.settings-empty { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.settings-empty-icon { display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.settings-empty-title { font-weight: 700; margin: 0; }
+.settings-empty-body { margin: 0; max-width: 44ch; }
+
+.settings-guard, .settings-alert { display: flex; align-items: flex-start; border-radius: var(--st-radius-sm); }
+.settings-guard-icon, .settings-alert-icon { flex: 0 0 auto; }
+
+.settings-label { display: block; font-weight: 600; }
+.settings-loading { display: flex; align-items: center; justify-content: center; }
+
+.settings-spinner {
+    border-radius: 50%;
+    border-style: solid;
+    animation: settings-spin 900ms linear infinite;
+}
+
+@keyframes settings-spin { to { transform: rotate(360deg); } }
+
+.settings-page .e-input-group.e-outline,
+.settings-page .e-input-group.e-control-wrapper.e-outline { border-radius: var(--st-radius-sm); }

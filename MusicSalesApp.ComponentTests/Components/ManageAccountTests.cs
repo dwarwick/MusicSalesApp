@@ -85,7 +85,7 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Close Account"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
 
         Assert.That(cut.Markup, Does.Not.Contain("Become a Creator"));
         Assert.That(cut.Markup, Does.Not.Contain("Creator Profile"));
@@ -132,11 +132,11 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends:"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Current Billing Period Ends"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Status:</strong> Active"));
+        Assert.That(cut.Markup, Does.Contain("Manage your subscription"));
         Assert.That(cut.Markup, Does.Contain("America/New_York"));
-        Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends:"));
+        Assert.That(cut.Markup, Does.Contain("Current Billing Period Ends"));
         Assert.That(cut.Markup, Does.Contain("will automatically renew unless canceled"));
         Assert.That(cut.Markup, Does.Contain("Manage Subscription"));
         Assert.That(cut.Markup, Does.Not.Contain("Start a new subscription at any time."));
@@ -227,9 +227,9 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Access Until:"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Access Until"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("Status:</strong> Renews Off"));
+        Assert.That(cut.Markup, Does.Contain("Renews Off"));
         Assert.That(cut.Markup, Does.Contain("America/New_York"));
         Assert.That(cut.Markup, Does.Contain("has been canceled"));
         Assert.That(cut.Markup, Does.Contain("will not automatically renew"));
@@ -584,7 +584,7 @@ public class ManageAccountTests : BUnitTestBase
         SetupRendererInfo();
 
         var cut = TestContext.Render<ManageAccount>();
-        cut.WaitForState(() => cut.Markup.Contains("Close Account"), TimeSpan.FromSeconds(5));
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
 
         SetField(cut.Instance, "_accountActionConfirmEmail", "  testuser@test.com  ");
         await InvokeNonPublicTask(cut.Instance, "DeleteAccount");

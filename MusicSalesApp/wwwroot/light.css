@@ -1570,3 +1570,160 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
     border-color: var(--st-accent);
     color: var(--st-accent-hover);
 }
+
+/* ---- Settings surfaces ---------------------------------------------------
+   Shared by Manage Account and Creator Settings.
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.settings-page { background-color: var(--st-page); }
+
+.settings-nav-heading { color: var(--st-text-3); }
+.settings-nav-link { color: var(--st-text-2); }
+.settings-nav-link:hover { background-color: var(--st-surface-hover); color: var(--st-text); }
+.settings-nav-link-danger { color: var(--st-danger); }
+
+.settings-head-eyebrow { color: var(--st-accent); }
+.settings-head-title { color: var(--st-text); }
+.settings-head-note { color: var(--st-text-2); }
+.settings-head-email { color: var(--st-text); }
+
+.settings-card {
+    background-color: var(--st-surface);
+    border-color: var(--st-line);
+    box-shadow: var(--st-elev);
+}
+
+.settings-card-danger { border-color: var(--st-danger); }
+
+.settings-eyebrow { color: var(--st-accent); }
+.settings-title { color: var(--st-text); }
+.settings-note { color: var(--st-text-2); }
+.settings-prose { color: var(--st-text-2); }
+.settings-tz { color: var(--st-text-3); }
+.settings-subhead { color: var(--st-text); }
+.settings-hint { color: var(--st-text-3); }
+.settings-working { color: var(--st-text-2); }
+
+.status-pill {
+    background-color: var(--st-accent-soft);
+    border-color: var(--st-accent);
+    color: var(--st-accent-hover);
+}
+
+.status-pill-dot { background-color: var(--st-accent); }
+
+.status-pill-warn {
+    background-color: var(--st-warn-tint);
+    border-color: var(--st-warn);
+    color: var(--st-warn);
+}
+
+.status-pill-warn .status-pill-dot { background-color: var(--st-warn); }
+
+.fact-row { border-bottom: 1px solid var(--st-line); }
+.fact-row:last-child { border-bottom: none; }
+.fact-label { color: var(--st-text-2); }
+.fact-value { color: var(--st-text); }
+
+.terms-list li { color: var(--st-text-2); }
+.terms-list li strong { color: var(--st-text); }
+.terms-list li::before { color: var(--st-accent); }
+
+.passkey-icon { background-color: var(--st-accent-soft); color: var(--st-accent); }
+.passkey-row { border-bottom: 1px solid var(--st-line); }
+.passkey-row:last-child { border-bottom: none; }
+.passkey-name { color: var(--st-text); }
+.passkey-meta { color: var(--st-text-3); }
+
+.settings-empty-icon { background-color: var(--st-accent-soft); color: var(--st-accent); }
+.settings-empty-title { color: var(--st-text); }
+.settings-empty-body { color: var(--st-text-2); }
+
+.settings-guard {
+    background-color: var(--st-surface-hover);
+    border: 1px solid var(--st-line);
+    color: var(--st-text-2);
+}
+
+.settings-guard-icon { color: var(--st-text-3); }
+
+.settings-alert-info {
+    background-color: var(--st-accent-soft);
+    border: 1px solid var(--st-accent);
+    color: var(--st-accent-hover);
+}
+
+.settings-alert-warn {
+    background-color: var(--st-warn-tint);
+    border: 1px solid var(--st-warn);
+    color: var(--st-warn);
+}
+
+.settings-label { color: var(--st-text-2); }
+.settings-loading { color: var(--st-text-2); }
+.settings-spinner { border-color: var(--st-track); border-top-color: var(--st-accent); }
+
+/* Account actions take the violet; destructive stays on the danger token. */
+.settings-page .e-btn.settings-btn {
+    background-color: transparent;
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+.settings-page .e-btn.settings-btn:hover {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}
+
+.settings-page .e-btn.settings-btn.settings-btn-violet,
+.settings-page .e-btn.settings-btn.settings-btn-violet:hover {
+    background-color: var(--st-genre-fill);
+    border-color: var(--st-genre-fill);
+    color: var(--st-on-genre);
+}
+
+.settings-page .e-btn.settings-btn.settings-btn-danger,
+.settings-page .e-btn.settings-btn.settings-btn-danger:hover {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+.settings-page .e-btn.settings-btn.settings-btn-danger-outline {
+    background-color: transparent;
+    border-color: var(--st-danger);
+    color: var(--st-danger);
+}
+
+.settings-page .e-btn.settings-btn.settings-btn-danger-outline:hover {
+    background-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+.settings-page .e-input-group.e-outline:not(.e-disabled),
+.settings-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
+    border-color: var(--st-control-line);
+    background-color: var(--st-surface);
+}
+
+.settings-page .e-input-group.e-outline.e-input-focus,
+.settings-page .e-input-group.e-control-wrapper.e-outline.e-input-focus {
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+}
+
+.settings-page .e-input-group input.e-input { color: var(--st-text); }
+
+.settings-page .e-checkbox-wrapper .e-frame,
+.settings-page .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
+
+.settings-page .e-checkbox-wrapper .e-frame.e-check,
+.settings-page .e-css.e-checkbox-wrapper .e-frame.e-check {
+    background-color: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.settings-page .e-checkbox-wrapper .e-label,
+.settings-page .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }

@@ -364,4 +364,11 @@
     .auth-panel-title { font-size: 34px; line-height: 1.12; margin-bottom: 10px; }
     .auth-panel-body { font-size: 15px; line-height: 1.55; max-width: 540px; margin-bottom: 14px; }
     .auth-form-col { padding: 40px 32px; align-items: flex-start; }
+
+/* Settings surfaces - the rail needs about 1030px beside a readable column, so it is
+       dropped here rather than squeezed. */
+    .settings-page { padding: 30px 32px 48px; gap: 0; }
+    .settings-nav { display: none; }
+    .settings-main { max-width: 700px; }
+    .settings-column { gap: 20px; }
 }

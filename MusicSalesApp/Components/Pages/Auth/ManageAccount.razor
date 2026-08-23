@@ -6,253 +6,348 @@
 @attribute [Authorize(Policy = Permissions.ValidatedUser)]
 @inherits ManageAccountModel
 
-<PageTitle>Manage Account</PageTitle>
+<PageTitle>Manage account</PageTitle>
 
-<div class="container mt-4">
-    <h2>Manage Account</h2>
+@*
+    One column of work, not a wall of cards. The section ORDER is unchanged, because it was
+    already right: the thing people come here for is the subscription, and it sits second.
 
+    The settings-* vocabulary is deliberately not manage-*: Creator Settings is the same kind
+    of surface and reuses every piece of it.
+*@
+<div class="settings-page">
     @if (_loading)
     {
-        <div class="text-center">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
+        <div class="settings-loading" role="status">
+            <span class="settings-spinner" aria-hidden="true"></span>
+            <span>Loading your account&hellip;</span>
         </div>
     }
     else if (!_isAuthenticated)
     {
-        <SfMessage Severity="MessageSeverity.Warning">You must be logged in to manage your account.</SfMessage>
+        <div class="settings-main">
+            <div class="settings-alert settings-alert-warn" role="alert">
+                <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                <span>You must be logged in to manage your account.</span>
+            </div>
+        </div>
     }
     else
     {
-        <!-- User Email Section -->
-        <div class="user-email-section mb-4">
-            <p class="user-email"><strong>Account Email:</strong> @_userEmail</p>
-        </div>
+        @* Needs about 1030px beside a readable column, so it appears from 1200px only. *@
+        <nav class="settings-nav" aria-label="Sections on this page">
+            <p class="settings-nav-heading">On this page</p>
+            <a href="#account" class="settings-nav-link">Account</a>
+            <a href="#subscription" class="settings-nav-link">Subscription</a>
+            <a href="#email-preferences" class="settings-nav-link">Email preferences</a>
+            <a href="#passkeys" class="settings-nav-link">Passkeys</a>
+            <a href="#password" class="settings-nav-link">Password</a>
+            <a href="#close-account" class="settings-nav-link settings-nav-link-danger">Close account</a>
+        </nav>
 
-        @if (!string.IsNullOrEmpty(_successMessage))
-        {
-            <SfMessage Severity="MessageSeverity.Success">@_successMessage</SfMessage>
-        }
+        <div class="settings-main">
+            <div class="settings-head">
+                <p class="settings-head-eyebrow">Your account</p>
+                <h1 class="settings-head-title">Manage account</h1>
+                <p class="settings-head-note">Signed in as <strong class="settings-head-email">@_userEmail</strong></p>
+            </div>
 
-        @if (!string.IsNullOrEmpty(_errorMessage))
-        {
-            <SfMessage Severity="MessageSeverity.Error">@_errorMessage</SfMessage>
-        }
+            @if (!string.IsNullOrEmpty(_successMessage))
+            {
+                <div class="settings-alert settings-alert-info" role="status">
+                    <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" /></svg>
+                    <span>@_successMessage</span>
+                </div>
+            }
 
-        <!-- Subscription Management Section -->
-        <SfCard CssClass="mb-4">
-            <CardHeader Title="Manage Your Subscription" />
-            <CardContent>
-                @if (_hasSubscription)
-                {
-                    <div class="subscription-details">
-                        <p><small>All subscription dates and times shown in @SubscriptionTimeZoneLabel.</small></p>
-                        <p><strong>Status:</strong> @DisplaySubscriptionStatus</p>
-                        <p><strong>Monthly Price:</strong> @CurrentMonthlyPriceDisplay</p>
-                        <p><strong>Billed via:</strong> @(_billingSource ?? "PayPal")</p>
-                        @if (_startDate.HasValue)
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="settings-alert settings-alert-warn" role="alert">
+                    <svg class="settings-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                    <span>@_errorMessage</span>
+                </div>
+            }
+
+            <div class="settings-column">
+
+                <section class="settings-card" id="account">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Account</p>
+                            <h2 class="settings-title">Your details</h2>
+                        </div>
+                    </div>
+                    <div class="fact-rows">
+                        <div class="fact-row">
+                            <span class="fact-label">Email address</span>
+                            <span class="fact-value">@_userEmail</span>
+                        </div>
+                    </div>
+                </section>
+                <section class="settings-card" id="subscription">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Subscription</p>
+                            <h2 class="settings-title">@SubscriptionCardTitle</h2>
+                        </div>
+                        @if (_hasSubscription)
                         {
-                            <p><strong>Started:</strong> @FormatUserDate(_startDate)</p>
+                            @* A pill with a dot, not a coloured word: hue alone is not a state
+                               indicator, and "Renews Off" printed in a colour was exactly that. *@
+                            <span class="status-pill @(IsNonRenewingSubscription ? "status-pill-warn" : "")">
+                                <span class="status-pill-dot" aria-hidden="true"></span>@DisplaySubscriptionStatus
+                            </span>
                         }
-                        @if (_nextBillingDate.HasValue)
+                        else if (HasUnresolvedPayPalAgreement)
                         {
-                            <p><strong>Next Billing Date:</strong> @FormatUserDate(_nextBillingDate)</p>
-                        }
-                        @if (_endDate.HasValue)
-                        {
-                            <p><strong>@SubscriptionEndDateLabel:</strong> @FormatUserDateTimeWithTimeZone(_endDate)</p>
-                        }
-                        <p class="subscription-note">@ActiveSubscriptionMessage</p>
-                        
-                        @if (ShowCancelSubscriptionButton && !_cancelling)
-                        {
-                            <SfButton OnClick="@CancelSubscription" CssClass="e-danger mt-2">@(ShouldUseExternalSubscriptionManagement ? "Manage Subscription" : "Cancel Subscription")</SfButton>
-                        }
-                        else if (_cancelling)
-                        {
-                            <p>Processing...</p>
+                            <span class="status-pill status-pill-warn">
+                                <span class="status-pill-dot" aria-hidden="true"></span>Needs attention
+                            </span>
                         }
                     </div>
-                }
 
-                @if (HasUnresolvedPayPalAgreement)
-                {
-                    <div class="subscription-details">
-                        <p><strong>PayPal billing needs attention.</strong></p>
-                        <p>@PayPalMismatchGuidance</p>
-                        <p>Starting another recurring StreamTunes subscription is temporarily blocked to prevent overlapping charges. Creator tips and other one-time payments are not affected.</p>
-                        @if (!string.IsNullOrWhiteSpace(_mismatchCorrelationId))
-                        {
-                            <p><small>Support reference: @_mismatchCorrelationId</small></p>
-                        }
-                        <div class="mt-2">
-                            <SfButton OnClick="@RefreshSubscription"
-                                      Disabled="@(_refreshingSubscription || _cancelling)"
-                                      CssClass="cta-secondary hero-secondary-cta">
-                                @(_refreshingSubscription ? "Refreshing..." : "Refresh Subscription")
-                            </SfButton>
-                            @if (CanOpenPayPal)
+                    @if (_hasSubscription)
+                    {
+                        <div class="subscription-details">
+                            <div class="fact-rows">
+                                <div class="fact-row">
+                                    <span class="fact-label">Status</span>
+                                    <span class="fact-value">@DisplaySubscriptionStatus</span>
+                                </div>
+                                <div class="fact-row">
+                                    <span class="fact-label">Monthly Price</span>
+                                    <span class="fact-value">@CurrentMonthlyPriceDisplay</span>
+                                </div>
+                                <div class="fact-row">
+                                    <span class="fact-label">Billed via</span>
+                                    <span class="fact-value">@(_billingSource ?? "PayPal")</span>
+                                </div>
+                                @if (_startDate.HasValue)
+                                {
+                                    <div class="fact-row">
+                                        <span class="fact-label">Started</span>
+                                        <span class="fact-value">@FormatUserDate(_startDate)</span>
+                                    </div>
+                                }
+                                @if (_nextBillingDate.HasValue)
+                                {
+                                    <div class="fact-row">
+                                        <span class="fact-label">Next Billing Date</span>
+                                        <span class="fact-value">@FormatUserDate(_nextBillingDate)</span>
+                                    </div>
+                                }
+                                @if (_endDate.HasValue)
+                                {
+                                    <div class="fact-row">
+                                        <span class="fact-label">@SubscriptionEndDateLabel</span>
+                                        <span class="fact-value">@FormatUserDateTimeWithTimeZone(_endDate)</span>
+                                    </div>
+                                }
+                            </div>
+
+                            <p class="settings-prose subscription-note">@ActiveSubscriptionMessage</p>
+                            <p class="settings-tz">All subscription dates and times shown in @SubscriptionTimeZoneLabel.</p>
+
+                            @if (ShowCancelSubscriptionButton && !_cancelling)
                             {
-                                <SfButton OnClick="@OpenPayPal" Disabled="@_refreshingSubscription" CssClass="mt-2">Open PayPal</SfButton>
+                                <div class="settings-actions">
+                                    <SfButton OnClick="@CancelSubscription" CssClass="e-btn settings-btn settings-btn-danger-outline">@(ShouldUseExternalSubscriptionManagement ? "Manage Subscription" : "Cancel Subscription")</SfButton>
+                                </div>
                             }
-                            <SfButton OnClick="@ContactSupport" Disabled="@_refreshingSubscription" CssClass="mt-2">Contact Support</SfButton>
-                            <SfButton OnClick="@CancelSubscription"
-                                      Disabled="@(_refreshingSubscription || _cancelling)"
-                                      CssClass="e-danger mt-2">
-                                @(_cancelling ? "Stopping..." : "Stop PayPal Billing")
-                            </SfButton>
+                            else if (_cancelling)
+                            {
+                                <p class="settings-working">Processing...</p>
+                            }
+                        </div>
+                    }
+
+                    @if (HasUnresolvedPayPalAgreement)
+                    {
+                        <div class="subscription-details">
+                            <p class="settings-prose">@PayPalMismatchGuidance</p>
+                            <p class="settings-prose">Starting another recurring StreamTunes subscription is temporarily blocked to prevent overlapping charges. Creator tips and other one-time payments are not affected.</p>
+                            @if (!string.IsNullOrWhiteSpace(_mismatchCorrelationId))
+                            {
+                                <p class="settings-tz">Support reference: @_mismatchCorrelationId</p>
+                            }
+                            <div class="settings-actions">
+                                <SfButton OnClick="@RefreshSubscription"
+                                          Disabled="@(_refreshingSubscription || _cancelling)"
+                                          CssClass="e-btn settings-btn settings-btn-violet">
+                                    @(_refreshingSubscription ? "Refreshing..." : "Refresh Subscription")
+                                </SfButton>
+                                @if (CanOpenPayPal)
+                                {
+                                    <SfButton OnClick="@OpenPayPal" Disabled="@_refreshingSubscription" CssClass="e-btn settings-btn">Open PayPal</SfButton>
+                                }
+                                <SfButton OnClick="@ContactSupport" Disabled="@_refreshingSubscription" CssClass="e-btn settings-btn">Contact Support</SfButton>
+                                <SfButton OnClick="@CancelSubscription"
+                                          Disabled="@(_refreshingSubscription || _cancelling)"
+                                          CssClass="e-btn settings-btn settings-btn-danger-outline">
+                                    @(_cancelling ? "Stopping..." : "Stop PayPal Billing")
+                                </SfButton>
+                            </div>
+                        </div>
+                    }
+
+                    @if (CanCreateNewSubscription)
+                    {
+                        <div class="subscription-description">
+                            <p class="settings-prose">@SubscriptionOfferLead</p>
+
+                            <div class="subscription-terms">
+                                <p class="settings-subhead">Subscription Terms:</p>
+                                <ul class="terms-list">
+                                    @if (HasFreeTrialOffer)
+                                    {
+                                        <li>Your <strong>@TrialDurationDisplay free trial</strong> is followed by recurring billing of <strong>@OfferRegularTermsDisplay</strong>.</li>
+                                        <li>If you cancel during the free trial, you will not be charged and your full streaming access will continue through the end of the trial.</li>
+                                    }
+                                    else
+                                    {
+                                        <li>A recurring fee of <strong>@OfferRegularTermsDisplay</strong> will continue until you cancel.</li>
+                                    }
+                                    <li>Recurring charges follow the cadence shown above, subject to your billing provider's policy.</li>
+                                    <li>After cancellation, full streaming access continues through the provider-confirmed trial-end or paid-through date.</li>
+                                    <li>You can cancel at any time through your StreamTunes account. PayPal billing is stopped immediately, with no future renewal charge.</li>
+                                </ul>
+                            </div>
+
+                            <div class="terms-agreement">
+                                <SfCheckBox @bind-Checked="_agreeToTerms" Label="I agree to the subscription terms and conditions" TChecked="bool" />
+                            </div>
+
+                            @if (!_subscribing)
+                            {
+                                <div class="settings-actions">
+                                    <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="e-btn settings-btn settings-btn-violet">@SubscribeButtonLabel</SfButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="settings-working">Processing your subscription...</p>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="settings-card" id="email-preferences">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Email preferences</p>
+                            <h2 class="settings-title">What we send you</h2>
+                            <p class="settings-note">Account and billing emails are always sent &mdash; these control the rest.</p>
                         </div>
                     </div>
-                }
-
-                @if (CanCreateNewSubscription)
-                {
-                    <div class="subscription-description">
-                        @if (HasFreeTrialOffer)
-                        {
-                            <h3>Try unlimited music free for @TrialDurationDisplay.</h3>
-                            <p>Stream every full song during your free trial. You will not be charged until the trial ends.</p>
-                        }
-                        else if (_payPalOfferQuote?.IsFirstTimeSubscriber == false)
-                        {
-                            <h3>Restart unlimited streaming for @OfferRegularTermsDisplay.</h3>
-                            <p>As a returning subscriber, you will receive the current subscription price.</p>
-                        }
-                        else
-                        {
-                            <h3>Subscribe for @OfferRegularTermsDisplay.</h3>
-                            <p>Enjoy unlimited streaming of all music on our platform.</p>
-                        }
-                        
-                        <div class="subscription-terms mt-3">
-                            <h4>Subscription Terms:</h4>
-                            <ul>
-                                @if (HasFreeTrialOffer)
-                                {
-                                    <li>Your <strong>@TrialDurationDisplay free trial</strong> is followed by recurring billing of <strong>@OfferRegularTermsDisplay</strong>.</li>
-                                    <li>If you cancel during the free trial, you will not be charged and your full streaming access will continue through the end of the trial.</li>
-                                }
-                                else
-                                {
-                                    <li>A recurring fee of <strong>@OfferRegularTermsDisplay</strong> will continue until you cancel.</li>
-                                }
-                                <li>Recurring charges follow the cadence shown above, subject to your billing provider's policy.</li>
-                                <li>After cancellation, full streaming access continues through the provider-confirmed trial-end or paid-through date.</li>
-                                <li>You can cancel at any time through your StreamTunes account. PayPal billing is stopped immediately, with no future renewal charge.</li>
-                            </ul>
-                        </div>
-
-                        <div class="terms-agreement mt-3">
-                            <SfCheckBox @bind-Checked="_agreeToTerms" Label="I agree to the subscription terms and conditions" TChecked="bool" />
-                        </div>
-                        
-                        @if (!_subscribing)
-                        {
-                            <SfButton OnClick="@Subscribe" Disabled="@(!_agreeToTerms)" CssClass="cta-secondary hero-secondary-cta mt-2">@SubscribeButtonLabel</SfButton>
-                        }
-                        else
-                        {
-                            <p>Processing your subscription...</p>
-                        }
+                    <div class="settings-check">
+                        <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" Label="Receive email notifications when new music is added" />
                     </div>
-                }
-            </CardContent>
-        </SfCard>
+                    <div class="settings-actions">
+                        <SfButton Content="Save Preferences" OnClick="SaveEmailPreferences" CssClass="e-btn settings-btn settings-btn-violet" />
+                    </div>
+                </section>
 
-        <!-- Email Preferences Section -->
-        <SfCard CssClass="mb-4">
-            <CardHeader Title="Email Preferences" />
-            <CardContent>
-                <div class="mb-3">
-                    <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" />
-                    <span class="ms-2">Receive email notifications when new music is added</span>
-                </div>
-                <SfButton IsPrimary="true" Content="Save Preferences" OnClick="SaveEmailPreferences" />
-            </CardContent>
-        </SfCard>
+                <section class="settings-card" id="passkeys">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Passkeys</p>
+                            <h2 class="settings-title">Sign in without a password</h2>
+                            @* Passwordless, NOT a second factor. There is no 2FA in this app, and
+                               the copy must not imply one. *@
+                            <p class="settings-note">Passkeys provide a secure and convenient way to sign in without a password. They replace your password rather than adding a second step.</p>
+                        </div>
+                    </div>
 
-        <!-- Passkey Management Section -->
-        <SfCard CssClass="mb-4">
-            <CardHeader Title="Passkeys" />
-            <CardContent>
-                <p>Passkeys provide a secure and convenient way to sign in without a password.</p>
-                
-                @if (_passkeys.Any())
-                {
-                    <SfGrid DataSource="@_passkeys" AllowPaging="false" AllowResizing="true" CssClass="mt-3">
-                        <GridColumns>
-                            <GridColumn Field="@nameof(Passkey.Name)" HeaderText="Name" Width="200"></GridColumn>
-                            <GridColumn Field="@nameof(Passkey.CreatedAt)" HeaderText="Created" Width="180">
-                                <Template>
-                                    @{
-                                        var passkey = (context as Passkey);
-                                        <span>@passkey.CreatedAt.ToLocalTime().ToString("g")</span>
-                                    }
-                                </Template>
-                            </GridColumn>
-                            <GridColumn Field="@nameof(Passkey.LastUsedAt)" HeaderText="Last Used" Width="180">
-                                <Template>
-                                    @{
-                                        var passkey = (context as Passkey);
-                                        <span>@passkey.LastUsedAt.ToLocalTime().ToString("g")</span>
-                                    }
-                                </Template>
-                            </GridColumn>
-                            <GridColumn HeaderText="Actions" Width="200">
-                                <Template>
-                                    @{
-                                        var passkey = (context as Passkey);
-                                        <div>
-                                            <SfButton CssClass="e-small" Content="Rename" OnClick="() => ShowRenameDialog(passkey)" />
-                                            <SfButton CssClass="e-small e-danger" Content="Delete" OnClick="() => ShowDeleteConfirmDialog(passkey)" />
-                                        </div>
-                                    }
-                                </Template>
-                            </GridColumn>
-                        </GridColumns>
-                    </SfGrid>
-                }
-                else
-                {
-                    <p>You don't have any passkeys yet.</p>
-                }
+                    @if (_passkeys.Any())
+                    {
+                        @* A row each, not an SfGrid. A data grid is right for a hundred rows;
+                           most people have one or two, and a grid makes two rows look like a
+                           report - and forces a horizontal scroll on a phone. *@
+                        <div class="passkey-rows">
+                            @foreach (var passkey in _passkeys)
+                            {
+                                <div class="passkey-row">
+                                    <span class="passkey-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="9" cy="9" r="4" /><path d="M12.5 11.5 20 19v2h-3v-2h-2v-2h-2z" /></svg>
+                                    </span>
+                                    <span class="passkey-detail">
+                                        <span class="passkey-name">@passkey.Name</span>
+                                        <span class="passkey-meta">Added @passkey.CreatedAt.ToLocalTime().ToString("g") &middot; last used @passkey.LastUsedAt.ToLocalTime().ToString("g")</span>
+                                    </span>
+                                    <span class="passkey-actions">
+                                        <SfButton Content="Rename" OnClick="() => ShowRenameDialog(passkey)" CssClass="e-btn settings-btn settings-btn-small" />
+                                        <SfButton Content="Delete" OnClick="() => ShowDeleteConfirmDialog(passkey)" CssClass="e-btn settings-btn settings-btn-small settings-btn-danger-outline" />
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="settings-empty">
+                            <span class="settings-empty-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="9" cy="9" r="4" /><path d="M12.5 11.5 20 19v2h-3v-2h-2v-2h-2z" /></svg>
+                            </span>
+                            <p class="settings-empty-title">You don't have any passkeys yet.</p>
+                            <p class="settings-empty-body">Add one and you can sign in with your fingerprint, face or device PIN instead of typing a password.</p>
+                        </div>
+                    }
 
-                <SfButton IsPrimary="true" Content="Add Passkey" OnClick="ShowAddPasskeyDialog" CssClass="mt-2" />
-            </CardContent>
-        </SfCard>
+                    <div class="settings-actions">
+                        <SfButton Content="Add Passkey" OnClick="ShowAddPasskeyDialog" CssClass="e-btn settings-btn settings-btn-violet" />
+                    </div>
+                </section>
 
-        <!-- Password Change Section -->
-        <SfCard CssClass="mb-4">
-            <CardHeader Title="Change Password" />
-            <CardContent>
-                <div class="mb-3">
-                    <label for="currentPassword" class="e-label">Current Password</label>
-                    <SfTextBox @bind-Value="_currentPassword" ID="currentPassword" Type="InputType.Password" Placeholder="Enter current password" CssClass="e-outline" />
-                </div>
+                <section class="settings-card" id="password">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Password</p>
+                            <h2 class="settings-title">Change your password</h2>
+                        </div>
+                    </div>
 
-                <div class="mb-3">
-                    <label for="newPassword" class="e-label">New Password</label>
-                    <SfTextBox @bind-Value="_newPassword" ID="newPassword" Type="InputType.Password" Placeholder="Enter new password" CssClass="e-outline" />
-                </div>
+                    <div class="settings-field">
+                        <label for="currentPassword" class="settings-label">Current Password</label>
+                        <SfTextBox @bind-Value="_currentPassword" ID="currentPassword" Type="InputType.Password" Placeholder="Enter current password" CssClass="e-outline" />
+                    </div>
 
-                <div class="mb-3">
-                    <label for="confirmPassword" class="e-label">Confirm New Password</label>
-                    <SfTextBox @bind-Value="_confirmPassword" ID="confirmPassword" Type="InputType.Password" Placeholder="Confirm new password" CssClass="e-outline" />
-                </div>
+                    <div class="settings-field">
+                        <label for="newPassword" class="settings-label">New Password</label>
+                        <SfTextBox @bind-Value="_newPassword" ID="newPassword" Type="InputType.Password" Placeholder="Enter new password" CssClass="e-outline" />
+                        <p class="settings-hint">Must be at least 8 characters and include upper, lower, digit, and symbol.</p>
+                    </div>
 
-                <SfButton IsPrimary="true" Content="Change Password" OnClick="ChangePassword" />
-            </CardContent>
-        </SfCard>
+                    <div class="settings-field">
+                        <label for="confirmPassword" class="settings-label">Confirm New Password</label>
+                        <SfTextBox @bind-Value="_confirmPassword" ID="confirmPassword" Type="InputType.Password" Placeholder="Confirm new password" CssClass="e-outline" />
+                    </div>
 
-        <!-- Account Closure Section -->
-        <SfCard CssClass="mb-4">
-            <CardHeader Title="Close Account" />
-            <CardContent>
-                <p class="text-danger">Warning: Closing your account will prevent you from logging in.</p>
-                <SfButton CssClass="e-danger" Content="Close My Account" OnClick="ShowAccountClosureDialog" />
-            </CardContent>
-        </SfCard>
+                    <div class="settings-actions">
+                        <SfButton Content="Change Password" OnClick="ChangePassword" CssClass="e-btn settings-btn settings-btn-violet" />
+                    </div>
+                </section>
+
+                @* Destructive actions sit in a bordered zone at the end of the page, never
+                   inline between two ordinary settings. *@
+                <section class="settings-card settings-card-danger" id="close-account">
+                    <div class="settings-section-head">
+                        <div>
+                            <p class="settings-eyebrow">Close account</p>
+                            <h2 class="settings-title">Close your StreamTunes account</h2>
+                        </div>
+                    </div>
+                    <p class="settings-prose">Warning: Closing your account will prevent you from logging in.</p>
+                    <div class="settings-guard">
+                        <svg class="settings-guard-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" /></svg>
+                        <span>You cannot close an account with an active subscription, and active creators must stop being a creator first.</span>
+                    </div>
+                    <div class="settings-actions">
+                        <SfButton Content="Close My Account" OnClick="ShowAccountClosureDialog" CssClass="e-btn settings-btn settings-btn-danger" />
+                    </div>
+                </section>
+
+            </div>
+        </div>
     }
 </div>
 
