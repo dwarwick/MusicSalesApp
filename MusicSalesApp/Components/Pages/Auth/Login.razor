@@ -31,7 +31,7 @@
     <section class="auth-form-col">
         <div class="auth-form">
             <h2 class="auth-title">Log in</h2>
-            <p class="auth-subtitle">Use the username or email address on your StreamTunes account.</p>
+            <p class="auth-subtitle">Use the email address on your StreamTunes account.</p>
 
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -47,8 +47,13 @@
                 @* AntiForgery token *@
                 <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
 
+                @* The field is named "username" because that is what /account/login binds and
+                   what FindByEmailOrUsernameAsync takes. It is labelled Email because a username
+                   is always the email here: every path that creates or renames an account sets
+                   UserName to it - AuthenticationService:81, WebGoogleAuthController:261,
+                   MobileAuthController:314, and both email-change paths. *@
                 <div class="auth-field">
-                    <label for="username" class="auth-label">Username or email</label>
+                    <label for="username" class="auth-label">Email</label>
                     <SfTextBox @bind-Value="@usernameValue" ID="username" Name="username" Placeholder="you@example.com" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
                 </div>
 
