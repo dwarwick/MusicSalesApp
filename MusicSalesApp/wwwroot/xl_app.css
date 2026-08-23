@@ -890,3 +890,23 @@
 .auth-provider-icon { width: 18px; height: 18px; }
 .auth-footer { font-size: 14px; margin-top: 28px; }
 .auth-dev-hint { font-size: 12.5px; line-height: 1.5; margin-top: 18px; }
+
+/* Register - sizing. */
+.auth-legal { border-radius: var(--st-radius-sm); padding: 16px; margin-bottom: 22px; }
+.auth-legal-row { gap: 10px; padding-bottom: 12px; }
+.auth-legal-row-optional { padding: 12px 0 0; }
+.auth-legal-split { margin-top: 2px; }
+.auth-page .legal-text { font-size: 13.5px; line-height: 1.5; }
+
+.auth-hint { font-size: 12.5px; line-height: 1.45; margin-top: 7px; }
+.auth-verify-lead { font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+.auth-verify-lead + .auth-verify-lead { margin-bottom: 22px; }
+.auth-countdown { font-size: 13px; margin-top: 10px; }
+.auth-rule { margin: 24px 0; }
+.auth-subhead { font-size: 15px; margin-bottom: 4px; }
+.auth-subhead-note { font-size: 13.5px; line-height: 1.55; margin-bottom: 16px; }
+
+.auth-page .auth-input.form-control { height: 46px; border-radius: var(--st-radius-sm); padding: 0 14px; font-size: 15px; }
+.auth-page .validation-errors { margin-bottom: 16px; }
+.auth-page .validation-message,
+.auth-page .validation-errors li { font-size: 12.5px; line-height: 1.5; }

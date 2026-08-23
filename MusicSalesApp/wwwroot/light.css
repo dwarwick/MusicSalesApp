@@ -1523,3 +1523,50 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
     border-color: var(--st-accent);
     color: var(--st-accent);
 }
+
+/* ---- Register ------------------------------------------------------------
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.auth-legal { background-color: var(--st-surface); border-color: var(--st-control-line); }
+.auth-legal-split { background-color: var(--st-line); }
+.auth-legal-optional { color: var(--st-text-3); }
+
+.auth-page .legal-text { color: var(--st-text-2); }
+.auth-page .legal-link { color: var(--st-accent); }
+.auth-page .legal-link:hover { color: var(--st-accent-hover); }
+
+.auth-hint { color: var(--st-text-3); }
+.auth-verify-lead { color: var(--st-text-2); }
+.auth-countdown { color: var(--st-text-3); }
+.auth-countdown strong { color: var(--st-text-2); }
+.auth-rule { background-color: var(--st-line); }
+.auth-subhead { color: var(--st-text); }
+.auth-subhead-note { color: var(--st-text-2); }
+
+/* An interactive boundary, so --st-control-line rather than --st-line. */
+.auth-page .auth-input.form-control {
+    background-color: var(--st-surface);
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+.auth-page .auth-input.form-control:hover { border-color: var(--st-text-3); }
+
+.auth-page .auth-input.form-control:focus {
+    background-color: var(--st-surface);
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+    color: var(--st-text);
+}
+
+.auth-page .auth-input.form-control::placeholder { color: var(--st-text-3); }
+
+/* EditForm renders these; unstyled they arrive as browser-default red on the page tint. */
+.auth-page .validation-message,
+.auth-page .validation-errors li { color: var(--st-danger); }
+
+.auth-alert-info {
+    background-color: var(--st-accent-soft);
+    border-color: var(--st-accent);
+    color: var(--st-accent-hover);
+}

@@ -23,7 +23,7 @@ public class RegisterTests : BUnitTestBase
     {
         var cut = TestContext.Render<Register>();
         // SfCard renders the title in CardHeader
-        Assert.That(cut.Markup, Does.Contain("Create Account"));
+        Assert.That(cut.Markup, Does.Contain("Create your account"));
         Assert.That(cut.Find("input#email"), Is.Not.Null);
     }
 
@@ -95,7 +95,7 @@ public class RegisterTests : BUnitTestBase
 
         var cut = TestContext.Render<Register>();
 
-        Assert.That(cut.Markup, Does.Contain("Finish creating your Google account"));
+        Assert.That(cut.Markup, Does.Contain("finish creating your Google account"));
         Assert.That(cut.Markup, Does.Contain("google@example.com"));
         Assert.That(cut.Markup, Does.Contain("Complete Google Sign Up"));
         Assert.Throws<ElementNotFoundException>(() => cut.Find("input#password"));
@@ -142,5 +142,58 @@ public class RegisterTests : BUnitTestBase
         var cut = TestContext.Render<Register>();
 
         Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2FCreatorSettings\""));
+    }
+
+    [Test]
+    public void Register_HasBrandPanel()
+    {
+        var cut = TestContext.Render<Register>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Find(".auth-panel"), Is.Not.Null);
+            // The panel keeps one palette in both site themes, so it takes the dark mark.
+            Assert.That(cut.Find(".auth-panel-logo").GetAttribute("src"), Does.Contain("logo-dark-small"));
+            Assert.That(cut.Markup, Does.Contain("Join StreamTunes."));
+        });
+    }
+
+    [Test]
+    public void Register_SubmitUsesTheListenerTier_NotTheAccountViolet()
+    {
+        // AGENTS.md picks a button tier by AUDIENCE and lists "register" under cta-primary
+        // alongside subscribe and play. Login's submit is the violet cta-secondary because
+        // logging in is an account action; this one must not follow it there.
+        var cut = TestContext.Render<Register>();
+
+        var submit = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Register");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(submit.ClassList, Does.Contain("cta-primary"));
+            Assert.That(submit.ClassList, Does.Not.Contain("cta-secondary"));
+            Assert.That(submit.ClassList, Does.Not.Contain("hero-secondary-cta"));
+        });
+    }
+
+    [Test]
+    public void Register_PolicyBlock_RendersOnBothPaths()
+    {
+        // The two copies of these four rows were byte-identical before they were extracted.
+        // This is what stops them drifting apart again.
+        var emailPath = TestContext.Render<Register>();
+        Assert.That(emailPath.FindAll(".auth-legal-row"), Has.Count.EqualTo(4));
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/register?{ExternalAuthFormFields.PendingRegistrationToken}=pending-token&{ExternalAuthFormFields.Email}=google%40example.com");
+
+        var googlePath = TestContext.Render<Register>();
+        Assert.Multiple(() =>
+        {
+            Assert.That(googlePath.FindAll(".auth-legal-row"), Has.Count.EqualTo(4));
+            Assert.That(googlePath.Markup, Does.Contain("Terms of Use"));
+            Assert.That(googlePath.Markup, Does.Contain("Privacy Policy"));
+            Assert.That(googlePath.Markup, Does.Contain("Refund Policy"));
+        });
     }
 }

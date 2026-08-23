@@ -4519,3 +4519,21 @@ h2.hero-title-line-2 { margin-top: 0; }
 .auth-page .e-input-group.e-control-wrapper.e-outline {
     border-radius: var(--st-radius-sm);
 }
+
+/* ---- Register adds to the auth shell ------------------------------------
+   The three fields stay InputText, so they are .form-control rather than a Syncfusion input
+   group. .auth-input gives them the same box without touching Bootstrap globally. */
+
+.auth-legal { border-style: solid; border-width: 1px; }
+.auth-legal-row { display: flex; align-items: flex-start; }
+.auth-legal-split { height: 1px; }
+
+.auth-page .validation-message,
+.auth-page .validation-errors { list-style: none; margin: 0; padding: 0; }
+
+.auth-hint { margin: 0; }
+.auth-verify-lead { margin: 0; }
+.auth-countdown { margin: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.auth-rule { height: 1px; }
+.auth-subhead { font-weight: 700; margin: 0; }
+.auth-subhead-note { margin: 0; }

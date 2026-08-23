@@ -570,4 +570,9 @@
     .auth-page .e-btn.auth-provider { height: 48px; }
     .auth-divider { margin: 18px 0; }
     .auth-footer { margin-top: 22px; }
+
+/* Register - phone. */
+    .auth-legal { padding: 14px; margin-bottom: 20px; }
+    .auth-page .auth-input.form-control { height: 48px; }
+    .auth-rule { margin: 20px 0; }
 }
