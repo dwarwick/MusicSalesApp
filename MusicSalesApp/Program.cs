@@ -361,6 +361,7 @@ try
     builder.Services.AddScoped<IImageVariantService, ImageVariantService>();
     builder.Services.AddScoped<IImageVariantCoordinator, ImageVariantCoordinator>();
     builder.Services.AddScoped<ICoverArtUrlBuilder, CoverArtUrlBuilder>();
+    builder.Services.AddSingleton<IPersonaImageUrlBuilder, PersonaImageUrlBuilder>();
     builder.Services.AddScoped<IImageVariantBackfillService, ImageVariantBackfillService>();
     builder.Services.AddScoped<IStreamCountService, StreamCountService>();
     builder.Services.AddScoped<IStreamCountHubClient, StreamCountHubClient>();

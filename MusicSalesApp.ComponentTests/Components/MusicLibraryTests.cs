@@ -133,6 +133,46 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
+    public void MusicLibrary_ServesPersonaImagesFromTheVersionedProxy_NotASasUrl()
+    {
+        // A SAS is minted per call with an expiry computed from the current time, so every render
+        // produced a different query string - a different URL, and a guaranteed browser cache miss.
+        // With one avatar per card that meant re-downloading every persona image on every load.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now,
+                Persona = new MusicSalesApp.Models.CreatorPersona
+                {
+                    Name = "Test Persona",
+                    IsEnabled = true,
+                    ImageBlobPath = "personas/test-persona.jpg",
+                    ImageVariantVersion = 5
+                }
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("api/persona-art/"));
+            // The version is what lets the endpoint mark the response immutable for a year and
+            // still show a replaced avatar.
+            Assert.That(cut.Markup, Does.Contain("?v=5"));
+            // No SAS signature may survive on a public page.
+            Assert.That(cut.Markup, Does.Not.Contain("sig="));
+            Assert.That(cut.Markup, Does.Not.Contain("blob.core.windows.net"));
+        });
+    }
+
+    [Test]
     public void MusicLibrary_HasAlbumArtPlaceholder_WhenNoArtAvailable()
     {
         // Arrange - Set up metadata with a matching song but no image
