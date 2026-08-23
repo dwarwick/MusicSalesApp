@@ -124,7 +124,7 @@ window.passkeyHelper = {
         }
     },
 
-    loginWithPasskey: async function (username) {
+    loginWithPasskey: async function (username, rememberMe) {
         try {
             // Begin login - get options from server
             const beginResponse = await fetch('/api/passkey/login/begin', {
@@ -132,7 +132,7 @@ window.passkeyHelper = {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ username: username })
+                body: JSON.stringify({ username: username, rememberMe: rememberMe !== false })
             });
 
             if (!beginResponse.ok) {

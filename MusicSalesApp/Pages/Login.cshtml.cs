@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Extensions;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -27,7 +28,12 @@ public class LoginPageModel : PageModel
         _accountEmailService = accountEmailService;
     }
 
-    public async Task<IActionResult> OnPostAsync([FromForm] string username, [FromForm] string password, [FromForm] bool reactivateAccount = false, [FromForm] string returnUrl = "/")
+    public async Task<IActionResult> OnPostAsync(
+        [FromForm] string username,
+        [FromForm] string password,
+        [FromForm] bool reactivateAccount = false,
+        [FromForm] string returnUrl = "/",
+        [FromForm(Name = ExternalAuthFormFields.RememberMe)] bool rememberMe = true)
     {
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
@@ -90,7 +96,10 @@ public class LoginPageModel : PageModel
         }
 
         // Validate password and sign in with lockout protection
-        var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: true, lockoutOnFailure: true);
+        // rememberMe defaults to true so an unticked box is a deliberate choice, not
+        // the absence of a form field - a client that never posts it keeps today's
+        // behaviour of a persistent cookie.
+        var result = await _signInManager.PasswordSignInAsync(user, password, isPersistent: rememberMe, lockoutOnFailure: true);
 
         if (result.Succeeded)
         {
