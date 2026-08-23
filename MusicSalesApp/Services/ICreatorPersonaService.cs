@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using MusicSalesApp.Models;
 
 namespace MusicSalesApp.Services;
@@ -78,6 +78,25 @@ public interface ICreatorPersonaService
     /// stays sharp on a high-density display.
     /// </param>
     string GetPersonaImageSasUrl(string blobPath, string? variantWidthsCsv, int displayWidthCssPx, TimeSpan lifetime);
+
+    /// <summary>
+    /// Whether <paramref name="blobPath"/> may be served to anyone over the public persona-art
+    /// endpoint - that is, it is the image (or a rendition of the image) of an enabled persona.
+    ///
+    /// <para>
+    /// The gate is the persona's IsEnabled flag, never the shape of the path. This is the persona
+    /// equivalent of the media whitelist <c>MusicController</c> applies to song blobs, and exists
+    /// for the same reason: the endpoint takes a caller-supplied path.
+    /// </para>
+    /// </summary>
+    Task<bool> IsPubliclyReadableImagePathAsync(string blobPath);
+
+    /// <summary>
+    /// Opens a persona image blob for reading, or null if it does not exist. Persona images live in
+    /// their own container, so <see cref="IAzureStorageService"/> - which is bound to the media
+    /// container - cannot reach them.
+    /// </summary>
+    Task<Stream?> OpenPersonaImageReadAsync(string blobPath);
 
     /// <summary>
     /// Uploads a persona profile image and returns the blob path.

@@ -1,0 +1,22 @@
+﻿@namespace MusicSalesApp.Components.Shared
+
+@* The StreamTunes "Loading" animation, self-hosted.
+
+   Exists so the asset path is written once - it was previously a hard-coded
+   https://lottie.host/... URL copy-pasted at ten call sites. Served from our own
+   origin via @Assets, so MapStaticAssets gives it a fingerprinted URL with
+   Cache-Control: immutable rather than the third-party response, which carried no
+   Cache-Control header at all.
+
+   Use this ONLY where a single instance is on screen. For per-card/per-row fallback
+   art use <SongArtPlaceholder>: each <dotlottie-wc> is an independent player with its
+   own canvas, WASM renderer and animation loop, and they do not share a fetch. *@
+<dotlottie-wc src="@Assets["animations/streamtunes-loading.lottie"]"
+              class="@CssClass" style="@Style"
+              autoplay loop></dotlottie-wc>
+
+@code {
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+
+    [Parameter] public string Style { get; set; } = string.Empty;
+}

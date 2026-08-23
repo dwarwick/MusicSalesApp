@@ -81,6 +81,14 @@ public abstract class BlazorBase : ComponentBase
     [Inject]
     protected ICoverArtUrlBuilder CoverArtUrlBuilder { get; set; } = default!;
 
+    /// <summary>
+    /// Builds the proxied URL for a persona avatar. Use this on public pages rather than
+    /// <c>CreatorPersonaService.GetPersonaImageSasUrl</c>: a SAS is minted per call and its query
+    /// string changes every render, so the browser can never reuse a cached copy.
+    /// </summary>
+    [Inject]
+    protected IPersonaImageUrlBuilder PersonaImageUrlBuilder { get; set; } = default!;
+
     [Inject]
     protected IImageVariantBackfillService ImageVariantBackfillService { get; set; } = default!;
 

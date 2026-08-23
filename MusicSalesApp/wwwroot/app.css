@@ -1,4 +1,4 @@
-html, body {
+﻿html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -734,6 +734,7 @@ h1:focus {
 
 /* Lottie animation styles for songs without cover art */
 .card-album-art-animation {
+    position: relative;
     width: 100%;
     height: 100%;
     display: flex;
@@ -742,6 +743,43 @@ h1:focus {
     border-radius: 4px;
     overflow: hidden;
     border: #06acfc 4px solid;
+}
+
+/* Static fallback art for songs with no cover art (Shared/SongArtPlaceholder.razor).
+   Replaced the per-card <dotlottie-wc>, which ran one animation player - canvas, WASM
+   renderer, rAF loop - for every art-less song on a page that renders the whole library
+   at once. Sized as a percentage so this single rule serves all four surfaces that use
+   it: the card grid, the playlist track rows and the two Syncfusion grid cells. Every
+   one of those wrappers is flex-centred with a resolved size. The SVG paints with
+   currentColor, so setting `color` here is what makes it follow the theme; the literal
+   is a fallback for any context where the token is not in scope. */
+.song-art-placeholder {
+    width: 55%;
+    height: 55%;
+    color: var(--st-accent, #06acfc);
+}
+
+/* The JS-owned island the lazy card animation is mounted into. Empty until the card
+   scrolls into view, so the glyph beneath is what a card shows the rest of the time, and
+   .is-animating is toggled by MusicLibrary.razor.js rather than by a :has() rule so the
+   swap does not depend on selector support.
+
+   This must NOT be display:none while empty, however tempting. IntersectionObserver is
+   watching this element, and an element with no layout box is never reported as
+   intersecting - it could not become visible until it was filled, and could not be
+   filled until it was seen as visible. It stays laid out and simply paints nothing while
+   it has no children. pointer-events:none keeps it from shadowing .card-art-open, which
+   overlays the same square. */
+.card-lottie-host {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* Hidden rather than removed: the glyph keeps its space in the flex centring, so the
+   animation lands in exactly the box the glyph occupied and nothing shifts. */
+.card-album-art-animation.is-animating .song-art-placeholder {
+    visibility: hidden;
 }
 
 .card-lottie-animation {
@@ -3731,6 +3769,8 @@ h1:focus {
 .playlist-player-container .track-thumbnail { display: block; border-radius: var(--st-radius-xs); object-fit: cover; }
 
 .playlist-player-container .track-thumbnail-animation {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4033,6 +4073,9 @@ h1:focus {
 }
 
 .card-album-art-animation {
+    /* Containing block for .card-lottie-host, which is inset:0 over the glyph. Set in
+       both declarations of this selector so neither one alone can drop it. */
+    position: relative;
     width: 100%;
     height: 100%;
     display: flex;

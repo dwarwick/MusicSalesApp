@@ -511,8 +511,8 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
         if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
             return null;
         // .persona-image-sm renders at 60 CSS px (40 below 576px), so the 60 covers every case.
-        return CreatorPersonaService.GetPersonaImageSasUrl(
-            persona.ImageBlobPath, persona.ImageVariantWidths, 60, TimeSpan.FromHours(2));
+        return PersonaImageUrlBuilder.BuildProxy(
+            persona.ImageBlobPath, persona.ImageVariantWidths, 60, persona.ImageVariantVersion);
     }
 
     protected double? GetTrackLengthSeconds()

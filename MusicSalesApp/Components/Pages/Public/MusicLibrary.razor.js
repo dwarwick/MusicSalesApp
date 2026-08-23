@@ -327,3 +327,120 @@ export function changeTrack(audioElement, newSrc, cardId, isRestricted = null, s
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Lazy card animations
+//
+// A song with no cover art shows a static glyph rendered server-side, and gets the
+// real Lottie only while its card is actually on screen. Mounting one per art-less
+// card is what filled the network tab with identical requests and left 25+ canvases,
+// WASM renderer instances and animation loops running at once - the grid renders the
+// whole filtered library with no virtualisation, so every art-less song paid.
+//
+// Everything here is client-side on purpose. Driving it from Blazor would mean an
+// interop round trip per scroll event over the circuit, and the grid re-renders on
+// every playback progress tick, so a refresh-on-render approach would be far worse
+// than the problem it solves. A MutationObserver picks up cards added by a filter
+// change instead.
+// ---------------------------------------------------------------------------
+
+let lottieVisibility = null;   // IntersectionObserver - which cards are on screen
+let lottieGridWatcher = null;  // MutationObserver - cards added/removed by filtering
+let lottieWatchedGrid = null;  // the element lottieGridWatcher is bound to
+let lottieSrc = null;
+let lottieRescanHandle = 0;
+
+// Start a little before a card scrolls in, so the animation is already running by the
+// time it is actually visible rather than popping in at the edge.
+const LOTTIE_ROOT_MARGIN = '200px';
+
+function mountLottie(host) {
+    if (!lottieSrc || host.childElementCount > 0) return;
+
+    const player = document.createElement('dotlottie-wc');
+    player.setAttribute('src', lottieSrc);
+    player.setAttribute('autoplay', '');
+    player.setAttribute('loop', '');
+    player.className = 'card-lottie-animation';
+
+    host.appendChild(player);
+    host.parentElement?.classList.add('is-animating');
+}
+
+function unmountLottie(host) {
+    if (host.childElementCount === 0) return;
+
+    // Drop the element entirely rather than pausing it: a paused player still holds a
+    // canvas and its renderer, which is most of what we are trying not to pay for.
+    host.replaceChildren();
+    host.parentElement?.classList.remove('is-animating');
+}
+
+function scanLottieHosts() {
+    if (!lottieVisibility) return;
+    // observe() on an element already being observed is a no-op, so re-scanning after a
+    // filter change is safe and needs no bookkeeping of its own.
+    document.querySelectorAll('[data-lottie-host]').forEach(h => lottieVisibility.observe(h));
+}
+
+function scheduleLottieRescan() {
+    clearTimeout(lottieRescanHandle);
+    lottieRescanHandle = setTimeout(scanLottieHosts, 50);
+}
+
+// Returns true once it is actually attached, so the caller can stop retrying. The grid
+// lives inside the page's loading/error branch, so it does not exist on first render.
+export function initLazyCardAnimations() {
+    const grid = document.querySelector('[data-lottie-grid]');
+    if (!grid) return false;
+
+    lottieSrc = grid.dataset.lottieSrc || null;
+    if (!lottieSrc) return false;
+
+    // No IntersectionObserver means no animation - the server-rendered glyph simply
+    // stands, which is a perfectly good card rather than a broken one. Report success so
+    // the caller stops asking; there is nothing here that retrying would fix.
+    if (typeof IntersectionObserver === 'undefined' || typeof MutationObserver === 'undefined') {
+        return true;
+    }
+
+    if (!lottieVisibility) {
+        lottieVisibility = new IntersectionObserver(entries => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) mountLottie(entry.target);
+                else unmountLottie(entry.target);
+            }
+        }, { rootMargin: LOTTIE_ROOT_MARGIN });
+    }
+
+    // Re-attach if the grid we were watching has been swapped out. That branch is an
+    // if/else, so going back through the loading or error state replaces the element and
+    // would otherwise leave the watcher bound to a detached node.
+    if (lottieGridWatcher && lottieWatchedGrid !== grid) {
+        lottieGridWatcher.disconnect();
+        lottieGridWatcher = null;
+    }
+
+    if (!lottieGridWatcher) {
+        lottieGridWatcher = new MutationObserver(scheduleLottieRescan);
+        lottieGridWatcher.observe(grid, { childList: true, subtree: true });
+        lottieWatchedGrid = grid;
+    }
+
+    scanLottieHosts();
+    return true;
+}
+
+export function disposeLazyCardAnimations() {
+    clearTimeout(lottieRescanHandle);
+
+    lottieGridWatcher?.disconnect();
+    lottieGridWatcher = null;
+    lottieWatchedGrid = null;
+
+    lottieVisibility?.disconnect();
+    lottieVisibility = null;
+
+    document.querySelectorAll('[data-lottie-host]').forEach(unmountLottie);
+    lottieSrc = null;
+}

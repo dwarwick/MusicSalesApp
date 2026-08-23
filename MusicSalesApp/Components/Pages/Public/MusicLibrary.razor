@@ -1,4 +1,4 @@
-@page "/music-library"
+﻿@page "/music-library"
 @rendermode InteractiveServer
 @inherits MusicLibraryModel
 @using MusicSalesApp.Services
@@ -126,7 +126,9 @@ else
         </div>
     }
 
-    <div class="@(ShowHomePageFeatured ? "featured-music-carousel" : "music-cards-grid")">
+    <div class="@(ShowHomePageFeatured ? "featured-music-carousel" : "music-cards-grid")"
+         data-lottie-grid
+         data-lottie-src="@Assets["animations/streamtunes-loading.lottie"]">
         @* Individual Song Cards *@
         @foreach (var f in GetFilteredFiles())
         {
@@ -185,8 +187,21 @@ else
                     }
                     else
                     {
+                        @* The glyph renders server-side and is what a card shows until it is
+                           actually scrolled into view; the empty div beside it is then filled with
+                           a real <dotlottie-wc> by MusicLibrary.razor.js and emptied again on the
+                           way out, so only about a viewport's worth of players ever exist at once.
+                           Mounting one per art-less card is what flooded the network tab and ran
+                           25+ canvases and animation loops on a page that renders the whole
+                           filtered library at once.
+
+                           The host div is deliberately EMPTY in the render tree. Blazor diffs its
+                           own children by sibling index, so JS-created nodes must live inside an
+                           element Blazor never renders children into - putting the <dotlottie-wc>
+                           beside the glyph instead would corrupt that indexing. *@
                         <div class="card-album-art-animation @artHidden">
-                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="card-lottie-animation" autoplay loop></dotlottie-wc>
+                            <SongArtPlaceholder />
+                            <div class="card-lottie-host" data-lottie-host></div>
                         </div>
                     }
 

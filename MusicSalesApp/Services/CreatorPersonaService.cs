@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
@@ -421,6 +421,49 @@ public class CreatorPersonaService : ICreatorPersonaService
         {
             _logger.LogError(ex, "Failed to generate SAS URL for persona image {BlobPath}", blobPath);
             return string.Empty;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsPubliclyReadableImagePathAsync(string blobPath)
+    {
+        if (string.IsNullOrWhiteSpace(blobPath))
+            return false;
+
+        // A rendition path is its master's path with ".w{width}.webp" appended, so the master is
+        // recoverable by string alone and one lookup covers both - the same trick the song media
+        // whitelist uses. No extra query, no new index.
+        var lookupPath = ImageVariantPaths.TryParseVariant(blobPath, out var masterPath, out _)
+            ? masterPath
+            : blobPath;
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        return await context.CreatorPersonas
+            .AsNoTracking()
+            .AnyAsync(p => p.IsEnabled
+                        && p.ImageBlobPath != null
+                        && p.ImageBlobPath == lookupPath);
+    }
+
+    /// <inheritdoc />
+    public async Task<Stream?> OpenPersonaImageReadAsync(string blobPath)
+    {
+        if (_personaContainerClient == null || string.IsNullOrWhiteSpace(blobPath))
+            return null;
+
+        try
+        {
+            var blobClient = _personaContainerClient.GetBlobClient(blobPath);
+            if (!await blobClient.ExistsAsync())
+                return null;
+
+            return await blobClient.OpenReadAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to open persona image {BlobPath} for reading", blobPath);
+            return null;
         }
     }
 

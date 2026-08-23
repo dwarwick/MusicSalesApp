@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
@@ -133,6 +133,46 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
+    public void MusicLibrary_ServesPersonaImagesFromTheVersionedProxy_NotASasUrl()
+    {
+        // A SAS is minted per call with an expiry computed from the current time, so every render
+        // produced a different query string - a different URL, and a guaranteed browser cache miss.
+        // With one avatar per card that meant re-downloading every persona image on every load.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now,
+                Persona = new MusicSalesApp.Models.CreatorPersona
+                {
+                    Name = "Test Persona",
+                    IsEnabled = true,
+                    ImageBlobPath = "personas/test-persona.jpg",
+                    ImageVariantVersion = 5
+                }
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("api/persona-art/"));
+            // The version is what lets the endpoint mark the response immutable for a year and
+            // still show a replaced avatar.
+            Assert.That(cut.Markup, Does.Contain("?v=5"));
+            // No SAS signature may survive on a public page.
+            Assert.That(cut.Markup, Does.Not.Contain("sig="));
+            Assert.That(cut.Markup, Does.Not.Contain("blob.core.windows.net"));
+        });
+    }
+
+    [Test]
     public void MusicLibrary_HasAlbumArtPlaceholder_WhenNoArtAvailable()
     {
         // Arrange - Set up metadata with a matching song but no image
@@ -153,9 +193,91 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have album art animation (lottie) for songs without cover art
+        // Assert - a song with no cover art falls back to the static placeholder.
+        // The wrapper is unchanged; only its contents are.
         Assert.That(cut.Markup, Does.Contain("card-album-art-animation"));
-        Assert.That(cut.Markup, Does.Contain("dotlottie-wc"));
+        Assert.That(cut.Markup, Does.Contain("song-art-placeholder"));
+
+        // The empty island the browser mounts the animation into once the card scrolls
+        // into view. It must be rendered but EMPTY: Blazor diffs its own children by
+        // sibling index, so the JS-created player has to live inside an element Blazor
+        // never renders children into.
+        Assert.That(cut.Markup, Does.Contain("data-lottie-host"));
+
+        // The load-bearing half of this test. Nothing may mount an animation player
+        // server-side: the grid renders the whole filtered library with no virtualisation,
+        // so one player per art-less song meant 25+ canvases, WASM renderer instances and
+        // animation loops, each independently fetching the same file. Players are now
+        // created by MusicLibrary.razor.js only for cards actually on screen, which bUnit
+        // does not execute - so this stays true here by construction.
+        Assert.That(cut.Markup, Does.Not.Contain("dotlottie-wc"));
+        Assert.That(cut.Markup, Does.Not.Contain("lottie.host"));
+    }
+
+    [Test]
+    public void MusicLibrary_CarriesTheAnimationAssetForTheClient_WithoutMountingAPlayer()
+    {
+        // The lazy mount needs the fingerprinted asset URL, and it is carried once on the
+        // grid rather than repeated on every card. If this attribute goes missing the JS
+        // bails out and every art-less card silently stays static.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("data-lottie-grid"));
+            Assert.That(cut.Markup, Does.Contain("streamtunes-loading.lottie"));
+            Assert.That(cut.Markup, Does.Not.Contain("lottie.host"));
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_RendersCoverArtNotThePlaceholder_WhenArtIsAvailable()
+    {
+        // The other half of the fallback: a song WITH cover art must not also get the
+        // placeholder. The two are the if/else arms of one branch, so a regression that
+        // rendered both would still satisfy the no-art test above.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                ImageBlobPath = "art/test.jpg",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        // The base fixture returns CoverArtSource.None, which would send the card down the
+        // placeholder branch - override it so this card actually has art.
+        MockCoverArtUrlBuilder
+            .Setup(b => b.BuildProxy(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+            .Returns(new MusicSalesApp.Services.CoverArtSource(
+                "/api/music/art/test.jpg",
+                Array.Empty<MusicSalesApp.Services.CoverArtVariantUrl>()));
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindComponents<MusicSalesApp.Components.Shared.CoverArt>(), Is.Not.Empty);
+            Assert.That(cut.Markup, Does.Not.Contain("song-art-placeholder"));
+            Assert.That(cut.Markup, Does.Not.Contain("dotlottie-wc"));
+        });
     }
 
     [Test]

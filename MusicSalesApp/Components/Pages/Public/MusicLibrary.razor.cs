@@ -228,16 +228,7 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             _needsJsInit = false;
             
-            if (_jsModule == null)
-            {
-                _dotNetRef = DotNetObjectReference.Create(this);
-                _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Public/MusicLibrary.razor.js");
-
-                // Load saved volume from localStorage
-                var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
-                _volume = savedVolume;
-                _previousVolume = savedVolume;
-            }
+            await EnsureJsModuleAsync();
 
             var isRestricted = IsCurrentPlayingTrackRestricted();
             var songMetadataId = GetCurrentPlayingSongMetadataId();
@@ -267,6 +258,51 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
             await InvokeAsync(StateHasChanged);
         }
+
+        await TryInitLazyCardAnimationsAsync();
+    }
+
+    /// <summary>
+    /// Imports the page's JS module once and restores the saved volume. Shared because the module
+    /// is now needed before playback starts - the lazy card animations are set up on first render.
+    /// </summary>
+    private bool _lazyAnimationsReady;
+
+    /// <summary>
+    /// Hooks up the lazy card animations. Retried on each render until it reports success: the
+    /// grid lives inside the page's loading/error branch, so it does not exist on first render.
+    /// Once attached, a MutationObserver on the JS side keeps up with filter changes, so this is
+    /// not called again - a per-render interop round trip would be far worse than the problem,
+    /// since the grid re-renders on every playback progress tick.
+    /// </summary>
+    private async Task TryInitLazyCardAnimationsAsync()
+    {
+        if (_lazyAnimationsReady)
+            return;
+
+        try
+        {
+            await EnsureJsModuleAsync();
+            _lazyAnimationsReady = await _jsModule.InvokeAsync<bool>("initLazyCardAnimations");
+        }
+        catch (JSDisconnectedException ex)
+        {
+            Logger.LogDebug(ex, "Music library JS runtime disconnected before card animations were set up");
+        }
+    }
+
+    private async Task EnsureJsModuleAsync()
+    {
+        if (_jsModule != null)
+            return;
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _jsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Public/MusicLibrary.razor.js");
+
+        // Load saved volume from localStorage
+        var savedVolume = await _jsModule.InvokeAsync<double>("getSavedVolume");
+        _volume = savedVolume;
+        _previousVolume = savedVolume;
     }
 
     public async ValueTask DisposeAsync()
@@ -287,6 +323,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         {
             if (_jsModule != null)
             {
+                // Before disposing the module: this disconnects both observers and removes every
+                // mounted player. Leaving them attached would keep animation loops running against
+                // a page that is going away.
+                await _jsModule.InvokeVoidAsync("disposeLazyCardAnimations");
+
                 await _jsModule.DisposeAsync();
                 _jsModule = null;
             }
@@ -526,8 +567,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
                     ? null
                     // .card-persona-image renders at 40 CSS px at every breakpoint.
-                    : CreatorPersonaService.GetPersonaImageSasUrl(
-                        songMeta.Persona.ImageBlobPath, songMeta.Persona.ImageVariantWidths, 40, TimeSpan.FromHours(2))
+                    : PersonaImageUrlBuilder.BuildProxy(
+                        songMeta.Persona.ImageBlobPath,
+                        songMeta.Persona.ImageVariantWidths,
+                        40,
+                        songMeta.Persona.ImageVariantVersion)
             };
         }
 
