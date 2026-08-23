@@ -556,6 +556,9 @@ public abstract class BUnitTestBase
         TestContext.Services.AddSingleton<IStorageBackupService>(MockStorageBackupService.Object);
         TestContext.Services.AddSingleton<IImageVariantCoordinator>(MockImageVariantCoordinator.Object);
         TestContext.Services.AddSingleton<ICoverArtUrlBuilder>(MockCoverArtUrlBuilder.Object);
+        // The real builder, not a mock: it has no dependencies and is a pure string function, so
+        // tests assert the URL format the browser will actually receive rather than a stub's echo.
+        TestContext.Services.AddSingleton<IPersonaImageUrlBuilder>(new PersonaImageUrlBuilder());
         TestContext.Services.AddSingleton<IImageVariantBackfillService>(MockImageVariantBackfillService.Object);
         TestContext.Services.AddSingleton<Microsoft.EntityFrameworkCore.IDbContextFactory<MusicSalesApp.Data.AppDbContext>>(MockDbContextFactory.Object);
         TestContext.Services.AddSingleton<IOptions<MobileAppInstallOptions>>(Options.Create(new MobileAppInstallOptions()));

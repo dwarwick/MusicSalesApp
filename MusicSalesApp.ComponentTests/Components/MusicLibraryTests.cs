@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
@@ -130,6 +130,46 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("title=\"play\""));
         Assert.That(cut.Markup, Does.Contain("card-art-open"));
         Assert.That(cut.Markup, Does.Not.Contain("title=\"view\""));
+    }
+
+    [Test]
+    public void MusicLibrary_ServesPersonaImagesFromTheVersionedProxy_NotASasUrl()
+    {
+        // A SAS is minted per call with an expiry computed from the current time, so every render
+        // produced a different query string - a different URL, and a guaranteed browser cache miss.
+        // With one avatar per card that meant re-downloading every persona image on every load.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                SongTitle = "Test Song",
+                UpdatedAt = DateTime.Now,
+                Persona = new MusicSalesApp.Models.CreatorPersona
+                {
+                    Name = "Test Persona",
+                    IsEnabled = true,
+                    ImageBlobPath = "personas/test-persona.jpg",
+                    ImageVariantVersion = 5
+                }
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("api/persona-art/"));
+            // The version is what lets the endpoint mark the response immutable for a year and
+            // still show a replaced avatar.
+            Assert.That(cut.Markup, Does.Contain("?v=5"));
+            // No SAS signature may survive on a public page.
+            Assert.That(cut.Markup, Does.Not.Contain("sig="));
+            Assert.That(cut.Markup, Does.Not.Contain("blob.core.windows.net"));
+        });
     }
 
     [Test]

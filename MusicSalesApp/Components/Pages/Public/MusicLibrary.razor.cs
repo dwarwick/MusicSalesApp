@@ -526,8 +526,11 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
                 PersonaImageUrl = string.IsNullOrEmpty(songMeta.Persona.ImageBlobPath)
                     ? null
                     // .card-persona-image renders at 40 CSS px at every breakpoint.
-                    : CreatorPersonaService.GetPersonaImageSasUrl(
-                        songMeta.Persona.ImageBlobPath, songMeta.Persona.ImageVariantWidths, 40, TimeSpan.FromHours(2))
+                    : PersonaImageUrlBuilder.BuildProxy(
+                        songMeta.Persona.ImageBlobPath,
+                        songMeta.Persona.ImageVariantWidths,
+                        40,
+                        songMeta.Persona.ImageVariantVersion)
             };
         }
 

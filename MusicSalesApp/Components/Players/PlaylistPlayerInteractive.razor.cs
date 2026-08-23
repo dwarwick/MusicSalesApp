@@ -1322,8 +1322,8 @@ namespace MusicSalesApp.Components.Players
             if (persona == null || string.IsNullOrEmpty(persona.ImageBlobPath))
                 return null;
             // .persona-image-sm renders at 60 CSS px (40 below 576px).
-            return CreatorPersonaService.GetPersonaImageSasUrl(
-                persona.ImageBlobPath, persona.ImageVariantWidths, 60, TimeSpan.FromHours(2));
+            return PersonaImageUrlBuilder.BuildProxy(
+                persona.ImageBlobPath, persona.ImageVariantWidths, 60, persona.ImageVariantVersion);
         }
 
         /// <summary>
