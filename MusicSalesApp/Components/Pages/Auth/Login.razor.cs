@@ -25,6 +25,7 @@ public partial class LoginModel : BlazorBase
     // unless they deliberately opt out. All three sign-in methods read this.
     protected bool rememberMe = true;
     protected string LoginReturnUrl => NormalizeLocalReturnUrl(ReturnUrl);
+    protected string RegisterUrl => BuildReturnUrl(AppPageRoutes.Register, LoginReturnUrl);
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,6 +86,9 @@ public partial class LoginModel : BlazorBase
             $"&{ExternalAuthFormFields.RememberMe}={(rememberMe ? "true" : "false")}";
         NavigationManager.NavigateTo(googleStartUrl, forceLoad: true);
     }
+
+    private static string BuildReturnUrl(string route, string returnUrl)
+        => $"{route}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
 
     private static string NormalizeLocalReturnUrl(string returnUrl)
         => string.IsNullOrWhiteSpace(returnUrl) || !IsLocalUrl(returnUrl)

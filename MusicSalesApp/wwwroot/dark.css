@@ -1479,3 +1479,88 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .lyrics-editor-record.is-recording {
     box-shadow: 0 0 0 2px var(--st-danger);
 }
+
+/* ---- Auth pages ---------------------------------------------------------
+   The BRAND PANEL is deliberately one palette in both themes, so its colours sit in app.css,
+   not here - only the themed half of the page is below. Measured on the panel base #102e55:
+   #ffffff is 13.60:1, #c8eafd is 10.78:1, #02b8fd is 6.01:1.
+
+   IDENTICAL IN light.css AND dark.css; the tokens carry the difference. */
+
+.auth-page { background-color: var(--st-page); }
+
+.auth-panel-eyebrow { color: #02b8fd; }
+.auth-panel-title { color: #ffffff; }
+.auth-panel-body { color: #c8eafd; }
+
+.auth-title { color: var(--st-text); }
+.auth-subtitle { color: var(--st-text-2); }
+.auth-label { color: var(--st-text-2); }
+.auth-link { color: var(--st-accent); }
+.auth-link:hover { color: var(--st-accent-hover); }
+.auth-footer { color: var(--st-text-2); }
+.auth-dev-hint { color: var(--st-text-3); }
+
+.auth-alert {
+    background-color: var(--st-warn-tint);
+    border: 1px solid var(--st-warn);
+    color: var(--st-warn);
+}
+
+.auth-divider::before,
+.auth-divider::after { background-color: var(--st-line); }
+.auth-divider span { color: var(--st-text-3); }
+
+/* Not --st-line: this is the boundary of an interactive control, so it takes the 3:1 value.
+   See the --st-control-line note in the :root block above. */
+.auth-page .e-input-group.e-outline:not(.e-disabled),
+.auth-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
+    border-color: var(--st-control-line);
+    background-color: var(--st-surface);
+}
+
+.auth-page .e-input-group.e-outline:not(.e-disabled):hover,
+.auth-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled):hover {
+    border-color: var(--st-text-3);
+}
+
+.auth-page .e-input-group.e-outline.e-input-focus,
+.auth-page .e-input-group.e-control-wrapper.e-outline.e-input-focus {
+    border-color: var(--st-accent);
+    box-shadow: 0 0 0 3px var(--st-accent-soft);
+}
+
+.auth-page .e-input-group input.e-input { color: var(--st-text); }
+
+.auth-page .e-checkbox-wrapper .e-frame,
+.auth-page .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
+
+.auth-page .e-checkbox-wrapper .e-frame.e-check,
+.auth-page .e-css.e-checkbox-wrapper .e-frame.e-check {
+    background-color: var(--st-accent-fill);
+    border-color: var(--st-accent-fill);
+    color: var(--st-on-accent);
+}
+
+.auth-page .e-checkbox-wrapper .e-label,
+.auth-page .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
+
+.auth-reactivate {
+    background-color: var(--st-accent-soft);
+    border: 1px solid var(--st-accent);
+    border-radius: var(--st-radius-sm);
+}
+
+/* Not the Google button - that one is white with #1f1f1f in BOTH themes, a brand rule
+   .google-auth-button already handles. */
+.auth-page .e-btn.auth-provider:not(.google-auth-button) {
+    background-color: var(--st-surface);
+    border-color: var(--st-control-line);
+    color: var(--st-text);
+}
+
+.auth-page .e-btn.auth-provider:not(.google-auth-button):hover {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-accent);
+    color: var(--st-accent);
+}

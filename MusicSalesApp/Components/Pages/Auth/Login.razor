@@ -2,78 +2,105 @@
 @rendermode InteractiveServer
 @inherits LoginModel
 
-<PageTitle>Login</PageTitle>
+<PageTitle>Log in</PageTitle>
 
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <SfCard>
-                <CardHeader Title="Login" />
-                <CardContent>
-                    @if (!string.IsNullOrEmpty(errorMessage))
-                    {
-                        <SfMessage Severity="MessageSeverity.Error">@errorMessage</SfMessage>
-                    }
+@*
+    Split screen. The panel is a BRAND surface, so it keeps one palette in both site themes -
+    the same call the players made - and its base is --st-navy rather than --st-brand-gradient,
+    because white on that gradient's #0186fd stop is 3.6:1 and fails AA.
 
-                    <form method="post" action="/account/login">
-                        @* AntiForgery token *@
-                        <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
-                        
-                        <div class="mb-3">
-                            <label for="username" class="e-label">Username or Email</label>
-                            <SfTextBox @bind-Value="@usernameValue" ID="username" Name="username" Placeholder="Enter username or email" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
-                        </div>
+    The submit is cta-secondary/hero-secondary-cta. AGENTS.md picks a tier by AUDIENCE, and
+    logging in is an account action. This is not the home hero's documented exception, where
+    Log In is cta-quiet because the hero is a listener surface.
+*@
+<div class="auth-page">
+    <aside class="auth-panel">
+        <img src="@Assets["images/logo-dark-small.png"]" alt="StreamTunes" class="auth-panel-logo" />
 
-                        <div class="mb-3">
-                            <label for="password" class="e-label">Password</label>
-                            <SfTextBox ID="password" Name="password" Type="InputType.Password" Placeholder="Enter password" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
-                            <div class="text-end mt-1">
-                                <a href="/forgot-password" class="text-muted small">Forgot Password?</a>
-                            </div>
-                        </div>
+        <div class="auth-panel-copy">
+            <p class="auth-panel-eyebrow">Independent music, streamed</p>
+            <h1 class="auth-panel-title">Welcome back.</h1>
+            <p class="auth-panel-body">Your library, your playlists and every full song &mdash; right where you left them.</p>
+        </div>
 
-                        @if (showReactivateCheckbox)
-                        {
-                            <div class="mb-3">
-                                <SfCheckBox @bind-Checked="@reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
-                                <input type="hidden" name="reactivateAccount" value="@reactivateAccount.ToString().ToLower()" />
-                            </div>
-                        }
+        <div class="auth-panel-rule"></div>
+    </aside>
 
-                        <div class="mb-3">
-                            <SfCheckBox @bind-Checked="@rememberMe" Label="Keep me signed in on this device" TChecked="bool" />
-                            <input type="hidden" name="@ExternalAuthFormFields.RememberMe" value="@rememberMe.ToString().ToLowerInvariant()" />
-                        </div>
+    <section class="auth-form-col">
+        <div class="auth-form">
+            <h2 class="auth-title">Log in</h2>
+            <p class="auth-subtitle">Use the username or email address on your StreamTunes account.</p>
 
-                        <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@LoginReturnUrl" />
-
-                        <div class="d-grid mb-3">
-                            <SfButton Type="ButtonType.Submit" IsPrimary="true" Content="Login with Password" CssClass="e-btn e-primary" />
-                        </div>
-                    </form>
-
-                    <!-- Passkey Login Section -->
-                    <div class="text-center mb-3">
-                        <hr />
-                        <span class="text-muted">OR</span>
-                        <hr />
-                    </div>
-
-                    <div class="d-grid gap-2">
-                        <SfButton IsPrimary="false" CssClass="e-btn e-outline google-auth-button" OnClick="ContinueWithGoogle">
-                            <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
-                            <span>Continue with Google</span>
-                        </SfButton>
-                        <SfButton IsPrimary="false" Content="Login with Passkey" CssClass="e-btn e-outline" OnClick="LoginWithPasskey" />
-                    </div>
-                </CardContent>
-            </SfCard>
-            @if (isDevelopment)
+            @if (!string.IsNullOrEmpty(errorMessage))
             {
-                <div class="mt-3 text-center text-muted">
-                    <small>Hint: Use email "admin@app.com" or "user@app.com" with password "Password_123"</small>
+                <div class="auth-alert" role="alert">
+                    <svg class="auth-alert-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                        <path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z" />
+                    </svg>
+                    <span>@errorMessage</span>
                 </div>
             }
+
+            <form method="post" action="/account/login">
+                @* AntiForgery token *@
+                <input name="__RequestVerificationToken" type="hidden" value="@antiForgeryToken" />
+
+                <div class="auth-field">
+                    <label for="username" class="auth-label">Username or email</label>
+                    <SfTextBox @bind-Value="@usernameValue" ID="username" Name="username" Placeholder="you@example.com" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
+                </div>
+
+                <div class="auth-field">
+                    <div class="auth-label-row">
+                        <label for="password" class="auth-label">Password</label>
+                        <a href="/forgot-password" class="auth-link">Forgot password?</a>
+                    </div>
+                    <SfTextBox ID="password" Name="password" Type="InputType.Password" Placeholder="Enter your password" CssClass="e-outline" HtmlAttributes="@(new Dictionary<string, object> { { "required", "required" } })" />
+                </div>
+
+                @if (showReactivateCheckbox)
+                {
+                    <div class="auth-reactivate">
+                        <SfCheckBox @bind-Checked="@reactivateAccount" Label="Reactivate my suspended account" TChecked="bool" />
+                        <input type="hidden" name="reactivateAccount" value="@reactivateAccount.ToString().ToLower()" />
+                    </div>
+                }
+
+                @* The hidden input matters: an unticked HTML checkbox posts nothing at all, so
+                   without it "off" and "field absent" would be indistinguishable. *@
+                <div class="auth-check">
+                    <SfCheckBox @bind-Checked="@rememberMe" Label="Keep me signed in on this device" TChecked="bool" />
+                    <input type="hidden" name="@ExternalAuthFormFields.RememberMe" value="@rememberMe.ToString().ToLowerInvariant()" />
+                </div>
+
+                <input type="hidden" name="@ExternalAuthFormFields.ReturnUrl" value="@LoginReturnUrl" />
+
+                <SfButton Type="ButtonType.Submit" Content="Log in" CssClass="e-btn cta-secondary hero-secondary-cta auth-submit" />
+            </form>
+
+            <div class="auth-divider"><span>or</span></div>
+
+            <div class="auth-providers">
+                <SfButton IsPrimary="false" CssClass="e-btn e-outline google-auth-button auth-provider" OnClick="ContinueWithGoogle">
+                    <img src="/images/google_logo.svg" alt="" class="google-auth-icon" />
+                    <span>Continue with Google</span>
+                </SfButton>
+                <SfButton IsPrimary="false" CssClass="e-btn e-outline auth-provider" OnClick="LoginWithPasskey">
+                    <svg class="auth-provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                        <circle cx="9" cy="9" r="4" />
+                        <path d="M12.5 11.5 20 19v2h-3v-2h-2v-2h-2z" />
+                    </svg>
+                    <span>Log in with a passkey</span>
+                </SfButton>
+            </div>
+
+            @* Register links back to Login already; this is the other half of that pair. *@
+            <p class="auth-footer">Don&rsquo;t have an account? <a href="@RegisterUrl" class="auth-link auth-link-strong">Register</a></p>
+
+            @if (isDevelopment)
+            {
+                <p class="auth-dev-hint">Hint: Use email "admin@app.com" or "user@app.com" with password "Password_123"</p>
+            }
         </div>
-    </div>
+    </section>
 </div>

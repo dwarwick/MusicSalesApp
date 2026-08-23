@@ -552,4 +552,22 @@
     .empty-state-icon svg { width: 26px; height: 26px; }
     .empty-state-title { font-size: 16.5px; }
     .state-action { height: 44px; width: 100%; }
+
+/* Auth pages - phone. The panel keeps the logo and the brand colour, which is the only
+       place either appears once the page scrolls. */
+    .auth-page { margin: -1rem -1.5rem 0; min-height: calc(100dvh - 56px); }
+    .auth-panel { height: 148px; padding: 20px 24px; }
+    .auth-panel-logo { height: 28px; }
+    .auth-panel-title { font-size: 26px; line-height: 1.14; margin-bottom: 12px; }
+    .auth-panel-body { display: none; }
+    .auth-panel-rule { width: 56px; }
+
+    .auth-form-col { padding: 22px 24px 20px; }
+    .auth-title { font-size: 26px; margin-bottom: 6px; }
+    .auth-subtitle { margin-bottom: 20px; }
+    .auth-check { margin-bottom: 20px; }
+    .auth-page .e-btn.auth-submit { height: 50px; }
+    .auth-page .e-btn.auth-provider { height: 48px; }
+    .auth-divider { margin: 18px 0; }
+    .auth-footer { margin-top: 22px; }
 }

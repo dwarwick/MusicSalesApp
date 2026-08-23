@@ -4402,3 +4402,120 @@ h1:focus {
  */
 h1.hero-title { margin-bottom: 0; }
 h2.hero-title-line-2 { margin-top: 0; }
+
+/* =========================================================================
+   AUTH PAGES - structure
+   =========================================================================
+   Login and Register share this shell. The brand panel is a BRAND surface, so it keeps one
+   palette in both site themes - the same decision the players made, and for the same reason:
+   it is not page content. Its colour block therefore lives here rather than being duplicated
+   across the theme sheets, because nothing about it changes with the toggle.
+
+   The negative margins cancel the .content padding MainLayout applies (padding-top: 1rem,
+   px-4). This page is deliberately full-bleed under the app bar; every other page is not.
+   ========================================================================= */
+
+.auth-page {
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+.auth-panel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    /* Base is --st-navy, the logo disc edge. NOT --st-brand-gradient: white on that
+       gradient stop #0186fd is 3.6:1 and fails AA, and this panel carries body copy.
+       The gradient blooms in from the corner where no text sits. */
+    background-color: #102e55;
+    background-image:
+        radial-gradient(120% 95% at 92% 104%, rgba(1, 134, 253, .62) 0%, rgba(1, 102, 214, .30) 40%, rgba(16, 46, 85, 0) 72%),
+        radial-gradient(72% 62% at 8% -6%, rgba(2, 184, 253, .20) 0%, rgba(16, 46, 85, 0) 62%);
+}
+
+.auth-panel-logo { display: block; flex: 0 0 auto; }
+.auth-panel-copy { flex: 0 0 auto; }
+.auth-panel-eyebrow { font-weight: 700; text-transform: uppercase; margin: 0; }
+.auth-panel-title { font-weight: 750; margin: 0; text-wrap: pretty; }
+.auth-panel-body { margin: 0; text-wrap: pretty; }
+
+.auth-panel-rule {
+    flex: 0 0 auto;
+    border-radius: var(--st-radius-pill);
+    background: linear-gradient(90deg, var(--st-blue-bright), var(--st-blue-deep));
+}
+
+.auth-form-col {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+
+.auth-form { width: 100%; }
+.auth-title { font-weight: 700; margin: 0; }
+.auth-subtitle { margin: 0; }
+
+.auth-label-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.auth-label { display: block; font-weight: 600; }
+.auth-link { font-weight: 600; text-decoration: none; }
+.auth-link:hover { text-decoration: underline; }
+.auth-link-strong { font-weight: 700; }
+
+.auth-alert {
+    display: flex;
+    align-items: flex-start;
+    border-radius: var(--st-radius-sm);
+}
+
+.auth-alert-icon { flex: 0 0 auto; }
+
+.auth-divider { display: flex; align-items: center; }
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1 1 auto;
+    height: 1px;
+}
+
+.auth-divider span { font-weight: 700; text-transform: uppercase; }
+
+.auth-providers { display: flex; flex-direction: column; }
+
+/* Syncfusion draws its own button content box; these make the provider buttons behave like
+   the rest of the pill family rather than like a stock e-btn. */
+.auth-page .e-btn.auth-provider,
+.auth-page .e-css.e-btn.auth-provider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: none;
+}
+
+.auth-provider-icon { flex: 0 0 auto; }
+
+.auth-page .e-btn.auth-submit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    text-transform: none;
+}
+
+.auth-footer { margin: 0; text-align: center; }
+.auth-dev-hint { margin: 0; text-align: center; }
+
+.auth-page .e-input-group.e-outline,
+.auth-page .e-input-group.e-control-wrapper.e-outline {
+    border-radius: var(--st-radius-sm);
+}

@@ -30,7 +30,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert - SfCard renders the title in CardHeader
-        Assert.That(cut.Markup, Does.Contain("Login"));
+        Assert.That(cut.Markup, Does.Contain("Log in"));
     }
 
     [Test]
@@ -65,8 +65,8 @@ public class LoginTests : BUnitTestBase
         // Act
         var cut = TestContext.Render<Login>();
 
-        // Assert - SfButton renders with e-btn class and contains "Login"
-        Assert.That(cut.Markup, Does.Contain("Login"));
+        // Assert - SfButton renders with e-btn class and carries the submit label
+        Assert.That(cut.Markup, Does.Contain("Log in"));
         Assert.That(cut.Markup, Does.Contain("e-btn"));
     }
 
@@ -113,7 +113,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Login with Passkey"));
+        Assert.That(cut.Markup, Does.Contain("Log in with a passkey"));
     }
 
     [Test]
@@ -134,7 +134,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Login with Password"));
+        Assert.That(cut.Markup, Does.Contain("Log in"));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class LoginTests : BUnitTestBase
         var cut = TestContext.Render<Login>();
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Forgot Password?"));
+        Assert.That(cut.Markup, Does.Contain("Forgot password?"));
         Assert.That(cut.Markup, Does.Contain("href=\"/forgot-password\""));
     }
 
@@ -230,7 +230,7 @@ public class LoginTests : BUnitTestBase
         cut.Find("input[type='checkbox']").Click();
 
         var passkeyButton = cut.FindAll("button")
-            .Single(button => button.TextContent.Contains("Login with Passkey"));
+            .Single(button => button.TextContent.Contains("Log in with a passkey"));
         passkeyButton.Click();
 
         var args = invocation.Invocations.Single().Arguments;
@@ -239,5 +239,40 @@ public class LoginTests : BUnitTestBase
             Assert.That(args[0], Is.EqualTo("dave.warwick"));
             Assert.That(args[1], Is.EqualTo(false));
         });
+    }
+
+    [Test]
+    public void Login_HasBrandPanel()
+    {
+        var cut = TestContext.Render<Login>();
+
+        var panel = cut.Find(".auth-panel");
+        var logo = cut.Find(".auth-panel-logo");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(panel, Is.Not.Null);
+            // The dark logo specifically: the panel keeps one palette in both site themes, so
+            // the light-theme mark would sit on a near-black surface.
+            Assert.That(logo.GetAttribute("src"), Does.Contain("logo-dark-small"));
+            Assert.That(cut.Markup, Does.Contain("Welcome back."));
+        });
+    }
+
+    [Test]
+    public void Login_LinksToRegister_PreservingTheReturnUrl()
+    {
+        // Register has always linked to Login; this is the other half of that pair. The
+        // returnUrl has to survive the hop or a creator sent here from /CreatorSettings loses
+        // the destination by choosing to sign up instead.
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"/login?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings");
+
+        var cut = TestContext.Render<Login>();
+
+        var registerLink = cut.FindAll("a").Single(a => a.TextContent.Trim() == "Register");
+        Assert.That(
+            registerLink.GetAttribute("href"),
+            Is.EqualTo($"{AppPageRoutes.Register}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(AppPageRoutes.CreatorSettings)}"));
     }
 }

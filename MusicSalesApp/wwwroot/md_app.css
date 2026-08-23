@@ -351,4 +351,14 @@
     .playlist-player-container .track-sub { display: block; margin-top: 2px; font-size: 12.5px; }
 
     .playlist-player-container .player-bar { margin: 18px 36px 18px; height: 72px; padding: 0 22px; gap: 16px; }
+
+/* Auth pages - the panel becomes a banner. A 620px rail plus a 400px column needs more
+       width than this breakpoint has. */
+    .auth-page { flex-direction: column; }
+    .auth-panel { width: auto; height: 260px; padding: 30px 40px; }
+    .auth-panel-logo { height: 34px; }
+    .auth-panel-eyebrow { margin-bottom: 8px; }
+    .auth-panel-title { font-size: 34px; line-height: 1.12; margin-bottom: 10px; }
+    .auth-panel-body { font-size: 15px; line-height: 1.55; max-width: 540px; margin-bottom: 14px; }
+    .auth-form-col { padding: 40px 32px; align-items: flex-start; }
 }
