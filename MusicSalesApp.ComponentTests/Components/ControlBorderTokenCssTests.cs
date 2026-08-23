@@ -155,6 +155,9 @@ public class ControlBorderTokenCssTests
                     $"{fileName} must declare --st-danger");
                 Assert.That(css, Does.Match(@"--st-on-danger\s*:"),
                     $"{fileName} must declare --st-on-danger, the only foreground allowed on it");
+                Assert.That(css, Does.Match(@"--st-danger-tint\s*:\s*#"),
+                    $"{fileName} must declare --st-danger-tint, and solid - an alpha cannot be "
+                    + "measured once, which is why --st-warn-soft was replaced");
             });
         }
     }

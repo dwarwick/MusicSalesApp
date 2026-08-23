@@ -261,6 +261,17 @@ public partial class ManagePersonasModel : BlazorBase, IAsyncDisposable
             _validationErrors.Add("Persona name must be 200 characters or less.");
         }
 
+        // Checked here so the creator gets a named message rather than the service exception
+        // surfacing through the generic catch below. The service enforces it regardless.
+        if (!_validationErrors.Any()
+            && await CreatorPersonaService.PersonaNameExistsAsync(
+                _creatorId.Value,
+                _editName,
+                excludePersonaId: _isNewPersona ? null : _editingPersona.Id))
+        {
+            _validationErrors.Add($"You already have a persona called '{_editName.Trim()}'.");
+        }
+
         if (_validationErrors.Any())
             return;
 

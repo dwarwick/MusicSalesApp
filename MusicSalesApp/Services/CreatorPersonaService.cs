@@ -87,8 +87,33 @@ public class CreatorPersonaService : ICreatorPersonaService
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> PersonaNameExistsAsync(int creatorId, string name, int? excludePersonaId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var trimmed = name.Trim();
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.CreatorPersonas
+            .AnyAsync(p => p.CreatorId == creatorId
+                && (excludePersonaId == null || p.Id != excludePersonaId)
+                && p.Name.ToLower() == trimmed.ToLower());
+    }
+
     public async Task<CreatorPersona> CreatePersonaAsync(int creatorId, string name, string? bio, string? websiteUrl)
     {
+        // Enforced here as well as in the page, because the page is not the only way in and a
+        // duplicate name is silently wrong rather than loudly wrong - two personas with the
+        // same name are indistinguishable everywhere a song credits one.
+        if (await PersonaNameExistsAsync(creatorId, name))
+        {
+            throw new InvalidOperationException($"You already have a persona called '{name.Trim()}'.");
+        }
+
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         var persona = new CreatorPersona
@@ -118,6 +143,12 @@ public class CreatorPersonaService : ICreatorPersonaService
         string? websiteUrl, string? imageBlobPath, int? imageWidth, int? imageHeight, bool sendNotification = true,
         bool imageReplaced = false)
     {
+        // Renaming onto another persona's name is the same defect as creating a duplicate.
+        if (await PersonaNameExistsAsync(creatorId, name, excludePersonaId: personaId))
+        {
+            throw new InvalidOperationException($"You already have a persona called '{name.Trim()}'.");
+        }
+
         await using var context = await _dbContextFactory.CreateDbContextAsync();
 
         var persona = await context.CreatorPersonas

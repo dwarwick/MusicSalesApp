@@ -285,7 +285,7 @@ So there are two families:
 | Family | Declared | Use for |
 | --- | --- | --- |
 | `--st-player-*`, `--st-blue*`, `--st-violet`, `--st-amber` | **once**, in `tokens.css` | the two player pages only |
-| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-danger`, `--st-on-danger`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
+| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-danger`, `--st-on-danger`, `--st-danger-tint`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
 
 **Never point a card rule at a `--st-player-*` token.** Measured on white, `--st-blue-bright` is
 ~2.1:1, `--st-violet` ~2.9:1, `--st-amber` ~2.1:1 — all fail AA. That is why `--st-warn` is
@@ -360,6 +360,12 @@ Contrast is symmetric: `#c8102e` reads at 5.88:1 as text on white *and* carries 
 the wrong FOREGROUND — white on `#02b8fd` is 2.26:1 — not because the value itself was wrong.
 Dark danger takes the same escape route the fill family already uses: keep the bright value,
 flip the foreground to near-black. `--st-on-danger` is the only foreground permitted on it.
+
+The alert background that goes with it is **`--st-danger-tint`** (`#fdf0f1` / `#331316`), solid
+for the same reason `--st-warn-tint` is: an alpha composites differently over `--st-page` than
+over `--st-surface`, so the pair cannot be measured once. `--st-danger` on it is 5.30:1 light and
+7.48:1 dark. `.creator-settings-alert-danger` and `.creator-settings-danger-zone` are its
+consumers, and came off four raw literals with hand-written dark values in the same change.
 
 `.lyrics-editor-record.is-recording` moved out of `app.css` in the same change. A coloured
 `box-shadow` belongs in the theme sheets by the routing rule above, and being in `app.css` is

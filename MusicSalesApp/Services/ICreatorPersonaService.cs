@@ -92,6 +92,19 @@ public interface ICreatorPersonaService
     Task<bool> IsPubliclyReadableImagePathAsync(string blobPath);
 
     /// <summary>
+    /// Whether this creator already has a persona with this name, ignoring case and
+    /// surrounding whitespace.
+    ///
+    /// <para>
+    /// Disabled personas count. A disabled persona still exists and can be re-enabled, and
+    /// two rows sharing a name are indistinguishable on a song card - which is the whole
+    /// reason for the check. Pass <paramref name="excludePersonaId"/> when renaming, so a
+    /// persona does not collide with itself.
+    /// </para>
+    /// </summary>
+    Task<bool> PersonaNameExistsAsync(int creatorId, string name, int? excludePersonaId = null);
+
+    /// <summary>
     /// Opens a persona image blob for reading, or null if it does not exist. Persona images live in
     /// their own container, so <see cref="IAzureStorageService"/> - which is bound to the media
     /// container - cannot reach them.
