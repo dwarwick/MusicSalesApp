@@ -354,7 +354,10 @@
 
 /* Auth pages - the panel becomes a banner. A 620px rail plus a 400px column needs more
        width than this breakpoint has. */
-    .auth-page { flex-direction: column; }
+    /* Stacked, an inner scroll area would trap the form under a banner the reader cannot
+       scroll past, so the page grows and the whole thing scrolls normally. */
+    .auth-page { flex-direction: column; height: auto; }
+    .auth-form-col { overflow-y: visible; }
     .auth-panel { width: auto; height: 260px; padding: 30px 40px; }
     .auth-panel-logo { height: 34px; }
     .auth-panel-eyebrow { margin-bottom: 8px; }

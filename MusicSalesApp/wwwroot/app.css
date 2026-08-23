@@ -4450,10 +4450,7 @@ main:has(> .content > .auth-page) > .content {
     padding: 0;
 }
 
-main:has(> .content > .auth-page) > .content > .auth-page {
-    margin: 0;
-    min-height: 100%;
-}
+main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 
 /* align-self, not just flex, because .auth-panel is a COLUMN flex container: the
    default align-items: stretch sets the used WIDTH, which squashes a fixed-height
@@ -4473,12 +4470,19 @@ main:has(> .content > .auth-page) > .content > .auth-page {
 .auth-form-col {
     flex: 1 1 auto;
     display: flex;
-    align-items: center;
     justify-content: center;
+    /* flex-start, not center. Centring a flex child that overflows its scroll
+       container puts the overflow above the scrollable area, where no scrollbar can
+       reach it - the top of a long form would simply be gone. The auto margins on
+       .auth-form centre it while there is room and collapse to 0 when there is not. */
+    align-items: flex-start;
     min-width: 0;
+    /* Only this column scrolls while the layout is side by side. Stacked, the whole page
+       scrolls instead - see md_app.css. */
+    overflow-y: auto;
 }
 
-.auth-form { width: 100%; }
+.auth-form { width: 100%; margin: auto 0; }
 .auth-title { font-weight: 700; margin: 0; }
 .auth-subtitle { margin: 0; }
 
@@ -4519,6 +4523,8 @@ main:has(> .content > .auth-page) > .content > .auth-page {
 .auth-page .e-btn.auth-provider,
 .auth-page .e-css.e-btn.auth-provider {
     display: flex;
+    /* Not inherited from a flex parent: Register renders this one inside a plain form. */
+    width: 100%;
     align-items: center;
     justify-content: center;
     text-transform: none;

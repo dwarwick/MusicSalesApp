@@ -857,7 +857,10 @@
 .cta-quiet { padding: 14px 32px; font-size: 1rem; }
 
 /* Auth pages - sizing. Unwrapped: this is the desktop base the breakpoints step down from. */
-.auth-page { margin: -1rem -1.5rem 0; min-height: calc(100dvh - 66px); }
+/* height:100% resolves against .content, which the :has rule in app.css sizes. Without
+   :has it computes to auto and the min-height below is what applies, which is the old
+   whole-page-scrolls behaviour rather than a broken one. */
+.auth-page { margin: -1rem -1.5rem 0; height: 100%; min-height: calc(100dvh - 66px); }
 .auth-panel { width: 620px; padding: 52px 56px; }
 .auth-panel-logo { height: 40px; }
 .auth-panel-eyebrow { font-size: 11.5px; letter-spacing: .10em; margin-bottom: 12px; }
