@@ -37,12 +37,16 @@
         @* Needs about 1030px beside a readable column, so it appears from 1200px only. *@
         <nav class="settings-nav" aria-label="Sections on this page">
             <p class="settings-nav-heading">On this page</p>
-            <a href="#account" class="settings-nav-link">Account</a>
-            <a href="#subscription" class="settings-nav-link">Subscription</a>
-            <a href="#email-preferences" class="settings-nav-link">Email preferences</a>
-            <a href="#passkeys" class="settings-nav-link">Passkeys</a>
-            <a href="#password" class="settings-nav-link">Password</a>
-            <a href="#close-account" class="settings-nav-link settings-nav-link-danger">Close account</a>
+            @* Fragment-ONLY hrefs do not work here. Blazor intercepts internal anchor
+               clicks and resolves the target against <base href="/">, so href="#account"
+               navigates to the home page carrying a fragment rather than staying put.
+               The route has to be spelled out. *@
+            <a href="@SectionLink("account")" class="settings-nav-link">Account</a>
+            <a href="@SectionLink("subscription")" class="settings-nav-link">Subscription</a>
+            <a href="@SectionLink("email-preferences")" class="settings-nav-link">Email preferences</a>
+            <a href="@SectionLink("passkeys")" class="settings-nav-link">Passkeys</a>
+            <a href="@SectionLink("password")" class="settings-nav-link">Password</a>
+            <a href="@SectionLink("close-account")" class="settings-nav-link settings-nav-link-danger">Close account</a>
         </nav>
 
         <div class="settings-main">

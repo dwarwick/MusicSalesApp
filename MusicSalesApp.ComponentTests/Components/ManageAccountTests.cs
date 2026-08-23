@@ -52,6 +52,53 @@ public class ManageAccountTests : BUnitTestBase
     }
 
     [Test]
+    public void ManageAccount_SectionNavLinks_SpellOutTheRoute()
+    {
+        // A bare href="#account" does not stay on this page. Blazor intercepts internal anchor
+        // clicks and resolves the target against <base href="/">, so a fragment-only link
+        // navigates to the HOME page carrying the fragment - which is exactly what happened
+        // the first time this shipped.
+        SetupAuthorizedUser(1, "testuser@test.com");
+
+        MockUserManager.Setup(x => x.GetUserAsync(It.IsAny<ClaimsPrincipal>()))
+            .ReturnsAsync(new ApplicationUser
+            {
+                Id = 1,
+                UserName = "testuser@test.com",
+                Email = "testuser@test.com",
+                EmailConfirmed = true,
+                TimeZoneId = "America/New_York"
+            });
+        TestContext.JSInterop.Setup<string>("dashboardHelper.getUserTimeZone")
+            .SetResult("America/New_York");
+
+        var handler = new StubHttpMessageHandler();
+        handler.SetupJsonResponse(
+            new Uri("http://localhost/api/subscription/status"),
+            new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        TestContext.Services.AddSingleton(new HttpClient(handler) { BaseAddress = new Uri("http://localhost/") });
+
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        var navLinks = cut.FindAll(".settings-nav-link");
+        Assert.That(navLinks, Is.Not.Empty, "the section nav should render for a signed-in user");
+
+        Assert.Multiple(() =>
+        {
+            foreach (var link in navLinks)
+            {
+                var href = link.GetAttribute("href");
+                Assert.That(href, Does.StartWith(AppPageRoutes.ManageAccount),
+                    $"'{link.TextContent.Trim()}' must name the route, or it lands on the home page");
+                Assert.That(href, Does.Contain("#"), "each link targets a section on this page");
+            }
+        });
+    }
+
+    [Test]
     public void ManageAccount_DoesNotRenderCreatorSettingsSections()
     {
         SetupAuthorizedUser(1, "testuser@test.com");

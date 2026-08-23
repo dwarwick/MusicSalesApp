@@ -450,6 +450,17 @@ public partial class ManageAccountModel : BlazorBase
         ? string.Empty
         : $"{OfferPriceDisplay} {OfferCadenceDisplay}";
     /// <summary>
+    /// An in-page link for the section nav.
+    ///
+    /// <para>
+    /// The route is spelled out rather than using a bare "#id": Blazor intercepts internal
+    /// anchor clicks and resolves the href against the base href, so a fragment-only link
+    /// lands on the home page with the fragment attached instead of scrolling this one.
+    /// </para>
+    /// </summary>
+    protected static string SectionLink(string sectionId) => $"{AppPageRoutes.ManageAccount}#{sectionId}";
+
+    /// <summary>
     /// What the subscription section is called right now. It names the problem when there is
     /// one, which the old markup did in a bare paragraph below the heading.
     /// </summary>
