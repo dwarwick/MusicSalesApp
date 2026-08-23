@@ -1,4 +1,4 @@
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+﻿@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inherits PlaylistPlayerInteractiveModel
 @using MusicSalesApp.Services
 @using MusicSalesApp.Components.Shared
@@ -64,7 +64,7 @@ else
                         else
                         {
                             <div class="playlist-art-animation">
-                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                <LottieAnimation CssClass="player-lottie-animation" />
                             </div>
                         }
                     </div>
@@ -226,7 +226,7 @@ else
                                     else
                                     {
                                         <div class="track-thumbnail-animation">
-                                            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="track-lottie-animation" autoplay loop></dotlottie-wc>
+                                            <SongArtPlaceholder />
                                         </div>
                                     }
                                 </td>
@@ -328,7 +328,7 @@ else
                         else
                         {
                             <div class="playlist-art-animation">
-                                <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie" class="player-lottie-animation" autoplay loop></dotlottie-wc>
+                                <LottieAnimation CssClass="player-lottie-animation" />
                             </div>
                         }
                     </div>

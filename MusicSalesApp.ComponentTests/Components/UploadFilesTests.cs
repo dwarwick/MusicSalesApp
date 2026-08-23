@@ -8,6 +8,23 @@ namespace MusicSalesApp.ComponentTests.Components;
 public class UploadFilesTests : BUnitTestBase
 {
     [Test]
+    public void UploadFiles_DoesNotMountTheAnimation_WhenNotUploading()
+    {
+        // The spinner used to be mounted always and merely display:none'd, so every view
+        // of this form built a Lottie player and pulled its WASM renderer for an element
+        // nobody could see. It is now gated on _isUploading, so an idle form mounts nothing.
+        var cut = TestContext.Render<UploadFiles>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("dotlottie-wc"));
+            // Query the DOM, not the raw markup: this component ships an inline <style>
+            // block that names .upload-spinner, so a text search always matches.
+            Assert.That(cut.FindAll(".upload-spinner"), Is.Empty);
+        });
+    }
+
+    [Test]
     public void UploadFiles_DisplaysSupportedFormats()
     {
         // Act

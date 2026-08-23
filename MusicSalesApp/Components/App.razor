@@ -54,9 +54,17 @@
     <script src="@Assets["js/passkey-helper.js"]"></script>    
     <script src="@Assets["js/dashboard-helper.js"]"></script>
     <script src="@Assets["js/google-ads-tracking.js"]"></script>
-    <!-- DotLottie web component (registers <dotlottie-wc>) -->
-    <script type="module"
-            src="https://unpkg.com/&#64;lottiefiles/dotlottie-wc@0.8.11/dist/dotlottie-wc.js"></script>
+    <!-- DotLottie web component (registers <dotlottie-wc>), self-hosted from
+         wwwroot/lib/dotlottie. The init module points the player's WASM renderer at
+         our copy before registering the element - see wwwroot/js/dotlottie-init.js. -->
+    <script>
+        // The 1.5 MB WASM renderer is fetched by URL, not by module resolution, so it is
+        // the one dotlottie asset we can point at its fingerprinted (immutable) route.
+        // Without this it lands on the plain route, which MapStaticAssets marks no-cache
+        // and the browser therefore revalidates on every page load.
+        window.__stDotLottieWasmUrl = "@Assets["lib/dotlottie/dotlottie-player.wasm"]";
+    </script>
+    <script type="module" src="@Assets["js/dotlottie-init.js"]"></script>
 </body>
 
 </html>

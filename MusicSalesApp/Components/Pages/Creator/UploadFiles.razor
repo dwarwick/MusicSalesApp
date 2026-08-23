@@ -72,11 +72,17 @@
             <div class="text-muted small">Max image file size: @_maxImageUploadSizeMBDisplay MB</div>
         </div>
 
-        <div class="upload-spinner" style="display: @(_isUploading ? "flex" : "none")">
-            <dotlottie-wc src="https://lottie.host/07d61f77-2c9f-49a7-9884-4030d670f9ed/hSfkTa6ydt.lottie"
-                          class="upload-processing-animation"
-                          autoplay loop></dotlottie-wc>
-        </div>
+        @* Mounted only while uploading rather than merely display:none'd. A mounted
+           <dotlottie-wc> builds a player and pulls the WASM renderer on every view of
+           this form, whether or not it is visible. .upload-spinner has no display of
+           its own, so the inline flex stays. This is the one place the animation's
+           "Loading" semantics are actually correct. *@
+        @if (_isUploading)
+        {
+            <div class="upload-spinner" style="display: flex">
+                <LottieAnimation CssClass="upload-processing-animation" />
+            </div>
+        }
     </label>
 
     @if (!string.IsNullOrEmpty(_validationErrorMessage))
