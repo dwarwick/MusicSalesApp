@@ -198,13 +198,48 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("card-album-art-animation"));
         Assert.That(cut.Markup, Does.Contain("song-art-placeholder"));
 
-        // The load-bearing half of this test. The placeholder replaced a per-card
-        // <dotlottie-wc>: the grid renders the whole filtered library with no
-        // virtualisation, so one animation player per art-less song meant N canvases,
-        // N WASM renderer instances and N rAF loops, each independently fetching the
-        // same file. Nothing on this page may mount an animation player again.
+        // The empty island the browser mounts the animation into once the card scrolls
+        // into view. It must be rendered but EMPTY: Blazor diffs its own children by
+        // sibling index, so the JS-created player has to live inside an element Blazor
+        // never renders children into.
+        Assert.That(cut.Markup, Does.Contain("data-lottie-host"));
+
+        // The load-bearing half of this test. Nothing may mount an animation player
+        // server-side: the grid renders the whole filtered library with no virtualisation,
+        // so one player per art-less song meant 25+ canvases, WASM renderer instances and
+        // animation loops, each independently fetching the same file. Players are now
+        // created by MusicLibrary.razor.js only for cards actually on screen, which bUnit
+        // does not execute - so this stays true here by construction.
         Assert.That(cut.Markup, Does.Not.Contain("dotlottie-wc"));
         Assert.That(cut.Markup, Does.Not.Contain("lottie.host"));
+    }
+
+    [Test]
+    public void MusicLibrary_CarriesTheAnimationAssetForTheClient_WithoutMountingAPlayer()
+    {
+        // The lazy mount needs the fingerprinted asset URL, and it is carried once on the
+        // grid rather than repeated on every card. If this attribute goes missing the JS
+        // bails out and every art-less card silently stays static.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new MusicSalesApp.Models.SongMetadata
+            {
+                Mp3BlobPath = "TestSong.mp3",
+                UpdatedAt = DateTime.Now
+            }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("data-lottie-grid"));
+            Assert.That(cut.Markup, Does.Contain("streamtunes-loading.lottie"));
+            Assert.That(cut.Markup, Does.Not.Contain("lottie.host"));
+        });
     }
 
     [Test]
