@@ -190,6 +190,19 @@ else
                         </div>
                     }
 
+                    @* The whole art square opens the song player - this replaced the eyeball
+                       "view" button that used to sit beside Play. A real <button> rather than an
+                       @onclick on .card-album-art: it gets keyboard activation, focus and an
+                       accessible name for free. It is a SIBLING of the art faces, never a wrapper
+                       around them - .card-album-art > img is a direct-child selector and a wrapper
+                       strips the image of all sizing. Sits above the art and the lyrics overlay but
+                       below the lyrics toggle and the overlaid badges; see the z-index ladder in
+                       app.css under "CARDS - structure". *@
+                    <button type="button"
+                            class="card-art-open"
+                            @onclick="() => OpenSongPlayer(f.Name)"
+                            aria-label="@($"Open {GetDisplayTitle(f.Name)} in the player")"></button>
+
                     @if (cardLyrics)
                     {
                         @* stopPropagation because the card itself is clickable - without it,
@@ -227,6 +240,12 @@ else
 
                 <!-- Song Title -->
                 <div class="card-song-title" title="@GetDisplayTitle(f.Name)">@GetDisplayTitle(f.Name)</div>
+
+                @* Artist, genre and stream count, wrapped so the phone breakpoint can merge them
+                   onto one line. At 576px and up this wrapper is display:contents (app.css), so the
+                   three stay direct flex children of .music-card and every wider layout renders
+                   exactly as it did before the wrapper existed. Only xs_app.css flips it to flex. *@
+                <div class="card-meta">
                 <!-- Artist Name (clickable link) -->
                 @{
                     var artistInfo = GetArtistInfo(f.Name);
@@ -269,6 +288,7 @@ else
                             <ReportButton SongMetadataId="GetSongMetadataId(f.Name)" />
                         </div>
                     </div>
+                </div>
                 </div>
 
                 @if (isPlaying)
@@ -350,18 +370,16 @@ else
                 }
                 else
                 {
-                    <!-- Card Actions: Play button and View button (like/dislike live in the AI badges row above) -->
-                    @* Play is the card's primary action and carries the accent fill; View is the
-                       quiet outline beside it. Both were identical outlines, which left the card
-                       with no primary at all - and made the Facebook share bar below the loudest
-                       thing on it. The modifier classes are what the CSS keys off; the title
-                       attributes stay because MusicLibraryTests selects on them. *@
+                    <!-- Card Actions: Play (like/dislike live in the AI badges row above) -->
+                    @* Play is the card's ONLY action now, full-width and carrying the accent fill.
+                       The eyeball "view" button that used to sit beside it is gone - .card-art-open
+                       above makes the whole artwork the way into the song player, which is a far
+                       larger target and needs no icon to explain itself. The wrapper divs and the
+                       title attribute stay: the CSS keys off .action-button-play and
+                       MusicLibraryTests selects on title="play". *@
                     <div class="card-actions-with-likes">
                         <div class="action-column action-column-play">
                             <SfButton CssClass="action-button action-button-play" onclick=@(() => PlayCard(f.Name)) title="play">@((MarkupString)SvgIcons.Play)</SfButton>
-                        </div>
-                        <div class="action-column">
-                            <SfButton CssClass="action-button action-button-view" onclick=@(() => GetSongPlayerUrl(f.Name)) title="view">@((MarkupString)SvgIcons.Eye)</SfButton>
                         </div>
                     </div>
                 }

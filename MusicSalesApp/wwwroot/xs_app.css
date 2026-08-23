@@ -328,42 +328,214 @@
 
 @media (max-width: 576px) {
     /*
-     * CARDS — phone. THE CARD TURNS HORIZONTAL.
+     * CARDS — phone. THE ARTWORK IS THE CARD.
      *
-     * The grid is a single 1fr column here, so the card's 1:1 artwork became about
-     * 338px tall and ONE card filled the screen. The same children reflow into a
-     * grid instead - art in a fixed left column spanning every row, everything else
-     * stacked beside it - so several fit. No markup change: this is
-     * grid-template-columns plus grid-row on the art.
+     * This REPLACES the horizontal 84px-thumbnail layout that used to live here. That
+     * layout traded artwork size for density - about four cards per screen - and the
+     * result was that the cover art and the scrolling lyrics, the two things a listener
+     * actually looks at, were the smallest things on the card while the text column ran
+     * tall and half empty. The trade is now inverted deliberately: art runs the full
+     * card width and roughly 1.5 cards fit a phone screen.
      *
-     * Only inside .music-cards-grid. The carousel keeps the tall card, because there
-     * the artwork IS the point and you swipe rather than scan.
+     * Three things pay for that height:
+     *   - the AI badges and like/dislike move ON TO the art, sharing grid row 1 with it
+     *   - artist / genre / streams merge onto one .card-meta line
+     *   - the mini player collapses to a single row and drops volume entirely
+     *
+     * Only inside .music-cards-grid, which keeps the home carousel out of it AND keeps
+     * every rule off Creator/LyricsTimingEditor.razor - that page renders these same
+     * .card-mini-* / .card-volume-* classes and is asserted on them.
      */
     /* The single 1fr column and its gap are already set higher up in this file. */
     .music-cards-grid .music-card {
         display: grid;
-        grid-template-columns: 84px minmax(0, 1fr);
-        gap: 3px 12px;
-        align-items: center;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
         padding: 10px;
     }
 
-    .music-cards-grid .music-card > *:not(.card-album-art) { grid-column: 2; }
-
+    /* Art and the badge row share row 1; everything else auto-places into rows 2+, so no
+       grid-column is needed on any of them. The card's 10px padding IS the art's margin -
+       "full width" here means full width of the content box, not bled to the card edge. */
     .music-cards-grid .card-album-art {
+        grid-row: 1;
         grid-column: 1;
-        grid-row: 1 / -1;
-        width: 84px;
-        height: 84px;
-        align-self: center;
+        width: 100%;
+        height: auto;      /* aspect-ratio:1 in app.css owns the height */
     }
 
-    .music-cards-grid .card-song-title { font-size: 14.5px; }
-    .music-cards-grid .card-artist-name { font-size: 12.5px; }
-    .music-cards-grid .card-genre { font-size: 11.5px; }
-    .music-cards-grid .card-stream-count { font-size: 11px; }
-    .music-cards-grid .card-ai-actions-row { min-height: 0; margin: 0; }
+    /*
+     * The badge row overlaid on the art. z-index 6 puts it above everything inside
+     * .card-album-art (see the ladder in app.css) - it is a sibling, not a child, so it is
+     * not clipped by that element's overflow:hidden and can sit inside the rounded corners
+     * by padding alone.
+     */
+    .music-cards-grid .card-ai-actions-row {
+        grid-row: 1;
+        grid-column: 1;
+        align-self: start;
+        position: relative;
+        z-index: 6;
+        min-height: 0;
+        margin: 0;
+        padding: 8px;
+        /* The row stretches the full card width at z-index 6, so without this it would shadow
+           .card-art-open and the whole top strip of the artwork would stop opening the player.
+           Only the two buttons take pointer events back; the AI badges are plain <img>. */
+        pointer-events: none;
+    }
+
+    .music-cards-grid .card-ai-actions-row .like-button,
+    .music-cards-grid .card-ai-actions-row .dislike-button {
+        pointer-events: auto;
+    }
+
+    /* Above the scrim. Both were z-index 4, and ::after paints after every child, so a short
+       cover could have put the gradient over the toggle. */
+    .music-cards-grid .card-album-art .lyrics-toggle-button { z-index: 5; }
+
+    /*
+     * A scrim under that row, because the badges and counts now sit on an arbitrary
+     * photograph. Painted only at this breakpoint - no other layout overlays the art.
+     * pointer-events:none so it never eats a tap meant for .card-art-open beneath it.
+     *
+     * Literal colours, not tokens, for the same reason app.css gives for
+     * .lyrics-toggle-button: a card token is measured against --st-surface and says nothing
+     * about legibility over a cover. rgba(8,12,20,.72) is the same family that button uses.
+     *
+     * Measured against the WORST case, which is white artwork: at .62 the scrim composites
+     * to #66686d there, and #fff on it is 5.58:1. Over dark artwork it approaches 21:1. Both
+     * clear AA, so the overlay is legible on any cover in either site theme.
+     *
+     * A FIXED height, not a percentage. At 42% of a 447px square it was a 188px grey wash
+     * across the top third of every cover - far more darkening than a 42px row of badges
+     * needs. 96px covers the row and still leaves most of the fade below it.
+     */
+    .music-cards-grid .card-album-art::after {
+        content: '';
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 96px;
+        z-index: 4;
+        pointer-events: none;
+        background: linear-gradient(180deg, rgba(8, 12, 20, .62) 0%, rgba(8, 12, 20, .30) 50%, rgba(8, 12, 20, 0) 100%);
+    }
+
+    /*
+     * Like/dislike sit on that scrim now, so --st-text-3 (measured on --st-surface) is the
+     * wrong colour by definition. White, both resting and active - and note the ACTIVE state
+     * is not carried by colour at all: LikeDislikeButtons already swaps a filled glyph for an
+     * outlined one, which reads on any artwork. --st-accent was the obvious choice for active
+     * and is the wrong one: #02b8fd on the worst-case scrim is 3.54:1 and fails.
+     *
+     * These live here rather than in light.css / dark.css because they are literals identical
+     * in both themes - the same arrangement app.css uses for .lyrics-toggle-button. The extra
+     * .music-cards-grid ancestor is what makes them outrank the theme sheets, which load last.
+     */
+    .music-cards-grid .card-ai-actions-row .like-button,
+    .music-cards-grid .card-ai-actions-row .dislike-button,
+    .music-cards-grid .card-ai-actions-row .like-button.active,
+    .music-cards-grid .card-ai-actions-row .dislike-button.active {
+        color: #fff;                       /* 8.09:1 on the scrim over white artwork */
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+    }
+
+    .music-cards-grid .card-ai-actions-row .like-button:hover,
+    .music-cards-grid .card-ai-actions-row .dislike-button:hover {
+        color: #c8eafd;                    /* 6.41:1, same worst case */
+    }
+
+    /* One meta line: artist · genre · streams, with tip and report pinned right by
+       .card-stream-count's own space-between. Its width:100% would force a wrap here. */
+    .music-cards-grid .card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        min-width: 0;
+    }
+
+    .music-cards-grid .card-meta .card-stream-count {
+        width: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .music-cards-grid .card-meta .card-genre::before,
+    .music-cards-grid .card-meta .card-stream-count::before {
+        content: '·';
+        margin-right: 8px;
+    }
+
+    /* Only a separator when something precedes it - a song with no artist would otherwise
+       open the line with a dot. */
+    .music-cards-grid .card-meta > :first-child::before { content: none; }
+
+    /* 24px alongside 11px text made the tip heart the loudest thing on the merged line. It
+       had a row to itself before this layout; now it shares one with everything else. */
+    .music-cards-grid .card-meta .tip-heart-card .tip-heart-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .music-cards-grid .card-meta .tip-heart-button { padding: 2px; }
+
+    /*
+     * Mini player on one row: [play][stop] 0:13 ————— 3:51.
+     *
+     * Volume goes entirely. A phone has hardware keys for it, and it is what buys the
+     * scrubber enough width to be usable at 390px. Scoped, so the lyric timing editor keeps
+     * its own volume control.
+     */
+    .music-cards-grid .card-mini-player {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .music-cards-grid .card-mini-controls-row { flex: 0 0 auto; gap: 6px; }
+    .music-cards-grid .card-progress-container { flex: 1 1 auto; min-width: 0; gap: 6px; }
+    .music-cards-grid .card-volume-controls { display: none; }
+
+    /* Inherited 14px from .music-card, which is a lot of the row's width at 390px. min-width
+       stops the scrubber twitching as the elapsed time crosses 9:59 / 0:09. */
+    .music-cards-grid .card-time-display {
+        flex: 0 0 auto;
+        min-width: 32px;
+        font-size: 12px;
+        text-align: center;
+    }
+
+    /* 40px, not the 44px floor .action-button gets below: it is the largest that leaves a
+       usable scrubber beside it on a 390px screen. Play/pause stays :first-child, which is
+       what carries the accent fill. */
+    .music-cards-grid .card-mini-controls .e-btn { width: 40px; height: 40px; }
+
+    /*
+     * TYPE — phone. Every size here is a step up from the ladder the horizontal card used,
+     * because that ladder was drawn for a 12px-wide-ish text column beside an 84px thumbnail.
+     * The column is now the full width of the screen and can carry normal reading sizes.
+     */
+    .music-cards-grid .card-song-title { font-size: 16px; }
+    .music-cards-grid .card-artist-name { font-size: 13.5px; }
+    .music-cards-grid .card-genre { font-size: 12.5px; }
+    .music-cards-grid .card-stream-count { font-size: 12px; }
+    .music-cards-grid .card-stream-info .stream-icon { width: 12px; height: 12px; }
     .music-cards-grid .action-button { height: 44px; }
+
+    /*
+     * The card lyrics. app.css sets 11px and calls it "smallest type, in place of a 210px
+     * cover" - which was true everywhere until this breakpoint stopped being a thumbnail.
+     * The panel is ~350px on a phone now, WIDER than that desktop cover, and 11px in it read
+     * like fine print. 15px matches what the playlist player uses at this width and stays a
+     * clear step below the song player's 18px, so the hierarchy across the three surfaces
+     * still reads. Scoped to .music-cards-grid, so the home carousel keeps the small type -
+     * its card is still narrow.
+     */
+    .music-cards-grid .lyrics-scroller--card { font-size: 15px; }
+
+    /* Line padding scaled with the type; 1px was set against 11px text. */
+    .music-cards-grid .lyrics-scroller--card .lyrics-line { padding: 3px 10px; }
 
     .filter-pill { height: 34px; padding: 0 13px; font-size: 13px; }
     .music-library-sticky-header { gap: 8px; padding: 10px 0; }

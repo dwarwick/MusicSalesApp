@@ -1060,11 +1060,16 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
         return _songArtSources.TryGetValue(fileName, out var source) ? source : CoverArtSource.None;
     }
 
-    protected void GetSongPlayerUrl(string fileName)
+    /// <summary>
+    /// Navigates to the song player. Named for what it does - it used to be called
+    /// GetSongPlayerUrl, which returned nothing and navigated as a side effect.
+    /// Called from .card-art-open, the transparent button covering the card artwork.
+    /// </summary>
+    protected void OpenSongPlayer(string fileName)
     {
         var songTitle = GetDisplayTitle(fileName);
 
-        NavigationManager.NavigateTo($"/song/{Uri.EscapeDataString(songTitle)}");        
+        NavigationManager.NavigateTo($"/song/{Uri.EscapeDataString(songTitle)}");
     }
 
     protected bool IsCardPlaying(string cardId)
