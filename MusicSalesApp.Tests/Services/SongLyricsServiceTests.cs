@@ -33,6 +33,7 @@ public class SongLyricsServiceTests
     private Mock<IAzureStorageService> _storage = null!;
     private Mock<IDurableTaskClient> _durable = null!;
     private RecordingBackgroundJobClient _jobs = null!;
+    private Mock<IAdminNotificationService> _adminNotifications = null!;
     private SongLyricsService _service = null!;
 
     [SetUp]
@@ -48,11 +49,14 @@ public class SongLyricsServiceTests
         _durable.SetupGet(client => client.IsConfigured).Returns(true);
         _jobs = new RecordingBackgroundJobClient();
 
+        _adminNotifications = new Mock<IAdminNotificationService>();
+
         _service = new SongLyricsService(
             _factory,
             _storage.Object,
             _durable.Object,
             _jobs,
+            _adminNotifications.Object,
             Mock.Of<ILogger<SongLyricsService>>());
     }
 
@@ -73,6 +77,57 @@ public class SongLyricsServiceTests
             Assert.That(job.Status, Is.EqualTo(LyricsAlignmentJobStatus.Queued));
             Assert.That(lyrics.Status, Is.EqualTo(SongLyricsStatus.Pending));
             Assert.That(_jobs.Created, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task AnAcceptedSubmissionTellsAdminWhoIsWorkingOnLyrics()
+    {
+        await AddSongAsync();
+
+        await _service.SubmitAsync(1, CreatorId, "hello darkness");
+
+        _adminNotifications.Verify(
+            n => n.NotifyLyricsAddedAsync(CreatorId, 1),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ARefusedSubmissionTellsAdminNothing()
+    {
+        // Nothing happened, so there is nothing to report. Empty text never reaches storage, never
+        // queues an attempt, and must not put a row in the admin's history either.
+        await AddSongAsync();
+
+        var result = await _service.SubmitAsync(1, CreatorId, "   ");
+
+        Assert.That(result.Accepted, Is.False);
+        _adminNotifications.Verify(
+            n => n.NotifyLyricsAddedAsync(It.IsAny<int>(), It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task AFailingAdminNotificationDoesNotFailTheCreatorsSubmission()
+    {
+        // THE IMPORTANT ONE. The notification runs after the work is committed and exists so an
+        // admin can watch; an unreachable SMTP server must not surface to the creator as a submit
+        // that failed - least of all one that failed after the attempt was already queued.
+        await AddSongAsync();
+
+        _adminNotifications
+            .Setup(n => n.NotifyLyricsAddedAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ThrowsAsync(new InvalidOperationException("smtp is down"));
+
+        var result = await _service.SubmitAsync(1, CreatorId, "hello darkness");
+
+        await using var context = new AppDbContext(_options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(_jobs.Created, Is.EqualTo(1), "The attempt was still queued.");
+            Assert.That(context.LyricsAlignmentJobs.Count(), Is.EqualTo(1));
         });
     }
 

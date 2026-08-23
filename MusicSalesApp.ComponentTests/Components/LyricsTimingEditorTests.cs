@@ -284,33 +284,99 @@ public class LyricsTimingEditorTests : BUnitTestBase
     // What the creator is told
     // -----------------------------------------------------------------
 
-    [Test]
-    public void ALowScoringSongWarnsThemToExpectWork()
+    [TestCase(0.0)]
+    [TestCase(0.42)]
+    [TestCase(0.88)]
+    public void TheGreetingIsTheSameWhateverTheAlignerThoughtOfItself(double confidence)
     {
-        GivenTimings(confidence: 0.42);
-
-        var cut = Render();
-
+        // The banner used to pick one of three messages by score, and got the verdict wrong in the
+        // common case: the aligner is systematically pessimistic, so a page routinely opened by
+        // telling a creator their perfectly good timings needed work. A creator can hear the answer
+        // in fifteen seconds, which is what this now asks them to do.
+        //
         // Asserted on the banner rather than the whole page, and on words rather than digits: the
-        // scroller's instance id is a GUID, so "does the markup contain 70" is true roughly one run
-        // in eight regardless of what the banner says.
-        var banner = cut.Find("[role=status]").TextContent;
+        // scroller's instance id is a GUID, so "does the markup contain 42" is true often enough to
+        // make a whole-page assertion meaningless.
+        GivenTimings(confidence: confidence);
+
+        var banner = Render().Find("[role=status]").TextContent;
 
         Assert.Multiple(() =>
         {
-            Assert.That(banner, Does.Contain("weren't confident"));
-            Assert.That(banner, Does.Not.Contain("%"), "The score is an admin's calibration, not a creator's problem.");
-            Assert.That(banner, Does.Not.Contain("threshold").IgnoreCase);
+            Assert.That(banner, Does.Contain("Have a listen"));
+            Assert.That(banner, Does.Contain("Publish"));
+            Assert.That(banner, Does.Not.Contain("weren't confident"));
+            Assert.That(banner, Does.Not.Contain("%"));
             Assert.That(banner, Does.Not.Contain("confidence").IgnoreCase, "No jargon in the greeting.");
+            Assert.That(banner, Does.Not.Contain("threshold").IgnoreCase);
+        });
+    }
+
+    // -----------------------------------------------------------------
+    // The transport
+    // -----------------------------------------------------------------
+
+    [Test]
+    public void QuarterSpeedIsOfferedForTheLinesHalfSpeedCannotSeparate()
+    {
+        GivenTimings(confidence: 0.6);
+
+        var rates = Render()
+            .FindAll(".lyrics-editor-rates button")
+            .Select(b => b.TextContent.Trim())
+            .ToList();
+
+        Assert.That(rates, Is.EqualTo(new[] { "0.25×", "0.5×", "0.75×", "1×" }));
+    }
+
+    [Test]
+    public void TheSeekStepsMatchThePerWordSteps()
+    {
+        // Same values, same outward-reading order as the Starts/Ends controls, so somebody who has
+        // learned one has learned the other. A hundredth is the point of having them at all: no seek
+        // bar resolves 10 ms at any width this page could give it.
+        GivenTimings(confidence: 0.6);
+
+        var steps = Render()
+            .FindAll(".lyrics-editor-seek button")
+            .Select(b => b.TextContent.Trim())
+            .ToList();
+
+        Assert.That(steps, Is.EqualTo(new[] { "−1", "−0.1", "−0.01", "+0.01", "+0.1", "+1" }));
+    }
+
+    [Test]
+    public void TheTransportSitsAboveTheWordsRatherThanInTheSideColumn()
+    {
+        // Where it lives is the whole reason the seek bar is usable: in the 320px side column a
+        // four-minute song got about three quarters of a second per pixel.
+        GivenTimings(confidence: 0.6);
+
+        var cut = Render();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll(".lyrics-editor-transport .card-progress-bar-container"), Is.Not.Empty);
+            Assert.That(cut.FindAll(".lyrics-editor-side .card-progress-bar-container"), Is.Empty);
         });
     }
 
     [Test]
-    public void AHighScoringSongIsEncouraging()
+    public void TheElapsedTimeReadsInHundredthsAndTheDurationDoesNot()
     {
-        GivenTimings(confidence: 0.88);
+        // One is a position being aimed at, the other is a fact about the file.
+        GivenTimings(confidence: 0.6);
 
-        Assert.That(Render().Markup, Does.Contain("came out well"));
+        var times = Render()
+            .FindAll(".card-time-display")
+            .Select(e => e.TextContent.Trim())
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(times[0], Is.EqualTo("0:00.00"), "Elapsed.");
+            Assert.That(times[1], Does.Not.Contain("."), "Duration.");
+        });
     }
 
     [Test]
@@ -327,20 +393,78 @@ public class LyricsTimingEditorTests : BUnitTestBase
     [Test]
     public void TheInstructionsAreOnThePageRatherThanBehindALink()
     {
-        // Written for somebody who has never done this. A creator who does not understand tap-along
-        // will either not use it or make their timings worse, and both read to them as the feature
-        // being broken.
+        // Written for somebody who has never done this. A creator who does not understand either
+        // repair will use whichever they found first on a problem it cannot solve, and that reads to
+        // them as the feature being broken. Collapsed is still "on the page" - a <details> ships its
+        // contents in the markup, so this is one click away rather than one navigation.
         GivenTimings();
 
         var cut = Render();
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("space bar"));
+            Assert.That(cut.Markup, Does.Contain("space bar"), "Option 1.");
+            Assert.That(cut.Markup, Does.Contain("Click the word"), "Option 2.");
             Assert.That(cut.Markup, Does.Contain("Nothing here is visible to listeners until you"));
-            Assert.That(cut.Markup, Does.Contain("half speed"));
+            Assert.That(cut.Markup, Does.Contain("0.25"), "Slowing down, for the tap pass.");
             Assert.That(cut.Markup, Does.Not.Contain("milliseconds"), "No jargon.");
             Assert.That(cut.Markup, Does.Not.Contain("monotonic"));
+        });
+    }
+
+    [Test]
+    public void BothWaysOfFixingATimingAreNamedAndEachCarriesItsOwnInstructions()
+    {
+        // A creator who only ever finds one of the two will try to fix a single early word by
+        // re-tapping the whole chorus, or will nudge word after word through a section that has
+        // drifted wholesale. Naming both, next to the controls that perform them, is what stops that.
+        GivenTimings();
+
+        var summaries = Render()
+            .FindAll("details summary")
+            .Select(element => element.TextContent.Trim())
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(summaries, Does.Contain("Tap to Fix Instructions"));
+            Assert.That(summaries, Does.Contain("Click Word / Row Instructions"));
+        });
+    }
+
+    [Test]
+    public void TheInstructionsStartCollapsedSoTheControlsFitOnTheScreen()
+    {
+        // They are read once and never again, and left open they push the controls of both options
+        // off the bottom of a laptop screen.
+        GivenTimings();
+
+        var open = Render()
+            .FindAll("details")
+            .Count(element => element.HasAttribute("open"));
+
+        Assert.That(open, Is.Zero);
+    }
+
+    [Test]
+    public void TheInstructionsSayWhatCannotBeBrokenRatherThanLeavingItToBeDiscovered()
+    {
+        // Both promises are real and both are worth making. A creator who believes they can corrupt
+        // the timings edits timidly, and timid editing is what leaves a song almost-right forever.
+        GivenTimings();
+
+        var markup = Render().Markup;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                markup,
+                Does.Contain("Rows can&#x27;t overlap").Or.Contain("Rows can't overlap"),
+                "Tapping ends the previous line; Publish refuses overlapping rows.");
+            Assert.That(
+                markup,
+                Does.Contain("turned inside out"),
+                "A word clamps against its own other edge.");
         });
     }
 

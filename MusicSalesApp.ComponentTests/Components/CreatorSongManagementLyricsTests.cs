@@ -1,8 +1,12 @@
 using System.Security.Claims;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Pages.Creator;
+using MusicSalesApp.Components.Shared;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 
@@ -136,47 +140,67 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
     }
 
     /// <summary>Stubs the bulk lookup with a single song's lyrics state.</summary>
-    private void GivenLyricsFor(SongLyricsStatus status, double? confidence)
+    private void GivenLyricsFor(
+        SongLyricsStatus status,
+        double? confidence,
+        string lrcBlobPath = "abc/abc-lyrics.lrc")
     {
         MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
         MockLyricsService.Setup(x => x.GetForSongsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<int, SongLyrics>
             {
-                [1] = new() { SongMetadataId = 1, Status = status, Confidence = confidence }
+                [1] = new()
+                {
+                    SongMetadataId = 1,
+                    Status = status,
+                    Confidence = confidence,
+                    LrcBlobPath = lrcBlobPath
+                }
             });
     }
 
-    [Test]
-    public void TheConfidenceIsShownToOneDecimalPlace()
+    /// <summary>Renders the grid and waits for the song list to arrive.</summary>
+    private IRenderedComponent<CreatorSongManagement> RenderLoaded()
     {
-        // To one decimal, unlike the dialog's whole-percent banner, because this column exists to
-        // choose the threshold it is read against - and 69.6% and 70.4% both rounding to "70%" hides
-        // exactly the distinction being made when they fall either side of the bar.
-        GivenLyricsFor(SongLyricsStatus.Published, 0.5208d);
-
         var cut = TestContext.Render<CreatorSongManagement>();
         cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
-
-        Assert.That(cut.Markup, Does.Contain("52.1"));
+        return cut;
     }
 
     [Test]
-    public void ASongNotYetPublishedSaysSoAlongsideItsScore()
+    public void NoScoreIsEverShownInTheGrid()
     {
-        // "Not published", not "Needs review". Every successful alignment now lands in NeedsReview
-        // regardless of score, so wording it as a problem would tell a creator with a perfectly good
-        // 88% song that something is wrong with it. What is true of all of them is only that no
-        // listener can see them yet.
-        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.4123d);
+        // The aligner's score is systematically pessimistic - it answers "did the aligner think it
+        // did well", not "are these timings good" - so a column of percentages read as a verdict on
+        // songs that were fine. The state is what a creator can act on; the number is not.
+        GivenLyricsFor(SongLyricsStatus.Published, 0.5208d);
 
-        var cut = TestContext.Render<CreatorSongManagement>();
-        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+        var cut = RenderLoaded();
 
         Assert.Multiple(() =>
         {
-            Assert.That(cut.Markup, Does.Contain("41.2"));
+            Assert.That(cut.Markup, Does.Contain("Published"));
+            Assert.That(cut.Markup, Does.Not.Contain("52.1"));
+        });
+    }
+
+    [Test]
+    public void ASongNotYetPublishedSaysSoWithoutAScore()
+    {
+        // "Not published", not "Needs review". Every successful alignment lands in NeedsReview
+        // regardless of score, so wording it as a problem would tell a creator with perfectly good
+        // timings that something is wrong with them. What is true of all of them is only that no
+        // listener can see them yet.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.4123d);
+
+        var cut = RenderLoaded();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Timed"));
             Assert.That(cut.Markup, Does.Contain("Not published"));
             Assert.That(cut.Markup, Does.Not.Contain("Needs review"));
+            Assert.That(cut.Markup, Does.Not.Contain("41.2"));
         });
     }
 
@@ -184,14 +208,145 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
     public void ASongWithNoConfidenceYetStillRenders()
     {
         // Confidence is null for every song until an alignment completes, and null for a Failed one
-        // permanently. A column that formatted it unguarded would throw during the grid's render,
-        // which takes the whole song list with it - Edit and Delete included.
+        // permanently. Kept from when this column formatted that number: formatting it unguarded
+        // threw during the grid's render, which took the whole song list with it.
         GivenLyricsFor(SongLyricsStatus.Pending, null);
 
-        var cut = TestContext.Render<CreatorSongManagement>();
-        cut.WaitForState(() => !cut.Markup.Contains("Loading your songs"), TimeSpan.FromSeconds(5));
+        Assert.That(ButtonLabels(RenderLoaded()), Does.Contain("Edit"));
+    }
 
-        Assert.That(ButtonLabels(cut), Does.Contain("Edit"));
+    [Test]
+    public void ATimedSongOffersTheExportAndThePreviewInsteadOfThePasteBox()
+    {
+        // The point of the change. Once an alignment has landed there is nothing left to paste, so
+        // the slot that opened the paste dialog hands over the .lrc, and the creator's next move -
+        // hearing the result - is the other button.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        var cut = RenderLoaded();
+        var labels = ButtonLabels(cut);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(labels, Does.Contain("Download LRC"));
+            Assert.That(labels, Does.Not.Contain("Lyrics"));
+            Assert.That(cut.Markup, Does.Contain("Preview Results"));
+            Assert.That(cut.Markup, Does.Not.Contain("Fix the timing"));
+        });
+    }
+
+    [TestCase(SongLyricsStatus.Failed)]
+    [TestCase(SongLyricsStatus.Pending)]
+    public void ASongWithoutUsableTimingsKeepsThePasteBox(SongLyricsStatus status)
+    {
+        // Failed is what the paste box exists for now: the words themselves were most likely wrong,
+        // which is the one thing running the pipeline again can fix. Pending has nothing yet.
+        GivenLyricsFor(status, confidence: null);
+
+        var labels = ButtonLabels(RenderLoaded());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(labels, Does.Contain("Lyrics"));
+            Assert.That(labels, Does.Not.Contain("Download LRC"));
+        });
+    }
+
+    [Test]
+    public void TimingsWithNoLrcFallBackToThePasteBoxRatherThanADeadButton()
+    {
+        // The LRC copy is allowed to fail without costing the timings, so "the alignment succeeded"
+        // and "there is a file to hand over" are two different questions. A Download button that
+        // silently does nothing is worse than not offering one.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d, lrcBlobPath: null);
+
+        var cut = RenderLoaded();
+        var labels = ButtonLabels(cut);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(labels, Does.Contain("Lyrics"));
+            Assert.That(labels, Does.Not.Contain("Download LRC"));
+            Assert.That(cut.Markup, Does.Contain("Preview Results"), "The timings are still there.");
+        });
+    }
+
+    // -----------------------------------------------------------------
+    // The handoff to Preview Results
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Raises the lyrics dialog's completion callback, exactly as a finished attempt does.
+    /// </summary>
+    /// <remarks>
+    /// Driven through the real child component rather than by reflecting onto the page's handler, so
+    /// the markup wiring is under test too - a callback that was never bound would otherwise pass.
+    /// Not awaited: the handler deliberately dwells on the notice before moving, and these tests want
+    /// to look at the notice while it stands.
+    /// </remarks>
+    private static void RaiseTimingCompleted(IRenderedComponent<CreatorSongManagement> cut, int songId)
+    {
+        var dialog = cut.FindComponent<LyricsEditorDialog>();
+        _ = cut.InvokeAsync(() => dialog.Instance.OnTimingCompleted.InvokeAsync(songId));
+    }
+
+    [Test]
+    public void ATimedSongSaysSoAndNamesWhereItIsTakingThem()
+    {
+        // The complaint this fixes: a creator watched the bar to the end, the dialog closed, and they
+        // were left looking at the grid with nothing to say the run had finished or what to do next.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Night Drive"), "Named, so it is clear which song.");
+            Assert.That(cut.Markup, Does.Contain("Preview Results"), "And where they are going.");
+            Assert.That(cut.Markup, Does.Contain("Publish"), "And what is still required of them.");
+        });
+    }
+
+    [Test]
+    public void PreviewResultsNowGoesStraightThere()
+    {
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        cut.Find("button.hero-secondary-cta").Click();
+
+        Assert.That(nav.Uri, Does.Contain(AppPageRoutes.CreatorSongLyrics(1)));
+    }
+
+    [Test]
+    public void NotJustNowLeavesThemOnTheGrid()
+    {
+        // The escape hatch. Preview Results is still one button away on the song's own row, so
+        // declining costs them nothing - and being moved somewhere you just said no to is worse than
+        // never having been offered.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var before = nav.Uri;
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Not just now")).Click();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(nav.Uri, Is.EqualTo(before));
+            Assert.That(cut.Markup, Does.Contain("Preview Results"), "Still reachable from the row.");
+        });
     }
 
     [Test]

@@ -33,26 +33,33 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     /// <summary>How far one arrow press moves a word. A twentieth of a second.</summary>
     protected const long NudgeMs = 50;
 
-    /// <summary>Half speed is the one that matters; the rest are there so it does not look odd alone.</summary>
-    protected static readonly double[] PlaybackRates = [0.5, 0.75, 1.0];
+    /// <summary>
+    /// Half speed is the one that matters; the rest are there so it does not look odd alone.
+    /// </summary>
+    /// <remarks>
+    /// A quarter is worth offering for a fast, densely-worded line, where half speed is still too
+    /// quick to hear where one word ends and the next begins. It is the floor rather than an
+    /// arbitrary choice: below 0.25 browsers stop playing audio at all, and <c>preservesPitch</c>
+    /// keeps even this sounding like the song rather than a tape winding down.
+    /// </remarks>
+    protected static readonly double[] PlaybackRates = [0.25, 0.5, 0.75, 1.0];
+
+    /// <summary>
+    /// How far the seek buttons move the playhead: one second, a tenth, a hundredth.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately the same values as <see cref="EdgeStepsMs"/>, rendered in the same outward-reading
+    /// order, so the two controls teach each other. They exist because no seek bar resolves a
+    /// hundredth of a second at any width this page could give it, and "play from exactly where that
+    /// word should land" is the thing a creator does over and over while tapping.
+    /// </remarks>
+    protected static readonly long[] SeekStepsMs = [1_000, 100, 10];
 
     /// <summary>
     /// Capped so a long session cannot grow without bound. Deeper undo is worth less than
     /// "Start again", which is one press and always available.
     /// </summary>
     private const int MaxUndoDepth = 50;
-
-    /// <summary>
-    /// The confidence below which the banner stops suggesting the work might already be done.
-    ///
-    /// <para>
-    /// Separate from the admin threshold on purpose. That one is a policy dial with a legal range of
-    /// 0 to 1 and decides where the line between "confident" and "not" sits; this is a floor on what
-    /// the wording is allowed to promise, so that lowering the dial can never turn a half-aligned
-    /// song into a page telling its creator it may need no work at all.
-    /// </para>
-    /// </summary>
-    private const double ConfidentEnoughToPromiseNoWork = 0.85d;
 
     [Parameter] public int SongId { get; set; }
 
@@ -77,6 +84,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
     /// <summary>Whether the revert button is waiting for a second press to confirm.</summary>
     protected bool _confirmingRevert;
+    protected bool _confirmingRemove;
     private SongLyrics? _lyrics;
 
     protected bool _isPlaying;
@@ -123,7 +131,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     protected string? _statusMessage;
     protected string _bannerClass = "alert-secondary";
     protected string _bannerMessage = string.Empty;
-    protected bool _helpOpen = true;
+
 
     /// <summary>
     /// The document as edited so far.
@@ -212,7 +220,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             _streamUrl = AzureStorageService.GetReadSasUri(song.Mp3BlobPath, TimeSpan.FromHours(2))?.ToString();
         }
 
-        await BuildBannerAsync(editable.IsDraft);
+        BuildBanner(editable.HasUnpublishedChanges);
 
         _loading = false;
     }
@@ -228,16 +236,117 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
     private void SendHome() => NavigationManager.NavigateTo(AppPageRoutes.Home, forceLoad: false);
 
     /// <summary>
-    /// The greeting, coloured by confidence against the admin threshold.
+    /// The greeting. Two states: a draft in progress, or a freshly timed song to listen to.
     /// </summary>
     /// <remarks>
-    /// The threshold is read now rather than stored with the song, so an admin moving it re-colours
-    /// every song's banner instead of leaving old ones carrying a verdict that no longer applies. The
-    /// creator is never shown the number itself - it is an admin knob and would mean nothing to them.
+    /// <b>No longer graded by confidence.</b> This used to pick one of three messages by comparing
+    /// the aligner's composite score against an admin threshold, and it got the verdict wrong in the
+    /// common case: the score is systematically pessimistic - alignments a creator would call perfect
+    /// score in the fifties - so the page routinely opened by telling somebody their good timings
+    /// needed work. A creator can hear the answer for themselves in about fifteen seconds, which is
+    /// what this now asks them to do. The score is still stored, for diagnosing the aligner.
     /// </remarks>
-    private async Task BuildBannerAsync(bool isDraft)
+    /// <summary>
+    /// Send the creator to the songs grid with the paste box open, ready for corrected words.
+    /// </summary>
+    /// <remarks>
+    /// A navigation rather than a paste box hosted here, so there is exactly one of those in the
+    /// application. The grid already owns it, already owns what happens when a run finishes, and is
+    /// where the creator ends up anyway - a second copy on this page would be a second place for the
+    /// finish-and-preview handoff to go wrong.
+    /// </remarks>
+    /// <summary>
+    /// Take these lyrics off the air, keeping every timing behind them.
+    /// </summary>
+    /// <remarks>
+    /// No confirmation, because nothing is lost and Publish puts it straight back - a creator who
+    /// presses this by mistake is one press from undoing it. Contrast <see cref="RemoveLyricsAsync"/>,
+    /// which asks twice.
+    /// </remarks>
+    protected async Task HideFromListenersAsync()
     {
-        if (isDraft)
+        _isSaving = true;
+
+        try
+        {
+            var result = await LyricsService.UnpublishAsync(SongId, _creatorId ?? 0);
+            _statusMessage = result.Message;
+
+            if (result.Success)
+            {
+                _isPublished = false;
+            }
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    /// <summary>
+    /// Delete these lyrics outright and go back to the songs grid.
+    /// </summary>
+    /// <remarks>
+    /// Asks twice, following "Back to original timing", and for a stronger reason: that one discards
+    /// a draft, this one discards the alignment, the draft, the pasted words and the published
+    /// timings together. There is no undo behind it - the way back is to paste the words again and
+    /// spend another separation pass.
+    /// </remarks>
+    protected async Task RemoveLyricsAsync()
+    {
+        if (!_confirmingRemove)
+        {
+            _confirmingRemove = true;
+            return;
+        }
+
+        _confirmingRemove = false;
+        _isSaving = true;
+
+        try
+        {
+            var result = await LyricsService.RemoveAsync(SongId, _creatorId ?? 0);
+
+            if (!result.Success)
+            {
+                _statusMessage = result.Message;
+                return;
+            }
+
+            // Back to the grid: this page has nothing left to show, and the row it came from now
+            // offers the paste box again.
+            NavigationManager.NavigateTo(AppPageRoutes.CreatorSongs);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    protected void ReplaceLyrics() =>
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorSongsReplaceLyrics(SongId));
+
+    /// <summary>Whether an administrator has taken these lyrics down.</summary>
+    protected bool _adminDisabled => _lyrics?.DisabledAt is not null;
+
+    private void BuildBanner(bool hasUnpublishedChanges)
+    {
+        // First, because it outranks everything else this banner could say. A creator whose lyrics
+        // have been taken down needs to know that before they read advice about tapping - and needs
+        // to be told rather than left to discover it by pressing Publish and being refused.
+        if (_adminDisabled)
+        {
+            _bannerClass = "alert-danger";
+            _bannerMessage = string.IsNullOrWhiteSpace(_lyrics!.DisabledReason)
+                ? "An administrator has disabled these lyrics. Listeners see the cover art, and they "
+                  + "can't be published until an administrator re-enables them."
+                : $"An administrator has disabled these lyrics: {_lyrics.DisabledReason} Listeners "
+                  + "see the cover art, and they can't be published until an administrator "
+                  + "re-enables them.";
+            return;
+        }
+
+        if (hasUnpublishedChanges)
         {
             _bannerClass = "alert-info";
             _bannerMessage = "These are your unpublished changes. Listeners still see the last "
@@ -245,38 +354,9 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        var threshold = await AppSettingsService.GetLyricsConfidenceThresholdAsync();
-        var confidence = _lyrics?.Confidence ?? 0d;
-
-        if (confidence < threshold)
-        {
-            _bannerClass = "alert-warning";
-            _bannerMessage = "We weren't confident about this one. Expect to do some tapping before "
-                             + "you publish.";
-            return;
-        }
-
-        // ABOVE THE THRESHOLD IS NOT THE SAME AS GOOD, which is why this does not stop at the
-        // comparison above. The threshold is an admin knob with a legal range of 0 to 1, so "cleared
-        // it" can mean anything at all - set it to 0.3 and a barely-half-aligned song clears it. The
-        // old copy promised "it may need no work at all" on that basis alone, and a creator who took
-        // it at face value published timings that visibly drift.
-        //
-        // So clearing the threshold decides the COLOUR - that is the admin's call about where the
-        // line sits - and this second, absolute test decides how much the copy is willing to promise.
-        // Nothing claims the work might already be done unless the aligner really did place almost
-        // everything.
-        if (confidence >= ConfidentEnoughToPromiseNoWork)
-        {
-            _bannerClass = "alert-success";
-            _bannerMessage = "This one came out well. Have a listen — it may need no work at all.";
-        }
-        else
-        {
-            _bannerClass = "alert-success";
-            _bannerMessage = "These are usable. Have a listen — expect to nudge a few lines before "
-                             + "you publish.";
-        }
+        _bannerClass = "alert-success";
+        _bannerMessage = "Have a listen. Nudge anything that drifted, then press Publish — nothing "
+                         + "is visible to listeners until you do.";
     }
 
     /// <summary>
@@ -361,11 +441,44 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
 
     protected double GetProgressPercent() => _duration <= 0 ? 0 : (_currentTime / _duration) * 100;
 
+    /// <summary>
+    /// Move the playhead by a fixed amount, clamped to the track.
+    /// </summary>
+    /// <remarks>
+    /// Clamped rather than trusted to the element: a negative <c>currentTime</c> throws, and seeking
+    /// past the end lands the creator on an ended player when what they pressed was "a bit later".
+    /// The duration is only known once the browser has told us, so before that this refuses to guess.
+    /// </remarks>
+    protected async Task SeekByAsync(long deltaMs)
+    {
+        if (_module is null || _duration <= 0)
+        {
+            return;
+        }
+
+        var target = Math.Clamp((_currentTime * 1000d) + deltaMs, 0d, _duration * 1000d);
+        await _module.InvokeVoidAsync("seekToMs", _audioElement, target);
+    }
+
     protected static string FormatTime(double seconds)
     {
         if (double.IsNaN(seconds) || seconds < 0) seconds = 0;
         var span = TimeSpan.FromSeconds(seconds);
         return $"{(int)span.TotalMinutes}:{span.Seconds:00}";
+    }
+
+    /// <summary>
+    /// The elapsed time to a hundredth of a second.
+    /// </summary>
+    /// <remarks>
+    /// Only ever used for the position, never the duration. Hundredths on a number being aimed at are
+    /// the whole point of the seek steps; hundredths on the track's length are noise.
+    /// </remarks>
+    protected static string FormatTimePrecise(double seconds)
+    {
+        if (double.IsNaN(seconds) || seconds < 0) seconds = 0;
+        var span = TimeSpan.FromSeconds(seconds);
+        return $"{(int)span.TotalMinutes}:{span.Seconds:00}.{span.Milliseconds / 10:00}";
     }
 
     [JSInvokable] public void UpdateTime(double t) { _currentTime = t; InvokeAsync(StateHasChanged); }
@@ -605,7 +718,7 @@ public class LyricsTimingEditorModel : BlazorBase, IAsyncDisposable
             _selected = null;
             _isDirty = false;
 
-            await BuildBannerAsync(editable.IsDraft);
+            BuildBanner(editable.HasUnpublishedChanges);
             _statusMessage = "Back to the timings we produced for you. Your saved changes are gone.";
         }
         finally

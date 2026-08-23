@@ -35,6 +35,11 @@ public class AdminNotificationService : IAdminNotificationService
     public const string NotifyChargebackReceivedKey = "AdminNotify_ChargebackReceived";
     public const string NotifyPersonaChangedKey = "AdminNotify_PersonaChanged";
 
+    // One key for both lyrics events, following NotifyPersonaChangedKey: an admin who wants to know
+    // when creators are working on lyrics wants both halves of it, and two switches to express one
+    // preference is two switches to get out of step.
+    public const string NotifyLyricsChangedKey = "AdminNotify_LyricsChanged";
+
     public AdminNotificationService(
         IEmailService emailService,
         IAppSettingsService appSettingsService,
@@ -297,6 +302,76 @@ public class AdminNotificationService : IAdminNotificationService
     public async Task NotifyPersonaDeletedAsync(int creatorId, string creatorEmail, string personaName, string? bio, string? personaImageUrl)
     {
         await SendPersonaChangeNotificationsAsync(creatorId, creatorEmail, personaName, bio, personaImageUrl, "Deleted");
+    }
+
+    /// <inheritdoc />
+    /// <inheritdoc />
+    public Task NotifyLyricsAddedAsync(int creatorId, int songMetadataId) =>
+        NotifyLyricsEventAsync(
+            creatorId,
+            songMetadataId,
+            UserHistoryEventTypes.LyricsAdded,
+            "added lyrics for",
+            "Lyrics Added",
+            "StreamTunes Admin - Lyrics Added");
+
+    /// <inheritdoc />
+    public Task NotifyLyricsPublishedAsync(int creatorId, int songMetadataId) =>
+        NotifyLyricsEventAsync(
+            creatorId,
+            songMetadataId,
+            UserHistoryEventTypes.LyricsPublished,
+            "published lyrics for",
+            "Lyrics Published",
+            "StreamTunes Admin - Lyrics Published");
+
+    /// <summary>
+    /// The shared body of both lyrics notifications: resolve who and what, always record the history
+    /// row, then email admin only if that notification is switched on.
+    /// </summary>
+    /// <remarks>
+    /// One method for both because the only differences are strings. Note the ordering that every
+    /// other notifier here uses: <b>history is unconditional and the email is not</b> - an admin
+    /// turning the email off is saying "stop mailing me", not "stop keeping the record".
+    /// </remarks>
+    private async Task NotifyLyricsEventAsync(
+        int creatorId,
+        int songMetadataId,
+        string eventType,
+        string verbPhrase,
+        string emailTitle,
+        string subject)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        // The creator row carries the UserId; user history is keyed on the user, not the creator.
+        var creator = await context.Creators.FirstOrDefaultAsync(c => c.Id == creatorId);
+        var user = creator is null
+            ? null
+            : await context.Users.FirstOrDefaultAsync(u => u.Id == creator.UserId);
+
+        var userId = user?.Id ?? 0;
+        var userEmail = user?.Email ?? string.Empty;
+
+        var song = await context.SongMetadata
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == songMetadataId);
+
+        var title = song is null
+            ? "a song"
+            : SongTitleHelper.GetEffectiveTitle(song.SongTitle, song.Mp3BlobPath, song.BlobPath);
+
+        await RecordUserHistoryAsync(
+            userId, userEmail, eventType, $"User {verbPhrase} song '{title}'");
+
+        if (!await IsNotificationEnabledAsync(NotifyLyricsChangedKey))
+            return;
+
+        var body = BuildAdminEmailBody(
+            emailTitle,
+            $"A creator has {verbPhrase} &ldquo;{System.Web.HttpUtility.HtmlEncode(title)}&rdquo;.",
+            userEmail);
+        await SendAdminEmailAsync(subject, body);
     }
 
     /// <inheritdoc />

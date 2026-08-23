@@ -56,6 +56,7 @@ public class AdminSettingsModel : BlazorBase
     protected bool _notifyUploadCompleted = true;
     protected bool _notifySongRenamed = true;
     protected bool _notifySongArtUpdated = true;
+    protected bool _notifyLyricsChanged = true;
     protected bool _notifyTipFraudPrevented = true;
 
     // Original values for change tracking
@@ -67,6 +68,7 @@ public class AdminSettingsModel : BlazorBase
     protected bool _originalNotifyUploadCompleted = true;
     protected bool _originalNotifySongRenamed = true;
     protected bool _originalNotifySongArtUpdated = true;
+    protected bool _originalNotifyLyricsChanged = true;
     protected bool _originalNotifyTipFraudPrevented = true;
     protected bool _isSavingNotifications = false;
 
@@ -119,6 +121,7 @@ public class AdminSettingsModel : BlazorBase
                                              || _notifyUploadCompleted != _originalNotifyUploadCompleted
                                              || _notifySongRenamed != _originalNotifySongRenamed
                                              || _notifySongArtUpdated != _originalNotifySongArtUpdated
+                                             || _notifyLyricsChanged != _originalNotifyLyricsChanged
                                              || _notifyTipFraudPrevented != _originalNotifyTipFraudPrevented;
 
     protected bool _hasMaintenanceChanges => _maintenanceStartEastern != _originalMaintenanceStartEastern
@@ -224,6 +227,8 @@ public class AdminSettingsModel : BlazorBase
 
         _notifySongArtUpdated = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifySongArtUpdatedKey);
         _originalNotifySongArtUpdated = _notifySongArtUpdated;
+        _notifyLyricsChanged = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyLyricsChangedKey);
+        _originalNotifyLyricsChanged = _notifyLyricsChanged;
 
         _notifyTipFraudPrevented = await AdminNotificationService.IsNotificationEnabledAsync(Services.AdminNotificationService.NotifyTipFraudPreventedKey);
         _originalNotifyTipFraudPrevented = _notifyTipFraudPrevented;
@@ -838,6 +843,7 @@ public class AdminSettingsModel : BlazorBase
         _notifyUploadCompleted = _originalNotifyUploadCompleted;
         _notifySongRenamed = _originalNotifySongRenamed;
         _notifySongArtUpdated = _originalNotifySongArtUpdated;
+        _notifyLyricsChanged = _originalNotifyLyricsChanged;
         _notifyTipFraudPrevented = _originalNotifyTipFraudPrevented;
         StateHasChanged();
     }
@@ -855,6 +861,7 @@ public class AdminSettingsModel : BlazorBase
             await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyUploadCompletedKey, _notifyUploadCompleted);
             await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifySongRenamedKey, _notifySongRenamed);
             await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifySongArtUpdatedKey, _notifySongArtUpdated);
+            await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyLyricsChangedKey, _notifyLyricsChanged);
             await AdminNotificationService.SetNotificationEnabledAsync(Services.AdminNotificationService.NotifyTipFraudPreventedKey, _notifyTipFraudPrevented);
 
             _originalNotifyRegistration = _notifyRegistration;
@@ -865,6 +872,7 @@ public class AdminSettingsModel : BlazorBase
             _originalNotifyUploadCompleted = _notifyUploadCompleted;
             _originalNotifySongRenamed = _notifySongRenamed;
             _originalNotifySongArtUpdated = _notifySongArtUpdated;
+            _originalNotifyLyricsChanged = _notifyLyricsChanged;
             _originalNotifyTipFraudPrevented = _notifyTipFraudPrevented;
 
             _successMessage = "Admin notification settings saved successfully.";

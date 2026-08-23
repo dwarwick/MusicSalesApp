@@ -39,6 +39,7 @@ public class SongLyricsDraftAndPublishTests
     private TestFactory _factory = null!;
     private Mock<IAzureStorageService> _storage = null!;
     private Dictionary<string, string> _blobs = null!;
+    private Mock<IAdminNotificationService> _adminNotifications = null!;
     private SongLyricsService _service = null!;
 
     [SetUp]
@@ -76,11 +77,14 @@ public class SongLyricsDraftAndPublishTests
         var durable = new Mock<IDurableTaskClient>();
         durable.SetupGet(client => client.IsConfigured).Returns(true);
 
+        _adminNotifications = new Mock<IAdminNotificationService>();
+
         _service = new SongLyricsService(
             _factory,
             _storage.Object,
             durable.Object,
             new RecordingBackgroundJobClient(),
+            _adminNotifications.Object,
             Mock.Of<ILogger<SongLyricsService>>());
     }
 
@@ -220,7 +224,7 @@ public class SongLyricsDraftAndPublishTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Outcome, Is.EqualTo(LyricsEditOutcome.Success));
-            Assert.That(result.IsDraft, Is.True);
+            Assert.That(result.HasUnpublishedChanges, Is.True);
             Assert.That(result.Document!.Lines[1].StartMs, Is.EqualTo(42_000));
         });
     }
@@ -234,8 +238,53 @@ public class SongLyricsDraftAndPublishTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.IsDraft, Is.False);
+            Assert.That(result.HasUnpublishedChanges, Is.False);
             Assert.That(result.Document!.Lines[1].StartMs, Is.EqualTo(1_000));
+        });
+    }
+
+    [Test]
+    public async Task ReopeningAFreshlyPublishedSongDoesNotClaimUnpublishedChanges()
+    {
+        // THE REGRESSION THIS EXISTS FOR. Publishing keeps the draft blob and stamps it level with
+        // the publish, so "there is a draft file" stays true forever afterwards - and the editor,
+        // which used to read exactly that, greeted a creator who had just published with "these are
+        // your unpublished changes" while the songs grid, one click away, correctly said there were
+        // none. The editor now asks the same property the grid does.
+        await SeedAsync();
+        await _service.SaveDraftAsync(SongId, CreatorId, Document(firstStart: 42_000));
+        await _service.PublishAsync(SongId, CreatorId);
+
+        var result = await _service.GetEditableTimingsAsync(SongId, CreatorId);
+        var row = await RowAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.HasUnpublishedChanges, Is.False, "What the editor's banner reads.");
+            Assert.That(row.HasUnpublishedChanges, Is.False, "What the songs grid reads.");
+            Assert.That(
+                result.Document!.Lines[1].StartMs,
+                Is.EqualTo(42_000),
+                "Still resumes from what was published, which is why the draft blob is kept.");
+        });
+    }
+
+    [Test]
+    public async Task EditingAfterAPublishClaimsUnpublishedChangesAgain()
+    {
+        // The other half: the fix must not simply stop reporting drafts. A creator who publishes and
+        // then keeps tapping does have unpublished work, and needs telling.
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+        await _service.SaveDraftAsync(SongId, CreatorId, Document(firstStart: 55_000));
+
+        var result = await _service.GetEditableTimingsAsync(SongId, CreatorId);
+        var row = await RowAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.HasUnpublishedChanges, Is.True);
+            Assert.That(row.HasUnpublishedChanges, Is.True, "And the grid agrees.");
         });
     }
 
@@ -253,7 +302,7 @@ public class SongLyricsDraftAndPublishTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Outcome, Is.EqualTo(LyricsEditOutcome.Success));
-            Assert.That(result.IsDraft, Is.False);
+            Assert.That(result.HasUnpublishedChanges, Is.False);
             Assert.That(result.Document!.Lines[1].StartMs, Is.EqualTo(1_000));
         });
     }
@@ -293,6 +342,163 @@ public class SongLyricsDraftAndPublishTests
     }
 
     // -----------------------------------------------------------------
+    // Turning lyrics off
+    // -----------------------------------------------------------------
+
+    [Test]
+    public async Task HidingKeepsTheTimingsAndTakesThemOffTheAir()
+    {
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+
+        var result = await _service.UnpublishAsync(SongId, CreatorId);
+        var row = await RowAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(row.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
+            Assert.That(row.IsVisibleToListeners, Is.False, "Gone from web and both apps.");
+            Assert.That(row.TimingsBlobPath, Is.Not.Null, "And the work behind them survives.");
+        });
+    }
+
+    [Test]
+    public async Task HidingIsUndoneByPublishing()
+    {
+        // The whole point of it being the reversible one.
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+        await _service.UnpublishAsync(SongId, CreatorId);
+
+        var result = await _service.PublishAsync(SongId, CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(RowAsync().GetAwaiter().GetResult().IsVisibleToListeners, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task RemovingLeavesTheSongAsThoughLyricsHadNeverBeenPasted()
+    {
+        await SeedAsync();
+
+        var result = await _service.RemoveAsync(SongId, CreatorId);
+
+        await using var context = new AppDbContext(_options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(context.SongLyrics.Any(), Is.False, "The row is gone.");
+            Assert.That(_blobs, Is.Empty, "And so are its artifacts.");
+        });
+    }
+
+    [Test]
+    public async Task RemovingRefusesForSomebodyElsesSong()
+    {
+        await SeedAsync();
+
+        var result = await _service.RemoveAsync(SongId, OtherCreatorId);
+
+        await using var context = new AppDbContext(_options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(context.SongLyrics.Any(), Is.True, "Nothing was deleted.");
+        });
+    }
+
+    [Test]
+    public async Task AnAdminTakedownSurvivesTheCreatorTryingToPublish()
+    {
+        // THE WHOLE REASON THIS IS A COLUMN AND NOT A STATUS. An unpublish and a takedown look
+        // identical in Status, and the creator can undo an unpublish - so a takedown recorded that
+        // way would last exactly until they pressed Publish again.
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: true, "Wrong words.");
+
+        var result = await _service.PublishAsync(SongId, CreatorId);
+        var row = await RowAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(LyricsEditOutcome.AdminDisabled));
+            Assert.That(row.IsVisibleToListeners, Is.False, "Still off the air.");
+            Assert.That(row.DisabledReason, Is.EqualTo("Wrong words."));
+        });
+    }
+
+    [Test]
+    public async Task ATakenDownSongIsInvisibleEvenWhileItsStatusSaysPublished()
+    {
+        // The mobile mapper and the public blob whitelist both ask IsVisibleToListeners rather than
+        // reading Status themselves, which is what makes a takedown reach a phone at all.
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: true);
+
+        var row = await RowAsync();
+        var timings = await _service.GetPublishedTimingsAsync(SongId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.Status, Is.EqualTo(SongLyricsStatus.Published), "Status is untouched.");
+            Assert.That(row.IsVisibleToListeners, Is.False, "But nobody may see them.");
+            Assert.That(timings, Is.Null, "Including the web player.");
+        });
+    }
+
+    [Test]
+    public async Task ReEnablingGivesTheDecisionBackWithoutMakingItForThem()
+    {
+        // Re-enabling restores the creator's ability to publish; it does not publish. Deciding for
+        // them would put words in front of listeners the creator has not looked at since.
+        await SeedAsync();
+        await _service.PublishAsync(SongId, CreatorId);
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: true, "Wrong words.");
+
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: false);
+
+        var row = await RowAsync();
+        var republished = await _service.PublishAsync(SongId, CreatorId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.DisabledAt, Is.Null);
+            Assert.That(row.DisabledReason, Is.Null, "The reason goes with it.");
+            Assert.That(republished.Success, Is.True, "And the creator is in charge again.");
+        });
+    }
+
+    [Test]
+    public async Task DisablingBumpsTheVersionInBothDirections()
+    {
+        // The blob path never changes and is cached for a year, so a phone holding these timings has
+        // no other way to notice either the takedown or the restore.
+        await SeedAsync(version: 3);
+
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: true);
+        var afterDisable = (await RowAsync()).Version;
+
+        await _service.SetAdminDisabledAsync(SongId, adminUserId: 99, disabled: false);
+        var afterEnable = (await RowAsync()).Version;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(afterDisable, Is.EqualTo(4));
+            Assert.That(afterEnable, Is.EqualTo(5), "Restoring needs a bump as much as removing did.");
+        });
+    }
+
+    // -----------------------------------------------------------------
     // Publishing
     // -----------------------------------------------------------------
 
@@ -318,6 +524,52 @@ public class SongLyricsDraftAndPublishTests
     }
 
     [Test]
+    public async Task PublishingTellsAdminWhoPutLyricsInFrontOfListeners()
+    {
+        await SeedAsync();
+
+        await _service.PublishAsync(SongId, CreatorId);
+
+        _adminNotifications.Verify(
+            n => n.NotifyLyricsPublishedAsync(CreatorId, SongId),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task ARefusedPublishTellsAdminNothing()
+    {
+        await SeedAsync();
+
+        var result = await _service.PublishAsync(SongId, OtherCreatorId);
+
+        Assert.That(result.Success, Is.False);
+        _adminNotifications.Verify(
+            n => n.NotifyLyricsPublishedAsync(It.IsAny<int>(), It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task AFailingAdminNotificationDoesNotFailThePublish()
+    {
+        // The publish is already committed by the time the notification runs, so letting it throw
+        // would report "we couldn't publish" for lyrics that are, in fact, live to listeners.
+        await SeedAsync();
+
+        _adminNotifications
+            .Setup(n => n.NotifyLyricsPublishedAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ThrowsAsync(new InvalidOperationException("smtp is down"));
+
+        var result = await _service.PublishAsync(SongId, CreatorId);
+        var row = await RowAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(row.Status, Is.EqualTo(SongLyricsStatus.Published));
+        });
+    }
+
+    [Test]
     public async Task PublishingBumpsTheVersionSoCachedBrowsersSeeTheChange()
     {
         // The blob path never changes and the response carries an immutable, year-long cache header.
@@ -332,7 +584,7 @@ public class SongLyricsDraftAndPublishTests
     [Test]
     public async Task PublishingRegeneratesTheLrcFromTheSameDocument()
     {
-        // Otherwise the Download .lrc button keeps handing out the timings from before the edit -
+        // Otherwise the Download LRC button keeps handing out the timings from before the edit -
         // two files describing the same song differently, with nothing to say which is current.
         await SeedAsync();
         _blobs["abc/abc-lyrics.lrc"] = "[00:00.00]stale\n";

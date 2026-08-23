@@ -44,7 +44,13 @@ public enum LyricsEditOutcome
     NoTimings,
 
     /// <summary>The timings would not be safe to show a listener. See the problems.</summary>
-    Invalid
+    Invalid,
+
+    /// <summary>An administrator has taken these lyrics down. Only an administrator can undo it.</summary>
+    AdminDisabled,
+
+    /// <summary>An attempt is in flight, so there is nothing stable to act on yet.</summary>
+    Running
 }
 
 /// <summary>The result of saving, discarding or publishing a set of timings.</summary>
@@ -67,15 +73,23 @@ public sealed record LyricsEditResult(
 
 /// <summary>The timings a creator is about to edit, and where they came from.</summary>
 /// <param name="Document">Null unless <paramref name="Outcome"/> is success.</param>
-/// <param name="IsDraft">
-/// Whether these are the creator's unpublished working copy rather than the aligner's output. The
-/// editor says so, because "you are looking at edits you made and never published" is a materially
-/// different thing to be looking at.
+/// <param name="HasUnpublishedChanges">
+/// Whether what the editor is showing is work no listener has seen yet. The editor says so, because
+/// "you are looking at edits you made and never published" is a materially different thing to be
+/// looking at.
+///
+/// <para>
+/// <b>Not "did this come out of the draft blob".</b> That was the old meaning and it was wrong:
+/// publishing keeps the draft and stamps it level with the publish, so the draft file outlives the
+/// state it described and the editor greeted a freshly published song by claiming it had unpublished
+/// changes - while the songs grid, reading <see cref="SongLyrics.HasUnpublishedChanges"/>, said the
+/// opposite. This is now that same property, so the two cannot disagree.
+/// </para>
 /// </param>
 public sealed record LyricsEditableTimings(
     LyricsEditOutcome Outcome,
     LyricsTimingsDocument? Document,
-    bool IsDraft,
+    bool HasUnpublishedChanges,
     SongLyrics? Lyrics);
 
 /// <summary>
@@ -198,6 +212,49 @@ public interface ISongLyricsService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Take a song's lyrics off the air without destroying them.
+    /// </summary>
+    /// <remarks>
+    /// The reversible half of turning lyrics off: listeners fall back to cover art immediately, on
+    /// web and on both mobile apps, while the timings and every minute of tapping behind them
+    /// survive. One press of Publish puts them back.
+    /// </remarks>
+    Task<LyricsEditResult> UnpublishAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete a song's lyrics outright, as though they had never been pasted.
+    /// </summary>
+    /// <remarks>
+    /// The destructive half, and the only way back to a genuinely blank slate: the row goes, the
+    /// blobs go, and the songs grid offers the paste box again. Refuses while an attempt is in
+    /// flight rather than racing the completion callback, which would otherwise write the row
+    /// straight back.
+    /// </remarks>
+    Task<LyricsEditResult> RemoveAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// An administrator takes a song's lyrics down, or puts them back.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the same operation as <see cref="UnpublishAsync"/>. That one moves
+    /// <c>Status</c>, which the creator can move straight back; this sets a column the publish path
+    /// refuses to write past, so a takedown holds. No creator id, because an administrator is not
+    /// acting as the owner - the caller is responsible for having checked the permission.
+    /// </remarks>
+    Task<LyricsEditResult> SetAdminDisabledAsync(
+        int songMetadataId,
+        int adminUserId,
+        bool disabled,
+        string? reason = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Throw the draft away and go back to the last aligned or published timings.
     /// </summary>
     Task<LyricsEditResult> DiscardDraftAsync(
@@ -215,6 +272,7 @@ public sealed class SongLyricsService : ISongLyricsService
     private readonly IAzureStorageService _storageService;
     private readonly IDurableTaskClient _durableTaskClient;
     private readonly IBackgroundJobClient _backgroundJobs;
+    private readonly IAdminNotificationService _adminNotifications;
     private readonly ILogger<SongLyricsService> _logger;
 
     public SongLyricsService(
@@ -222,12 +280,14 @@ public sealed class SongLyricsService : ISongLyricsService
         IAzureStorageService storageService,
         IDurableTaskClient durableTaskClient,
         IBackgroundJobClient backgroundJobs,
+        IAdminNotificationService adminNotifications,
         ILogger<SongLyricsService> logger)
     {
         _contextFactory = contextFactory;
         _storageService = storageService;
         _durableTaskClient = durableTaskClient;
         _backgroundJobs = backgroundJobs;
+        _adminNotifications = adminNotifications;
         _logger = logger;
     }
 
@@ -289,10 +349,12 @@ public sealed class SongLyricsService : ISongLyricsService
             .AsNoTracking()
             .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
 
-        // Gated on the row's status for the same reason IsPubliclyReadableAsync is: timings held back
-        // for review sit at exactly the same blob path as published ones, so the path proves nothing.
+        // Gated on the row for the same reason IsPubliclyReadableAsync is: timings held back for
+        // review, or taken down by an administrator, sit at exactly the same blob path as published
+        // ones, so the path proves nothing. IsVisibleToListeners is the single expression of that
+        // rule - see the remarks on it.
         if (lyrics is null
-            || lyrics.Status != SongLyricsStatus.Published
+            || !lyrics.IsVisibleToListeners
             || string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath))
         {
             return null;
@@ -318,7 +380,9 @@ public sealed class SongLyricsService : ISongLyricsService
         // is case-sensitive, which is a difference in what gets served rather than a formatting one.
         return await context.SongLyrics
             .AsNoTracking()
-            .Where(row => row.Status == SongLyricsStatus.Published)
+            // The IsVisibleToListeners rule, spelled out because this one runs in SQL and cannot
+            // call a [NotMapped] property. Any change to that rule belongs here too.
+            .Where(row => row.Status == SongLyricsStatus.Published && row.DisabledAt == null)
             .Where(row => row.TimingsBlobPath == blobPath || row.LrcBlobPath == blobPath)
             .Join(
                 context.SongMetadata.Where(song => song.IsActive && song.IsEnabled),
@@ -467,6 +531,13 @@ public sealed class SongLyricsService : ISongLyricsService
         _logger.LogInformation(
             "Queued lyrics alignment {JobId} for song {SongId}.", job.JobId, songMetadataId);
 
+        // Recorded on the creator's ACTION, not on the outcome. "Who is working on lyrics" is the
+        // question this answers for an admin, and an attempt that later fails is still an answer.
+        await NotifyAdminAsync(
+            () => _adminNotifications.NotifyLyricsAddedAsync(creatorId, songMetadataId),
+            "added",
+            songMetadataId);
+
         return new LyricsSubmissionResult(LyricsSubmissionOutcome.Accepted, job.JobId, "Lyrics submitted.");
     }
 
@@ -568,8 +639,12 @@ public sealed class SongLyricsService : ISongLyricsService
 
         // The draft wins when there is one: it is what the creator was last working on, and showing
         // them the aligner's output instead would silently discard their work the moment they saved.
-        var isDraft = !string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath);
-        var path = isDraft ? lyrics.DraftTimingsBlobPath : lyrics.TimingsBlobPath;
+        //
+        // NOTE THIS ANSWERS "WHICH BLOB", NOT "IS THIS UNPUBLISHED" - the two came apart the moment
+        // publishing started keeping the draft rather than deleting it, and conflating them is what
+        // told a creator who had just published that they had unpublished changes. See below.
+        var readingDraft = !string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath);
+        var path = readingDraft ? lyrics.DraftTimingsBlobPath : lyrics.TimingsBlobPath;
 
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -578,7 +653,7 @@ public sealed class SongLyricsService : ISongLyricsService
 
         var document = await ReadDocumentAsync(path);
 
-        if (document is null && isDraft)
+        if (document is null && readingDraft)
         {
             // The draft blob is gone or unreadable. Falling back to the published timings beats
             // showing the creator an error page for a file they never asked about - they lose the
@@ -588,12 +663,19 @@ public sealed class SongLyricsService : ISongLyricsService
                 songMetadataId);
 
             document = await ReadDocumentAsync(lyrics.TimingsBlobPath);
-            isDraft = false;
+            readingDraft = false;
         }
+
+        // THE SAME QUESTION THE SONGS GRID ASKS, deliberately answered from the same property.
+        // Publishing keeps the draft blob and stamps it level with the publish, so "there is a draft
+        // file" stays true forever afterwards - which is why the editor greeted a freshly published
+        // song with "these are your unpublished changes" while the grid, reading the timestamps,
+        // correctly said there were none. The two must not be able to disagree.
+        var hasUnpublishedChanges = readingDraft && lyrics.HasUnpublishedChanges;
 
         return document is null
             ? new LyricsEditableTimings(LyricsEditOutcome.NoTimings, null, false, lyrics)
-            : new LyricsEditableTimings(LyricsEditOutcome.Success, document, isDraft, lyrics);
+            : new LyricsEditableTimings(LyricsEditOutcome.Success, document, hasUnpublishedChanges, lyrics);
     }
 
     /// <inheritdoc />
@@ -647,7 +729,18 @@ public sealed class SongLyricsService : ISongLyricsService
             return LyricsEditResult.Fail(failure.Value, "These lyrics could not be published.");
         }
 
-        var source = string.IsNullOrWhiteSpace(lyrics!.DraftTimingsBlobPath)
+        // THE TEETH IN AN ADMINISTRATOR'S TAKEDOWN. Everything else about a disabled song still
+        // works - the creator can open the editor, tap, and save a draft - because none of that
+        // reaches a listener. This is the one door out to an audience, and it is the one that is
+        // locked.
+        if (lyrics!.DisabledAt is not null)
+        {
+            return LyricsEditResult.Fail(
+                LyricsEditOutcome.AdminDisabled,
+                "An administrator has disabled these lyrics, so they can't be published.");
+        }
+
+        var source = string.IsNullOrWhiteSpace(lyrics.DraftTimingsBlobPath)
             ? lyrics.TimingsBlobPath
             : lyrics.DraftTimingsBlobPath;
 
@@ -683,7 +776,7 @@ public sealed class SongLyricsService : ISongLyricsService
 
         await UploadDocumentAsync(timingsPath, document);
 
-        // The LRC is regenerated rather than left alone, because the Download .lrc button would
+        // The LRC is regenerated rather than left alone, because the Download LRC button would
         // otherwise keep handing out the timings from before this edit - two files describing the
         // same song differently, with nothing anywhere to say which is current.
         var lrc = LyricsLrcWriter.Write(
@@ -722,8 +815,189 @@ public sealed class SongLyricsService : ISongLyricsService
             songMetadataId,
             lyrics.Version);
 
+        await NotifyAdminAsync(
+            () => _adminNotifications.NotifyLyricsPublishedAsync(creatorId, songMetadataId),
+            "published",
+            songMetadataId);
+
         return LyricsEditResult.Ok("Published. Listeners will see these timings from now on.");
     }
+
+    /// <summary>
+    /// Fire an admin notification without letting it affect the creator.
+    /// </summary>
+    /// <remarks>
+    /// <b>Swallowed on purpose.</b> These run after the work is already committed, and they exist so
+    /// an admin can watch what creators are doing - which is worth exactly nothing measured against
+    /// the submit or publish the creator actually asked for. An unreachable SMTP server must not
+    /// surface as "we couldn't publish your lyrics" on a publish that already happened.
+    /// </remarks>
+    private async Task NotifyAdminAsync(Func<Task> notify, string what, int songMetadataId)
+    {
+        try
+        {
+            await notify();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not send the admin notification for lyrics {What} on song {SongId}.",
+                what,
+                songMetadataId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> UnpublishAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, _, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return LyricsEditResult.Fail(failure.Value, "These lyrics could not be hidden.");
+        }
+
+        if (lyrics!.Status != SongLyricsStatus.Published)
+        {
+            return LyricsEditResult.Ok("These lyrics were already hidden from listeners.");
+        }
+
+        // NeedsReview rather than a new state, because that is precisely what this song now is:
+        // timings that exist and nobody outside can see. PublishedAt is left alone - it records that
+        // a publish once happened, which is still true, and clearing it would tell
+        // HasUnpublishedChanges that every saved edit is suddenly unreleased.
+        lyrics.Status = SongLyricsStatus.NeedsReview;
+        lyrics.UpdatedAt = DateTime.UtcNow;
+
+        // The paths do not change, so a phone holding a cached copy has no other way to notice.
+        lyrics.Version++;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Creator {CreatorId} hid the lyrics for song {SongId} from listeners.",
+            creatorId,
+            songMetadataId);
+
+        return LyricsEditResult.Ok(
+            "Hidden. Listeners see the cover art again, and your timings are kept.");
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> RemoveAsync(
+        int songMetadataId,
+        int creatorId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var (lyrics, _, failure) = await LoadOwnedAsync(context, songMetadataId, creatorId, cancellationToken);
+        if (failure is not null)
+        {
+            return LyricsEditResult.Fail(failure.Value, "These lyrics could not be removed.");
+        }
+
+        // Refused rather than raced. The completion callback writes the row back if it finds it
+        // missing - deliberately, so timings that cost minutes of compute are never dropped - so
+        // removing under a running attempt would delete the row and then watch it reappear.
+        var running = await context.LyricsAlignmentJobs
+            .AnyAsync(
+                job => job.SongMetadataId == songMetadataId
+                    && (job.Status == LyricsAlignmentJobStatus.Queued
+                        || job.Status == LyricsAlignmentJobStatus.Processing),
+                cancellationToken);
+
+        if (running)
+        {
+            return LyricsEditResult.Fail(
+                LyricsEditOutcome.Running,
+                "These lyrics are being timed. Cancel that first, then remove them.");
+        }
+
+        var paths = new[]
+        {
+            lyrics!.TimingsBlobPath,
+            lyrics.LrcBlobPath,
+            lyrics.DraftTimingsBlobPath,
+            lyrics.LyricsBlobPath
+        };
+
+        context.SongLyrics.Remove(lyrics);
+        await context.SaveChangesAsync(cancellationToken);
+
+        // AFTER the row, and best-effort. With the row gone nothing points at these blobs and nothing
+        // will serve them - IsPubliclyReadableAsync resolves a path back through the row - so a blob
+        // that refuses to delete is litter, not exposure, and is not worth failing the removal over.
+        foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)))
+        {
+            try
+            {
+                await _storageService.DeleteAsync(path!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete the lyrics artifact {Path}.", path);
+            }
+        }
+
+        _logger.LogInformation(
+            "Creator {CreatorId} removed the lyrics for song {SongId}.", creatorId, songMetadataId);
+
+        return LyricsEditResult.Ok("Removed. This song is back to having no lyrics at all.");
+    }
+
+    /// <inheritdoc />
+    public async Task<LyricsEditResult> SetAdminDisabledAsync(
+        int songMetadataId,
+        int adminUserId,
+        bool disabled,
+        string? reason = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var lyrics = await context.SongLyrics
+            .FirstOrDefaultAsync(row => row.SongMetadataId == songMetadataId, cancellationToken);
+
+        if (lyrics is null)
+        {
+            return LyricsEditResult.Fail(
+                LyricsEditOutcome.NotFound, "This song has no lyrics to disable.");
+        }
+
+        lyrics.DisabledAt = disabled ? DateTime.UtcNow : null;
+        lyrics.DisabledByUserId = disabled ? adminUserId : null;
+        lyrics.DisabledReason = disabled ? Truncate(reason, 500) : null;
+        lyrics.UpdatedAt = DateTime.UtcNow;
+
+        // Bumped on the way DOWN as well as up. The blob path is unchanged and cached for a year, so
+        // a phone that already holds these timings needs a reason to ask again - and re-enabling
+        // without one would leave the song silently lyric-less on every device that had seen it.
+        lyrics.Version++;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Administrator {AdminUserId} {Action} the lyrics for song {SongId}.",
+            adminUserId,
+            disabled ? "disabled" : "re-enabled",
+            songMetadataId);
+
+        return LyricsEditResult.Ok(
+            disabled
+                ? "Disabled. Listeners see the cover art, and the creator can't publish these again."
+                : "Re-enabled. The creator can publish these lyrics again.");
+    }
+
+    private static string? Truncate(string? value, int maxLength) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Length <= maxLength ? value : value[..maxLength];
 
     /// <inheritdoc />
     public async Task<LyricsEditResult> DiscardDraftAsync(

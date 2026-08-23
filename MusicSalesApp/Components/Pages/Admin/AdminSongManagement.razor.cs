@@ -42,6 +42,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
     [Inject] protected IImageVariantCoordinator ImageVariantCoordinator { get; set; }
     [Inject] protected ICoverArtUrlBuilder CoverArtUrlBuilder { get; set; }
     [Inject] protected ILogger<AdminSongManagementModel> Logger { get; set; }
+    [Inject] protected ISongLyricsService LyricsService { get; set; }
 
     protected bool _isLoading = true;
     protected string _errorMessage = string.Empty;
@@ -113,6 +114,7 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                 {
                     var appUser = await UserManager.GetUserAsync(user);
                     _currentAdminEmail = appUser?.Email ?? string.Empty;
+                    _currentAdminUserId = appUser?.Id ?? 0;
                 }
 
                 // Pre-load the cache
@@ -139,6 +141,62 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
             _imageDimensionsChecked = true;
             await CheckAllImageDimensions();
         }
+    }
+
+    protected int _currentAdminUserId;
+    protected string _lyricsMessage = string.Empty;
+
+    protected SongAdminViewModel _lyricsAdminSong;
+    protected bool _showLyricsDisableDialog;
+    protected string _lyricsDisableReason = string.Empty;
+
+    /// <summary>Ask what to tell the creator, then take their lyrics down.</summary>
+    /// <remarks>
+    /// The reason is prompted for rather than optional-in-passing because it is the only thing the
+    /// creator will see. A takedown with no explanation reads as a fault in the site, and the
+    /// creator's next move is a support email somebody has to answer.
+    /// </remarks>
+    protected void OpenLyricsDisableDialog(SongAdminViewModel song)
+    {
+        _lyricsAdminSong = song;
+        _lyricsDisableReason = string.Empty;
+        _showLyricsDisableDialog = true;
+    }
+
+    protected async Task ConfirmLyricsDisableAsync()
+    {
+        if (_lyricsAdminSong is null || !int.TryParse(_lyricsAdminSong.Id, out var songId))
+        {
+            return;
+        }
+
+        _showLyricsDisableDialog = false;
+
+        var result = await LyricsService.SetAdminDisabledAsync(
+            songId, _currentAdminUserId, disabled: true, _lyricsDisableReason);
+
+        _lyricsMessage = result.Message;
+        await LoadSongsAsync();
+    }
+
+    /// <summary>Put a song's lyrics back within the creator's control.</summary>
+    /// <remarks>
+    /// Deliberately does NOT republish them. Re-enabling restores the creator's ability to decide;
+    /// deciding for them would put words in front of listeners that the creator has not looked at
+    /// since the takedown.
+    /// </remarks>
+    protected async Task EnableLyricsAsync(SongAdminViewModel song)
+    {
+        if (!int.TryParse(song.Id, out var songId))
+        {
+            return;
+        }
+
+        var result = await LyricsService.SetAdminDisabledAsync(
+            songId, _currentAdminUserId, disabled: false);
+
+        _lyricsMessage = result.Message;
+        await LoadSongsAsync();
     }
 
     protected async Task LoadSongsAsync()
@@ -177,6 +235,34 @@ public class AdminSongManagementModel : ComponentBase, IAsyncDisposable
                     CoverArtVariantWidths = m.CoverArtVariantWidths ?? string.Empty
                 };
             }).ToList();
+
+        // Swallowed like the creator grid's equivalent, and for the same reason: an admin came here
+        // to manage songs, so a lyrics lookup that throws must cost the lyrics column rather than
+        // the entire song list.
+        try
+        {
+            var songIds = _allSongs
+                .Select(song => int.TryParse(song.Id, out var id) ? id : (int?)null)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .ToList();
+
+            var lyrics = await LyricsService.GetForSongsAsync(songIds);
+
+            foreach (var song in _allSongs)
+            {
+                if (int.TryParse(song.Id, out var songId)
+                    && lyrics.TryGetValue(songId, out var songLyrics))
+                {
+                    song.LyricsStatus = songLyrics.Status;
+                    song.LyricsDisabledAt = songLyrics.DisabledAt;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Could not load lyric state for the admin song grid.");
+        }
 
         // Generate SAS URLs for images
         foreach (var song in _allSongs)

@@ -28,7 +28,7 @@ public class LyricsAlignmentCompletionServiceTests
     private TestFactory _factory = null!;
     private Mock<IBlobContainerFactory> _containers = null!;
     private Mock<IStagingToMediaCopier> _copier = null!;
-    private Mock<IAppSettingsService> _appSettings = null!;
+
     private RecordingNotifier _notifier = null!;
     private RecordingBackgroundJobClient _jobs = null!;
     private LyricsAlignmentCompletionService _service = null!;
@@ -64,9 +64,6 @@ public class LyricsAlignmentCompletionServiceTests
         _copier = new Mock<IStagingToMediaCopier>();
         _copier.Setup(c => c.CreateStagingReadSasQuery(It.IsAny<BlobContainerClient>())).Returns("sig=x");
 
-        _appSettings = new Mock<IAppSettingsService>();
-        _appSettings.Setup(s => s.GetLyricsConfidenceThresholdAsync()).ReturnsAsync(0.7d);
-
         _notifier = new RecordingNotifier();
         _jobs = new RecordingBackgroundJobClient();
 
@@ -75,7 +72,6 @@ public class LyricsAlignmentCompletionServiceTests
             _containers.Object,
             _jobs,
             _copier.Object,
-            _appSettings.Object,
             _notifier,
             Mock.Of<ILogger<LyricsAlignmentCompletionService>>());
     }

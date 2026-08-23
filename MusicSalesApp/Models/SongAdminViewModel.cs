@@ -99,16 +99,23 @@ public class SongAdminViewModel
     public SongLyricsStatus? LyricsStatus { get; set; }
 
     /// <summary>
-    /// The composite confidence behind the current timings, 0-1, or null while pending or absent.
+    /// Where this song's Enhanced LRC lives, or empty if there is not one to download.
     ///
     /// <para>
-    /// Surfaced in the grid rather than only in the lyrics dialog because the number's only real use
-    /// is comparative: it is read against an admin-set threshold, and deciding where that threshold
-    /// belongs means looking at several songs together. One song at a time, through a dialog, is not
-    /// enough to judge it.
+    /// Empty even for a song whose timings landed: the LRC copy is allowed to fail on its own
+    /// without costing the timings (see <c>LyricsAlignmentCompletionService</c>), so "the alignment
+    /// succeeded" and "there is a file to hand the creator" are two different questions. The grid
+    /// offers Download LRC only when this is set, and falls back to the Lyrics button otherwise -
+    /// a download button that silently does nothing is worse than not offering one.
     /// </para>
     /// </summary>
-    public double? LyricsConfidence { get; set; }
+    public string LyricsLrcBlobPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When an administrator took this song's lyrics down, or null if they are the creator's to
+    /// control. Admin surfaces only.
+    /// </summary>
+    public DateTime? LyricsDisabledAt { get; set; }
 
     /// <summary>
     /// Whether the creator has timing edits they have saved but not released.

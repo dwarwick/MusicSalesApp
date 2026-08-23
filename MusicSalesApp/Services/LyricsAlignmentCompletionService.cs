@@ -45,16 +45,16 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     private readonly IBlobContainerFactory _containerFactory;
     private readonly IBackgroundJobClient _backgroundJobs;
     private readonly IStagingToMediaCopier _copier;
-    private readonly IAppSettingsService _appSettings;
     private readonly ILyricsAlignmentNotifier _notifier;
     private readonly ILogger<LyricsAlignmentCompletionService> _logger;
 
+    // No IAppSettingsService here any more: the only thing it was asked for was the lyrics confidence
+    // threshold, and classification no longer consults the score at all.
     public LyricsAlignmentCompletionService(
         IDbContextFactory<AppDbContext> contextFactory,
         IBlobContainerFactory containerFactory,
         IBackgroundJobClient backgroundJobs,
         IStagingToMediaCopier copier,
-        IAppSettingsService appSettings,
         ILyricsAlignmentNotifier notifier,
         ILogger<LyricsAlignmentCompletionService> logger)
     {
@@ -62,7 +62,6 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
         _containerFactory = containerFactory;
         _backgroundJobs = backgroundJobs;
         _copier = copier;
-        _appSettings = appSettings;
         _notifier = notifier;
         _logger = logger;
     }
@@ -122,8 +121,7 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
             return;
         }
 
-        var threshold = await _appSettings.GetLyricsConfidenceThresholdAsync();
-        var classification = Classify(result, threshold);
+        var classification = Classify(result);
 
         if (classification.Status == SongLyricsStatus.Failed)
         {
@@ -340,12 +338,13 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
     /// </para>
     ///
     /// <para>
-    /// The confidence threshold now only chooses which message the creator reads. It is advice about
-    /// where to spend attention, not a gate, so an admin moving it re-words what creators are told
-    /// without changing what any listener can see.
+    /// The confidence no longer chooses anything. It graded the success message until it became clear
+    /// the score is systematically pessimistic - it answers "did the aligner think it did well", not
+    /// "are these timings good" - so the wording it produced told creators with excellent timings to
+    /// expect work. Success now reads the same way every time and lets the creator judge by ear.
     /// </para>
     /// </summary>
-    internal static LyricsClassification Classify(LyricsAlignmentResult result, double threshold)
+    internal static LyricsClassification Classify(LyricsAlignmentResult result)
     {
         if (result.MatchedTokenCount == 0)
         {
@@ -391,26 +390,17 @@ public sealed class LyricsAlignmentCompletionService : ILyricsAlignmentCompletio
 
         // NOTHING IS PUBLISHED HERE, at any confidence. Machine alignment of sung vocals lands
         // 150-300 ms out on a good day, and a listener notices that immediately, so the last word
-        // belongs to the person whose song it is. The creator opens the timing editor, listens, taps
+        // belongs to the person whose song it is. The creator opens Preview Results, listens, taps
         // anything that drifts, and presses Publish.
         //
-        // The threshold survives as ADVICE rather than a gate: it decides which of these two messages
-        // the creator reads, and therefore whether they expect to do any work. That is the honest use
-        // of a number that was never able to answer "are these good enough to show to listeners" -
-        // it only ever answered "did the aligner think it did well".
-        var confidence = result.Confidence ?? 0d;
-
-        return confidence < threshold
-            ? new LyricsClassification(
-                SongLyricsStatus.NeedsReview,
-                null,
-                $"We timed these lyrics, but we're not confident about this one ({confidence:P0}). "
-                + "Have a listen and expect to do some tapping before you publish.")
-            : new LyricsClassification(
-                SongLyricsStatus.NeedsReview,
-                null,
-                $"Timed with {confidence:P0} confidence. Have a listen, and press Publish when "
-                + "you're happy - they aren't visible to listeners yet.");
+        // One message, with no score in it. The structural checks above are what "this run failed"
+        // means; past them, the aligner's own opinion of itself adds nothing a creator can act on and
+        // reads far worse than the timings deserve.
+        return new LyricsClassification(
+            SongLyricsStatus.NeedsReview,
+            null,
+            "We've timed these lyrics. Have a listen, and press Publish when you're happy - they "
+            + "aren't visible to listeners yet.");
     }
 
     private async Task ApplyFailureAsync(

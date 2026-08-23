@@ -28,6 +28,13 @@ else if (!string.IsNullOrEmpty(_errorMessage))
 }
 else
 {
+    @* Confirms a lyrics takedown or restore actually landed. Without it the only feedback is a badge
+       changing colour in one row of a long grid, which is easy to miss and impossible to be sure of. *@
+    @if (!string.IsNullOrEmpty(_lyricsMessage))
+    {
+        <div class="alert alert-info" role="status">@_lyricsMessage</div>
+    }
+
     <div id="grid-container">
         <!-- Syncfusion Data Grid -->
         <SfGrid @ref="_grid" 
@@ -51,6 +58,46 @@ else
                             <SfButton OnClick="() => EditSong(song)" IsPrimary="true" CssClass="e-btn e-small e-primary">
                                 <i class="bi bi-pencil"></i> Edit
                             </SfButton>
+                        }
+                    </Template>
+                </GridColumn>
+                <GridColumn HeaderText="Lyrics" Width="150" AllowFiltering="false" AllowSorting="false">
+                    <Template>
+                        @{
+                            var song = (context as SongAdminViewModel);
+
+                            @* Nothing to moderate until a creator has actually pasted words. *@
+                            if (song.LyricsStatus is null)
+                            {
+                                <span class="text-muted">&mdash;</span>
+                            }
+                            else if (song.LyricsDisabledAt is not null)
+                            {
+                                <span class="badge bg-danger">Disabled</span>
+                                <div class="mt-1">
+                                    <SfButton OnClick="() => EnableLyricsAsync(song)" CssClass="e-btn e-small e-outline">
+                                        Enable
+                                    </SfButton>
+                                </div>
+                            }
+                            else
+                            {
+                                @* Live vs merely present: only Published reaches a listener, so only
+                                   Published is worth flagging green to somebody deciding what to act on. *@
+                                if (song.LyricsStatus == SongLyricsStatus.Published)
+                                {
+                                    <span class="badge bg-success">Live</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Not live</span>
+                                }
+                                <div class="mt-1">
+                                    <SfButton OnClick="() => OpenLyricsDisableDialog(song)" CssClass="e-btn e-small e-danger">
+                                        Disable
+                                    </SfButton>
+                                </div>
+                            }
                         }
                     </Template>
                 </GridColumn>
@@ -525,6 +572,37 @@ else
                     <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                 }
                 Save Changes
+            </SfButton>
+        </FooterTemplate>
+    </DialogTemplates>
+</SfDialog>
+
+@* Taking a song's lyrics down. The reason is asked for rather than offered, because it is the only
+   thing the creator is told - a takedown with no explanation reads to them as a fault in the site,
+   and their next move is a support email somebody has to answer. *@
+<SfDialog @bind-Visible="_showLyricsDisableDialog" Width="480px" IsModal="true" ShowCloseIcon="true">
+    <DialogTemplates>
+        <Header>Disable lyrics for @(_lyricsAdminSong?.SongTitle ?? "this song")</Header>
+        <Content>
+            <p>
+                Listeners will see the cover art instead, on the website and in both mobile apps, and
+                the creator won't be able to publish these lyrics again until you re-enable them.
+                Their timings are kept.
+            </p>
+            <div class="mb-2">
+                <label class="form-label" for="lyrics-disable-reason">Reason shown to the creator</label>
+                <SfTextBox @bind-Value="_lyricsDisableReason"
+                           ID="lyrics-disable-reason"
+                           Multiline="true"
+                           Placeholder="e.g. These lyrics don't match the song." />
+            </div>
+        </Content>
+        <FooterTemplate>
+            <SfButton OnClick="ConfirmLyricsDisableAsync" CssClass="e-btn e-small e-danger">
+                Disable lyrics
+            </SfButton>
+            <SfButton OnClick="() => _showLyricsDisableDialog = false" CssClass="e-btn e-small">
+                Cancel
             </SfButton>
         </FooterTemplate>
     </DialogTemplates>

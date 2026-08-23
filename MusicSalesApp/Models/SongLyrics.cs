@@ -143,6 +143,39 @@ public class SongLyrics
     public bool HasUnpublishedChanges =>
         DraftUpdatedAt.HasValue && (!PublishedAt.HasValue || DraftUpdatedAt > PublishedAt);
 
+    /// <summary>When an administrator took these lyrics off the air. Null unless one has.</summary>
+    /// <remarks>
+    /// <b>Deliberately not expressed by moving <see cref="Status"/>.</b> An unpublish and a takedown
+    /// look identical in that column, and the creator can undo an unpublish - so a takedown recorded
+    /// that way survives exactly until the creator presses Publish again. A separate column lets the
+    /// publish path refuse while it is set, and lets the creator be told why instead of meeting a
+    /// button that silently does nothing.
+    /// </remarks>
+    public DateTime? DisabledAt { get; set; }
+
+    /// <summary>The administrator who disabled them. Null unless <see cref="DisabledAt"/> is set.</summary>
+    /// <remarks>
+    /// No foreign key, for the same reason <c>LyricsAlignmentJob.CreatorId</c> has none: this is an
+    /// audit note about who acted, and it must not become a reason a user row cannot be deleted.
+    /// </remarks>
+    public int? DisabledByUserId { get; set; }
+
+    /// <summary>What the creator is told, in the administrator's words. Optional.</summary>
+    [MaxLength(500)]
+    public string DisabledReason { get; set; }
+
+    /// <summary>
+    /// The one answer to "may a listener see these?" - used by the web player, the mobile mapper and
+    /// the public blob whitelist alike.
+    /// </summary>
+    /// <remarks>
+    /// Centralised on purpose. Three separate call sites used to spell out <c>Status == Published</c>
+    /// for themselves, and adding a second condition to a rule written in three places is how one of
+    /// them keeps serving what the other two have withdrawn.
+    /// </remarks>
+    [NotMapped]
+    public bool IsVisibleToListeners => Status == SongLyricsStatus.Published && DisabledAt is null;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

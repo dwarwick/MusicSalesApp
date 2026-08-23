@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.Data;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
@@ -411,6 +412,135 @@ public class AdminNotificationServiceTests
         Assert.That(result, Has.Count.EqualTo(2));
         Assert.That(result[0].EventType, Is.EqualTo("EmailConfirmed")); // Most recent first
         Assert.That(result[1].EventType, Is.EqualTo("Registration"));
+    }
+
+    // -----------------------------------------------------------------
+    // Lyrics
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// A creator whose UserId points at the seeded user, plus a song of theirs to name.
+    /// </summary>
+    /// <remarks>
+    /// The indirection is the point of the test: the lyrics notifiers are handed a creator id, but
+    /// user history is keyed on the USER, so getting the hop wrong would file every lyrics event
+    /// against user 0 and nobody would notice until an admin went looking.
+    /// </remarks>
+    private async Task SeedCreatorWithSongAsync()
+    {
+        await using var context = new AppDbContext(_dbOptions);
+        context.Creators.Add(new Creator { Id = 5, UserId = 1 });
+        context.SongMetadata.Add(new SongMetadata
+        {
+            Id = 42,
+            CreatorId = 5,
+            SongTitle = "No More Five Year Plans"
+        });
+        await context.SaveChangesAsync();
+    }
+
+    [Test]
+    public async Task NotifyLyricsAddedAsync_SendsEmailAndRecordsHistory()
+    {
+        await SeedCreatorWithSongAsync();
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyLyricsChangedKey))
+            .ReturnsAsync((string)null);
+
+        await _service.NotifyLyricsAddedAsync(5, 42);
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                AdminNotificationService.AdminEmail,
+                It.Is<string>(s => s.Contains("Lyrics Added")),
+                It.Is<string>(body => body.Contains("No More Five Year Plans"))),
+            Times.Once);
+
+        await using var context = new AppDbContext(_dbOptions);
+        var history = await context.UserHistories.SingleAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(history.EventType, Is.EqualTo(UserHistoryEventTypes.LyricsAdded));
+            Assert.That(history.UserEmail, Is.EqualTo("test@example.com"));
+            Assert.That(history.Description, Does.Contain("No More Five Year Plans"));
+        });
+    }
+
+    [Test]
+    public async Task NotifyLyricsPublishedAsync_SendsEmailAndRecordsHistory()
+    {
+        await SeedCreatorWithSongAsync();
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyLyricsChangedKey))
+            .ReturnsAsync((string)null);
+
+        await _service.NotifyLyricsPublishedAsync(5, 42);
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(
+                AdminNotificationService.AdminEmail,
+                It.Is<string>(s => s.Contains("Lyrics Published")),
+                It.IsAny<string>()),
+            Times.Once);
+
+        await using var context = new AppDbContext(_dbOptions);
+        var history = await context.UserHistories.SingleAsync();
+        Assert.That(history.EventType, Is.EqualTo(UserHistoryEventTypes.LyricsPublished));
+    }
+
+    [Test]
+    public async Task NotifyLyricsAddedAsync_StillRecordsHistory_WhenDisabled()
+    {
+        // The switch says "stop mailing me", not "stop keeping the record". An admin who turns the
+        // email off and later goes looking in User History must still find out who did what.
+        await SeedCreatorWithSongAsync();
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyLyricsChangedKey))
+            .ReturnsAsync("False");
+
+        await _service.NotifyLyricsAddedAsync(5, 42);
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+
+        await using var context = new AppDbContext(_dbOptions);
+        var history = await context.UserHistories.SingleAsync();
+        Assert.That(history.EventType, Is.EqualTo(UserHistoryEventTypes.LyricsAdded));
+    }
+
+    [Test]
+    public async Task NotifyLyricsPublishedAsync_StillRecordsHistory_WhenDisabled()
+    {
+        await SeedCreatorWithSongAsync();
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyLyricsChangedKey))
+            .ReturnsAsync("False");
+
+        await _service.NotifyLyricsPublishedAsync(5, 42);
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
+
+        await using var context = new AppDbContext(_dbOptions);
+        var history = await context.UserHistories.SingleAsync();
+        Assert.That(history.EventType, Is.EqualTo(UserHistoryEventTypes.LyricsPublished));
+    }
+
+    [Test]
+    public async Task TheLyricsSwitchGovernsBothEventsTogether()
+    {
+        // One key covers Added and Published on purpose, following the persona notifier. If a second
+        // key ever appears, this fails - which is the point: two switches for one preference is two
+        // switches to get out of step.
+        await SeedCreatorWithSongAsync();
+        _mockAppSettingsService.Setup(x => x.GetSettingAsync(AdminNotificationService.NotifyLyricsChangedKey))
+            .ReturnsAsync("False");
+
+        await _service.NotifyLyricsAddedAsync(5, 42);
+        await _service.NotifyLyricsPublishedAsync(5, 42);
+
+        _mockEmailService.Verify(
+            x => x.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never);
     }
 
     private class TestDbContextFactory : IDbContextFactory<AppDbContext>

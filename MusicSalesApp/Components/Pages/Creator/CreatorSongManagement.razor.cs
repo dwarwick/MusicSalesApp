@@ -6,7 +6,6 @@ using MusicSalesApp.Components.Base;
 using MusicSalesApp.Models;
 using MusicSalesApp.Services;
 using Syncfusion.Blazor.Grids;
-using System.Globalization;
 
 namespace MusicSalesApp.Components.Pages.Creator;
 
@@ -71,6 +70,29 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected SongAdminViewModel _lyricsSong;
 
     protected bool _showLyricsDialog;
+    protected bool _replacingLyrics;
+
+    /// <summary>
+    /// A song whose words the creator wants to replace, sent here by Preview Results.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = CreatorSongsQueryKeys.ReplaceLyrics)]
+    public int? ReplaceLyricsSongId { get; set; }
+
+    /// <summary>
+    /// How long the "your lyrics are timed" notice stands before it takes the creator to Preview
+    /// Results by itself.
+    /// </summary>
+    /// <remarks>
+    /// Long enough to read two short sentences, short enough that nobody wonders whether it is stuck.
+    /// The notice exists because the alternative - moving somebody to a page they did not ask for -
+    /// is disorienting even when it is the right page, and a creator who has just watched a progress
+    /// bar for several minutes deserves to be told what happened before the screen changes under them.
+    /// </remarks>
+    private static readonly TimeSpan PreviewHandoffDelay = TimeSpan.FromSeconds(5);
+
+    protected bool _showTimingCompleteNotice;
+    protected string _timedSongTitle = string.Empty;
+    protected int? _timedSongId;
 
     /// <summary>
     /// Whether lyric timing is offered at all in this environment.
@@ -129,6 +151,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                         {
                             await LoadSongsAsync();
                             await LoadPersonasAsync();
+                            OpenReplaceLyricsIfRequested();
                         }
                         else
                         {
@@ -168,18 +191,84 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         song.LyricsStatus is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
 
     /// <summary>
-    /// The confidence as a percentage with one decimal place.
-    ///
-    /// <para>
-    /// One decimal, unlike the lyrics dialog's whole-percent banner, because this column exists to
-    /// choose a threshold. Rounding 69.6% and 70.4% both to "70%" hides exactly the distinction
-    /// being made when the two fall either side of the bar.
-    /// </para>
+    /// Hand the creator this song's Enhanced LRC.
     /// </summary>
-    protected static string FormatLyricsConfidence(double? confidence) =>
-        confidence.HasValue
-            ? confidence.Value.ToString("P1", CultureInfo.CurrentCulture)
-            : "—";
+    /// <remarks>
+    /// The same short-lived read SAS the lyrics dialog used to mint, moved here because this is now
+    /// the only place it is offered from: once an alignment has landed, the grid slot that opened the
+    /// paste dialog offers the download instead. The lyrics blobs are deliberately not on
+    /// MusicController's public whitelist, so a SAS is the only way to reach one.
+    /// </remarks>
+    protected async Task DownloadLrcAsync(SongAdminViewModel song)
+    {
+        if (string.IsNullOrEmpty(song.LyricsLrcBlobPath))
+        {
+            return;
+        }
+
+        var uri = AzureStorageService.GetReadSasUri(song.LyricsLrcBlobPath, TimeSpan.FromMinutes(10));
+        await JS.InvokeVoidAsync("open", uri.ToString(), "_blank");
+    }
+
+    /// <summary>
+    /// A song's timings just landed: say so, then take the creator to Preview Results.
+    /// </summary>
+    /// <remarks>
+    /// <b>This page is the guard.</b> The dialog raises this on every successful attempt, open or
+    /// closed, and does not try to work out whether the creator is still watching - it cannot. This
+    /// handler only runs while the songs grid is on screen, so a creator who has moved on to another
+    /// part of the site is never yanked out of it; the completion email is what reaches them there.
+    /// </remarks>
+    protected async Task OnLyricsTimingCompletedAsync(int songMetadataId)
+    {
+        Logger.LogInformation(
+            "Lyrics timing finished for song {SongId}; offering Preview Results.", songMetadataId);
+
+        // Before the notice, so the grid behind it already shows Download LRC and Preview Results -
+        // and so the title below is read off fresh data.
+        await LoadSongsAsync();
+
+        _timedSongId = songMetadataId;
+        _timedSongTitle = _songs
+            .FirstOrDefault(song => song.Id == songMetadataId.ToString())?.SongTitle ?? "your song";
+        _showTimingCompleteNotice = true;
+        await InvokeAsync(StateHasChanged);
+
+        await Task.Delay(PreviewHandoffDelay);
+
+        // Re-checked rather than assumed: the creator may have pressed "Not just now", or a second
+        // song may have finished in the meantime and claimed the notice.
+        //
+        // THROUGH InvokeAsync, WHICH IS NOT OPTIONAL. This whole path begins in a SignalR callback,
+        // not a UI event, so it is not on the renderer's dispatcher - and NavigateTo off the
+        // dispatcher throws. That is precisely how the previous attempt at this failed: the
+        // exception went into a fire-and-forget hub handler where nothing reported it, and the
+        // creator was left sitting in a dialog that had already set itself closed but could not
+        // repaint to prove it.
+        if (_showTimingCompleteNotice && _timedSongId == songMetadataId)
+        {
+            await InvokeAsync(OpenPreviewResults);
+        }
+    }
+
+    /// <summary>Go to Preview Results for the song the notice is about.</summary>
+    protected void OpenPreviewResults()
+    {
+        if (_timedSongId is null)
+        {
+            return;
+        }
+
+        _showTimingCompleteNotice = false;
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorSongLyrics(_timedSongId.Value));
+    }
+
+    /// <summary>Leave them on the grid. Preview Results is still a button away on the song's row.</summary>
+    protected void DismissTimingCompleteNotice()
+    {
+        _showTimingCompleteNotice = false;
+        _timedSongId = null;
+    }
 
     protected async Task LoadSongsAsync()
     {
@@ -276,7 +365,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
                 if (lyrics.TryGetValue(songId, out var songLyrics))
                 {
                     song.LyricsStatus = songLyrics.Status;
-                    song.LyricsConfidence = songLyrics.Confidence;
+                    song.LyricsLrcBlobPath = songLyrics.LrcBlobPath ?? string.Empty;
                     song.HasUnpublishedLyricEdits = songLyrics.HasUnpublishedChanges;
                 }
             }
@@ -557,6 +646,35 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     protected void OpenLyricsEditor(SongAdminViewModel song)
     {
         _lyricsSong = song;
+        _replacingLyrics = false;
+        _showLyricsDialog = true;
+    }
+
+    /// <summary>
+    /// Open the paste box ready to replace a song's words, when Preview Results asked us to.
+    /// </summary>
+    /// <remarks>
+    /// Runs after the songs are loaded, because the dialog is handed a row from that list rather than
+    /// an id. An id that matches nothing - a stale link, or another creator's song - simply does
+    /// nothing: the grid only ever holds this creator's songs, so the lookup failing IS the
+    /// authorisation check, and <c>SubmitAsync</c> refuses on ownership again behind it.
+    /// </remarks>
+    protected void OpenReplaceLyricsIfRequested()
+    {
+        if (ReplaceLyricsSongId is not int songId)
+        {
+            return;
+        }
+
+        var song = _songs.FirstOrDefault(candidate => candidate.Id == songId.ToString());
+
+        if (song is null)
+        {
+            return;
+        }
+
+        _lyricsSong = song;
+        _replacingLyrics = true;
         _showLyricsDialog = true;
     }
 
