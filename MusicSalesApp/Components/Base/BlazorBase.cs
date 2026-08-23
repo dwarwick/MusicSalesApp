@@ -11,6 +11,7 @@ using MusicSalesApp.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Runtime.CompilerServices;
 
 namespace MusicSalesApp.Components.Base;
 
@@ -191,6 +192,74 @@ public abstract class BlazorBase : ComponentBase
 
     private ILogger _logger;
     protected ILogger Logger => _logger ??= LoggerFactory.CreateLogger(GetType());
+
+    /// <summary>
+    /// Runs UI work on the renderer's dispatcher from a callback that is not already on it - a
+    /// SignalR push, a timer tick, a C# event raised by a background service - and then repaints.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The work goes inside, not just the repaint.</b> Blazor Server owns component state on one
+    /// dispatcher. <c>StateHasChanged</c> called from anywhere else throws "The current thread is not
+    /// associated with the Dispatcher" - but the quieter half of the problem is the lines before it:
+    /// fields mutated on a hub thread race the renderer reading them, and for a Dictionary or the
+    /// circuit's scoped DbContext that is a corruption bug, not a repaint bug.
+    /// </para>
+    /// <para>
+    /// <b>Fire and forget by design</b>, because every caller is a <c>void</c> event handler with
+    /// nobody to await it. That is exactly why the body is wrapped: an exception inside a discarded
+    /// Task is unobserved, and these handlers are the paths nobody is watching.
+    /// </para>
+    /// </remarks>
+    /// <param name="work">The state change to make. Runs on the dispatcher.</param>
+    /// <param name="origin">Supplied by the compiler; names the handler in the log if it throws.</param>
+    protected void DispatchUiUpdate(Func<Task> work, [CallerMemberName] string origin = "")
+    {
+        try
+        {
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    await work();
+                    StateHasChanged();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The component went away while this update was queued behind it. Expected.
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Background UI update from {Origin} failed.", origin);
+                }
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // The renderer had already gone when we tried to queue. Also expected: unsubscribing in
+            // Dispose narrows this race, it cannot remove it.
+        }
+    }
+
+    /// <summary>
+    /// Runs UI work on the renderer's dispatcher and repaints. See
+    /// <see cref="DispatchUiUpdate(Func{Task}, string)"/> for why this is not optional.
+    /// </summary>
+    protected void DispatchUiUpdate(Action work, [CallerMemberName] string origin = "")
+        => DispatchUiUpdate(
+            () =>
+            {
+                work();
+                return Task.CompletedTask;
+            },
+            origin);
+
+    /// <summary>
+    /// Repaints from a background callback that has no state of its own to change - the no-work case
+    /// of <see cref="DispatchUiUpdate(Action, string)"/>.
+    /// </summary>
+    protected void DispatchUiRefresh([CallerMemberName] string origin = "")
+        => DispatchUiUpdate(() => { }, origin);
 
     /// <summary>
     /// Gets the current user's integer ID from claims without making a database call.

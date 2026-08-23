@@ -1,4 +1,4 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
@@ -168,12 +168,15 @@ public class MusicLibraryModel : BlazorBase, IAsyncDisposable
 
     private void OnStreamCountUpdated(int songMetadataId, int newCount)
     {
-        // Update local stream count tracking
-        if (_streamCounts.ContainsKey(songMetadataId))
+        // Update local stream count tracking. The membership test only reads; the write is inside
+        // the hop, because a Dictionary written from a hub thread while the renderer enumerates it
+        // is not a repaint bug.
+        if (!_streamCounts.ContainsKey(songMetadataId))
         {
-            _streamCounts[songMetadataId] = newCount;
-            InvokeAsync(StateHasChanged);
+            return;
         }
+
+        DispatchUiUpdate(() => _streamCounts[songMetadataId] = newCount);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

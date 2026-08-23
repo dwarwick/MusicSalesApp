@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
@@ -79,32 +79,25 @@ public class AdminMessageDialogHostModel : BlazorBase, IAsyncDisposable
         await ValueTask.CompletedTask;
     }
 
-    private void HandleAdminMessagesUpdated()
+    private void HandleAdminMessagesUpdated() => DispatchUiUpdate(async () =>
     {
-        _ = InvokeAsync(async () =>
-        {
-            await AdminMessageHubClient.StartAsync();
-            await RefreshPendingMessagesAsync();
-            StateHasChanged();
-        });
-    }
+        await AdminMessageHubClient.StartAsync();
+        await RefreshPendingMessagesAsync();
+    });
 
     private void HandleAuthenticationStateChanged(Task<AuthenticationState> authenticationStateTask)
-    {
-        _ = InvokeAsync(async () =>
+        => DispatchUiUpdate(async () =>
         {
             try
             {
                 var authState = await authenticationStateTask;
                 await LoadForUserAsync(authState);
-                StateHasChanged();
             }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Failed to refresh admin message dialog host after auth state changed");
             }
         });
-    }
 
     private async Task LoadForCurrentUserAsync()
     {

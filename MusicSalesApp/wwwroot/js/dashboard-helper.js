@@ -1,6 +1,15 @@
-window.dashboardHelper = {
+﻿window.dashboardHelper = {
     getUserTimeZone: function () {
         return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    },
+
+    // A no-op the server calls purely to find out whether this browser is still attached to the
+    // circuit. It exists because NavigationManager.NavigateTo cannot be wrapped in a try/catch on
+    // the server side - a navigation whose interop is never answered surfaces a minute later as an
+    // unhandled circuit exception - so an automatic navigation asks this first and declines if
+    // nobody answers. Deliberately does nothing and touches nothing.
+    ping: function () {
+        return true;
     },
 
     formatAdminMessageDate: function (utcIso) {

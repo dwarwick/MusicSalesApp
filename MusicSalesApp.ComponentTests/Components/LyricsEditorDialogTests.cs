@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -518,6 +518,13 @@ public class LyricsEditorDialogTests : BUnitTestBase
         SetupRendererInfo();
         SetupAuthorizedUser(1, "creator@example.com", "Creator");
 
+        // NOTE: the receiver here is this NUnit fixture, which is not an IHandleEvent - so
+        // EventCallback.InvokeAsync calls the delegate directly and never goes through
+        // ComponentBase.HandleEventAsync. That is the right shape for what this test asserts (a
+        // throwing parent must not strand the dialog), but it is also why this fixture could never
+        // have caught the dispatcher violation that shipped: production binds OnCompleted to a real
+        // component. That path is covered by
+        // CreatorSongManagementLyricsTests.ATerminalPushFromTheHubThreadStillRepaintsTheGrid.
         var cut = TestContext.Render<LyricsEditorDialog>(parameters => parameters
             .Add(p => p.IsVisible, true)
             .Add(p => p.CreatorId, 7)

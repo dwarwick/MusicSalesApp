@@ -1,3 +1,16 @@
 ﻿<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
 
-<dialog id="components-reconnect-modal" aria-hidden="true"></dialog>
+@* Blazor needs this element to exist. Its presence is what makes the framework use
+   UserSpecifiedDisplay - class toggles plus a components-reconnect-state-changed event - instead of
+   building its own reconnect UI, whose wording lands in the page source and from there in search
+   results, making a perfectly healthy site look broken. It stays empty and hidden forever; the pill
+   below is the only thing a user ever sees. *@
+<dialog id="components-reconnect-modal" aria-hidden="true" data-nosnippet></dialog>
+
+@* Deliberately wordless in the markup, for the same reason. Every string is written in by
+   ReconnectModal.razor.js the first time a reconnect actually starts - which a crawler, fetching a
+   page once against a healthy circuit, never triggers. What the crawler sees is these empty spans. *@
+<div id="st-reconnect-pill" class="st-reconnect-pill" role="status" aria-live="polite" data-nosnippet>
+    <span class="st-reconnect-spinner" aria-hidden="true"></span>
+    <span class="st-reconnect-text"></span>
+</div>

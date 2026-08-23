@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
@@ -27,7 +27,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected string _creatorTaxFormStatus = null;
     protected string _lastTaxFormErrorMessage = null;
     protected TimeSpan? _tinMatchCooldownRemaining = null;
-    private System.Threading.Timer _cooldownTimer;
+    private ITimer _cooldownTimer;
     protected string _creatorDisplayName = string.Empty;
     protected string _creatorBio = string.Empty;
     protected string _creatorPayPalEmail = string.Empty;
@@ -815,31 +815,42 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     private void StartCooldownTimer()
     {
         _cooldownTimer?.Dispose();
-        _cooldownTimer = new System.Threading.Timer(async _ =>
-        {
-            if (_tinMatchCooldownRemaining.HasValue)
+
+        // TimeProvider.CreateTimer rather than a raw System.Threading.Timer, matching NavMenu - and
+        // the callback is no longer an async void lambda mutating component state from a timer
+        // thread once a second.
+        _cooldownTimer = TimeProvider.CreateTimer(
+            _ => DispatchUiUpdate(() =>
             {
+                if (!_tinMatchCooldownRemaining.HasValue)
+                {
+                    return;
+                }
+
                 _tinMatchCooldownRemaining = _tinMatchCooldownRemaining.Value - TimeSpan.FromSeconds(1);
+
                 if (_tinMatchCooldownRemaining.Value <= TimeSpan.Zero)
                 {
                     _tinMatchCooldownRemaining = null;
                     _cooldownTimer?.Dispose();
                     _cooldownTimer = null;
                 }
-                await InvokeAsync(StateHasChanged);
-            }
-        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            }),
+            null,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(1));
     }
 
     private void OnWebhookStatusReceived(WebhookStatusMessage message)
     {
-        if (_currentUser == null || message.UserId != _currentUser.Id)
+        DispatchUiUpdate(async () =>
         {
-            return;
-        }
+            // Inside the hop, not before it: _currentUser is renderer-owned state like any other.
+            if (_currentUser == null || message.UserId != _currentUser.Id)
+            {
+                return;
+            }
 
-        InvokeAsync(async () =>
-        {
             try
             {
                 var toastModel = new ToastModel
@@ -867,8 +878,6 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                         await ShowCreatorActivatedDialog();
                     }
                 }
-
-                StateHasChanged();
             }
             catch (Exception ex)
             {
