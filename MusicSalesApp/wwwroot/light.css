@@ -18,6 +18,10 @@
     --st-surface: #ffffff;
     --st-surface-hover: #f1f4f8;
     --st-line: #dee2e6;
+    /* Control boundaries ONLY. --st-line is 1.30:1 on --st-surface, which is fine
+       for a card edge but below the 3:1 WCAG 1.4.11 asks for on the border of an
+       INTERACTIVE control - an unchecked checkbox at that ratio reads as absent. */
+    --st-control-line: #7f8894; /* 3.59:1 on --st-surface, 3.40:1 on --st-page, 3.25:1 on --st-surface-hover */
     --st-text: #0f1b2d; /* 17.28:1 on --st-surface */
     --st-text-2: #4a5b70; /*  6.95:1 */
     --st-text-3: #5e6f85; /*  5.14:1 - the dimmest that still passes AA */
@@ -26,7 +30,9 @@
     --st-accent-soft: rgba(1, 102, 214, .10);
     --st-genre: #7d3c98; /*  7.07:1 - NOT #8e44ad, which is for dark surfaces */
     --st-warn: #9a5c00; /*  5.38:1 - NOT #ffa500, which is 2.1:1 on white */
-    --st-warn-soft: rgba(154, 92, 0, .12);
+    /* Solid, not an alpha: --st-warn-soft composited differently over --st-page than
+       over --st-surface, and on the page it left --st-warn at 4.34:1, under AA. */
+    --st-warn-tint: #f7f1e8; /* --st-warn #9a5c00 on it = 4.79:1 */
     --st-track: rgba(15, 27, 45, .14);
     /* The page behind the cards, so a sticky header can hide what scrolls under it. */
     --st-page: #f8f9fa;
@@ -982,7 +988,7 @@ body {
 
 .action-button {
     background: transparent;
-    border: 1px solid var(--st-line);
+    border: 1px solid var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1026,7 +1032,7 @@ body {
 
 .filter-pill {
     background-color: var(--st-surface);
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1057,7 +1063,7 @@ body {
 
 .filter-pill-search-input {
     background-color: var(--st-surface);
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text);
 }
 
@@ -1253,7 +1259,7 @@ body {
 .card-mini-controls .e-btn:focus,
 .card-mini-controls .e-btn:active {
     background: transparent;
-    border-color: var(--st-line);
+    border-color: var(--st-control-line);
     color: var(--st-text-2);
 }
 
@@ -1369,7 +1375,7 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 .cta-outline {
     background-color: transparent !important;
-    border: 1px solid var(--st-line) !important;
+    border: 1px solid var(--st-control-line) !important;
     color: var(--st-text) !important;
 }
 

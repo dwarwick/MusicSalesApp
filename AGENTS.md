@@ -285,7 +285,7 @@ So there are two families:
 | Family | Declared | Use for |
 | --- | --- | --- |
 | `--st-player-*`, `--st-blue*`, `--st-violet`, `--st-amber` | **once**, in `tokens.css` | the two player pages only |
-| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-soft`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
+| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
 
 **Never point a card rule at a `--st-player-*` token.** Measured on white, `--st-blue-bright` is
 ~2.1:1, `--st-violet` ~2.9:1, `--st-amber` ~2.1:1 — all fail AA. That is why `--st-warn` is
@@ -314,6 +314,38 @@ Note dark keeps the **bright** fill and flips the *foreground* to near-black, ra
 the fill — the same pattern the players already use for an active pill segment. Anything sitting
 inside a filled control (`.filter-pill-count`, `.filter-pill-clear`) takes `color: inherit` and
 `--st-on-accent-soft`, never a hardcoded white.
+
+### A border on a CONTROL is measured differently from a border on a CARD
+
+`--st-line` (`#dee2e6` light, `rgba(255,255,255,.10)` dark) measures **1.30:1** and **1.37:1**
+against `--st-surface`. That is correct for what it is: the edge of a card, a divider, a
+popup boundary. WCAG has no contrast requirement for decoration.
+
+It is *not* correct for the border of something you can click or type into. WCAG 1.4.11 asks
+for **3:1** on the visual boundary of an interactive control, and the failure is not academic:
+an unchecked checkbox drawn with a 1.37:1 border on the dark page reads as simply absent.
+
+So control boundaries take **`--st-control-line`** (`#7f8894` light, `#7e8b9e` dark), which
+clears 3:1 on all three backgrounds a control can sit on - `--st-surface`, `--st-page` and
+`--st-surface-hover`. Five rules use it today: `.action-button`, `.filter-pill`,
+`.filter-pill-search-input`, `.card-mini-controls .e-btn` and `.cta-outline`. `.music-card`,
+`.filter-pill-dropdown`, `.feature-card` and `.cta-card` keep `--st-line`, because they are
+surfaces rather than controls.
+
+The new border is visibly heavier than the old hairline. That is the cost of the rule, not a
+drawing error - do not "fix" it back.
+
+### A tint token must be solid, not an alpha
+
+`--st-warn-soft` was `rgba(154,92,0,.12)`, so what it actually painted depended on what sat
+behind it. Over `--st-surface` it gave `#f3ebe0`, on which `--st-warn` is 4.55:1 and passes.
+Over `--st-page` it gave `#ede6dc`, where the same pair is **4.34:1 and fails** - and the page
+is where a full-width alert normally sits. The token could not be measured once, which is the
+whole point of the "measure against the surface, not the page" rule two paragraphs down.
+
+It is now **`--st-warn-tint`**, a solid `#f7f1e8` / `#3f3320`, measured once: `--st-warn` on it
+is 4.79:1 light and 6.23:1 dark. It was renamed rather than added beside the old one because
+`--st-warn-soft` had no consumers anywhere in the app.
 
 Three more rules that fall out of this:
 
