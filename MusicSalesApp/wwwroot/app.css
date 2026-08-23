@@ -4436,6 +4436,25 @@ h2.hero-title-line-2 { margin-top: 0; }
         radial-gradient(72% 62% at 8% -6%, rgba(2, 184, 253, .20) 0%, rgba(16, 46, 85, 0) 62%);
 }
 
+/* The auth pages are the only full-bleed pages under the app bar, and getting their height
+   from a fixed subtraction is wrong on any deployment that shows something else up there.
+   NavMenu can render a test-server banner (every non-production deployment does) and
+   MobileAppInstallBanner can render another, both OUTSIDE <main> - so calc(100dvh - 66px)
+   overshoots by a banner and leaves <main> scrolling on exactly the servers used to test.
+
+   Handing the height down the chain removes the guess: <main> is already flex:1 inside a
+   100vh column, so 100% of it is correct whatever sits above. The breakpoint sheets keep the
+   calc as the fallback for anything without :has(), where it degrades to today's behaviour. */
+main:has(> .content > .auth-page) > .content {
+    height: 100%;
+    padding: 0;
+}
+
+main:has(> .content > .auth-page) > .content > .auth-page {
+    margin: 0;
+    min-height: 100%;
+}
+
 .auth-panel-logo { display: block; flex: 0 0 auto; }
 .auth-panel-copy { flex: 0 0 auto; }
 .auth-panel-eyebrow { font-weight: 700; text-transform: uppercase; margin: 0; }
