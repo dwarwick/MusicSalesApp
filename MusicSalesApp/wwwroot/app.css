@@ -2680,10 +2680,47 @@ h1:focus {
     margin-bottom: 12px;
 }
 
+/* The one-paragraph orientation that replaced the long help block at the top. The two ways of
+   actually fixing a timing now document themselves inside the panel that offers them. */
+.lyrics-editor-intro {
+    max-width: 80ch;
+    margin-bottom: 16px;
+}
+
+/* Names each option, so a creator can see there are two of them without opening either. Tighter
+   than a stock h5 because these sit at the top of a 320px column, not on a page of their own. */
+.lyrics-editor-panel-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+}
+
 .lyrics-editor-help {
     margin-bottom: 16px;
     border-radius: 6px;
     padding: 10px 14px;
+}
+
+/* Inside an option panel the help is a nested disclosure rather than a block of its own, so it is
+   indented less and does not repeat the padding the panel already has. */
+.lyrics-editor-record .lyrics-editor-help,
+.lyrics-editor-selection .lyrics-editor-help {
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+.lyrics-editor-record .lyrics-editor-help summary,
+.lyrics-editor-selection .lyrics-editor-help summary {
+    font-size: 0.875rem;
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+/* 70ch is meaningless in a 320px column - it just lets the text set its own width and overflow. */
+.lyrics-editor-record .lyrics-editor-help-body,
+.lyrics-editor-selection .lyrics-editor-help-body {
+    max-width: none;
+    font-size: 0.875rem;
 }
 
 .lyrics-editor-help summary {
@@ -2725,9 +2762,28 @@ h1:focus {
     min-width: 260px;
 }
 
-.lyrics-editor-rates {
+/* The transport, full width and above the body. It lived in the 320px side column until the seek bar
+   turned out to be the least precise control on a page built around seeking: at that width a
+   four-minute song gets about 0.75 seconds per pixel. Sticky because tapping means scrolling the
+   words while keeping play and seek within reach, and an OPAQUE background for the same reason -
+   the lyrics scroll underneath it. */
+.lyrics-editor-transport {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--st-surface);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.lyrics-editor-rates,
+.lyrics-editor-seek {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     margin-top: 10px;
 }

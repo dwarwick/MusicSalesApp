@@ -16,6 +16,18 @@ public static class AppPageRoutes
     /// </summary>
     public static string CreatorSongLyrics(int songMetadataId) =>
         $"{CreatorSongs}/{songMetadataId}/lyrics";
+
+    /// <summary>
+    /// The songs grid, asking it to open the paste box for one song so its words can be replaced.
+    /// </summary>
+    /// <remarks>
+    /// A round trip rather than a paste box on the timing page, because the grid already hosts that
+    /// dialog and already owns what happens when a run finishes. Preview Results is only where the
+    /// creator FINDS OUT the words are wrong - hearing them against the song is the one way to
+    /// notice - so it needs to point at the fix, not own it.
+    /// </remarks>
+    public static string CreatorSongsReplaceLyrics(int songMetadataId) =>
+        $"{CreatorSongs}?{CreatorSongsQueryKeys.ReplaceLyrics}={songMetadataId}";
     public const string NewCreatorSignup = "/new-creator-signup";
     public const string NewCreatorSignupQuestions = "/new-creator-signup-questions";
     public const string Login = "/login";

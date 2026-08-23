@@ -132,12 +132,14 @@ else
                                      Placeholder="Enter a percentage"
                                      CssClass="e-outline" />
                     <small class="text-muted">
-                        Advice to creators, not a gate (default 70). Timed lyrics are never shown to
-                        listeners until the creator has heard them and pressed Publish. This score
-                        only decides how a creator is greeted in the timing editor &mdash; above it,
-                        &ldquo;have a listen&rdquo;; below it, &ldquo;expect to do some tapping&rdquo;.
-                        Sung vocals score lower than speech, so this may want lowering once a few
-                        songs have been timed; the creator&rsquo;s song list shows each score.
+                        <strong>Currently unused</strong> (default 70). It used to decide how a
+                        creator was greeted on the Preview Results page &mdash; above it, &ldquo;have
+                        a listen&rdquo;; below it, &ldquo;expect to do some tapping&rdquo;. The
+                        aligner scores sung vocals far lower than speech, so that warning fired on
+                        timings creators were happy with and read as a verdict on their song. Nothing
+                        creator-facing consults this now; the score is still recorded for diagnosing
+                        the aligner, and this is kept so the greeting can be reinstated if the
+                        scoring is ever made trustworthy.
                     </small>
                 </div>
                 <div class="col-md-3">
@@ -403,6 +405,10 @@ else
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" @bind="_notifySongArtUpdated" id="notifySongArtUpdated" />
                         <label class="form-check-label" for="notifySongArtUpdated">Song Art Updated</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="_notifyLyricsChanged" id="notifyLyricsChanged" />
+                        <label class="form-check-label" for="notifyLyricsChanged">Lyrics Added / Published</label>
                     </div>
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" @bind="_notifyTipFraudPrevented" id="notifyTipFraudPrevented" />

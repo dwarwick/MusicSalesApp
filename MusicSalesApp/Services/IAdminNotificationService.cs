@@ -53,6 +53,20 @@ public interface IAdminNotificationService
     Task NotifySongArtUpdatedAsync(string userEmail, string songTitle);
 
     /// <summary>
+    /// Notifies admin that a creator submitted lyrics for a song, and records a user history event.
+    /// </summary>
+    /// <remarks>
+    /// Takes ids rather than an email and a title because the caller - <c>SongLyricsService</c> -
+    /// holds neither, and this service already opens a context in every method.
+    /// </remarks>
+    Task NotifyLyricsAddedAsync(int creatorId, int songMetadataId);
+
+    /// <summary>
+    /// Notifies admin that a creator published timed lyrics, and records a user history event.
+    /// </summary>
+    Task NotifyLyricsPublishedAsync(int creatorId, int songMetadataId);
+
+    /// <summary>
     /// Records a user history event in the database.
     /// </summary>
     Task RecordUserHistoryAsync(int userId, string userEmail, string eventType, string description, string? oldValue = null, string? newValue = null);

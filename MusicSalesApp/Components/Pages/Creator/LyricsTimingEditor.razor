@@ -7,7 +7,7 @@
 @using MusicSalesApp.Components.Shared
 @attribute [Authorize(Policy = Permissions.ManageOwnSongs)]
 
-<PageTitle>Lyric timing</PageTitle>
+<PageTitle>Preview results</PageTitle>
 
 @if (_loading)
 {
@@ -30,75 +30,137 @@ else
         <div class="lyrics-editor-header">
             <div>
                 <h3 class="mb-1">@_songTitle</h3>
-                <span class="text-muted">Lyric timing</span>
+                <span class="text-muted">Preview results</span>
             </div>
             <a class="btn btn-outline-secondary btn-sm" href="@AppPageRoutes.CreatorSongs">Back to my songs</a>
         </div>
 
-        @* The advisory banner. Colour comes from the confidence against the admin threshold, read at
-           render time rather than stored, so moving the threshold re-colours existing songs instead
-           of leaving them stamped with a stale verdict. The creator is never shown the threshold
-           itself - it is an admin knob and would mean nothing to them. *@
+        @* The advisory banner. Score-independent: it used to grade its own copy by the aligner's
+           confidence against an admin threshold, which told creators with perfectly good timings to
+           "expect to do some tapping" because the score reads low even when the alignment is spot
+           on. What is left says the one thing that is always true and always actionable. *@
         <div class="alert @_bannerClass" role="status">
             @_bannerMessage
         </div>
 
-        @* Written for somebody who has never done this before, and open by default the first time.
-           A creator who does not understand tap-along will either not use it or make their timings
-           worse, and both look to them like the feature being broken. *@
-        <details class="lyrics-editor-help" open="@_helpOpen">
-            <summary>How to get your lyrics in time</summary>
-            <div class="lyrics-editor-help-body">
-                <p>
-                    We've made a first guess at when every word is sung. It's usually close, but
-                    almost never perfect. <strong>Nothing here is visible to listeners until you
-                    press Publish.</strong>
-                </p>
-                <ol>
-                    <li>
-                        <strong>Listen first.</strong> Press play and watch the words light up. If
-                        they light up at the right moment, you're done — press Publish.
-                    </li>
-                    <li>
-                        <strong>If a section drifts, re-tap it.</strong> Press
-                        <em>Start tapping</em> and the song plays from where you are. Each time you
-                        hear a new line begin, press the <strong>space bar</strong> — that line moves
-                        to the moment you pressed it, and the words inside it spread out to match.
-                        The box shows which line your next press belongs to, and it
-                        <strong>waits for you</strong> rather than following the song. The on-screen
-                        <em>Tap</em> button does exactly the same thing as the space bar — use
-                        whichever you prefer. Slow the song to <em>0.5×</em> first if you like; the
-                        timings still come out right at normal speed. You don't have to do the whole
-                        song — just the part that's wrong.
-                    </li>
-                    <li>
-                        <strong>If one word is slightly off, nudge it.</strong> Click the word, then
-                        the <strong>left arrow</strong> to make it come earlier, the
-                        <strong>right arrow</strong> to make it come later. Each press moves it a
-                        twentieth of a second, without changing how long it is sung for.
-                    </li>
-                    <li>
-                        <strong>If a word flashes past, or hangs about, change its length.</strong>
-                        Click it and set <em>Starts</em> and <em>Ends</em> separately, in steps of
-                        1, 0.1 or 0.01 seconds. <em>Sung for</em> underneath shows what you have
-                        given it &mdash; anything near 0.05s will be gone before you see it. Press
-                        <strong>Esc</strong> when you have finished with that word.
-                    </li>
-                    <li>
-                        <strong>Made a mess?</strong> Press <em>Undo</em>, or
-                        <em>Start again</em> to put everything back the way we found it.
-                    </li>
-                    <li>
-                        <strong>Press Publish when you're happy.</strong> Listeners see the change
-                        straight away, and you can come back and adjust any time.
-                    </li>
-                </ol>
-                <p class="mb-0">
-                    <em>Tip: slow the song to half speed while you tap. It's much easier to hit the
-                    right moment, and the timings stay correct at normal speed.</em>
-                </p>
+        @* The overview only. The two ways of actually fixing something now carry their own
+           instructions, inside the panel that offers them - a creator reading about tapping wants
+           the Tap button in front of them, not four screens away at the top of the page. *@
+        <p class="lyrics-editor-intro">
+            We've made a first guess at when every word is sung. It's usually close, but almost never
+            perfect. <strong>Nothing here is visible to listeners until you press Publish.</strong>
+            Play it through first &mdash; if the words light up at the right moments, you're done.
+            If not, there are two ways to fix it, and each one explains itself on the right.
+        </p>
+
+        @* THE TRANSPORT IS FULL WIDTH, and that is a functional decision rather than a cosmetic one.
+           It used to sit in the 320px side column, which gave a four-minute song about three quarters
+           of a second per pixel - so "click just before that line" could not land within a second of
+           anywhere, and the one control this page is built around was the least precise thing on it.
+           Sticky, because tapping means scrolling the words while keeping play and seek reachable. *@
+        <div class="lyrics-editor-transport">
+
+            @* Deliberately the card player's controls rather than the big player bar: this is one
+               song, and previous/next would mean nothing here. No preview restriction either -
+               it is the creator's own song. *@
+            <audio @ref="_audioElement" src="@_streamUrl" preload="auto" class="card-audio-hidden"></audio>
+
+            <div class="card-mini-player">
+                <div class="card-mini-controls-row">
+                    <div class="card-mini-controls">
+                        <button type="button" class="e-btn" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
+                            @if (_isPlaying)
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M8 5v14l11-7z" /></svg>
+                            }
+                        </button>
+                        <button type="button" class="e-btn" @onclick="StopPlayback" title="Stop">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M6 6h12v12H6z" /></svg>
+                        </button>
+                    </div>
+
+                    <div class="card-volume-controls">
+                        <button type="button" class="card-volume-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
+                            @if (_isMuted || _volume == 0)
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" /></svg>
+                            }
+                        </button>
+                        <div @ref="_volumeBarContainer" class="card-volume-bar-container" @onclick="OnVolumeBarClick">
+                            <div class="card-volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
+                                <div class="card-volume-thumb"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* Seekable, and that is the most important control on this page. Tapping a chorus
+                   means replaying the same eight bars over and over; without a seek the creator
+                   waits through the whole song for each attempt.
+
+                   The elapsed time reads in hundredths and the duration does not: one is a position
+                   being aimed at, the other is a fact about the file. *@
+                <div class="card-progress-container">
+                    <span class="card-time-display">@FormatTimePrecise(_currentTime)</span>
+                    <div @ref="_progressBarContainer" class="card-progress-bar-container" @onclick="OnProgressBarClick">
+                        <div class="card-progress-bar" style="width: @(GetProgressPercent())%;">
+                            <div class="card-progress-thumb"></div>
+                        </div>
+                    </div>
+                    <span class="card-time-display">@FormatTime(_duration)</span>
+                </div>
+
+                @* Deliberately the same steps, in the same outward-reading order, as the per-word
+                   Starts/Ends controls in the panel below: coarse, fine, finer, value, finer, fine,
+                   coarse. Somebody who has learned one has learned the other, and a hundredth here is
+                   what makes "play from exactly the moment that word should land" reachable at all -
+                   no seek bar, at any width, resolves 10 ms. *@
+                <div class="lyrics-editor-seek">
+                    <span class="text-muted me-2">Seek</span>
+                    @foreach (var step in SeekStepsMs)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                title="@FormatStep(step) seconds earlier"
+                                @onclick="() => SeekByAsync(-step)">
+                            −@FormatStep(step)
+                        </button>
+                    }
+                    @for (var i = SeekStepsMs.Length - 1; i >= 0; i--)
+                    {
+                        var step = SeekStepsMs[i];
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                title="@FormatStep(step) seconds later"
+                                @onclick="() => SeekByAsync(step)">
+                            +@FormatStep(step)
+                        </button>
+                    }
+                </div>
+
+                @* Slowing down makes tapping dramatically easier, and the timings stay correct at
+                   normal speed because they are recorded against the audio clock. A quarter speed is
+                   worth having for a fast, densely-worded line, where half is still too quick to
+                   hear where one word ends and the next begins. *@
+                <div class="lyrics-editor-rates">
+                    <span class="text-muted me-2">Speed</span>
+                    @foreach (var rate in PlaybackRates)
+                    {
+                        <button type="button"
+                                class="btn btn-sm @(_playbackRate == rate ? "btn-primary" : "btn-outline-secondary")"
+                                @onclick="() => SetPlaybackRate(rate)">
+                            @rate.ToString("0.##")×
+                        </button>
+                    }
+                </div>
             </div>
-        </details>
+        </div>
 
         <div class="lyrics-editor-body">
 
@@ -114,80 +176,53 @@ else
 
             <div class="lyrics-editor-side">
 
-                @* Deliberately the card player's controls rather than the big player bar: this is one
-                   song, and previous/next would mean nothing here. No preview restriction either -
-                   it is the creator's own song. *@
-                <audio @ref="_audioElement" src="@_streamUrl" preload="auto" class="card-audio-hidden"></audio>
-
-                <div class="card-mini-player">
-                    <div class="card-mini-controls-row">
-                        <div class="card-mini-controls">
-                            <button type="button" class="e-btn" @onclick="TogglePlay" title="@(_isPlaying ? "Pause" : "Play")">
-                                @if (_isPlaying)
-                                {
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                                }
-                                else
-                                {
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M8 5v14l11-7z" /></svg>
-                                }
-                            </button>
-                            <button type="button" class="e-btn" @onclick="StopPlayback" title="Stop">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="control-icon"><path d="M6 6h12v12H6z" /></svg>
-                            </button>
-                        </div>
-
-                        <div class="card-volume-controls">
-                            <button type="button" class="card-volume-button" @onclick="ToggleMute" title="@(_isMuted ? "Unmute" : "Mute")">
-                                @if (_isMuted || _volume == 0)
-                                {
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
-                                }
-                                else
-                                {
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="card-volume-icon"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" /></svg>
-                                }
-                            </button>
-                            <div @ref="_volumeBarContainer" class="card-volume-bar-container" @onclick="OnVolumeBarClick">
-                                <div class="card-volume-bar" style="width: @(GetDisplayVolume() * 100)%;">
-                                    <div class="card-volume-thumb"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* Seekable, and that is the most important control on this page. Tapping a chorus
-                       means replaying the same eight bars over and over; without a seek the creator
-                       waits through the whole song for each attempt. *@
-                    <div class="card-progress-container">
-                        <span class="card-time-display">@FormatTime(_currentTime)</span>
-                        <div @ref="_progressBarContainer" class="card-progress-bar-container" @onclick="OnProgressBarClick">
-                            <div class="card-progress-bar" style="width: @(GetProgressPercent())%;">
-                                <div class="card-progress-thumb"></div>
-                            </div>
-                        </div>
-                        <span class="card-time-display">@FormatTime(_duration)</span>
-                    </div>
-
-                    @* Half speed makes tapping dramatically easier, and the timings stay correct at
-                       normal speed because they are recorded against the audio clock. *@
-                    <div class="lyrics-editor-rates">
-                        <span class="text-muted me-2">Speed</span>
-                        @foreach (var rate in PlaybackRates)
-                        {
-                            <button type="button"
-                                    class="btn btn-sm @(_playbackRate == rate ? "btn-primary" : "btn-outline-secondary")"
-                                    @onclick="() => SetPlaybackRate(rate)">
-                                @rate.ToString("0.##")×
-                            </button>
-                        }
-                    </div>
-                </div>
-
-                @* Tap-along. The prompt shows the line the next press applies to, because "press
-                   space at the start of each line" is unfollowable if you cannot see which line the
-                   editor thinks you are on. *@
+                @* OPTION 1 OF TWO, and named as such. The two ways of fixing a timing fix different
+                   things - this one re-places whole lines by ear, the other adjusts one word or row
+                   by the hundredth - and a creator who does not know there are two will use whichever
+                   they found first on a problem it cannot solve. *@
                 <div class="lyrics-editor-record @(_isRecording ? "is-recording" : "")">
+                    <h5 class="lyrics-editor-panel-title">Tap to Fix</h5>
+
+                    @* Collapsed by default. These are three paragraphs a creator needs once and then
+                       never again, and left open they push the controls of BOTH options off the
+                       screen on the laptop this is most often used on. *@
+                    <details class="lyrics-editor-help">
+                        <summary>Tap to Fix Instructions</summary>
+                        <div class="lyrics-editor-help-body">
+                            <p>
+                                Best for a section that has drifted as a whole &mdash; a chorus that
+                                comes in late, or everything after a long instrumental.
+                            </p>
+                            <ol>
+                                <li>
+                                    Move the song to just before the part that's wrong, then press
+                                    <strong>Start tapping</strong>. The song plays from where you are.
+                                </li>
+                                <li>
+                                    Each time you hear a new line begin, press the
+                                    <strong>space bar</strong> &mdash; or the <em>Tap</em> button,
+                                    which is the same control. That line moves to the moment you
+                                    pressed, and the words inside it spread out to match.
+                                </li>
+                                <li>
+                                    The box shows which line your next press belongs to, and it
+                                    <strong>waits for you</strong> rather than following the song. You
+                                    don't have to do the whole song &mdash; just the part that's wrong.
+                                </li>
+                            </ol>
+                            <p class="mb-0">
+                                <strong>Rows can't overlap.</strong> Each tap ends the previous line
+                                where the new one begins, so tapping can never leave two rows lighting
+                                up at once.
+                            </p>
+                            <p class="mb-0 mt-2">
+                                <em>Tip: slow the song to 0.5&times; or 0.25&times; while you tap.
+                                It's much easier to hit the right moment, and the timings stay correct
+                                at normal speed.</em>
+                            </p>
+                        </div>
+                    </details>
+
                     @if (!_isRecording)
                     {
                         <button type="button" class="btn btn-danger btn-sm" @onclick="StartRecording">
@@ -241,7 +276,60 @@ else
                     }
                 </div>
 
+                @* OPTION 2 OF TWO. Where tapping re-places whole lines by ear, this is the precise
+                   one: it reaches a single word, at a hundredth of a second, which no amount of
+                   tapping can do. *@
                 <div class="lyrics-editor-selection">
+                    <h5 class="lyrics-editor-panel-title">Click Word / Row to Fix</h5>
+
+                    <details class="lyrics-editor-help">
+                        <summary>Click Word / Row Instructions</summary>
+                        <div class="lyrics-editor-help-body">
+                            <p>
+                                Best when the timing is nearly right &mdash; one word arriving a beat
+                                early, or a word that flashes past before you can read it.
+                            </p>
+                            <ol>
+                                <li>
+                                    <strong>Click the word</strong> in the lyrics on the left. Its
+                                    name, its start and its end appear here.
+                                </li>
+                                <li>
+                                    <strong>To move it without changing its length</strong>, use
+                                    <em>&larr; Earlier</em> and <em>Later &rarr;</em>, or the left and
+                                    right arrow keys. Each press moves it a twentieth of a second.
+                                </li>
+                                <li>
+                                    <strong>To change how long it is sung for</strong>, set
+                                    <em>Starts</em> and <em>Ends</em> separately, in steps of 1, 0.1
+                                    or 0.01 seconds. <em>Sung for</em> underneath shows what you've
+                                    given it &mdash; anything near 0.05s will be gone before you see it.
+                                </li>
+                                <li>
+                                    <strong>To move the whole row</strong>, use <em>Shift whole line
+                                    earlier</em> or <em>later</em>. Every word in it moves together,
+                                    keeping the spacing you can hear.
+                                </li>
+                                <li>
+                                    Press <strong>Esc</strong> when you've finished with that word, or
+                                    click the &times; above.
+                                </li>
+                            </ol>
+                            <p class="mb-0">
+                                <strong>A word can't be turned inside out.</strong> Dragging its start
+                                past its end just makes it zero-length; it never runs backwards.
+                            </p>
+                            <p class="mb-0 mt-2">
+                                <strong>Rows can't overlap in what you publish.</strong> Two words in
+                                the same row are allowed to overlap while you work &mdash; that's what
+                                makes the hundredth-second steps useful &mdash; but if your edits leave
+                                one row starting before the row above it has finished, Publish will
+                                refuse and name the two rows, so you can't release a version where the
+                                highlight jumps backwards.
+                            </p>
+                        </div>
+                    </details>
+
                     @if (_selected is null)
                     {
                         <p class="text-muted mb-0">Click a word to adjust exactly when it is sung.</p>
@@ -374,6 +462,35 @@ else
                                 : "Back to original timing")
                         </button>
                     }
+
+                    @* The escape hatch for the one problem this page cannot fix. Everything else here
+                       moves words in time; none of it changes what the words ARE. An aligner handed
+                       the wrong lyrics times them faithfully and confidently, and hearing them
+                       against the song is the only way anybody finds out - which is why the way out
+                       lives here, where the discovery happens, rather than only on the songs grid. *@
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ReplaceLyrics">
+                        Replace lyrics
+                    </button>
+
+                    @* Only once there is something for a listener to lose. Offering to hide lyrics
+                       nobody can see would be a button that does nothing. *@
+                    @if (_isPublished)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                @onclick="HideFromListenersAsync" disabled="@_isSaving">
+                            Hide from listeners
+                        </button>
+                    }
+
+                    @* Asks twice. This is the only control here with no undo behind it: it discards
+                       the alignment, the draft, the pasted words and the published timings together,
+                       and the way back is another separation pass. *@
+                    <button type="button"
+                            class="btn @(_confirmingRemove ? "btn-danger" : "btn-outline-danger") btn-sm"
+                            @onclick="RemoveLyricsAsync"
+                            disabled="@_isSaving">
+                        @(_confirmingRemove ? "Delete these lyrics?" : "Remove lyrics")
+                    </button>
                     <button type="button" class="btn btn-secondary btn-sm" @onclick="SaveDraft" disabled="@(_isSaving || !_isDirty)">
                         Save
                     </button>
@@ -381,7 +498,10 @@ else
                     @* The only thing on this page that changes what a listener sees. Kept visually
                        distinct from Save for that reason - the two being adjacent and identical is
                        how somebody publishes a half-finished pass by muscle memory. *@
-                    <button type="button" class="btn btn-success" @onclick="Publish" disabled="@_isSaving">
+                    @* Disabled rather than hidden while a takedown stands. A missing button reads as
+                       a bug; a greyed one with the banner above it reads as the decision it is. *@
+                    <button type="button" class="btn btn-success"
+                            @onclick="Publish" disabled="@(_isSaving || _adminDisabled)">
                         @(_isPublished ? "Publish changes" : "Publish")
                     </button>
                 </div>

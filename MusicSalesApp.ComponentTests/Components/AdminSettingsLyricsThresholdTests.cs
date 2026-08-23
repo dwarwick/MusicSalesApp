@@ -14,18 +14,17 @@ namespace MusicSalesApp.ComponentTests.Components;
 /// The lyric timing confidence threshold, as an administrator loads and saves it.
 ///
 /// <para>
-/// The setting decides whether timed lyrics reach listeners at all: below it they are held as
-/// <c>NeedsReview</c> and hidden.  It is admin-tunable rather than compiled because the right value
-/// is a judgement call - sung vocals score materially lower than speech, and the 0.7 default was
-/// chosen before any real song had been through the pipeline.
+/// <b>Nothing creator-facing consults this setting any more.</b> It used to choose the wording of
+/// the greeting on the Preview Results page, until it became clear the aligner scores sung vocals so
+/// far below speech that the low-confidence warning fired on timings creators were perfectly happy
+/// with.  The setting is kept - stored, loaded and saved - so the greeting can be reinstated if the
+/// scoring is ever made trustworthy, and these tests are kept with it.
 /// </para>
 ///
 /// <para>
-/// The service stores 0-1 and the UI works in whole percent, because percent is the form every other
-/// surface reports - the creator's lyrics dialog says "52% confidence".  That conversion is the most
-/// likely thing to be wrong and it fails plausibly in both directions: a threshold saved as 0.7 when
-/// the admin typed 70 hides every song, and one saved as 70 publishes every song.  So it is asserted
-/// on the model rather than through the markup, following <c>AdminSettingsPayPalOfferTests</c>.
+/// The service stores 0-1 and the UI works in whole percent.  That conversion is the most likely
+/// thing to be wrong and it fails plausibly in both directions, so it is asserted on the model rather
+/// than through the markup, following <c>AdminSettingsPayPalOfferTests</c>.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -66,8 +65,8 @@ public class AdminSettingsLyricsThresholdTests : BUnitTestBase
     [Test]
     public void TheStoredFractionIsLoadedAsAPercentage()
     {
-        // 0.7 must reach the admin as 70. Presenting the raw fraction beside a creator-facing dialog
-        // that reports "52% confidence" invites an admin to type 0.52 and set half a percent.
+        // 0.7 must reach the admin as 70. Presenting the raw fraction under a field labelled "(%)"
+        // invites an admin to type 0.52 and set half a percent.
         var cut = RenderLoaded(0.7d);
 
         Assert.That(cut.Instance.ThresholdPercent, Is.EqualTo(70m));

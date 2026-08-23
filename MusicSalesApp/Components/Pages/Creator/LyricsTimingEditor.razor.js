@@ -230,8 +230,20 @@ export function setRate(audio, rate) {
     audio.playbackRate = rate;
 }
 
+// Push the new position to .NET rather than waiting for the next `timeupdate`. Browsers fire that
+// event about four times a second, so the elapsed readout would otherwise sit up to 250 ms stale
+// after a seek - and the moment straight after a deliberate seek is precisely when the creator is
+// reading it. Cheap, because a seek is a thing a person does, not something that fires on a clock.
+function reportTime(audio) {
+    if (state && state.dotNetRef && audio) {
+        state.dotNetRef.invokeMethodAsync('UpdateTime', audio.currentTime);
+    }
+}
+
 export function seekToMs(audio, ms) {
-    if (audio) audio.currentTime = ms / 1000;
+    if (!audio) return;
+    audio.currentTime = ms / 1000;
+    reportTime(audio);
 }
 
 export function seekToPosition(audio, container, offsetX) {
@@ -239,6 +251,7 @@ export function seekToPosition(audio, container, offsetX) {
     const width = container.clientWidth || 1;
     const ratio = Math.min(1, Math.max(0, offsetX / width));
     audio.currentTime = ratio * audio.duration;
+    reportTime(audio);
 }
 
 export function setVolumeFromPosition(audio, container, offsetX) {

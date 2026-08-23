@@ -107,10 +107,6 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
             return;
         }
 
-        var lyrics = await context.SongLyrics
-            .AsNoTracking()
-            .FirstOrDefaultAsync(row => row.SongMetadataId == job.SongMetadataId);
-
         var title = job.SongMetadata is null
             ? "your song"
             : SongTitleHelper.GetEffectiveTitle(
@@ -125,7 +121,7 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
             : $"StreamTunes - we couldn't time the lyrics for \"{title}\"";
 
         var body = succeeded
-            ? BuildSuccessBody(title, job.SongMetadataId, lyrics?.Confidence)
+            ? BuildSuccessBody(title, job.SongMetadataId)
             : BuildFailureBody(title, job.SongMetadataId, job.FailureMessage);
 
         // Deliberately not caught. Hangfire retries this three times, and an SMTP server that is
@@ -140,14 +136,13 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
             succeeded ? "completed" : "failed");
     }
 
-    private string BuildSuccessBody(string title, int songMetadataId, double? confidence)
+    // No confidence figure. The aligner's score reads far worse than the timings it describes, and an
+    // email that leads with "52% confidence" is the last thing a creator sees before they decide
+    // whether the result is worth listening to.
+    private string BuildSuccessBody(string title, int songMetadataId)
     {
         var editorUrl = EditorUrl(songMetadataId);
         var safeTitle = WebUtility.HtmlEncode(title);
-
-        var confidenceLine = confidence.HasValue
-            ? $"<p style='margin: 0 0 16px 0;'>Our first guess came out at <strong>{confidence.Value:P0}</strong> confidence.</p>"
-            : string.Empty;
 
         return $@"
             {_emailService.GetEmailLogoHtml()}
@@ -159,8 +154,6 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
                     time with your song.
                 </p>
 
-                {confidenceLine}
-
                 <p style='margin: 0 0 16px 0; padding: 12px; background: #fff8e1; border-left: 4px solid #f0ad4e;'>
                     <strong>These aren't live yet.</strong> Have a listen first &mdash; if anything is
                     out of step you can fix it, and nothing is shown to listeners until you press
@@ -171,7 +164,7 @@ public sealed class LyricsAlignmentEmailService : ILyricsAlignmentEmailService
                     <a href='{editorUrl}'
                        style='background: #1db954; color: #fff; padding: 12px 24px; text-decoration: none;
                               border-radius: 4px; display: inline-block;'>
-                        Listen and publish
+                        Preview results
                     </a>
                 </p>
 

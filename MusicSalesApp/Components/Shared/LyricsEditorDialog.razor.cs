@@ -36,12 +36,38 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     [Parameter]
     public bool IsVisible { get; set; }
 
+    /// <summary>
+    /// Whether this was opened to replace a song's words rather than to time them for the first time.
+    /// </summary>
+    /// <remarks>
+    /// The submit button is normally hidden once a song has timings, because re-running the SAME
+    /// words is the thing this feature stopped offering: it costs another separation pass and comes
+    /// back with the same result. Replacing words that were wrong in the first place is a different
+    /// request and the only way back from a faithful alignment of the wrong lyrics, so the host says
+    /// which of the two it is opening this for.
+    /// </remarks>
+    [Parameter]
+    public bool IsReplacing { get; set; }
+
     [Parameter]
     public EventCallback<bool> IsVisibleChanged { get; set; }
 
     /// <summary>Raised once an attempt reaches a terminal state, so the grid can refresh.</summary>
     [Parameter]
     public EventCallback OnCompleted { get; set; }
+
+    /// <summary>
+    /// Raised with the song's id when an attempt produced usable timings.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="OnCompleted"/>, which fires however an attempt ended and means only
+    /// "your data is stale". This one is the handoff: it fires solely on success, and it is the host's
+    /// cue to take the creator to Preview Results. Kept as a callback rather than a navigation of our
+    /// own so that the host - which knows what page it is and whether the creator is still there -
+    /// decides, instead of this dialog inferring it from its own visibility.
+    /// </remarks>
+    [Parameter]
+    public EventCallback<int> OnTimingCompleted { get; set; }
 
     protected string _lyricsText = string.Empty;
     protected readonly List<string> _validationErrors = [];
@@ -95,39 +121,39 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     protected bool IsOverLimit => CharacterCount > MaxCharacters || LineCount > MaxLines;
 
     /// <summary>
-    /// "Time lyrics" the first time, "Re-run timing" afterwards.
+    /// "Time lyrics" normally, "Try again" after a run that produced nothing usable.
     ///
     /// <para>
-    /// Worth being explicit about, because a re-run is the intended fix for a low-confidence result
-    /// and the button being labelled the same either way makes it look like a no-op.
+    /// There is no longer a re-run label, because there is no longer a re-run: this button is hidden
+    /// entirely once timings exist. "Try again" is reserved for the one case where running the
+    /// pipeline a second time is genuinely the fix - a failure, where the pasted words themselves
+    /// were most likely wrong.
     /// </para>
     /// </summary>
-    protected string SubmitLabel =>
-        _status is null || _status.Status == SongLyricsStatus.Pending ? "Time lyrics" : "Re-run timing";
+    protected string SubmitLabel => _status?.Status switch
+    {
+        SongLyricsStatus.Failed => "Try again",
+        _ when IsReplacing && _hasTimings => "Replace and time",
+        _ => "Time lyrics"
+    };
+
+    /// <summary>Whether to offer to run the pipeline at all.</summary>
+    /// <remarks>
+    /// Two ways to qualify, and they are different questions. No timings yet - never run, still
+    /// running, or a run that failed - means there is nothing to lose by running. Timings that exist
+    /// but describe the wrong words mean running is the only repair there is.
+    /// </remarks>
+    protected bool _canSubmit => LyricsService.IsAvailable && (!_hasTimings || IsReplacing);
 
     /// <summary>Whether there is something to open the timing editor on.</summary>
     protected bool _hasTimings =>
         _status?.TimingsBlobPath is not null
         && _status.Status is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview;
 
-    /// <summary>
-    /// Send the creator to the timing editor for this song.
-    /// </summary>
-    protected async Task OpenTimingEditorAsync()
-    {
-        if (SongMetadataId is null)
-        {
-            return;
-        }
 
-        await CloseAsync();
-
-        // The shared route helper rather than the path, for the reason it documents: the completion
-        // email links here too, and the two must not drift apart.
-        NavigationManager.NavigateTo(AppPageRoutes.CreatorSongLyrics(SongMetadataId.Value));
-    }
-
-    protected MessageSeverity _statusSeverity => _status?.Status switch
+    protected MessageSeverity _statusSeverity => IsReplacing && _hasTimings
+        ? MessageSeverity.Warning
+        : _status?.Status switch
     {
         SongLyricsStatus.Published => MessageSeverity.Success,
         SongLyricsStatus.NeedsReview => MessageSeverity.Warning,
@@ -135,24 +161,25 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         _ => MessageSeverity.Info
     };
 
-    protected string _statusMessage => _status?.Status switch
+    // NO CONFIDENCE FIGURE IN ANY OF THESE. The aligner's composite score is systematically
+    // pessimistic - timings a creator would call perfect routinely score in the fifties - so quoting
+    // it talked people out of results that were fine and into a re-run that costs another separation
+    // pass and comes back no better. The score is still computed and stored for diagnosing the
+    // aligner; it is simply not evidence a creator can act on.
+    // Warned about rather than done quietly, because a replacement is the one path here that
+    // DESTROYS work: the completion service discards the draft, since a set of edits made against
+    // the old timings would silently reapply to words that are no longer there. A creator who has
+    // spent twenty minutes tapping a chorus is entitled to know that before they paste.
+    protected string _statusMessage => IsReplacing && _hasTimings
+        ? "Paste the corrected words below. Timing runs again from scratch and replaces this song's "
+          + "current timings - including anything you have tapped, saved or published."
+        : _status?.Status switch
     {
         SongLyricsStatus.Published =>
-            $"Lyrics timed ({_status.Confidence ?? 0d:P0} confidence). Listeners will see them in time with the song.",
+            "Lyrics timed. Listeners will see them in time with the song.",
 
-        // Editing is offered first on purpose. Machine alignment lands 150-300 ms out on a good day,
-        // so a re-run of the same text usually returns something just as approximate after another
-        // several minutes of compute - while tapping the few lines that drifted is quick and exact.
-        // The re-run is still named, because it is the only thing that helps when the pasted text was
-        // wrong rather than the timing.
-        // States the score without passing a verdict on it. NeedsReview is where EVERY successful
-        // alignment lands now, at any confidence, so copy that reads "we aren't confident in this"
-        // would tell a creator with a 95% result that their song went badly.
         SongLyricsStatus.NeedsReview =>
-            $"Timed with {_status.Confidence ?? 0d:P0} confidence. Nothing is shown to listeners "
-            + "until you press Publish. Have a listen - fixing the few lines that drifted is "
-            + "usually quicker than timing it again. If the words themselves are wrong, edit them "
-            + "and re-run instead.",
+            "These lyrics are timed. Nothing is shown to listeners until you press Publish.",
 
         SongLyricsStatus.Failed => "We couldn't time these lyrics. You can edit them and try again.",
         SongLyricsStatus.Pending => "These lyrics are queued for timing.",
@@ -297,20 +324,6 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             _isSaving = false;
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    protected async Task DownloadLrcAsync()
-    {
-        if (_status?.LrcBlobPath is null)
-        {
-            return;
-        }
-
-        // A short-lived read SAS straight to storage rather than proxying the bytes through the
-        // circuit. The lyrics blobs are deliberately not on MusicController's public whitelist, so
-        // this is the only way to reach one - and it is scoped to this creator's own request.
-        var uri = AzureStorageService.GetReadSasUri(_status.LrcBlobPath, TimeSpan.FromMinutes(10));
-        await JS.InvokeVoidAsync("open", uri.ToString(), "_blank");
     }
 
     protected async Task CloseAsync()
@@ -493,6 +506,43 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             Logger.LogWarning(
                 ex, "Could not refresh the song list after lyrics job for song {SongId} finished.",
                 SongMetadataId);
+        }
+
+        // Information, not Debug: this is the hinge of the whole finish-and-preview flow and it runs
+        // on a server nobody can attach a debugger to. When a creator reports being left in the paste
+        // box, this line is the difference between knowing the signal arrived and guessing.
+        Logger.LogInformation(
+            "Lyrics timing reached a terminal state for song {SongId}: status={Status}, hasTimings={HasTimings}.",
+            SongMetadataId,
+            _status?.Status,
+            _hasTimings);
+
+        // Timing landed, so this dialog has nothing left to say - close it and hand the song back to
+        // whoever is hosting us. A failure deliberately does NOT: it stays open, where the message
+        // and "Try again" are.
+        //
+        // THE DECISION OF WHERE TO GO NEXT IS DELIBERATELY NOT MADE HERE. It used to be, gated on
+        // IsVisible, and a creator watching the bar to the end was still left sitting in the paste
+        // box - IsVisible is a parameter SfDialog also writes to through @bind-Visible, so it is not
+        // a trustworthy answer to "is anyone still looking at this". The host knows better than we
+        // do: CreatorSongManagement only exists while the creator is on the songs grid, so raising
+        // this there sends them onward exactly when that is welcome, and does nothing at all once
+        // they have navigated away - without this component having to guess.
+        // ON THE DISPATCHER, because this method is reached from a SignalR callback and from a timer
+        // tick, neither of which runs on it. Everything below touches component state the renderer
+        // owns - closing this dialog, and whatever the host does with the handoff, which is a
+        // navigation. Off the dispatcher that throws, into a fire-and-forget hub handler where
+        // nothing reports it; the symptom is a dialog that has set itself closed and cannot repaint
+        // to show it, with the creator still sitting in front of it.
+        if (_hasTimings && SongMetadataId is not null)
+        {
+            var songId = SongMetadataId.Value;
+
+            await InvokeAsync(async () =>
+            {
+                await CloseAsync();
+                await OnTimingCompleted.InvokeAsync(songId);
+            });
         }
     }
 

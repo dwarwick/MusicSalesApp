@@ -16,6 +16,8 @@ public static class UserHistoryEventTypes
     public const string UploadCompleted = "UploadCompleted";
     public const string SongRenamed = "SongRenamed";
     public const string SongArtUpdated = "SongArtUpdated";
+    public const string LyricsAdded = "LyricsAdded";
+    public const string LyricsPublished = "LyricsPublished";
     public const string ChargebackReceived = "ChargebackReceived";
     public const string PersonaEnabled = "PersonaEnabled";
     public const string PersonaDisabled = "PersonaDisabled";

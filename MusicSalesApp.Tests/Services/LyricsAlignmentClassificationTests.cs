@@ -15,17 +15,16 @@ namespace MusicSalesApp.Tests.Services;
 /// </para>
 ///
 /// <para>
-/// <b>Two gates, and conflating them is the mistake this guards against.</b> Confidence is a quality
-/// gate: below the threshold the timings are held back but kept, because they may still be worth a
-/// look and are the starting point for any correction. The structural checks are a different kind of
-/// thing - timings that run backwards, or end after the track does, are broken rather than
-/// imprecise, and no amount of reviewing turns them into something a player could use.
+/// <b>The structural checks are the only gate left.</b> Timings that run backwards, or end after the
+/// track does, are broken rather than imprecise, and no amount of reviewing turns them into something
+/// a player could use. Confidence used to sit alongside them as a quality gate; it no longer decides
+/// anything, because it turned out to answer "did the aligner think it did well" rather than "are
+/// these timings good", and the two disagree badly on real songs.
 /// </para>
 /// </summary>
 [TestFixture]
 public class LyricsAlignmentClassificationTests
 {
-    private const double Threshold = 0.7d;
 
     [Test]
     public void EvenAVeryConfidentResultWaitsForTheCreator()
@@ -35,7 +34,7 @@ public class LyricsAlignmentClassificationTests
         // whose song it is.
         var result = GoodResult(confidence: 0.91d);
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -52,8 +51,7 @@ public class LyricsAlignmentClassificationTests
         // of a listener without the creator having heard them.
         foreach (var confidence in new[] { 0d, 0.25d, 0.5d, 0.7d, 0.99d, 1.0d })
         {
-            var classification = LyricsAlignmentCompletionService.Classify(
-                GoodResult(confidence), Threshold);
+            var classification = LyricsAlignmentCompletionService.Classify(GoodResult(confidence));
 
             Assert.That(
                 classification.Status,
@@ -63,20 +61,22 @@ public class LyricsAlignmentClassificationTests
     }
 
     [Test]
-    public void TheThresholdChangesTheWordingRatherThanTheOutcome()
+    public void TheConfidenceChangesNothingTheCreatorReads()
     {
-        // What "advisory" has to mean. Both land in the same state; only the greeting differs, so an
-        // admin moving the threshold re-words what creators are told and changes nothing a listener
-        // can see.
-        var above = LyricsAlignmentCompletionService.Classify(GoodResult(0.91d), Threshold);
-        var below = LyricsAlignmentCompletionService.Classify(GoodResult(0.42d), Threshold);
+        // The score used to pick between two greetings, one of which warned the creator to expect
+        // work. It is systematically pessimistic - alignments a creator would call perfect score in
+        // the fifties - so the warning fired on good songs and read as a verdict on them. Success now
+        // says the same thing at every score and lets the creator judge by ear.
+        var messages = new[] { 0d, 0.42d, 0.7d, 0.91d, 1.0d }
+            .Select(c => LyricsAlignmentCompletionService.Classify(GoodResult(c)).Message)
+            .Distinct()
+            .ToList();
 
         Assert.Multiple(() =>
         {
-            Assert.That(above.Status, Is.EqualTo(below.Status));
-            Assert.That(above.Message, Is.Not.EqualTo(below.Message));
-            Assert.That(below.Message, Does.Contain("tapping"));
-            Assert.That(above.Message, Does.Contain("Publish"));
+            Assert.That(messages, Has.Count.EqualTo(1), "The score must not change the wording.");
+            Assert.That(messages[0], Does.Contain("Publish"));
+            Assert.That(messages[0], Does.Not.Contain("%"), "No score in creator-facing copy.");
         });
     }
 
@@ -88,7 +88,7 @@ public class LyricsAlignmentClassificationTests
         // threshold would be the wrong trade.
         var result = GoodResult(confidence: 0.42d);
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -98,17 +98,17 @@ public class LyricsAlignmentClassificationTests
     }
 
     [Test]
-    public void ConfidenceExactlyAtTheThresholdReadsAsTheConfidentMessage()
+    public void ASuccessfulRunNeverQuotesAScoreAtTheCreator()
     {
-        // The threshold is admin-tunable, so somebody will eventually set it to the exact value a
-        // song scored. "At least this confident" is the intended reading.
-        var classification = LyricsAlignmentCompletionService.Classify(
-            GoodResult(confidence: Threshold), Threshold);
+        // The point of the whole change, pinned here as well as in the wording test above: whatever
+        // the aligner thought of itself, none of it reaches the creator's screen.
+        var classification = LyricsAlignmentCompletionService.Classify(GoodResult(confidence: 0.52d));
 
         Assert.Multiple(() =>
         {
             Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
-            Assert.That(classification.Message, Does.Contain("Publish"));
+            Assert.That(classification.Message, Does.Not.Contain("52"));
+            Assert.That(classification.Message, Does.Not.Contain("confiden"));
         });
     }
 
@@ -118,7 +118,7 @@ public class LyricsAlignmentClassificationTests
         // A Function that reported no score must not be read as having reported a perfect one.
         var result = GoodResult(confidence: null);
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview));
     }
@@ -131,7 +131,7 @@ public class LyricsAlignmentClassificationTests
         var result = GoodResult(confidence: 0.99d);
         result.MatchedTokenCount = 0;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -150,7 +150,7 @@ public class LyricsAlignmentClassificationTests
         var result = GoodResult(confidence: 0.95d);
         result.IsMonotonic = false;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -168,7 +168,7 @@ public class LyricsAlignmentClassificationTests
         result.DurationMs = 200_000;
         result.LastWordEndMs = 260_000;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -188,7 +188,7 @@ public class LyricsAlignmentClassificationTests
         result.DurationMs = 200_000;
         result.LastWordEndMs = 202_000;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview), "Tolerated, not failed.");
     }
@@ -202,7 +202,7 @@ public class LyricsAlignmentClassificationTests
         result.LineCount = 40;
         result.LinesWithTimingCount = 9;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -221,7 +221,7 @@ public class LyricsAlignmentClassificationTests
         var result = GoodResult(confidence: 0.10d);
         result.IsMonotonic = false;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.Multiple(() =>
         {
@@ -239,7 +239,7 @@ public class LyricsAlignmentClassificationTests
         result.DurationMs = 0;
         result.LastWordEndMs = 180_000;
 
-        var classification = LyricsAlignmentCompletionService.Classify(result, Threshold);
+        var classification = LyricsAlignmentCompletionService.Classify(result);
 
         Assert.That(classification.Status, Is.EqualTo(SongLyricsStatus.NeedsReview), "Not a failure.");
     }

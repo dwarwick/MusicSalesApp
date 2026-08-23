@@ -158,13 +158,19 @@ public class MobileSongMapper : IMobileSongMapper
     /// The timings path a listener may fetch, or null.
     /// </summary>
     /// <remarks>
-    /// Gated on the row's STATUS rather than on a path existing, for the same reason
+    /// Gated on the ROW rather than on a path existing, for the same reason
     /// <c>IsPubliclyReadableAsync</c> is: withheld timings sit at the identical blob path, so
     /// "there is a file" proves nothing. Since alignment stopped publishing, NeedsReview is where
     /// every successful run lands - it is the common case here, not an edge one.
+    ///
+    /// <para>
+    /// Null here is what takes lyrics off a phone. The app asks for nothing it was not given a path
+    /// for, so a hidden or taken-down song simply arrives without one and the player shows cover art
+    /// - it needs no notion of "disabled" at all, and no release to learn one.
+    /// </para>
     /// </remarks>
     private static string? ResolveLyricsTimingsPath(SongLyrics? lyrics) =>
-        lyrics is { Status: SongLyricsStatus.Published }
+        lyrics is { IsVisibleToListeners: true }
         && !string.IsNullOrWhiteSpace(lyrics.TimingsBlobPath)
             ? lyrics.TimingsBlobPath
             : null;

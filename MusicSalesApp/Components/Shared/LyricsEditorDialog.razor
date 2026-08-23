@@ -7,7 +7,7 @@
         <Header>
             <div class="lyrics-dialog-header">
                 <i class="bi bi-music-note-list me-2"></i>
-                Lyrics for @(Song?.SongTitle ?? "this song")
+                @(IsReplacing && _hasTimings ? "Replace lyrics for " : "Lyrics for ")@(Song?.SongTitle ?? "this song")
             </div>
         </Header>
         <Content>
@@ -53,6 +53,17 @@
                                 @_progressPercent.ToString("0")%
                             </div>
                         </div>
+
+                        @* Says the thing that was always true and never stated. The run is started
+                           through Hangfire and finishes on a Durable Function that reports back over
+                           HTTP - none of it touches this circuit - so a creator watching this bar is
+                           waiting for no reason. Worth the space: without it the honest reading of a
+                           progress bar is "do not touch anything", and timing a song takes minutes. *@
+                        <SfMessage Severity="MessageSeverity.Info" ShowIcon="true">
+                            <strong>You can close this and carry on.</strong> The timing keeps running
+                            on our servers even if you close this box, leave the page, or shut the
+                            browser. We'll email you the moment it's finished.
+                        </SfMessage>
                     </div>
                 }
 
@@ -77,41 +88,25 @@
         </Content>
         <FooterTemplate>
             <div class="lyrics-dialog-footer">
-                @if (_status?.Status is SongLyricsStatus.Published or SongLyricsStatus.NeedsReview)
-                {
-                    <SfButton OnClick="DownloadLrcAsync" CssClass="e-btn e-small e-outline">
-                        <i class="bi bi-download me-1"></i> Download .lrc
-                    </SfButton>
-                }
-
                 @if (_isRunning)
                 {
                     <SfButton OnClick="CancelAsync" CssClass="e-btn e-small e-danger" Disabled="@_isSaving">
                         <i class="bi bi-x-circle me-1"></i> Cancel timing
                     </SfButton>
                 }
-                else
+                else if (_canSubmit)
                 {
-                    @* Offered before the re-run, and styled as the primary action, because it is
-                       almost always the right one: a re-run costs another separation pass and comes
-                       back with the same 150-300 ms of drift, whereas nudging the handful of words
-                       that are actually off takes seconds and is exact. The re-run stays for the case
-                       editing cannot fix - lyrics that were wrong in the first place. *@
-                    @if (_hasTimings)
-                    {
-                        <SfButton OnClick="OpenTimingEditorAsync" CssClass="e-btn cta-secondary hero-secondary-cta">
-                            <i class="bi bi-sliders me-1"></i> Fix the timing
-                        </SfButton>
-                    }
-
-                    @if (LyricsService.IsAvailable)
-                    {
-                        <SfButton OnClick="SubmitAsync"
-                                  CssClass="@(_hasTimings ? "e-btn e-small e-outline" : "e-btn cta-secondary hero-secondary-cta")"
-                                  Disabled="@(_isSaving || IsOverLimit)">
-                            <i class="bi bi-stopwatch me-1"></i> @SubmitLabel
-                        </SfButton>
-                    }
+                    @* Normally gated on there being NO timings, which is what removes the old re-run
+                       button: the first alignment is good, and offering to run it again invited a
+                       second separation pass that came back with the same 150-300 ms of drift while
+                       reading to the creator as advice to take it. The exception is a deliberate
+                       replacement - words that were wrong in the first place, which no amount of
+                       nudging repairs and which the timing editor cannot touch. *@
+                    <SfButton OnClick="SubmitAsync"
+                              CssClass="e-btn cta-secondary hero-secondary-cta"
+                              Disabled="@(_isSaving || IsOverLimit)">
+                        <i class="bi bi-stopwatch me-1"></i> @SubmitLabel
+                    </SfButton>
                 }
 
                 <SfButton OnClick="CloseAsync" CssClass="e-btn e-small">Close</SfButton>

@@ -194,6 +194,40 @@ public class MobileSongMapperTests
         });
     }
 
+    /// <summary>
+    /// An administrator's takedown reaches the phone, even though Status still says Published.
+    /// </summary>
+    /// <remarks>
+    /// This mapping IS the propagation. The apps have no notion of "disabled" and need none: they
+    /// ask for nothing they were not given a path for, so a null here is what puts the cover art
+    /// back on a phone that already knows this song - no release, no client change.
+    /// </remarks>
+    [Test]
+    public void MapToSongListItem_WithholdsTimings_WhenAnAdministratorHasDisabledThem()
+    {
+        var song = new SongMetadata { Id = 7, Mp3BlobPath = "folder/test.mp3" };
+        var lyrics = new SongLyrics
+        {
+            SongMetadataId = 7,
+            Status = SongLyricsStatus.Published,
+            TimingsBlobPath = "abc/abc-lyrics.json",
+            Version = 4,
+            DisabledAt = new DateTime(2026, 8, 22, 12, 0, 0, DateTimeKind.Utc),
+            DisabledByUserId = 99
+        };
+
+        var listItem = _mapper.MapToSongListItem(song, TimeSpan.FromHours(24), 30, lyrics);
+        var playlistItem = _mapper.MapToPlaylistSong(song, TimeSpan.FromHours(24), null, 30, lyrics);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(listItem.LyricsTimingsPath, Is.Null);
+            Assert.That(listItem.LyricsVersion, Is.Zero);
+            Assert.That(playlistItem.LyricsTimingsPath, Is.Null, "Both entry points, or one leaks it.");
+            Assert.That(playlistItem.LyricsVersion, Is.Zero);
+        });
+    }
+
     [Test]
     public void MapToSongListItem_WithholdsTimings_WhenPublishedButThePathIsMissing()
     {
