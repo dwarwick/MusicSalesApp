@@ -140,6 +140,61 @@ public class ControlBorderTokenCssTests
     }
 
     [Test]
+    public void BothThemesDeclareADangerColourAndItsForeground()
+    {
+        foreach (var fileName in ThemeFiles)
+        {
+            var css = ReadThemeCss(fileName);
+
+            Assert.Multiple(() =>
+            {
+                // #dc3545 was the last colour with no theme variant. Filled with a white
+                // label it measured 4.53:1 and passed, while every text and border use of
+                // the same value failed - 2.86:1 on the dark surface.
+                Assert.That(css, Does.Match(@"--st-danger\s*:"),
+                    $"{fileName} must declare --st-danger");
+                Assert.That(css, Does.Match(@"--st-on-danger\s*:"),
+                    $"{fileName} must declare --st-on-danger, the only foreground allowed on it");
+            });
+        }
+    }
+
+    [Test]
+    public void DestructiveButtonsAreThemed()
+    {
+        foreach (var fileName in ThemeFiles)
+        {
+            // AGENTS.md keeps destructive actions on e-danger rather than restyling them
+            // as CTAs, so the class stays and only its value becomes ours. Syncfusion's own
+            // .e-btn.e-danger is two classes, so a bare .e-btn override cannot reach it.
+            var body = ReadRuleBodies(ReadThemeCss(fileName), ".e-btn.e-danger", fileName);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(body, Does.Contain("var(--st-danger)"),
+                    $".e-btn.e-danger in {fileName} must use --st-danger");
+                Assert.That(body, Does.Contain("var(--st-on-danger)"),
+                    $".e-btn.e-danger in {fileName} must use --st-on-danger for its label");
+            });
+        }
+    }
+
+    [Test]
+    public void NoRawDangerLiteralOutsideTheThemeSheets()
+    {
+        // A coloured box-shadow in app.css is how the recording ring ended up with no dark
+        // variant in the first place - colour belongs in the theme sheets.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "MusicSalesApp.slnx")))
+            dir = dir.Parent;
+
+        var appCss = File.ReadAllText(Path.Combine(dir!.FullName, "MusicSalesApp", "wwwroot", "app.css"));
+
+        Assert.That(appCss, Does.Not.Contain("#dc3545"),
+            "app.css carries layout, not colour - a danger value there cannot have a dark variant");
+    }
+
+    [Test]
     public void SurfacesKeepTheOriginalLineToken()
     {
         foreach (var fileName in ThemeFiles)

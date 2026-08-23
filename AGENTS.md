@@ -285,7 +285,7 @@ So there are two families:
 | Family | Declared | Use for |
 | --- | --- | --- |
 | `--st-player-*`, `--st-blue*`, `--st-violet`, `--st-amber` | **once**, in `tokens.css` | the two player pages only |
-| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
+| `--st-surface`, `--st-surface-hover`, `--st-line`, `--st-control-line`, `--st-text`, `--st-text-2`, `--st-text-3`, `--st-accent`, `--st-accent-hover`, `--st-accent-soft`, `--st-genre`, `--st-warn`, `--st-warn-tint`, `--st-danger`, `--st-on-danger`, `--st-track`, `--st-page`, `--st-brand-gradient`, `--st-elev`, `--st-elev-hover` | **twice**, in `light.css` *and* `dark.css` | everything that follows the theme |
 
 **Never point a card rule at a `--st-player-*` token.** Measured on white, `--st-blue-bright` is
 ~2.1:1, `--st-violet` ~2.9:1, `--st-amber` ~2.1:1 — all fail AA. That is why `--st-warn` is
@@ -334,6 +334,40 @@ surfaces rather than controls.
 
 The new border is visibly heavier than the old hairline. That is the cost of the rule, not a
 drawing error - do not "fix" it back.
+
+### Destructive actions have a theme now
+
+`e-danger` is Syncfusion's, and AGENTS.md deliberately keeps destructive actions on it rather
+than restyling them as CTAs. What it did not have was a value of our own, which made `#dc3545`
+the last colour in the app with no theme variant:
+
+| `#dc3545` used as | Light | Dark |
+| --- | --- | --- |
+| text or a 1px border on `--st-surface` | 4.53:1 | **2.86:1** |
+| text or a 1px border on `--st-page` | **4.30:1** | **3.41:1** |
+| a fill under a white label | 4.53:1 | 4.53:1 |
+
+The filled case squeaked through, which is exactly why this went unnoticed for so long — the
+button looked fine while every *text* and *border* use of the same colour failed. On this app
+that is most of them: Delete links, outlined Cancel actions, the danger-zone edge.
+
+So there is now **`--st-danger`** (`#c8102e` light, `#ff8a94` dark) and **`--st-on-danger`**
+(`#ffffff` / `#2a0508`), applied to `.e-btn.e-danger` in both theme sheets.
+
+**One value covers both jobs here, and that is not an inconsistency with the fill family.**
+Contrast is symmetric: `#c8102e` reads at 5.88:1 as text on white *and* carries white text at
+5.88:1. `--st-accent` needed a separate `--st-accent-fill` only because its dark value carried
+the wrong FOREGROUND — white on `#02b8fd` is 2.26:1 — not because the value itself was wrong.
+Dark danger takes the same escape route the fill family already uses: keep the bright value,
+flip the foreground to near-black. `--st-on-danger` is the only foreground permitted on it.
+
+`.lyrics-editor-record.is-recording` moved out of `app.css` in the same change. A coloured
+`box-shadow` belongs in the theme sheets by the routing rule above, and being in `app.css` is
+precisely how it ended up with no dark variant.
+
+**Still on raw literals, and deliberately left alone**: the `creator-settings-alert-danger` /
+`creator-status-text-danger` family. Those already have hand-written dark variants, so they are
+not this bug; they get tokenised when that page is redesigned.
 
 ### A tint token must be solid, not an alpha
 

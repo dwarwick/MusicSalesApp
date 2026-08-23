@@ -53,6 +53,19 @@
     --st-on-accent: #04121f; /* 8.35:1 on the fill, 10.11:1 on the hover */
     --st-on-accent-soft: rgba(0, 0, 0, .22);
     --st-genre-fill: #a594f6;
+    /*
+     * DESTRUCTIVE. Syncfusion ships e-danger as #dc3545 and it was the last colour in
+     * the app with no theme variant at all: as TEXT or a 1px BORDER it measures
+     * 2.86:1 on --st-surface and 3.41:1 on --st-page - both well under AA, so every Delete link, outlined
+     * Cancel and danger-zone edge failed. Filled with a white label it squeaked
+     * through at 4.53:1, which is why it went unnoticed.
+     *
+     * Contrast is symmetric, so ONE value does both jobs here - unlike --st-accent,
+     * which needed a separate fill family only because its FOREGROUND was wrong.
+     * --st-on-danger is the only foreground permitted on --st-danger.
+     */
+    --st-danger: #ff8a94; /* 5.74:1 on --st-surface, 6.84:1 on --st-page, 4.95:1 on --st-surface-hover */
+    --st-on-danger: #2a0508; /* 8.29:1 on the fill */
     --st-on-genre: #17102e; /* 7.10:1 */
     --st-elev: 0 2px 6px rgba(0, 0, 0, .30), 0 8px 24px rgba(0, 0, 0, .38);
     --st-elev-hover: 0 4px 10px rgba(0, 0, 0, .38), 0 14px 34px rgba(0, 0, 0, .48);
@@ -1435,4 +1448,30 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .cta-quiet:hover {
     background-color: var(--st-surface-hover) !important;
     color: var(--st-text) !important;
+}
+
+/* ---- Destructive buttons ------------------------------------------------
+   AGENTS.md keeps destructive actions on e-danger rather than restyling them as
+   CTAs. These give that class a themed value; see --st-danger above. */
+
+.e-btn.e-danger,
+.e-css.e-btn.e-danger {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+}
+
+.e-btn.e-danger:hover,
+.e-css.e-btn.e-danger:hover {
+    background-color: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-on-danger);
+    box-shadow: var(--st-elev-hover);
+}
+
+/* Moved out of app.css, where a coloured box-shadow had no theme variant and
+   broke the property-routing rule. Unmistakably armed: a creator who does not
+   realise recording is live will press space expecting play/pause. */
+.lyrics-editor-record.is-recording {
+    box-shadow: 0 0 0 2px var(--st-danger);
 }
