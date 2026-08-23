@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Contracts;
@@ -293,7 +293,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         finally
         {
             _isSaving = false;
-            await InvokeAsync(StateHasChanged);
+            StateHasChanged();
         }
     }
 
@@ -322,7 +322,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         finally
         {
             _isSaving = false;
-            await InvokeAsync(StateHasChanged);
+            StateHasChanged();
         }
     }
 
@@ -333,7 +333,41 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         await IsVisibleChanged.InvokeAsync(false);
     }
 
+    /// <summary>
+    /// The marshalling boundary for everything the hub pushes at this dialog.
+    ///
+    /// <para>
+    /// <c>HubConnection</c> raises <c>OnLyricsProgress</c> from its own message loop, where
+    /// <c>SynchronizationContext.Current</c> is null - so nothing below here is on the renderer's
+    /// dispatcher until this hop puts it there.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The hop is here, at the entry point, and not around each individual repaint.</b> An
+    /// <c>await</c> inside a method that was entered off the dispatcher does not resume on it, so a
+    /// hop per repaint leaves every line between the hops off it again. That is precisely how
+    /// <c>OnCompleted</c> came to be raised off the dispatcher: the repaint above it hopped, the
+    /// continuation did not stay, and <c>ComponentBase.HandleEventAsync</c> then called the host
+    /// page's <c>StateHasChanged</c> from a hub thread and threw.
+    /// </para>
+    /// </summary>
     private async Task HandleProgressAsync(LyricsAlignmentProgress progress)
+    {
+        try
+        {
+            await InvokeAsync(() => ApplyProgressAsync(progress));
+        }
+        catch (ObjectDisposedException)
+        {
+            // The circuit was torn down between the push arriving and the hop onto its dispatcher.
+            // There is nothing left to repaint and nobody left to tell.
+        }
+    }
+
+    /// <summary>
+    /// Applies one progress push. Runs on the dispatcher - see <see cref="HandleProgressAsync"/>.
+    /// </summary>
+    private async Task ApplyProgressAsync(LyricsAlignmentProgress progress)
     {
         // The hub carries every attempt for this creator, including other songs'. Filtering on the
         // attempt's own id is what stops one song's progress driving another song's bar.
@@ -353,7 +387,7 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
             return;
         }
 
-        await InvokeAsync(StateHasChanged);
+        StateHasChanged();
     }
 
     private static string DescribeStep(LyricsAlignmentStep step) => step switch
@@ -408,47 +442,26 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     {
         try
         {
-            while (await poller.WaitForNextTickAsync())
+            // The wait deliberately does NOT resume on the dispatcher, and the body deliberately
+            // hops onto it. This loop used to land on the dispatcher only because StartStatusPoller
+            // happens to be called from dispatcher code, so the context was captured by accident -
+            // true today, and silently untrue the first time anything starts the poller elsewhere.
+            while (await poller.WaitForNextTickAsync().ConfigureAwait(false))
             {
-                var watchedJobId = _activeJob?.JobId;
-
-                if (!_isRunning || watchedJobId is null || SongMetadataId is null)
-                {
-                    break;
-                }
+                var keepPolling = true;
 
                 try
                 {
-                    var updated = await LyricsService.GetActiveJobAsync(SongMetadataId.Value);
-
-                    // GetActiveJobAsync only ever returns Queued or Processing rows, so an attempt
-                    // that has finished - however it finished - stops being returned at all. That
-                    // disappearance IS the terminal signal here; there is no terminal row to read.
-                    if (updated is null || updated.JobId != watchedJobId)
-                    {
-                        await ApplyTerminalStateAsync();
-                        break;
-                    }
-
-                    if (updated.Step > _activeJob!.Step)
-                    {
-                        _activeJob = updated;
-                        _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(updated.Step);
-                        _progressDetail = DescribeStep(updated.Step);
-                        await InvokeAsync(StateHasChanged);
-                    }
+                    await InvokeAsync(async () => keepPolling = await PollOnceAsync());
                 }
                 catch (ObjectDisposedException)
                 {
                     break;
                 }
-                catch (Exception ex)
+
+                if (!keepPolling)
                 {
-                    // Warning rather than Debug: this is the safety net for a lost terminal push, so
-                    // it failing silently leaves the creator watching a bar that will never move and
-                    // leaves nothing in the logs to explain why.
-                    Logger.LogWarning(
-                        ex, "Lyrics status poll failed for job {JobId}.", watchedJobId);
+                    break;
                 }
             }
         }
@@ -463,7 +476,62 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>
+    /// One tick of the fallback poll. Runs on the dispatcher; returns whether to keep polling.
+    /// </summary>
+    private async Task<bool> PollOnceAsync()
+    {
+        var watchedJobId = _activeJob?.JobId;
+
+        if (!_isRunning || watchedJobId is null || SongMetadataId is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var updated = await LyricsService.GetActiveJobAsync(SongMetadataId.Value);
+
+            // GetActiveJobAsync only ever returns Queued or Processing rows, so an attempt that has
+            // finished - however it finished - stops being returned at all. That disappearance IS
+            // the terminal signal here; there is no terminal row to read.
+            if (updated is null || updated.JobId != watchedJobId)
+            {
+                await ApplyTerminalStateAsync();
+                return false;
+            }
+
+            if (updated.Step > _activeJob!.Step)
+            {
+                _activeJob = updated;
+                _progressPercent = LyricsAlignmentProgressCalculator.ToOverallPercent(updated.Step);
+                _progressDetail = DescribeStep(updated.Step);
+                StateHasChanged();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Warning rather than Debug: this is the safety net for a lost terminal push, so it
+            // failing silently leaves the creator watching a bar that will never move and leaves
+            // nothing in the logs to explain why.
+            Logger.LogWarning(
+                ex, "Lyrics status poll failed for job {JobId}.", watchedJobId);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Closes the attempt out in the UI, from whichever path noticed first.
+    ///
+    /// <para>
+    /// <b>Runs on the dispatcher.</b> Both callers - the hub push and the fallback poll - hop before
+    /// they reach here, so everything below touches renderer state directly. Do not call it from
+    /// anywhere that has not made that hop.
+    /// </para>
     ///
     /// <para>
     /// <b>The repaint is in a finally, and the parent refresh happens after it.</b> Both matter.
@@ -494,11 +562,15 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         }
         finally
         {
-            await InvokeAsync(StateHasChanged);
+            StateHasChanged();
         }
 
         try
         {
+            // The host binds this to a method on a ComponentBase, so EventCallback.InvokeAsync goes
+            // through ComponentBase.HandleEventAsync, which repaints the host synchronously. That is
+            // the call that threw off the dispatcher. The catch below is for the reload itself
+            // failing - a database problem - and must not be allowed to mask a threading one again.
             await OnCompleted.InvokeAsync();
         }
         catch (Exception ex)
@@ -528,21 +600,12 @@ public partial class LyricsEditorDialogModel : BlazorBase, IAsyncDisposable
         // do: CreatorSongManagement only exists while the creator is on the songs grid, so raising
         // this there sends them onward exactly when that is welcome, and does nothing at all once
         // they have navigated away - without this component having to guess.
-        // ON THE DISPATCHER, because this method is reached from a SignalR callback and from a timer
-        // tick, neither of which runs on it. Everything below touches component state the renderer
-        // owns - closing this dialog, and whatever the host does with the handoff, which is a
-        // navigation. Off the dispatcher that throws, into a fire-and-forget hub handler where
-        // nothing reports it; the symptom is a dialog that has set itself closed and cannot repaint
-        // to show it, with the creator still sitting in front of it.
         if (_hasTimings && SongMetadataId is not null)
         {
             var songId = SongMetadataId.Value;
 
-            await InvokeAsync(async () =>
-            {
-                await CloseAsync();
-                await OnTimingCompleted.InvokeAsync(songId);
-            });
+            await CloseAsync();
+            await OnTimingCompleted.InvokeAsync(songId);
         }
     }
 

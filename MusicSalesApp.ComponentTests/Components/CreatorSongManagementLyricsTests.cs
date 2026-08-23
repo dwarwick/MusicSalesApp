@@ -1,8 +1,9 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using MusicSalesApp.Common.Contracts;
 using MusicSalesApp.Common.Helpers;
 using MusicSalesApp.ComponentTests.Testing;
 using MusicSalesApp.Components.Pages.Creator;
@@ -369,4 +370,194 @@ public class CreatorSongManagementLyricsTests : BUnitTestBase
             Assert.That(ButtonLabels(cut), Does.Contain("Edit"));
         });
     }
+    // -----------------------------------------------------------------
+    // The paths that do not start on the renderer's dispatcher
+    // -----------------------------------------------------------------
+
+    /// <summary>Renders the grid with the lyrics dialog open on an attempt already in flight.</summary>
+    private IRenderedComponent<CreatorSongManagement> RenderWithLyricsDialogOpen(Guid jobId)
+    {
+        MockLyricsService.SetupGet(x => x.IsAvailable).Returns(true);
+        MockLyricsService.Setup(x => x.GetActiveJobAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LyricsAlignmentJob
+            {
+                JobId = jobId,
+                SongMetadataId = 1,
+                CreatorId = 7,
+                LyricsBlobPath = "abc/abc-lyrics.txt",
+                Step = LyricsAlignmentStep.Saving
+            });
+
+        var cut = RenderLoaded();
+        cut.FindAll("button").First(b => b.TextContent.Trim() == "Lyrics").Click();
+        cut.WaitForState(() => cut.Markup.Contains("progress-bar"), TimeSpan.FromSeconds(5));
+
+        return cut;
+    }
+
+    /// <summary>
+    /// A terminal push has to repaint the songs grid, not merely reload it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The regression, seen in production as
+    /// "Could not refresh the song list after lyrics job for song 157 finished /
+    /// InvalidOperationException: The current thread is not associated with the Dispatcher".
+    /// The dialog raised <c>OnCompleted</c> straight from the SignalR callback thread. That callback
+    /// is bound to a method on this page, so <c>EventCallback.InvokeAsync</c> goes through
+    /// <c>ComponentBase.HandleEventAsync</c>, which starts the reload and then calls
+    /// <c>StateHasChanged</c> synchronously. Off the dispatcher that throws, the dialog's catch
+    /// logged it as a warning, and the abandoned reload left the grid showing stale rows until the
+    /// creator refreshed the page by hand.
+    /// </para>
+    /// <para>
+    /// Driven through the hub mock rather than by invoking the callback directly, because Moq raises
+    /// the event on the calling thread - which is not bUnit's renderer dispatcher, exactly like
+    /// production. This is what <c>LyricsEditorDialogTests</c> cannot reach: with an NUnit fixture as
+    /// the callback's receiver there is no <c>IHandleEvent</c>, so the throwing path never runs.
+    /// </para>
+    /// <para>
+    /// A <b>Failed</b> terminal state is deliberate. It leaves <c>_hasTimings</c> false, so
+    /// <c>OnTimingCompleted</c> never fires and its own reload-and-repaint cannot mask the missing
+    /// one. This is the only path back to the grid.
+    /// </para>
+    /// </remarks>
+    [Test]
+    public void ATerminalPushFromTheHubThreadStillRepaintsTheGrid()
+    {
+        var jobId = Guid.NewGuid();
+        var cut = RenderWithLyricsDialogOpen(jobId);
+
+        Assert.That(
+            cut.Markup,
+            Does.Not.Contain("badge bg-danger"),
+            "Precondition: the grid has no failed-lyrics state to show yet.");
+
+        // From here the song's lyrics read as failed. Only a repaint can put that on the grid.
+        MockLyricsService.Setup(x => x.GetForSongAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SongLyrics { SongMetadataId = 1, Status = SongLyricsStatus.Failed });
+        MockLyricsService.Setup(x => x.GetForSongsAsync(It.IsAny<IEnumerable<int>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<int, SongLyrics>
+            {
+                [1] = new() { SongMetadataId = 1, Status = SongLyricsStatus.Failed }
+            });
+
+        MockUploadProgressHubClient.Raise(
+            x => x.OnLyricsProgress += null,
+            new LyricsAlignmentProgress
+            {
+                JobId = jobId,
+                Step = LyricsAlignmentStep.Failed,
+                OverallPercent = 100d
+            });
+
+        cut.WaitForState(() => cut.Markup.Contains("badge bg-danger"), TimeSpan.FromSeconds(5));
+
+        Assert.That(
+            cut.Markup,
+            Does.Contain("badge bg-danger"),
+            "The grid must repaint off the hub thread, not wait for the creator to refresh.");
+    }
+
+    // -----------------------------------------------------------------
+    // The automatic handoff, and the circuit it must not kill
+    // -----------------------------------------------------------------
+
+    /// <summary>The browser is there and answers the liveness probe.</summary>
+    private void GivenTheBrowserAnswers()
+        => TestContext.JSInterop.Setup<bool>("dashboardHelper.ping").SetResult(true);
+
+    /// <summary>
+    /// Nudges the fake clock past the handoff wait.
+    /// </summary>
+    /// <remarks>
+    /// Advancing once is not reliable: the wait is armed a few microseconds after the notice
+    /// renders, so a single Advance can land before there is anything to fire. Nudging until the
+    /// outcome appears is deterministic without depending on that ordering.
+    /// </remarks>
+    private void AdvancePastTheHandoffWait(Func<bool> settled = null, int nudges = 12)
+    {
+        for (var i = 0; i < nudges; i++)
+        {
+            FakeTimeProvider.Advance(TimeSpan.FromSeconds(5));
+
+            if (settled != null && settled())
+            {
+                return;
+            }
+
+            Thread.Sleep(20);
+        }
+    }
+
+    [Test]
+    public void TheHandoffGoesToPreviewResultsWhenTheBrowserIsStillThere()
+    {
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+        GivenTheBrowserAnswers();
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var destination = AppPageRoutes.CreatorSongLyrics(1);
+
+        AdvancePastTheHandoffWait(() => nav.Uri.Contains(destination));
+
+        Assert.That(nav.Uri, Does.Contain(destination), "The point of the notice is that it moves them on.");
+    }
+
+    /// <summary>
+    /// A circuit whose browser has gone must not be navigated.
+    /// </summary>
+    /// <remarks>
+    /// The second production failure: "Navigation failed when changing the location to
+    /// /creator/songs/157/lyrics - TaskCanceledException", followed by an unhandled circuit exception
+    /// that tore the circuit down, exactly 65 seconds after the job finished - the five-second
+    /// handoff wait plus the one-minute JSInteropDefaultCallTimeout. NavigateTo cannot be wrapped in
+    /// a try/catch, because RemoteNavigationManager runs the interop detached and reports failures
+    /// straight to CircuitHost, so the only defence is to ask first and decline.
+    /// </remarks>
+    [Test]
+    public void TheHandoffIsAbandonedWhenTheBrowserHasGone()
+    {
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+
+        // Nobody answers, which is what a disconnected-but-retained circuit looks like.
+        TestContext.JSInterop.Setup<bool>("dashboardHelper.ping").SetCanceled();
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var before = nav.Uri;
+
+        AdvancePastTheHandoffWait();
+
+        Assert.That(nav.Uri, Is.EqualTo(before), "A navigation nobody can receive kills the circuit.");
+    }
+
+    [Test]
+    public void NotJustNowCancelsTheHandoffRatherThanRacingIt()
+    {
+        // The dismissal used to be honoured only by a flag re-read after the wait had already run to
+        // completion. Cancelling the wait is what stops a declined navigation being attempted at all.
+        GivenLyricsFor(SongLyricsStatus.NeedsReview, 0.52d);
+        GivenTheBrowserAnswers();
+
+        var cut = RenderLoaded();
+        RaiseTimingCompleted(cut, 1);
+        cut.WaitForState(() => cut.Markup.Contains("Your lyrics are timed"), TimeSpan.FromSeconds(5));
+
+        var nav = TestContext.Services.GetRequiredService<NavigationManager>();
+        var before = nav.Uri;
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Not just now")).Click();
+        AdvancePastTheHandoffWait();
+
+        Assert.That(nav.Uri, Is.EqualTo(before));
+    }
 }
+

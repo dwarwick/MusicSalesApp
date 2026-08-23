@@ -1,4 +1,4 @@
-using MusicSalesApp.Components.Base;
+﻿using MusicSalesApp.Components.Base;
 using MusicSalesApp.Services;
 using Microsoft.JSInterop;
 using Syncfusion.Blazor.Grids;
@@ -369,33 +369,32 @@ public partial class CreatorDashboardModel : BlazorBase, IDisposable
         await InvokeAsync(StateHasChanged);
     }
 
-    private async void HandleStreamCountReceived(int songMetadataId, int newCount)
+    /// <remarks>
+    /// The hub raises this from its own message loop, and it used to be an <c>async void</c> that
+    /// did the whole reload there: LoadFilterData and LoadChartData both query through the circuit's
+    /// scoped DbContext, so they were racing whatever the renderer was doing with the same context.
+    /// </remarks>
+    private void HandleStreamCountReceived(int songMetadataId, int newCount)
     {
-        // Reload chart data when a new stream is recorded
-        if (_creatorId != null)
+        DispatchUiUpdate(async () =>
         {
-            try
+            // Reload chart data when a new stream is recorded
+            if (_creatorId == null)
             {
-                // Update end date to user's current time to include the latest data
-                var userNow = GetUserNow();
-                _endDate = userNow;
-                _maxStartDate = userNow;
-                _maxEndDate = userNow;
-                await LoadFilterData();
-                await LoadChartData();
-                await InvokeAsync(StateHasChanged);
+                return;
             }
-            catch (ObjectDisposedException)
-            {
-                // Component was disposed during the async update - safe to ignore
-            }
-        }
+
+            // Update end date to user's current time to include the latest data
+            var userNow = GetUserNow();
+            _endDate = userNow;
+            _maxStartDate = userNow;
+            _maxEndDate = userNow;
+            await LoadFilterData();
+            await LoadChartData();
+        });
     }
 
-    private void HandleThemeChanged()
-    {
-        InvokeAsync(StateHasChanged);
-    }
+    private void HandleThemeChanged() => DispatchUiRefresh();
 
     private async Task LoadPayoutHistory()
     {

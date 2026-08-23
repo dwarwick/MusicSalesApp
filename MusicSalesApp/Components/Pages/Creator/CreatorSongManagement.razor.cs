@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using MusicSalesApp.Common.Helpers;
@@ -89,6 +89,26 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     /// bar for several minutes deserves to be told what happened before the screen changes under them.
     /// </remarks>
     private static readonly TimeSpan PreviewHandoffDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long the browser gets to answer a no-op before an automatic handoff gives up on it.
+    /// </summary>
+    /// <remarks>
+    /// Short on purpose. This is not waiting for work, it is waiting for a round trip that either
+    /// happens in milliseconds or is never going to happen at all.
+    /// </remarks>
+    private static readonly TimeSpan BrowserProbeTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>A no-op in dashboard-helper.js, called only to find out whether anybody answers.</summary>
+    private const string BrowserProbeJsFunction = "dashboardHelper.ping";
+
+    /// <summary>Cancelled when this page goes away, so no pending handoff can outlive it.</summary>
+    private readonly CancellationTokenSource _pageLifetime = new();
+
+    /// <summary>
+    /// The wait in front of the current automatic handoff, cancelled by anything that supersedes it.
+    /// </summary>
+    private CancellationTokenSource _handoffCts;
 
     protected bool _showTimingCompleteNotice;
     protected string _timedSongTitle = string.Empty;
@@ -234,20 +254,107 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
         _showTimingCompleteNotice = true;
         await InvokeAsync(StateHasChanged);
 
-        await Task.Delay(PreviewHandoffDelay);
+        try
+        {
+            // TimeProvider rather than Task.Delay, and cancellable: pressing "Not just now", a
+            // second song claiming the notice, or this page going away all end the wait here rather
+            // than leaving a navigation queued up behind it.
+            await TimeProvider.Delay(PreviewHandoffDelay, BeginHandoffWindow());
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
 
-        // Re-checked rather than assumed: the creator may have pressed "Not just now", or a second
-        // song may have finished in the meantime and claimed the notice.
+        // Re-checked rather than assumed, since cancellation is not the only way to be superseded.
+        if (!_showTimingCompleteNotice || _timedSongId != songMetadataId)
+        {
+            return;
+        }
+
+        // ASK THE BROWSER FIRST. NavigationManager.NavigateTo cannot be wrapped in a try/catch:
+        // RemoteNavigationManager starts the interop in a detached task and hands any failure
+        // straight to CircuitHost as an unhandled exception, which tears the circuit down. On a
+        // circuit whose browser has gone - a reconnect in flight, a closed tab, a circuit still
+        // inside its three-minute disconnected-retention window - the interop is simply never
+        // answered, and JSInteropDefaultCallTimeout turns that into a TaskCanceledException a full
+        // minute later. A two-second no-op answers the same question for one round trip and lets us
+        // decline instead.
         //
+        // This does not close the race, it shrinks it: the browser can still leave between the probe
+        // and the navigation. That window is two consecutive interop calls wide instead of the whole
+        // handoff delay plus however long the circuit has been a zombie. Nothing can close it fully.
+        if (!await IsBrowserStillListeningAsync())
+        {
+            Logger.LogInformation(
+                "Skipped the automatic Preview Results handoff for song {SongId}: the browser is no "
+                + "longer attached to this circuit.",
+                songMetadataId);
+            return;
+        }
+
         // THROUGH InvokeAsync, WHICH IS NOT OPTIONAL. This whole path begins in a SignalR callback,
-        // not a UI event, so it is not on the renderer's dispatcher - and NavigateTo off the
+        // not a UI event, so it is not reliably on the renderer's dispatcher - and NavigateTo off the
         // dispatcher throws. That is precisely how the previous attempt at this failed: the
         // exception went into a fire-and-forget hub handler where nothing reported it, and the
         // creator was left sitting in a dialog that had already set itself closed but could not
         // repaint to prove it.
-        if (_showTimingCompleteNotice && _timedSongId == songMetadataId)
+        try
         {
             await InvokeAsync(OpenPreviewResults);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The circuit went away while we were asking it whether it was still there.
+        }
+    }
+
+    /// <summary>
+    /// Opens the cancellation window for one automatic handoff, superseding any still open.
+    /// </summary>
+    private CancellationToken BeginHandoffWindow()
+    {
+        var superseded = _handoffCts;
+        _handoffCts = CancellationTokenSource.CreateLinkedTokenSource(_pageLifetime.Token);
+
+        superseded?.Cancel();
+        superseded?.Dispose();
+
+        return _handoffCts.Token;
+    }
+
+    /// <summary>Ends the pending automatic handoff, if one is waiting.</summary>
+    private void CancelPendingHandoff() => _handoffCts?.Cancel();
+
+    /// <summary>
+    /// Whether this circuit still has a browser on the other end that answers.
+    /// </summary>
+    /// <remarks>
+    /// Only worth asking before something the framework will not let us catch. Every ordinary JS
+    /// call on this page can simply be wrapped.
+    /// </remarks>
+    private async Task<bool> IsBrowserStillListeningAsync()
+    {
+        try
+        {
+            return await JS.InvokeAsync<bool>(BrowserProbeJsFunction, BrowserProbeTimeout);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone.
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            // Covers TaskCanceledException: nobody answered inside the timeout.
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // A JS error or a serialization problem is not proof the browser has left - but it is
+            // not proof it is there either, and declining to navigate is the safe way to be wrong.
+            Logger.LogDebug(ex, "The browser liveness probe failed before an automatic handoff.");
+            return false;
         }
     }
 
@@ -259,6 +366,9 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
             return;
         }
 
+        // Whether the button or the timer got here first, the wait has done its job.
+        CancelPendingHandoff();
+
         _showTimingCompleteNotice = false;
         NavigationManager.NavigateTo(AppPageRoutes.CreatorSongLyrics(_timedSongId.Value));
     }
@@ -266,6 +376,7 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
     /// <summary>Leave them on the grid. Preview Results is still a button away on the song's row.</summary>
     protected void DismissTimingCompleteNotice()
     {
+        CancelPendingHandoff();
         _showTimingCompleteNotice = false;
         _timedSongId = null;
     }
@@ -1055,6 +1166,11 @@ public partial class CreatorSongManagementModel : BlazorBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // First, so a handoff still counting down cannot navigate a page that no longer exists.
+        _pageLifetime.Cancel();
+        _handoffCts?.Dispose();
+        _pageLifetime.Dispose();
+
         CleanupSongImageTempFile();
         await DisposeCropTool();
         if (_cropModule != null)

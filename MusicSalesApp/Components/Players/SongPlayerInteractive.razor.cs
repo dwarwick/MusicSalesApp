@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
@@ -107,11 +107,14 @@ public partial class SongPlayerInteractiveModel : BlazorBase, IAsyncDisposable
 
     private void OnStreamCountUpdated(int songMetadataId, int newCount)
     {
-        if (_songMetadata != null && _songMetadata.Id == songMetadataId)
+        // The id check stays out here because it only reads, and a stale read costs at most one
+        // skipped or one redundant update. The write goes inside the hop.
+        if (_songMetadata?.Id != songMetadataId)
         {
-            _streamCount = newCount;
-            InvokeAsync(StateHasChanged);
+            return;
         }
+
+        DispatchUiUpdate(() => _streamCount = newCount);
     }
 
     protected override async Task OnParametersSetAsync()

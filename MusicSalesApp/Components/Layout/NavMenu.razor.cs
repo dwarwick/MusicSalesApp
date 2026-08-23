@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -66,14 +66,7 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
         }
     }
 
-    private void HandleMaintenanceUpdated()
-    {
-        InvokeAsync(async () =>
-        {
-            await LoadMaintenanceNoticeAsync();
-            StateHasChanged();
-        });
-    }
+    private void HandleMaintenanceUpdated() => DispatchUiUpdate(LoadMaintenanceNoticeAsync);
 
     private async Task LoadMaintenanceNoticeAsync()
     {
@@ -142,19 +135,9 @@ public class NavMenuModel : BlazorBase, IAsyncDisposable
         _maintenanceExpiryTimer = TimeProvider.CreateTimer(_ =>
         {
             if (_disposed) return;
-            try
-            {
-                InvokeAsync(async () =>
-                {
-                    await LoadMaintenanceNoticeAsync();
-                    StateHasChanged();
-                });
-            }
-            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
-            {
-                // Component was disposed between the _disposed check and InvokeAsync — expected race condition; ignore.
-                Logger.LogDebug(ex, "Maintenance expiry timer callback invoked after component disposal (expected race condition)");
-            }
+
+            // The disposal race between that check and the hop is handled inside DispatchUiUpdate.
+            DispatchUiUpdate(LoadMaintenanceNoticeAsync);
         }, null, delay, Timeout.InfiniteTimeSpan);
     }
 

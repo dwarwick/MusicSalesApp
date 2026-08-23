@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using MusicSalesApp.Components.Base;
 using Syncfusion.Blazor.Popups;
 
@@ -185,9 +185,11 @@ public partial class LikeDislikeButtonsModel : BlazorBase, IDisposable
     {
         if (songMetadataId != SongMetadataId) return;
 
-        _likeCount = likeCount;
-        _dislikeCount = dislikeCount;
-        InvokeAsync(StateHasChanged);
+        DispatchUiUpdate(() =>
+        {
+            _likeCount = likeCount;
+            _dislikeCount = dislikeCount;
+        });
     }
 
     public void Dispose()

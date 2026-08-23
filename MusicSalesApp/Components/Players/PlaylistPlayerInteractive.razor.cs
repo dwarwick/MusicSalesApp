@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MusicSalesApp.Components.Base;
 using MusicSalesApp.Components.Layout;
@@ -220,12 +220,15 @@ namespace MusicSalesApp.Components.Players
 
         private void OnStreamCountUpdated(int songMetadataId, int newCount)
         {
-            // Update local tracking if this song is in our list
-            if (_trackStreamCounts.ContainsKey(songMetadataId))
+            // Update local tracking if this song is in our list. The membership test only reads; the
+            // write is inside the hop, because a Dictionary written from a hub thread while the
+            // renderer enumerates it is not a repaint bug.
+            if (!_trackStreamCounts.ContainsKey(songMetadataId))
             {
-                _trackStreamCounts[songMetadataId] = newCount;
-                InvokeAsync(StateHasChanged);
+                return;
             }
+
+            DispatchUiUpdate(() => _trackStreamCounts[songMetadataId] = newCount);
         }
 
         private void SetModeFlags()

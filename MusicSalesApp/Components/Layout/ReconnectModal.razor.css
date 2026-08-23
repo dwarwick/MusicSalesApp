@@ -1,14 +1,8 @@
-/* Hide all reconnection UI elements since we handle reconnections automatically */
-.components-reconnect-first-attempt-visible,
-.components-reconnect-repeated-attempt-visible,
-.components-reconnect-failed-visible,
-.components-pause-visible,
-.components-resume-failed-visible,
-.components-rejoining-animation {
-    display: none;
-}
-
-/* Keep the modal itself hidden at all times */
+/* Blazor's own reconnect UI is never shown. It is kept in the DOM only so the framework picks
+   UserSpecifiedDisplay and raises components-reconnect-state-changed for ReconnectModal.razor.js;
+   everything the user sees is the pill below. The dialog is also closed from JS on every state
+   change, because showModal() makes the rest of the document inert - and somebody watching their
+   connection drop with pasted lyrics on screen needs to be able to select and copy them. */
 #components-reconnect-modal {
     display: none !important;
     opacity: 0;
@@ -19,67 +13,81 @@
     display: none !important;
 }
 
-/* Keep animation definitions for potential future use */
-@keyframes components-reconnect-modal-slideUp {
-    0% {
-        transform: translateY(30px) scale(0.95);
-    }
+.components-reconnect-first-attempt-visible,
+.components-reconnect-repeated-attempt-visible,
+.components-reconnect-failed-visible,
+.components-pause-visible,
+.components-resume-failed-visible,
+.components-rejoining-animation {
+    display: none;
+}
 
-    100% {
-        transform: translateY(0);
+/* ---------------------------------------------------------------------------------------------
+   The pill. Non-blocking on purpose: a dropped circuit already costs the user their page, and a
+   modal on top of it would take the ability to copy anything out of it as well.
+   --------------------------------------------------------------------------------------------- */
+.st-reconnect-pill {
+    display: none;
+    position: fixed;
+    left: 50%;
+    bottom: var(--st-space-5, 24px);
+    transform: translateX(-50%) translateY(8px);
+    z-index: 2147483000; /* above Syncfusion dialogs, which sit around 1000-100000 */
+    align-items: center;
+    gap: var(--st-space-2, 8px);
+    max-width: min(92vw, 420px);
+    padding: var(--st-space-2, 8px) var(--st-space-4, 16px);
+    border-radius: var(--st-radius-pill, 999px);
+    background: var(--st-player-surface, #0d1727);
+    border: 1px solid var(--st-player-line-strong, rgba(255, 255, 255, .14));
+    box-shadow: var(--st-shadow-float, 0 20px 50px rgba(0, 0, 0, .6));
+    color: var(--st-player-text, #fff);
+    font-family: var(--st-font, system-ui, sans-serif);
+    font-size: 14px;
+    line-height: 1.35;
+    opacity: 0;
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.st-reconnect-pill.st-reconnect-visible {
+    display: flex;
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.st-reconnect-spinner {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--st-player-line-strong, rgba(255, 255, 255, .14));
+    border-top-color: var(--st-blue-bright, #02b8fd);
+    animation: st-reconnect-spin .8s linear infinite;
+}
+
+/* Nothing is being attempted any more, so a spinner would be a lie. */
+.st-reconnect-pill.st-reconnect-terminal .st-reconnect-spinner {
+    animation: none;
+    border-color: var(--st-amber, #ffa500);
+    border-top-color: var(--st-amber, #ffa500);
+}
+
+.st-reconnect-text:empty {
+    display: none;
+}
+
+@keyframes st-reconnect-spin {
+    to {
+        transform: rotate(360deg);
     }
 }
 
-@keyframes components-reconnect-modal-fadeInOpacity {
-    0% {
-        opacity: 0;
+@media (prefers-reduced-motion: reduce) {
+    .st-reconnect-pill {
+        transition: none;
     }
 
-    100% {
-        opacity: 1;
-    }
-}
-
-@keyframes components-reconnect-modal-fadeOutOpacity {
-    0% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
-    }
-}
-
-@keyframes components-rejoining-animation {
-    0% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 0;
-    }
-
-    4.9% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 0;
-    }
-
-    5% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 1;
-    }
-
-    100% {
-        top: 0px;
-        left: 0px;
-        width: 80px;
-        height: 80px;
-        opacity: 0;
+    .st-reconnect-spinner {
+        animation: none;
     }
 }
