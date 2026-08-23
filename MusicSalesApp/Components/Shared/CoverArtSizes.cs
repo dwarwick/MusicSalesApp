@@ -27,13 +27,15 @@ public static class CoverArtSizes
     /// approximate the track width net of the gap and card padding.
     ///
     /// <para>
-    /// The 576 stop is a FIXED 84px, not a vw: below that breakpoint the grid card turns
-    /// horizontal and the art moves into an 84px left column (<c>xs_app.css</c>). It used to read
-    /// <c>92vw</c>, which was right when one square card filled the phone screen.
+    /// The 576 stop is back to <c>92vw</c>. It read a fixed <c>84px</c> while the grid card was
+    /// horizontal with its art in a small left column; that layout is gone and the art now runs
+    /// the full width of a single-column card again (<c>xs_app.css</c>, "THE ARTWORK IS THE
+    /// CARD"). Leaving it at 84px fetches a thumbnail rendition for a ~370px box, which renders
+    /// visibly soft - it does not error.
     /// </para>
     /// </summary>
     public const string Card =
-        "(max-width:576px) 84px, (max-width:768px) 46vw, (max-width:992px) 31vw, 210px";
+        "(max-width:576px) 92vw, (max-width:768px) 46vw, (max-width:992px) 31vw, 210px";
 
     /// <summary>
     /// The home / signup featured carousel (<c>.featured-music-carousel</c>), which keeps the tall

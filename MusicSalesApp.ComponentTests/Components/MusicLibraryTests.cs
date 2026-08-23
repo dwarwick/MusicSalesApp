@@ -104,7 +104,7 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_HasPlayAndViewButtons_ForEachCard()
+    public void MusicLibrary_HasPlayButtonAndTappableArt_ForEachCard()
     {
         // Arrange - Set up metadata with a matching song
         var metadata = new List<MusicSalesApp.Models.SongMetadata>
@@ -124,10 +124,12 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have card actions div with play and view buttons
+        // Assert - the actions row holds Play, and the artwork itself is the second way in.
+        // It used to hold Play plus an eyeball "view" button; that button is gone.
         Assert.That(cut.Markup, Does.Contain("card-actions"));
         Assert.That(cut.Markup, Does.Contain("title=\"play\""));
-        Assert.That(cut.Markup, Does.Contain("title=\"view\""));
+        Assert.That(cut.Markup, Does.Contain("card-art-open"));
+        Assert.That(cut.Markup, Does.Not.Contain("title=\"view\""));
     }
 
     [Test]
@@ -157,7 +159,7 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_HasViewButtonWithOnClickEvent()
+    public void MusicLibrary_OpensThePlayerFromTheArtwork_NotAViewButton()
     {
         // Arrange - Set up metadata with a matching song
         var metadata = new List<MusicSalesApp.Models.SongMetadata>
@@ -177,10 +179,18 @@ public class MusicLibraryTests : BUnitTestBase
         SetupRendererInfo();
         var cut = TestContext.Render<MusicLibrary>();
 
-        // Assert - should have button with view title and blazor onclick attribute
-        // The GetSongPlayerUrl method navigates to /song/{title} when clicked
-        var viewButtons = cut.FindAll("button[title='view']");
-        Assert.That(viewButtons.Count, Is.GreaterThan(0));
+        // The eyeball "view" button is gone. .card-art-open - a transparent button covering the
+        // whole artwork - is what calls OpenSongPlayer and navigates to /song/{title} now.
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.FindAll("button[title='view']"), Is.Empty,
+                "the eyeball view button was replaced by tap-to-open on the artwork");
+
+            var artOpen = cut.FindAll(".card-album-art .card-art-open");
+            Assert.That(artOpen, Is.Not.Empty, "every card needs a way into the player");
+            Assert.That(artOpen[0].GetAttribute("aria-label"), Is.Not.Null.And.Not.Empty,
+                "a transparent button has no text, so the accessible name has to come from aria-label");
+        });
     }
 
     [Test]
@@ -1107,11 +1117,12 @@ public class MusicLibraryTests : BUnitTestBase
     }
 
     [Test]
-    public void MusicLibrary_MarksPlayAsThePrimaryAction_AndViewAsSecondary()
+    public void MusicLibrary_MarksPlayAsTheOnlyAction()
     {
         // The CSS keys the accent fill off .action-button-play. Both buttons used to carry the
         // identical .action-button outline, which left the card with no primary action at all -
-        // and made the full-width Facebook share bar the loudest control on it.
+        // and made the full-width Facebook share bar the loudest control on it. The View button
+        // has since gone entirely, so Play is the row's only child and stretches full width.
         var metadata = new List<MusicSalesApp.Models.SongMetadata>
         {
             new() { Id = 1, Mp3BlobPath = "TestSong.mp3", SongTitle = "Test Song", UpdatedAt = DateTime.Now }
@@ -1124,8 +1135,32 @@ public class MusicLibraryTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Find("button[title='play']").ClassList, Does.Contain("action-button-play"));
-            Assert.That(cut.Find("button[title='view']").ClassList, Does.Contain("action-button-view"));
-            Assert.That(cut.Find("button[title='view']").ClassList, Does.Not.Contain("action-button-play"));
+            Assert.That(cut.Find(".card-actions-with-likes").QuerySelectorAll(".action-column"),
+                Has.Length.EqualTo(1), "Play is the only action column left");
+            Assert.That(cut.Markup, Does.Not.Contain("action-button-view"));
+        });
+    }
+
+    [Test]
+    public void MusicLibrary_GroupsArtistGenreAndStreamsInOneMetaWrapper()
+    {
+        // .card-meta is display:contents at 576px and up, so it is invisible to every wider
+        // layout - but xs_app.css flips it to flex to merge the three onto one line. If the
+        // wrapper stops containing all three, the phone card silently falls back to a stack.
+        var metadata = new List<MusicSalesApp.Models.SongMetadata>
+        {
+            new() { Id = 1, Mp3BlobPath = "TestSong.mp3", SongTitle = "Test Song", UpdatedAt = DateTime.Now }
+        };
+
+        MockSongMetadataService.Setup(x => x.GetAllAsync()).ReturnsAsync(metadata);
+        SetupRendererInfo();
+        var cut = TestContext.Render<MusicLibrary>();
+
+        var meta = cut.Find(".card-meta");
+        Assert.Multiple(() =>
+        {
+            Assert.That(meta.QuerySelector(".card-genre"), Is.Not.Null);
+            Assert.That(meta.QuerySelector(".card-stream-count"), Is.Not.Null);
         });
     }
 

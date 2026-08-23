@@ -2602,6 +2602,46 @@ h1:focus {
 }
 
 /*
+ * THE CARD ARTWORK IS THE WAY INTO THE SONG PLAYER.
+ *
+ * A transparent button laid over the whole art square, replacing the eyeball "view" button that
+ * used to sit beside Play. It is a SIBLING of the art faces rather than a wrapper around them:
+ * .card-album-art > img is a direct-child selector, and a wrapper would strip the image of all
+ * sizing. Being a sibling of the lyrics toggle rather than its ancestor is also what saves the
+ * toggle from needing anything more than the stopPropagation it already had.
+ *
+ * The z-index ladder inside .card-album-art, which is position:relative with z-index:auto and so
+ * creates no stacking context of its own:
+ *
+ *     -  img / Lottie                     (static)
+ *     2  .lyrics-scroller-overlay
+ *     3  .card-art-open                   <- this
+ *     4  .card-album-art::after           (the scrim, pointer-events:none, phone only)
+ *     4  .lyrics-toggle-button
+ *     6  .card-ai-actions-row             (a SIBLING of .card-album-art, overlaid at <576px)
+ *
+ * It deliberately covers the lyrics panel too - tapping the lyrics opens the player, which is the
+ * requested behaviour. The cost is that the card lyrics can no longer be scrolled by hand; they
+ * auto-scroll with the audio clock, as they already did.
+ */
+.card-art-open {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Negative offset because .card-album-art is overflow:hidden - an outward ring would be clipped.
+   Matches the toggle's ring below, for the same reason: it is drawn over a photograph. */
+.card-art-open:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+}
+
+/*
  * The CARD's lyrics/art toggle.
  *
  * SCOPED TO .card-album-art on purpose. Three components render .lyrics-toggle-button - the two
@@ -4038,6 +4078,14 @@ h1:focus {
     flex: 0 0 auto;
     object-fit: cover;
 }
+
+/*
+ * A wrapper that exists only for the phone breakpoint, which merges artist / genre / streams onto
+ * one line. display:contents makes it vanish from the box tree here, so its three children stay
+ * direct flex items of .music-card and every layout at 576px and up is untouched by the wrapper
+ * being introduced. Only xs_app.css gives it a display of its own.
+ */
+.card-meta { display: contents; }
 
 .card-stream-count {
     display: flex;
