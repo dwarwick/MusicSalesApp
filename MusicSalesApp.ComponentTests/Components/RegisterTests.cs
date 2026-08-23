@@ -152,8 +152,8 @@ public class RegisterTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(cut.Find(".auth-panel"), Is.Not.Null);
-            // The panel keeps one palette in both site themes, so it takes the dark mark.
-            Assert.That(cut.Find(".auth-panel-logo").GetAttribute("src"), Does.Contain("logo-dark-small"));
+            // The transparent mark - logo-dark-small.png has its background baked in.
+            Assert.That(cut.Find(".auth-panel-logo").GetAttribute("src"), Does.Contain("logo-mark"));
             Assert.That(cut.Markup, Does.Contain("Join StreamTunes."));
         });
     }

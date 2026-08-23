@@ -252,9 +252,10 @@ public class LoginTests : BUnitTestBase
         Assert.Multiple(() =>
         {
             Assert.That(panel, Is.Not.Null);
-            // The dark logo specifically: the panel keeps one palette in both site themes, so
-            // the light-theme mark would sit on a near-black surface.
-            Assert.That(logo.GetAttribute("src"), Does.Contain("logo-dark-small"));
+            // The transparent mark specifically. logo-dark-small.png bakes its background to
+            // #181c1f - the dark app-bar colour - so on the navy panel it is a black box.
+            Assert.That(logo.GetAttribute("src"), Does.Contain("logo-mark"));
+            Assert.That(logo.GetAttribute("src"), Does.Not.Contain("logo-dark-small"));
             Assert.That(cut.Markup, Does.Contain("Welcome back."));
         });
     }

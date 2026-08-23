@@ -4455,7 +4455,10 @@ main:has(> .content > .auth-page) > .content > .auth-page {
     min-height: 100%;
 }
 
-.auth-panel-logo { display: block; flex: 0 0 auto; }
+/* align-self, not just flex, because .auth-panel is a COLUMN flex container: the
+   default align-items: stretch sets the used WIDTH, which squashes a fixed-height
+   image out to the panel width and ignores its intrinsic ratio. */
+.auth-panel-logo { display: block; flex: 0 0 auto; align-self: flex-start; width: auto; }
 .auth-panel-copy { flex: 0 0 auto; }
 .auth-panel-eyebrow { font-weight: 700; text-transform: uppercase; margin: 0; }
 .auth-panel-title { font-weight: 750; margin: 0; text-wrap: pretty; }
