@@ -760,17 +760,20 @@ h1:focus {
 }
 
 /* The JS-owned island the lazy card animation is mounted into. Empty until the card
-   scrolls into view, so the glyph above is what a card shows the rest of the time, and
+   scrolls into view, so the glyph beneath is what a card shows the rest of the time, and
    .is-animating is toggled by MusicLibrary.razor.js rather than by a :has() rule so the
-   swap does not depend on selector support. */
+   swap does not depend on selector support.
+
+   This must NOT be display:none while empty, however tempting. IntersectionObserver is
+   watching this element, and an element with no layout box is never reported as
+   intersecting - it could not become visible until it was filled, and could not be
+   filled until it was seen as visible. It stays laid out and simply paints nothing while
+   it has no children. pointer-events:none keeps it from shadowing .card-art-open, which
+   overlays the same square. */
 .card-lottie-host {
     position: absolute;
     inset: 0;
-    display: none;
-}
-
-.card-album-art-animation.is-animating .card-lottie-host {
-    display: block;
+    pointer-events: none;
 }
 
 /* Hidden rather than removed: the glyph keeps its space in the flex centring, so the
