@@ -21,7 +21,7 @@ public class PasskeyController : ControllerBase
 
     // In-memory storage for options (in production, use distributed cache)
     private static readonly Dictionary<string, CredentialCreateOptions> _credentialCreateOptionsCache = new();
-    private static readonly Dictionary<string, AssertionOptions> _assertionOptionsCache = new();
+    private static readonly Dictionary<string, PendingPasskeyLogin> _assertionOptionsCache = new();
 
     public PasskeyController(
         IPasskeyService passkeyService,
@@ -133,9 +133,10 @@ public class PasskeyController : ControllerBase
         {
             var options = await _passkeyService.BeginLoginAsync(request.Username);
             
-            // Store options in cache
+            // Store options in cache, together with the sign-in persistence chosen on
+            // the login page - login/complete has no other way to learn it.
             var sessionId = Guid.NewGuid().ToString();
-            _assertionOptionsCache[sessionId] = options;
+            _assertionOptionsCache[sessionId] = new PendingPasskeyLogin(options, request.RememberMe);
             HttpContext.Response.Cookies.Append("passkey_login_session", sessionId, new CookieOptions 
             { 
                 HttpOnly = true, 
@@ -160,12 +161,12 @@ public class PasskeyController : ControllerBase
         {
             // Retrieve the stored options from cache
             var sessionId = HttpContext.Request.Cookies["passkey_login_session"];
-            if (string.IsNullOrEmpty(sessionId) || !_assertionOptionsCache.TryGetValue(sessionId, out var originalOptions))
+            if (string.IsNullOrEmpty(sessionId) || !_assertionOptionsCache.TryGetValue(sessionId, out var pendingLogin))
             {
                 return BadRequest(new { message = "Session expired. Please try again." });
             }
 
-            var user = await _passkeyService.CompleteLoginAsync(assertionResponse, originalOptions);
+            var user = await _passkeyService.CompleteLoginAsync(assertionResponse, pendingLogin.Options);
             
             // Clear the cache after use
             _assertionOptionsCache.Remove(sessionId);
@@ -179,7 +180,7 @@ public class PasskeyController : ControllerBase
                 }
 
                 // Sign in the user
-                await _signInManager.SignInAsync(user, isPersistent: true);
+                await _signInManager.SignInAsync(user, isPersistent: pendingLogin.RememberMe);
                 return Ok(new { message = "Login successful" });
             }
             else
@@ -285,7 +286,17 @@ public class CompleteRegistrationRequest
 public class BeginLoginRequest
 {
     public string Username { get; set; } = string.Empty;
+
+    // Defaults to true so a client that omits it keeps the previous behaviour of a
+    // persistent cookie.
+    public bool RememberMe { get; set; } = true;
 }
+
+/// <summary>
+/// What login/begin hands to login/complete: the WebAuthn challenge, plus the
+/// sign-in persistence the user chose on the login page.
+/// </summary>
+public sealed record PendingPasskeyLogin(AssertionOptions Options, bool RememberMe);
 
 public class RenamePasskeyRequest
 {

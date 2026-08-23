@@ -20,6 +20,10 @@ public partial class LoginModel : BlazorBase
     protected string usernameValue = string.Empty;
     protected bool reactivateAccount = false;
     protected bool showReactivateCheckbox = false;
+
+    // Ticked by default, so the persistent cookie every user gets today is unchanged
+    // unless they deliberately opt out. All three sign-in methods read this.
+    protected bool rememberMe = true;
     protected string LoginReturnUrl => NormalizeLocalReturnUrl(ReturnUrl);
 
     protected override async Task OnInitializedAsync()
@@ -60,7 +64,7 @@ public partial class LoginModel : BlazorBase
             // Call JavaScript to initiate passkey login with extended timeout (2 minutes)
             // Google Password Manager may take longer than Windows Hello
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            await JS.InvokeVoidAsync("passkeyHelper.loginWithPasskey", cts.Token, usernameValue);
+            await JS.InvokeVoidAsync("passkeyHelper.loginWithPasskey", cts.Token, usernameValue, rememberMe);
         }
         catch (TaskCanceledException)
         {
@@ -76,7 +80,9 @@ public partial class LoginModel : BlazorBase
 
     protected void ContinueWithGoogle()
     {
-        var googleStartUrl = $"{GoogleAuthRoutes.WebStartPath}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(LoginReturnUrl)}";
+        var googleStartUrl = $"{GoogleAuthRoutes.WebStartPath}" +
+            $"?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(LoginReturnUrl)}" +
+            $"&{ExternalAuthFormFields.RememberMe}={(rememberMe ? "true" : "false")}";
         NavigationManager.NavigateTo(googleStartUrl, forceLoad: true);
     }
 

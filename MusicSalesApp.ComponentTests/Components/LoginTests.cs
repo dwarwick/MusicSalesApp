@@ -171,6 +171,73 @@ public class LoginTests : BUnitTestBase
             .Single(button => button.TextContent.Contains("Continue with Google"));
         googleButton.Click();
 
-        Assert.That(navigationManager.Uri, Does.EndWith($"{GoogleAuthRoutes.WebStartPath}?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings"));
+        Assert.That(navigationManager.Uri, Does.EndWith(
+            $"{GoogleAuthRoutes.WebStartPath}" +
+            $"?{ExternalAuthFormFields.ReturnUrl}=%2FCreatorSettings" +
+            $"&{ExternalAuthFormFields.RememberMe}=true"));
+    }
+
+    [Test]
+    public void Login_HasKeepMeSignedInField_TickedByDefault()
+    {
+        var cut = TestContext.Render<Login>();
+
+        var rememberMeInput = cut.Find($"input[name='{ExternalAuthFormFields.RememberMe}']");
+        Assert.Multiple(() =>
+        {
+            Assert.That(rememberMeInput.GetAttribute("type"), Is.EqualTo("hidden"));
+            // Default ticked, so an existing user who ignores the box keeps the
+            // persistent cookie they get today.
+            Assert.That(rememberMeInput.GetAttribute("value"), Is.EqualTo("true"));
+            Assert.That(cut.Markup, Does.Contain("Keep me signed in on this device"));
+        });
+    }
+
+    [Test]
+    public void Login_KeepMeSignedInUnticked_PostsFalse()
+    {
+        var cut = TestContext.Render<Login>();
+
+        cut.Find("input[type='checkbox']").Click();
+
+        var rememberMeInput = cut.Find($"input[name='{ExternalAuthFormFields.RememberMe}']");
+        Assert.That(rememberMeInput.GetAttribute("value"), Is.EqualTo("false"));
+    }
+
+    [Test]
+    public void Login_KeepMeSignedInUnticked_CarriesThroughToGoogle()
+    {
+        var cut = TestContext.Render<Login>();
+        cut.Find("input[type='checkbox']").Click();
+
+        var googleButton = cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Continue with Google"));
+        googleButton.Click();
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        Assert.That(navigationManager.Uri, Does.EndWith($"&{ExternalAuthFormFields.RememberMe}=false"));
+    }
+
+    [Test]
+    public void Login_PasskeyLogin_PassesRememberMeToJs()
+    {
+        var invocation = TestContext.JSInterop.SetupVoid(
+            "passkeyHelper.loginWithPasskey",
+            _ => true);
+
+        var cut = TestContext.Render<Login>();
+        cut.Find("#username").Change("dave.warwick");
+        cut.Find("input[type='checkbox']").Click();
+
+        var passkeyButton = cut.FindAll("button")
+            .Single(button => button.TextContent.Contains("Login with Passkey"));
+        passkeyButton.Click();
+
+        var args = invocation.Invocations.Single().Arguments;
+        Assert.Multiple(() =>
+        {
+            Assert.That(args[0], Is.EqualTo("dave.warwick"));
+            Assert.That(args[1], Is.EqualTo(false));
+        });
     }
 }

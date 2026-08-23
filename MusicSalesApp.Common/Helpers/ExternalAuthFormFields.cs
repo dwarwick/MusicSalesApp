@@ -10,5 +10,6 @@ public static class ExternalAuthFormFields
     public const string PendingRegistrationToken = "pendingGoogleRegistrationToken";
     public const string ReceiveNewSongEmails = "receiveNewSongEmails";
     public const string RegistrationIntentToken = "registrationIntentToken";
+    public const string RememberMe = "rememberMe";
     public const string ReturnUrl = "returnUrl";
 }
