@@ -367,52 +367,22 @@ public class UploadFilesCoverArtRepairTests
     // When the batch stops for review, and when it does not.
     // -----------------------------------------------------------------
 
-    [Test]
-    public void ABatchWithNoArtworkAtAll_DoesNotPause()
+    [TestCase(false, false, false)]
+    [TestCase(false, true, true)]
+    [TestCase(true, false, false)]
+    [TestCase(false, true, false)]
+    public void EveryBatchNowPauses(bool badTitles, bool hasArt, bool matchPreference)
     {
-        // Nothing to pair, no pool to drag from - the step would be a confirmation dialog wearing a
-        // table, and audio-only batches are a normal way to use this page.
+        // It did not used to: an audio-only batch, or one whose owner had turned the cover-art
+        // checkbox off, went straight up. That stopped being safe when genre moved onto this page.
+        // A song cannot publish without one, and the review step is the only place to set it, so a
+        // skipped step is a rejected batch.
+        //
+        // The checkbox still means something - it decides whether the artwork re-pairing controls
+        // appear inside the step - it just no longer decides whether the step happens.
         Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: false, matchCoverArtBeforeUpload: true),
-            Is.False);
-    }
-
-    [Test]
-    public void ABatchWithArtwork_Pauses()
-    {
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: true),
+            UploadFilesModel.ShouldPauseForReview(badTitles, hasArt, matchPreference),
             Is.True);
-    }
-
-    [Test]
-    public void TurningTheCheckboxOff_SkipsThePauseEvenWithArtwork()
-    {
-        Assert.That(
-            UploadFilesModel.ShouldPauseForReview(
-                titlesNeedAttention: false, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
-            Is.False);
-    }
-
-    [Test]
-    public void ABrokenTitleStopsTheBatchWhateverElseIsTurnedOff()
-    {
-        // Not a preference. The upload would be rejected by the server, so skipping the step would
-        // trade one pause for a failed batch.
-        Assert.Multiple(() =>
-        {
-            Assert.That(
-                UploadFilesModel.ShouldPauseForReview(
-                    titlesNeedAttention: true, batchHasCoverArt: false, matchCoverArtBeforeUpload: false),
-                Is.True);
-
-            Assert.That(
-                UploadFilesModel.ShouldPauseForReview(
-                    titlesNeedAttention: true, batchHasCoverArt: true, matchCoverArtBeforeUpload: false),
-                Is.True);
-        });
     }
 
     [Test]
