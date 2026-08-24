@@ -1726,4 +1726,21 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .persona-bio { color: var(--st-text-2); }
 .persona-meta { color: var(--st-text-3); }
 
+.persona-summary { color: var(--st-text-3); }
+.persona-card { background-color: var(--st-surface); border-color: var(--st-line); box-shadow: var(--st-elev); }
+.persona-card-bio { color: var(--st-text-2); }
+.persona-card-site { color: var(--st-accent); }
+.persona-card-site-none { color: var(--st-text-3); }
+
+/* Dashed, and on --st-control-line rather than --st-line: it is the boundary of a file
+   picker, which WCAG 1.4.11 puts at 3:1 like any other control. */
+.persona-image-picker { border-color: var(--st-control-line); }
+.persona-image-title { color: var(--st-text); }
+.persona-image-input { color: var(--st-text-2); }
+
+.crop-tool { background-color: var(--st-surface-hover); border-color: var(--st-line); }
+.crop-canvas { background-color: var(--st-page); }
+.crop-zoom input[type="range"] { accent-color: var(--st-accent-fill); }
+
+
 

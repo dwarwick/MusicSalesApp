@@ -829,6 +829,26 @@
 .persona-bio { font-size: 12.5px; line-height: 1.5; }
 .persona-meta { font-size: 12px; margin-top: 2px; }
 
+.persona-toolbar { gap: 16px; margin-bottom: 16px; }
+.persona-summary { font-size: 13px; }
+.persona-cards { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.persona-card { border-radius: 14px; padding: 18px; gap: 10px; }
+.persona-card-head { gap: 14px; margin-bottom: 2px; }
+.persona-avatar-lg { width: 56px; height: 56px; font-size: 19px; }
+.persona-card-bio { font-size: 13.5px; line-height: 1.55; }
+.persona-card-site { font-size: 12.5px; }
+.persona-card .settings-actions { margin-top: 6px; }
+
+.persona-image-picker { gap: 14px; padding: 14px; margin-bottom: 16px; }
+.persona-image-title { font-size: 13.5px; margin-bottom: 3px; }
+.persona-image-input { font-size: 13px; margin-top: 10px; }
+
+.crop-tool { padding: 16px; margin-top: 14px; }
+.crop-canvas { margin-bottom: 14px; }
+.crop-zoom { gap: 12px; margin-bottom: 4px; }
+.crop-zoom .settings-label { font-size: 12.5px; }
+
+
 
 .settings-empty { gap: 12px; padding: 30px 20px; }
 .settings-empty-icon { width: 64px; height: 64px; }

@@ -4465,6 +4465,10 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .settings-actions { display: flex; flex-wrap: wrap; align-items: center; }
 .settings-inline-status { font-weight: 600; }
 
+
+/* A link wearing the button classes. Syncfusion styles .e-btn for a <button>, which
+   leaves an anchor with an underline and its label off-centre. */
+a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 :is(.settings-page, .settings-dialog) .e-btn.settings-btn {
     border-radius: var(--st-radius-pill);
     font-weight: 700;
@@ -4597,4 +4601,35 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .persona-name { font-weight: 700; overflow-wrap: anywhere; }
 .persona-bio { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .persona-meta { overflow-wrap: anywhere; }
+
+/* /creator/personas. A card per identity rather than a row per identity split across six
+   grid columns - image, name, bio, website, song count and status are all one person. */
+.settings-main-wide { max-width: none; }
+.persona-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.persona-summary { font-weight: 600; }
+
+.persona-cards { display: grid; }
+.persona-card { border-style: solid; border-width: 1px; display: flex; flex-direction: column; }
+.persona-card-head { display: flex; align-items: center; }
+.persona-card-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.persona-card-bio { margin: 0; }
+.persona-card-site { margin: 0; display: block; overflow-wrap: anywhere; }
+
+/* Sized here rather than on .persona-avatar so the compact row on Creator Settings and the
+   card here can differ without either one having to override the other. */
+.persona-avatar-lg { overflow: hidden; }
+.persona-avatar-lg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.persona-image-picker { display: flex; align-items: flex-start; border-style: dashed; border-width: 1px; border-radius: var(--st-radius-sm); }
+.persona-image-copy { flex: 1 1 auto; min-width: 0; }
+.persona-image-title { margin: 0; font-weight: 600; }
+.persona-image-input { display: block; width: 100%; }
+
+.crop-tool { border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
+.crop-canvas { display: block; margin-inline: auto; border-radius: var(--st-radius-sm); cursor: grab; touch-action: none; }
+.crop-canvas:active { cursor: grabbing; }
+.crop-zoom { display: flex; align-items: center; }
+.crop-zoom .settings-label { margin-bottom: 0; flex: 0 0 auto; }
+.crop-zoom input[type="range"] { flex: 1 1 auto; min-width: 0; }
+
 

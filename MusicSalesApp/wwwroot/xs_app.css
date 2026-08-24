@@ -576,5 +576,14 @@
     .payout-heading { flex-wrap: wrap; }
     .settings-consent { padding: 14px; }
     .persona-row { align-items: flex-start; }
+    .persona-cards { grid-template-columns: 1fr; gap: 14px; }
+    .persona-card { padding: 16px; }
+    .persona-card-head { flex-wrap: wrap; }
+    .persona-toolbar { align-items: stretch; }
+    /* Two actions on one line at 390 leaves neither with a usable target. */
+    .persona-card .settings-actions .e-btn.settings-btn { flex: 1 1 auto; }
+    .persona-image-picker { flex-direction: column; }
+    .crop-canvas { width: 100%; max-width: 300px; height: auto; }
+
 
 }
