@@ -225,6 +225,8 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
 
             await AdvanceAsync(job, AudioProcessingStep.SavingMetadata, assemblyToken);
 
+            var personaId = await ResolvePersonaAsync(job, cancellationToken);
+
             var savedMetadata = await _metadataService.UpsertValidatedUploadAsync(new SongMetadata
             {
                 MediaGuid = mediaGuid,
@@ -258,7 +260,16 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
                 AlbumName = job.AlbumName ?? string.Empty,
                 IsAlbumCover = false,
                 TrackLength = result.DurationSeconds.Value,
-                CreatorId = job.CreatorId
+                CreatorId = job.CreatorId,
+
+                // Set by the creator at the review step, minutes ago and on another machine.
+                // Genre in particular is required for a song to be publishable, so carrying it
+                // here is what stops the upload page publishing songs it knows are incomplete.
+                Genre = job.Genre,
+                PersonaId = personaId,
+                IsAiGenerated = job.IsAiGenerated,
+                IsAiVocals = job.IsAiVocals,
+                IsAiLyrics = job.IsAiLyrics
             });
 
             // The metadata commit succeeded, so the blobs are live and referenced. Nothing below
@@ -486,6 +497,46 @@ public sealed class MediaProcessingCompletionService : IMediaProcessingCompletio
         return await context.SongUploadJobs
             .AsNoTracking()
             .FirstOrDefaultAsync(job => job.MediaGuid == jobId, cancellationToken);
+    }
+
+    /// <summary>
+    /// The persona to credit, or null if the one chosen at upload time is no longer usable.
+    ///
+    /// <para>
+    /// Minutes pass between a creator picking a persona and this running, and
+    /// <c>SongMetadata.PersonaId</c> is a real foreign key - so a persona deleted in the meantime
+    /// would fail the insert and lose an upload the creator has already waited for. Falling back to
+    /// null costs the song its persona name and publishes it under the display name, which is
+    /// exactly what a song with no persona does anyway.
+    /// </para>
+    ///
+    /// <para>
+    /// The ownership check is not redundant with the page only offering a creator their own
+    /// personas. This runs from a queue message about a row written elsewhere, and crediting one
+    /// creator's song to another creator's artist name is not a failure worth trusting a caller
+    /// over.
+    /// </para>
+    /// </summary>
+    private async Task<int?> ResolvePersonaAsync(SongUploadJob job, CancellationToken cancellationToken)
+    {
+        if (job.PersonaId is not int personaId)
+        {
+            return null;
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var usable = await context.CreatorPersonas
+            .AsNoTracking()
+            .AnyAsync(p => p.Id == personaId && p.CreatorId == job.CreatorId, cancellationToken);
+
+        if (!usable)
+        {
+            _logger.LogWarning(
+                "Persona {PersonaId} is gone or not owned by creator {CreatorId}; publishing job {JobId} without it.",
+                personaId, job.CreatorId, job.MediaGuid);
+        }
+
+        return usable ? personaId : null;
     }
 
     private async Task AdvanceAsync(
