@@ -32,13 +32,17 @@
     {
         <div class="mb-3">
             <SfCheckBox TChecked="bool"
-                        Label="Match cover art to songs before uploading"
+                        Label="Let me re-pair cover art before uploading"
                         Checked="@_matchCoverArtBeforeUpload"
                         ValueChange="@OnMatchCoverArtChanged" />
+            @* This used to decide whether the batch paused at all, and said so. It does not
+               any more - every batch stops so titles can be confirmed and genres chosen,
+               because a song cannot publish without a genre. All this now decides is whether
+               the artwork controls appear at that stop. *@
             <small class="text-muted d-block ms-4 ps-1">
-                Pauses once your files are ready so you can check each pairing and drag artwork
-                onto the right song. Cover art is still matched automatically either way, and
-                batches with no artwork never pause.
+                Every batch pauses so you can confirm each title and choose a genre. Tick this to
+                add the artwork controls to that step, so you can drag an image onto a different
+                song. Cover art is matched automatically either way.
                 @if (_awaitingTitleConfirmation)
                 {
                     @* It does NOT wait for the next batch. Unticking it here removes the pairing
