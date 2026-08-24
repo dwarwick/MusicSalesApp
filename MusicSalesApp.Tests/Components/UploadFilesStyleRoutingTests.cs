@@ -66,6 +66,44 @@ public class UploadFilesStyleRoutingTests
     }
 
     [Test]
+    public void TheCardTreatmentIsOnTheReviewTableNotTheReceivingOne()
+    {
+        // This page has two tables with identical opening markup - the "Receiving Files" one and
+        // the review one - and the class landed on the wrong one, so the card layout never applied
+        // to anything a creator was looking at. Anchoring on the header is the only way to tell
+        // them apart from the source.
+        var markup = Razor();
+
+        var classAt = markup.IndexOf("review-table", StringComparison.Ordinal);
+        Assert.That(classAt, Is.GreaterThanOrEqualTo(0), "the review table needs the class");
+
+        var firstHeader = markup.IndexOf("<th>", classAt, StringComparison.Ordinal);
+        var header = markup.Substring(firstHeader, 40);
+
+        Assert.That(header, Does.Contain("Song Title"),
+            "the class is on whichever table comes next, and that has to be the one with the metadata columns");
+    }
+
+    [Test]
+    public void TheCardRulesOutrankBootstrap()
+    {
+        // Bootstrap styles cells at .table > :not(caption) > * > *, specificity 0,1,3, and sets
+        // padding, a bottom border, a background and the stripe. A plain ".review-table td" is
+        // 0,1,1 and silently loses all four, which is what the first version did.
+        var md = ReadProjectFile("MusicSalesApp", "wwwroot", "md_app.css");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(md, Does.Contain(".review-table > tbody > tr > td"),
+                "the child-combinator form is what matches Bootstrap's specificity");
+            Assert.That(md, Does.Contain("box-shadow: none !important"),
+                "Bootstrap paints the stripe as an inset box-shadow, so clearing the background is not enough");
+            Assert.That(md, Does.Contain("min-width: 0 !important"),
+                "the cells carry inline min-widths that would keep the table wide");
+        });
+    }
+
+    [Test]
     public void TheDropTargetIsNamedByShapeNotColour()
     {
         // It used to say "green dashed box". That pinned the CSS to a hue with no token behind it,

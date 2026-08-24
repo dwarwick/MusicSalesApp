@@ -159,11 +159,7 @@
                     </div>
                 </div>
                 <div class="table-responsive">
-                    @* review-table is what the breakpoint sheets key the card treatment off.
-                       Six columns do not fit a phone, so below 992px each row becomes a card and
-                       every cell grows a label from its data-label. Only while reviewing: the
-                       progress view has four columns and reads fine as a table. *@
-                    <table class="table table-striped @(_awaitingTitleConfirmation ? "review-table" : "")">
+                    <table class="table table-striped">
                         <thead>
                             <tr>
                                 <th>File</th>
@@ -389,7 +385,11 @@
                     }
                 }
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    @* review-table is what the breakpoint sheets key the card treatment off.
+                       Six columns do not fit a phone, so below 992px each row becomes a card and
+                       every cell grows a label from its data-label. Only while reviewing: the
+                       progress view has four columns and reads fine as a table. *@
+                    <table class="table table-striped @(_awaitingTitleConfirmation ? "review-table" : "")">
                         <thead>
                             <tr>
                                 <th>Song Title</th>

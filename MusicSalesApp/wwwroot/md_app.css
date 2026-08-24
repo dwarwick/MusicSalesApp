@@ -3,18 +3,24 @@
     /* ---- Upload review: six columns do not fit a tablet, let alone a phone.
        Each row becomes a card and each cell is titled from its data-label, so
        nothing has to be read against a header row that is off screen. Only the
-       review table: the progress view has four columns and reads fine as one. */
+       review table: the progress view has four columns and reads fine as one.
+
+       The selectors are child-combinator and !important on purpose. Bootstrap
+       styles cells at .table > :not(caption) > * > * - specificity 0,1,3 - and
+       sets padding, a bottom border, a background AND the stripe, which it paints
+       as an inset box-shadow. A plain .review-table td is 0,1,1 and loses all four,
+       which is how the first version of this rendered as a table anyway. */
     .review-table thead { display: none; }
 
     .review-table,
-    .review-table tbody,
-    .review-table tr,
-    .review-table td {
+    .review-table > tbody,
+    .review-table > tbody > tr,
+    .review-table > tbody > tr > td {
         display: block;
         width: 100%;
     }
 
-    .review-table tbody tr {
+    .review-table > tbody > tr {
         border-style: solid;
         border-width: 1px;
         border-radius: 12px;
@@ -22,17 +28,19 @@
         margin-bottom: 14px;
     }
 
-    /* Syncfusion and Bootstrap both stripe alternate rows, which on a stack of
-       cards reads as two kinds of card rather than one list. */
-    .review-table tbody tr > td { background-color: transparent !important; }
-
-    .review-table td {
+    .review-table > tbody > tr > td {
         min-width: 0 !important;
-        padding: 8px 0;
-        border: none;
+        padding: 8px 0 !important;
+        border: none !important;
+
+        /* The card carries its own colour, on the row. Leaving these on the cells
+           would stripe alternate cards and paint the problem row Bootstrap yellow,
+           which is not a themed colour and reads badly on the dark surface. */
+        background-color: transparent !important;
+        box-shadow: none !important;
     }
 
-    .review-table td::before {
+    .review-table > tbody > tr > td::before {
         content: attr(data-label);
         display: block;
         margin-bottom: 5px;
@@ -42,8 +50,8 @@
         text-transform: uppercase;
     }
 
-    /* The one cell whose label would just repeat the value above it. */
-    .review-table td[data-label="Song title"]::before { display: none; }
+    /* The one cell whose label would just repeat the value under it. */
+    .review-table > tbody > tr > td[data-label="Song title"]::before { display: none; }
 
     .apply-all-field { min-width: 100%; }
 

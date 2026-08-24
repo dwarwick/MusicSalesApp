@@ -1740,8 +1740,17 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 /* Below 992px each review row is a card, and every cell is titled by its
    data-label. Declared here because it is colour; the layout is in md_app.css. */
-.review-table td::before { color: var(--st-text-3); }
-.review-table tbody tr { border-color: var(--st-line); background-color: var(--st-surface); }
+.review-table > tbody > tr > td::before { color: var(--st-text-3); }
+.review-table > tbody > tr { border-color: var(--st-line); background-color: var(--st-surface); }
+
+/* A row with something to fix. Bootstrap paints .table-warning a fixed #fff3cd through
+   its cells, which is not a themed colour - on the dark surface it is a slab of yellow.
+   The card takes the warn tint instead, and the cells are stripped of their own paint
+   in md_app.css so this is the only thing showing. */
+.review-table > tbody > tr.table-warning {
+    background-color: var(--st-warn-tint);
+    border-color: var(--st-warn);
+}
 
 .ai-declare { border-color: var(--st-line); }
 .ai-declare-invalid { border-color: var(--st-danger); }
