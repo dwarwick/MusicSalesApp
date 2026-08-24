@@ -149,6 +149,17 @@ public interface ICreatorService
     Task<List<SongMetadata>> GetCreatorSongsAsync(int creatorId);
 
     /// <summary>
+    /// How many active songs this creator has.
+    ///
+    /// <para>
+    /// Separate from <see cref="GetCreatorSongsAsync"/> because the settings page needs the
+    /// number and nothing else, and that method loads every row with its creator, user and
+    /// persona attached.
+    /// </para>
+    /// </summary>
+    Task<int> GetCreatorSongCountAsync(int creatorId);
+
+    /// <summary>
     /// Deactivates all songs for a creator and cleans up related data.
     /// Used when a creator closes their account or stops being a creator.
     /// Removes blobs from Azure storage, marks SongMetadata as inactive (retained for financial/tax records),

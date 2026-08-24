@@ -485,19 +485,6 @@ h1:focus {
     font-weight: 800;
 }
 
-.creator-settings-page .e-btn,
-.creator-settings-page .e-btn.creator-settings-cta {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.creator-settings-page .e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left,
-.creator-settings-page .e-css.e-btn.e-control .streamtunes-button-icon.e-btn-icon.e-icon-left {
-    flex: 0 0 auto;
-    vertical-align: middle;
-}
-
 .loading-state,
 .error-state {
     display: flex;
@@ -2079,173 +2066,6 @@ h1:focus {
     margin-top: 1.5rem;
 }
 
-/* Creator settings activation and payout setup */
-.creator-settings-page {
-    display: block;
-}
-
-.creator-settings-shell {
-    margin-inline: auto;
-}
-
-.creator-settings-topline,
-.creator-settings-actions,
-.creator-section-heading,
-.creator-settings-checkbox {
-    display: flex;
-    align-items: center;
-}
-
-.creator-settings-topline {
-    justify-content: space-between;
-}
-
-.creator-settings-actions {
-    flex-wrap: wrap;
-}
-
-.creator-settings-inline-message.e-message {
-    display: inline-flex;
-    align-items: center;
-}
-
-.creator-settings-title h2,
-.creator-settings-title p,
-.creator-settings-card h3,
-.creator-settings-card p,
-.creator-settings-kicker,
-.creator-agreement-box label,
-.creator-status-label,
-.creator-status-value,
-.creator-section-heading strong,
-.creator-section-heading span,
-.creator-checklist-item strong,
-.creator-checklist-item span,
-.creator-settings-field small,
-.creator-settings-hint {
-    margin: 0;
-}
-
-.creator-status-pill {
-    display: inline-flex;
-    align-items: center;
-    white-space: nowrap;
-}
-
-.creator-status-dot {
-    display: inline-block;
-    border-radius: 50%;
-}
-
-.creator-settings-card.e-card {
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.creator-agreement-box,
-.creator-info-strip,
-.creator-status-card,
-.creator-checklist-item,
-.creator-payout-section,
-.creator-settings-alert {
-    border-style: solid;
-    border-width: 1px;
-    border-radius: 8px;
-}
-
-.creator-agreement-box,
-.creator-info-strip,
-.creator-success-hero,
-.creator-status-grid,
-.creator-checklist,
-.creator-payout-grid,
-.creator-settings-form-grid {
-    display: grid;
-}
-
-.creator-agreement-box {
-    grid-template-columns: auto 1fr;
-    align-items: start;
-}
-
-.creator-success-hero {
-    grid-template-columns: auto 1fr;
-    align-items: start;
-}
-
-.creator-success-icon,
-.creator-checklist-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.creator-success-icon {
-    border-style: solid;
-    border-width: 1px;
-    border-radius: 8px;
-}
-
-.creator-info-strip {
-    grid-template-columns: auto 1fr;
-}
-
-.creator-status-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.creator-checklist-item {
-    display: flex;
-}
-
-.creator-checklist-icon {
-    flex: none;
-    border-radius: 50%;
-    box-sizing: border-box;
-    line-height: 1;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-}
-
-.creator-payout-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.creator-section-heading {
-    align-items: flex-start;
-}
-
-.creator-section-heading span:not(.creator-checklist-icon) {
-    display: block;
-}
-
-.creator-settings-checkbox {
-    align-items: flex-start;
-}
-
-.creator-settings-field {
-    display: grid;
-}
-
-.creator-settings-page .e-input-group,
-.creator-settings-page .e-input-group.e-control-wrapper,
-.creator-settings-page .e-input-group.e-outline,
-.creator-settings-page .e-input-group.e-control-wrapper.e-outline {
-    border-radius: 8px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.creator-settings-page .e-checkbox-wrapper .e-frame,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-frame {
-    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.creator-settings-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 .tip-buckets {
     display: flex;
     gap: 16px;
@@ -2428,18 +2248,6 @@ h1:focus {
         display: none !important;
     }
 
-    .creator-signup-form > .mb-3,
-    .creator-eligibility,
-    .creator-location-certification,
-    .creator-acknowledgment,
-    .onboarding-section,
-    .stop-selling-section,
-    .user-email-section,
-    .alert,
-    .e-message {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -4657,7 +4465,7 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .settings-actions { display: flex; flex-wrap: wrap; align-items: center; }
 .settings-inline-status { font-weight: 600; }
 
-.settings-page .e-btn.settings-btn {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn {
     border-radius: var(--st-radius-pill);
     font-weight: 700;
     text-transform: none;
@@ -4689,5 +4497,104 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 
 @keyframes settings-spin { to { transform: rotate(360deg); } }
 
-.settings-page .e-input-group.e-outline,
-.settings-page .e-input-group.e-control-wrapper.e-outline { border-radius: var(--st-radius-sm); }
+:is(.settings-page, .settings-dialog) .e-input-group.e-outline,
+:is(.settings-page, .settings-dialog) .e-input-group.e-control-wrapper.e-outline { border-radius: var(--st-radius-sm); }
+
+/* -------------------------------------------------------------------------
+   CREATOR SETTINGS - what Manage Account does not already have
+   -------------------------------------------------------------------------
+   Everything shared (page shell, nav rail, cards, section heads, buttons, fields,
+   status pill) comes from the settings-* block above. Only the pieces unique to a
+   creator live here.
+   ------------------------------------------------------------------------- */
+
+/* A consent row. Bordered rather than loose, because in both places it appears the
+   checkbox is a gate: creator activation, and the PayPal ownership affirmation. */
+.settings-consent {
+    display: flex;
+    align-items: flex-start;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: var(--st-radius-sm);
+}
+
+.settings-hero { display: flex; align-items: flex-start; }
+.settings-hero-icon { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.settings-hero-body { min-width: 0; }
+
+.settings-label-row { display: flex; align-items: baseline; justify-content: space-between; }
+.settings-count { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.settings-optional { font-weight: 400; }
+
+/* Three tiles that read the same way at a glance. Each is a label plus a status pill,
+   so what is complete and what is not survives being read in greyscale. */
+.status-tiles { display: flex; flex-wrap: wrap; }
+.status-tile { flex: 1 1 0; min-width: 0; border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
+.status-tile-label { display: block; font-weight: 700; text-transform: uppercase; }
+
+.steps { display: flex; flex-direction: column; }
+.step { display: flex; align-items: flex-start; border-bottom-style: solid; border-bottom-width: 1px; }
+.step:last-child { border-bottom: none; }
+
+.step-badge {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border-style: solid;
+    border-width: 1px;
+    font-weight: 700;
+}
+
+.step-detail { min-width: 0; display: flex; flex-direction: column; }
+.step-title { font-weight: 700; }
+
+/* Numbered for reference, not for order: IsPayoutReady is an AND of the two, and either
+   can be done first. */
+.payout-sections { display: flex; flex-direction: column; }
+.payout-section { border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
+.payout-heading { display: flex; align-items: center; }
+
+.payout-num {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border-style: solid;
+    border-width: 1px;
+    font-weight: 700;
+}
+
+.payout-heading-title { flex: 1 1 auto; min-width: 0; font-weight: 700; }
+
+/* A window that has not opened yet, not a disabled button. A greyed control invites
+   pressing it to find out why; a plain statement of when does not. */
+.retry-window { display: inline-flex; align-items: center; border-radius: var(--st-radius-pill); border-style: solid; border-width: 1px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.info-strip { display: flex; align-items: flex-start; border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
+.info-strip-icon { flex: 0 0 auto; }
+
+/* One identity per row. The grid this replaces split image, name, bio, website, song
+   count and status across six cells of the same person. */
+.persona-rows { display: flex; flex-direction: column; }
+.persona-row { display: flex; align-items: center; border-bottom-style: solid; border-bottom-width: 1px; }
+.persona-row:last-child { border-bottom: none; }
+
+.persona-avatar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    border-style: solid;
+    border-width: 1px;
+    font-weight: 750;
+}
+
+.persona-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.persona-name { font-weight: 700; overflow-wrap: anywhere; }
+.persona-bio { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.persona-meta { overflow-wrap: anywhere; }
+

@@ -143,109 +143,6 @@ body {
     color: #212529;
 }
 
-.creator-settings-page {
-    color: #1f2937;
-}
-
-.creator-settings-title h2,
-.creator-settings-card h3 {
-    color: #1a1a2e;
-}
-
-.creator-settings-title p,
-.creator-settings-card p,
-.creator-settings-hint,
-.creator-status-label,
-.creator-checklist-item span,
-.creator-settings-field small,
-.creator-section-heading span {
-    color: #6b7280;
-}
-
-.creator-settings-kicker {
-    color: #8e44ad;
-}
-
-.creator-status-pill,
-.creator-settings-card.e-card,
-.creator-agreement-box,
-.creator-checklist-item,
-.creator-payout-section,
-.creator-status-card {
-    background-color: #ffffff;
-    border-color: #e5e7eb;
-}
-
-.creator-status-dot,
-.creator-success-icon,
-.creator-checklist-icon {
-    background-color: #ecfdf5;
-    color: #16a34a;
-    border-color: #bbf7d0;
-}
-
-.creator-status-value.good,
-.creator-status-text-good {
-    color: #16a34a;
-}
-
-.creator-status-value.pending,
-.creator-status-text-pending {
-    color: #b45309;
-}
-
-.creator-status-text-danger {
-    color: #b91c1c;
-}
-
-.creator-info-strip,
-.creator-settings-alert-warning {
-    background-color: #fffbeb;
-    border-color: #fde68a;
-    color: #78350f;
-}
-
-.creator-settings-alert-danger {
-    background-color: var(--st-danger-tint);
-    border-color: var(--st-danger);
-    color: var(--st-danger);
-}
-
-.creator-settings-alert-info {
-    background-color: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1e40af;
-}
-
-.creator-settings-danger-zone.e-card {
-    border-color: var(--st-danger);
-}
-
-.creator-settings-page .e-checkbox-wrapper .e-frame.e-check,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-frame.e-check,
-.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check {
-    background-color: #8e44ad !important;
-    border-color: #8e44ad !important;
-    color: #ffffff !important;
-}
-
-.creator-settings-page .e-checkbox-wrapper:hover .e-frame,
-.creator-settings-page .e-css.e-checkbox-wrapper:hover .e-frame,
-.creator-settings-page .e-input-group.e-outline:not(.e-disabled):hover,
-.creator-settings-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled):hover,
-.creator-settings-page .e-input-group.e-input-focus,
-.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus {
-    border-color: #8e44ad !important;
-}
-
-.creator-settings-page .e-input-group.e-input-focus,
-.creator-settings-page .e-input-group.e-control-wrapper.e-input-focus,
-.creator-settings-page .e-checkbox-wrapper .e-checkbox:focus + .e-frame,
-.creator-settings-page .e-css.e-checkbox-wrapper .e-checkbox:focus + .e-frame {
-    box-shadow: 0 0 0 0.2rem rgba(142, 68, 173, 0.18) !important;
-}
-
 .song-title {
     color: #282828;
 }
@@ -1664,75 +1561,75 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .settings-spinner { border-color: var(--st-track); border-top-color: var(--st-accent); }
 
 /* Account actions take the violet; destructive stays on the danger token. */
-.settings-page .e-btn.settings-btn {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn {
     background-color: transparent;
     border-color: var(--st-control-line);
     color: var(--st-text);
 }
 
-.settings-page .e-btn.settings-btn:hover {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn:hover {
     background-color: var(--st-surface-hover);
     border-color: var(--st-accent);
     color: var(--st-accent);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled),
-.settings-page .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled):hover {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled):hover {
     background-color: var(--st-genre-fill);
     border-color: var(--st-genre-fill);
     color: var(--st-on-genre);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled),
-.settings-page .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled):hover {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled):hover {
     background-color: var(--st-danger);
     border-color: var(--st-danger);
     color: var(--st-on-danger);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-danger-outline {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger-outline {
     background-color: transparent;
     border-color: var(--st-danger);
     color: var(--st-danger);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-danger-outline:hover {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-danger-outline:hover {
     background-color: var(--st-danger);
     color: var(--st-on-danger);
 }
 
-.settings-page .e-input-group.e-outline:not(.e-disabled),
-.settings-page .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
+:is(.settings-page, .settings-dialog) .e-input-group.e-outline:not(.e-disabled),
+:is(.settings-page, .settings-dialog) .e-input-group.e-control-wrapper.e-outline:not(.e-disabled) {
     border-color: var(--st-control-line);
     background-color: var(--st-surface);
 }
 
-.settings-page .e-input-group.e-outline.e-input-focus,
-.settings-page .e-input-group.e-control-wrapper.e-outline.e-input-focus {
+:is(.settings-page, .settings-dialog) .e-input-group.e-outline.e-input-focus,
+:is(.settings-page, .settings-dialog) .e-input-group.e-control-wrapper.e-outline.e-input-focus {
     border-color: var(--st-accent);
     box-shadow: 0 0 0 3px var(--st-accent-soft);
 }
 
-.settings-page .e-input-group input.e-input { color: var(--st-text); }
+:is(.settings-page, .settings-dialog) .e-input-group input.e-input { color: var(--st-text); }
 
-.settings-page .e-checkbox-wrapper .e-frame,
-.settings-page .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-frame,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-frame { border-color: var(--st-control-line); }
 
-.settings-page .e-checkbox-wrapper .e-frame.e-check,
-.settings-page .e-css.e-checkbox-wrapper .e-frame.e-check {
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-frame.e-check,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-frame.e-check {
     background-color: var(--st-accent-fill);
     border-color: var(--st-accent-fill);
     color: var(--st-on-accent);
 }
 
-.settings-page .e-checkbox-wrapper .e-label,
-.settings-page .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
+:is(.settings-page, .settings-dialog) .e-checkbox-wrapper .e-label,
+:is(.settings-page, .settings-dialog) .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
 
 /* A disabled control has to read as disabled. The fill rules above are deliberately
    scoped :not(:disabled) so they cannot paint one as live - Subscribe is gated on the
    terms checkbox, and a violet button that does nothing is worse than a grey one. */
-.settings-page .e-btn.settings-btn:disabled,
-.settings-page .e-btn.settings-btn.e-disabled {
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn:disabled,
+:is(.settings-page, .settings-dialog) .e-btn.settings-btn.e-disabled {
     background-color: var(--st-surface-hover);
     border-color: var(--st-control-line);
     color: var(--st-text-3);
@@ -1742,4 +1639,50 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 .settings-inline-status { color: var(--st-accent-hover); }
 .settings-inline-status-bad { color: var(--st-danger); }
+
+/* ---- Creator settings ---------------------------------------------------
+   Contrast, measured on the surface each pairing actually sits on:
+     status-tile label   --st-text-2 on --st-surface-hover   6.30 light / 5.41 dark
+     step body, bio      --st-text-2 on --st-surface         6.95 / 6.28
+     persona meta        --st-text-3 on --st-surface         5.14 / 5.03
+     pill in a tile      --st-accent-hover on accent-soft over --st-surface-hover
+                                                             5.30 / 7.06
+     done tick, hero     --st-on-accent on --st-accent-fill  5.42 / 8.35
+     consent + payout edge --st-control-line on --st-surface 3.59 / 3.74
+   --st-text-3 is deliberately NOT used on --st-surface-hover: it measures 4.33:1
+   in dark, under AA. That is the same trap the disabled labels fell into.
+   ------------------------------------------------------------------------- */
+
+.settings-consent { background-color: var(--st-surface); border-color: var(--st-control-line); color: var(--st-text-2); }
+.settings-consent a { color: var(--st-accent); }
+
+.settings-hero-icon { background-color: var(--st-accent-fill); color: var(--st-on-accent); }
+
+.settings-count, .settings-optional { color: var(--st-text-3); }
+.settings-link { color: var(--st-accent); }
+
+.status-tile { background-color: var(--st-surface-hover); border-color: var(--st-line); }
+.status-tile-label { color: var(--st-text-2); }
+
+.step { border-bottom-color: var(--st-line); }
+.step-badge { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.step-badge-done { background-color: var(--st-accent-fill); border-color: var(--st-accent-fill); color: var(--st-on-accent); }
+.step-title { color: var(--st-text); }
+.step-body { color: var(--st-text-2); }
+
+.payout-section { background-color: var(--st-surface); border-color: var(--st-control-line); }
+.payout-num { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.payout-heading-title { color: var(--st-text); }
+
+.retry-window { background-color: var(--st-surface-hover); border-color: var(--st-control-line); color: var(--st-text-2); }
+
+.info-strip { background-color: var(--st-accent-soft); border-color: var(--st-accent); color: var(--st-accent-hover); }
+.info-strip-warn { background-color: var(--st-warn-tint); border-color: var(--st-warn); color: var(--st-warn); }
+
+.persona-row { border-bottom-color: var(--st-line); }
+.persona-avatar { background-color: var(--st-surface-hover); border-color: var(--st-line); color: var(--st-text-2); }
+.persona-name { color: var(--st-text); }
+.persona-bio { color: var(--st-text-2); }
+.persona-meta { color: var(--st-text-3); }
+
 

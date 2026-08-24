@@ -537,6 +537,14 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    public async Task<int> GetCreatorSongCountAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+        return await context.SongMetadata
+            .CountAsync(s => s.CreatorId == creatorId && s.IsActive);
+    }
+
+    /// <inheritdoc />
     public async Task<int> DeactivateAllCreatorSongsAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();

@@ -7,6 +7,7 @@ public static class AppPageRoutes
     public const string CreatorAgreement = "/creator-agreement";
     public const string CreatorDashboard = "/creator/dashboard";
     public const string CreatorSongs = "/creator/songs";
+    public const string CreatorPersonas = "/creator/personas";
 
     /// <summary>
     /// The lyric timing editor for one song. Built here rather than written out at each call site

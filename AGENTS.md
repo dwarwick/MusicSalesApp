@@ -59,7 +59,7 @@ This application uses Syncfusion Blazor components for all UI elements to provid
 Syncfusion components should still look like StreamTunes, not Syncfusion defaults:
 
 - For prominent page actions on public, account, creator setup, and creator settings surfaces, prefer the existing site CTA classes over plain `IsPrimary="true"` when `IsPrimary` renders the default Syncfusion blue.
-- Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`, plus a page-specific hook when needed (for example `creator-settings-cta`).
+- Use the existing home-page CTA classes for purple primary creator/account actions: `cta-secondary hero-secondary-cta`. **On Backstage surfaces (`/manage-account`, `/CreatorSettings`) the equivalent is `e-btn settings-btn settings-btn-violet`** - see "The Backstage settings kit" below.
 - Keep destructive actions on `e-danger`; do not restyle stop/delete/destructive buttons as purple CTAs.
 - **The purple is for CREATOR surfaces, not for every button that happens to be secondary.** There are four tiers, and picking by prominence rather than by audience is how the home hero ended up with its main listener action wearing the creator colour:
   | Tier | Classes | For |
@@ -364,16 +364,63 @@ flip the foreground to near-black. `--st-on-danger` is the only foreground permi
 The alert background that goes with it is **`--st-danger-tint`** (`#fdf0f1` / `#331316`), solid
 for the same reason `--st-warn-tint` is: an alpha composites differently over `--st-page` than
 over `--st-surface`, so the pair cannot be measured once. `--st-danger` on it is 5.30:1 light and
-7.48:1 dark. `.creator-settings-alert-danger` and `.creator-settings-danger-zone` are its
-consumers, and came off four raw literals with hand-written dark values in the same change.
+7.48:1 dark. `.settings-alert-warn`, `.settings-card-danger` and `.settings-btn-danger` are
+its consumers.
 
 `.lyrics-editor-record.is-recording` moved out of `app.css` in the same change. A coloured
 `box-shadow` belongs in the theme sheets by the routing rule above, and being in `app.css` is
 precisely how it ended up with no dark variant.
 
-**Still on raw literals, and deliberately left alone**: the `creator-settings-alert-danger` /
-`creator-status-text-danger` family. Those already have hand-written dark variants, so they are
-not this bug; they get tokenised when that page is redesigned.
+The `creator-settings-*` family that used to be listed here as "still on raw literals" is gone:
+the Backstage rebuild of `/CreatorSettings` deleted all forty-odd of them along with the markup
+they styled.
+
+### The Backstage settings kit
+
+`/manage-account` and `/CreatorSettings` are the same kind of surface - a single column of
+sections with a nav rail beside it - so they share one vocabulary. It is `settings-*`, not
+`manage-*` or `creator-*`, precisely so the second page could not grow a parallel set. **A
+third account-management surface reuses these; it does not invent its own.**
+
+| Piece | Classes |
+|---|---|
+| Page shell and nav rail | `.settings-page`, `.settings-nav`, `.settings-nav-link`, `.settings-main`, `.settings-head*` |
+| A section | `.settings-card` (`.settings-card-danger`), `.settings-section-head`, `.settings-eyebrow`, `.settings-title`, `.settings-note` |
+| Copy | `.settings-prose`, `.settings-hint`, `.settings-working`, `.settings-label`, `.settings-count`, `.settings-optional` |
+| Actions | `.settings-actions`, `.e-btn.settings-btn` + `-violet` / `-danger` / `-danger-outline` / `-small`, `.settings-inline-status` (+ `-bad`) |
+| State | `.status-pill` (+ `-warn`), `.settings-alert-info` / `-warn`, `.settings-empty*`, `.settings-loading` |
+| Data | `.fact-row`, `.terms-list`, `.passkey-row`, `.persona-row`, `.status-tile`, `.step`, `.payout-section`, `.info-strip` (+ `-warn`), `.retry-window` |
+
+Three rules the rebuild is built on, each of which was a real defect first:
+
+**A section link has to name the route.** `href="#subscription"` does not stay on the page.
+Blazor intercepts internal anchor clicks and resolves the target against `<base href="/">`,
+so a fragment-only link navigates to the HOME page carrying the fragment. Both pages have a
+`SectionLink(id)` helper that spells the route out, and a test that walks every
+`.settings-nav-link` checking both halves.
+
+**A save reports where the click happened.** The page-level banner renders above the first
+section; most of these forms are three or more sections below it, so a save from one moved
+nothing on screen and the button read as dead. Every form-level action also sets a
+`.settings-inline-status` beside its own button. Where a save is directional - a notification
+switched on or off - the message says which way it went, because "Saved" alone leaves the
+reader unable to tell whether it took the new value or the old.
+
+**Status is a pill with a dot, never a coloured word.** `/CreatorSettings` used to print
+"Active" in `#16a34a` and "Required before payout" in `#b45309`, so the state was carried by
+hue alone and vanished in greyscale. There is deliberately **no success token** in this
+palette: `--st-accent` does that job, and the word in the pill is what actually distinguishes
+the states.
+
+Two traps specific to this kit:
+
+- The Syncfusion overrides are scoped `:is(.settings-page, .settings-dialog)`, not
+  `.settings-page` alone. A Syncfusion dialog renders at the **body root**, outside the page
+  div, so a `settings-btn` inside one silently lost every override. Any new dialog on these
+  pages needs `CssClass="settings-dialog"`.
+- **`--st-text-3` is not usable on `--st-surface-hover`.** It measures 4.33:1 in dark, under
+  AA. Anything nested on a hover-tinted panel - a status tile label, an inset hint - takes
+  `--st-text-2`. The disabled-button labels fell into this exact hole once already.
 
 ### A tint token must be solid, not an alpha
 

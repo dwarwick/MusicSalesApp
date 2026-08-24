@@ -87,6 +87,55 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         IsPayoutPayPalReady
         && IsPayoutTaxReady;
 
+    // The settings page shows what the creator has, not just what they must still do:
+    // a song count for the checklist and the stop-being-a-creator warning, and the
+    // personas that decide what artist name a listener actually sees.
+    protected int _songCount;
+    protected List<PersonaAdminViewModel> _personas = new();
+
+    protected bool HasUploadedMusic => _songCount > 0;
+
+    /// <summary>
+    /// Whether the three-step card has anything left to say. Every step is driven by real
+    /// state, so once all three are done the card is not a checklist any more - it is a wall
+    /// of ticks between the reader and the sections they came for.
+    /// </summary>
+    protected bool HasOutstandingSteps => !HasUploadedMusic || !IsPayoutReady;
+
+    protected string CatalogueNote => _songCount == 0
+        ? "You have not uploaded anything yet."
+        : $"{SongCountLabel(_songCount)} on StreamTunes.";
+
+    protected string NoPersonasBody => string.IsNullOrWhiteSpace(_editCreatorDisplayName)
+        ? "Your songs show your display name. Create a persona if you release under a band or project name."
+        : $"Your songs show your display name, {_editCreatorDisplayName}. Create a persona if you release under a band or project name.";
+
+    /// <summary>
+    /// The tax form status as a pill label. Deliberately not the raw enum name:
+    /// "TinMatchInProgress" is an internal term for something a creator experiences as
+    /// waiting on the IRS.
+    /// </summary>
+    protected string TaxFormStatusLabel =>
+        _creatorTaxFormStatus == TaxFormStatus.Completed.ToString() ? "Complete"
+        : _creatorTaxFormStatus == TaxFormStatus.TinMatchInProgress.ToString() ? "Verifying"
+        : _creatorTaxFormStatus == TaxFormStatus.Failed.ToString() ? "Failed"
+        : _creatorTaxFormStatus == TaxFormStatus.Pending.ToString() ? "Processing"
+        : "Not started";
+
+    protected int BioLength => _editCreatorBio?.Length ?? 0;
+
+    protected static string SongCountLabel(int count) => count == 1 ? "1 song" : $"{count} songs";
+
+    protected static string PersonaInitial(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "?" : name.Trim().Substring(0, 1).ToUpperInvariant();
+
+    /// <summary>
+    /// A section link that names the route. A fragment-only href does not stay on this page:
+    /// Blazor intercepts internal anchor clicks and resolves them against &lt;base href="/"&gt;,
+    /// so href="#status" navigates to the home page carrying a fragment.
+    /// </summary>
+    protected static string SectionLink(string sectionId) => $"{AppPageRoutes.CreatorSettings}#{sectionId}";
+
     protected SfDialog _stopSellingDialog;
     protected SfToast _toastRef;
 
@@ -228,6 +277,8 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _editCreatorDisplayName = _creatorDisplayName;
                 _editCreatorBio = _creatorBio;
                 _showActivationSuccess = CreatorActivated && creator.IsActive;
+
+                await LoadCatalogueSummaryAsync(creator.Id);
             }
             else
             {
@@ -255,6 +306,47 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading creator status");
+        }
+    }
+
+    /// <summary>
+    /// The song count and the persona list. Both are display-only, so a failure here leaves
+    /// the page usable: the checklist shows the upload step as outstanding and the personas
+    /// card shows its empty state, which is the same thing a genuinely empty account sees.
+    /// </summary>
+    private async Task LoadCatalogueSummaryAsync(int creatorId)
+    {
+        try
+        {
+            _songCount = await CreatorService.GetCreatorSongCountAsync(creatorId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading song count for creator {CreatorId}", creatorId);
+        }
+
+        try
+        {
+            var personas = await CreatorPersonaService.GetPersonasByCreatorIdAsync(creatorId);
+            var counts = await CreatorPersonaService.GetPersonaSongCountsAsync(personas.Select(x => x.Id));
+
+            _personas = personas
+                .OrderBy(x => x.Name)
+                .Select(x => new PersonaAdminViewModel
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Bio = x.Bio ?? string.Empty,
+                    WebsiteUrl = x.WebsiteUrl ?? string.Empty,
+                    IsEnabled = x.IsEnabled,
+                    SongCount = counts.TryGetValue(x.Id, out var n) ? n : 0,
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading personas for creator {CreatorId}", creatorId);
+            _personas = new();
         }
     }
 
@@ -524,6 +616,11 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     protected void NavigateToUpload()
     {
         NavigationManager.NavigateTo(AppPageRoutes.UploadFiles);
+    }
+
+    protected void NavigateToPersonas()
+    {
+        NavigationManager.NavigateTo(AppPageRoutes.CreatorPersonas);
     }
 
     protected void NavigateToManageSongs()

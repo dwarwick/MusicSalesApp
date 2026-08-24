@@ -1,27 +1,5 @@
 /* Extra small breakpoint styles (<576px) */
 @media (max-width: 576px) {
-    .creator-settings-page {
-        padding: 22px 10px 40px;
-    }
-
-    .creator-settings-card .e-card-content {
-        padding: 18px;
-    }
-
-    .creator-settings-title h2 {
-        font-size: 24px;
-    }
-
-    .creator-settings-card h3 {
-        font-size: 22px;
-    }
-
-    .creator-agreement-box,
-    .creator-info-strip,
-    .creator-payout-section {
-        padding: 14px;
-    }
-
     .mobile-app-install-banner {
         min-height: 54px;
         padding: 8px 10px;
@@ -587,5 +565,16 @@
     .fact-value { text-align: left; }
     .passkey-row { flex-wrap: wrap; }
     .passkey-actions { width: 100%; }
-    .settings-page .e-btn.settings-btn.settings-btn-small { flex: 1 1 auto; }
+    :is(.settings-page, .settings-dialog) .e-btn.settings-btn.settings-btn-small { flex: 1 1 auto; }
+
+    /* Creator settings. The three status tiles stop competing for width and become
+       label-and-pill rows, which is the only shape that stays legible at 390. */
+    .status-tiles { flex-direction: column; gap: 10px; }
+    .status-tile { flex: 0 0 auto; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; }
+    .status-tile-label { margin-bottom: 0; }
+    .payout-section { padding: 14px; }
+    .payout-heading { flex-wrap: wrap; }
+    .settings-consent { padding: 14px; }
+    .persona-row { align-items: flex-start; }
+
 }
