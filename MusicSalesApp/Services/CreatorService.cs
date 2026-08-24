@@ -385,10 +385,11 @@ public class CreatorService : ICreatorService
         creator.IsActive = true;
         creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
 
-        // The field is named for exactly this moment and, until now, only the RE-onboarding
-        // path ever wrote it - so it was null for most active creators and set only for people
-        // who had signed up twice.
-        creator.OnboardedAt = DateTime.UtcNow;
+        // OnboardedAt is deliberately NOT written here. StartOnboardingAsync calls
+        // ResetCreatorOnboardingAsync immediately before this, and that is what stamps it - so
+        // every creator already has one. Setting it again here would overwrite a correct
+        // historical date with today every time a dormant creator is re-activated, which both
+        // CompleteOnboardingAsync and the admin activate endpoint do.
 
         // Arms the one-time celebration. Null means "owed"; the page claims it on arrival.
         creator.ActivationAnnouncedAt = null;

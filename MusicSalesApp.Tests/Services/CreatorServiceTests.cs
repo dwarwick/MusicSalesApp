@@ -476,11 +476,10 @@ public class CreatorServiceTests
     }
 
     [Test]
-    public async Task ActivateCreatorAsync_StampsOnboardedAtAndRearmsTheNotice()
+    public async Task ActivateCreatorAsync_RearmsTheActivationNotice()
     {
-        // OnboardedAt is named for this moment and used to be written only by the RE-onboarding
-        // path, so it was null for most active creators. Re-arming matters too: someone who stops
-        // being a creator and comes back is activating again, and should be told so again.
+        // Someone who stops being a creator and comes back is activating again, and should be
+        // told so again.
         var user = new ApplicationUser { UserName = "rearm@test.com", Email = "rearm@test.com" };
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -497,7 +496,6 @@ public class CreatorServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(saved.IsActive, Is.True);
-            Assert.That(saved.OnboardedAt, Is.Not.Null, "the activation itself is what OnboardedAt records");
             Assert.That(saved.ActivationAnnouncedAt, Is.Null, "a fresh activation owes a fresh notice");
         });
     }

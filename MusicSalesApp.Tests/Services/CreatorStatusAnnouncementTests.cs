@@ -143,14 +143,36 @@ public class CreatorStatusAnnouncementTests
 
         await _service.ActivateCreatorAsync(creator.Id);
 
-        Assert.Multiple(async () =>
-        {
-            Assert.That(await _service.TryClaimActivationAnnouncementAsync(creator.Id), Is.True);
+        Assert.That(await _service.TryClaimActivationAnnouncementAsync(creator.Id), Is.True);
+    }
 
-            await using var verify = await _contextFactory.CreateDbContextAsync();
-            var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
-            Assert.That(saved.OnboardedAt, Is.Not.Null,
-                "OnboardedAt is named for this moment and used to be written only when re-onboarding");
+    [Test]
+    public async Task ActivateCreatorAsync_LeavesOnboardedAtAlone()
+    {
+        // Re-activating a dormant creator must not restamp when they onboarded.
+        // StartOnboardingAsync stamps OnboardedAt via ResetCreatorOnboardingAsync and then calls
+        // ActivateCreatorAsync, so writing it here too would overwrite the real date with today
+        // every time CompleteOnboardingAsync or the admin activate endpoint revived an account.
+        var onboarded = new DateTime(2026, 2, 15, 17, 32, 43, DateTimeKind.Utc);
+        var creator = await AddCreatorAsync(activationAnnouncedAt: DateTime.UtcNow.AddDays(-30));
+
+        await using (var seed = await _contextFactory.CreateDbContextAsync())
+        {
+            var row = await seed.Creators.SingleAsync(c => c.Id == creator.Id);
+            row.OnboardedAt = onboarded;
+            row.IsActive = false;
+            await seed.SaveChangesAsync();
+        }
+
+        await _service.ActivateCreatorAsync(creator.Id);
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.IsActive, Is.True);
+            Assert.That(saved.OnboardedAt, Is.EqualTo(onboarded));
         });
     }
 

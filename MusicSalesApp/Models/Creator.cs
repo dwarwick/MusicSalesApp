@@ -238,8 +238,7 @@ public class Creator
     /// <para>
     /// <see cref="CreatorService.ActivateCreatorAsync"/> sets it back to null, so a creator who
     /// leaves and comes back is congratulated again - it tracks the current activation, not
-    /// whether one ever happened. <see cref="Creator.OnboardedAt"/> is the timestamp of the
-    /// activation itself.
+    /// whether one ever happened.
     /// </para>
     /// </summary>
     public DateTime? ActivationAnnouncedAt { get; set; }
