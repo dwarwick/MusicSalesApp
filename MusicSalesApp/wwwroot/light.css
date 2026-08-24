@@ -1701,5 +1701,44 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 .crop-canvas { background-color: var(--st-page); }
 .crop-zoom input[type="range"] { accent-color: var(--st-accent-fill); }
 
+/* ---- Upload ------------------------------------------------------------
+   Twelve hard-coded colours came out of the inline block this replaces, none
+   of which had a dark variant. Contrast, measured:
+     dropzone label   --st-accent on --st-surface   5.42 light / 5.72 dark
+     dashed edges     --st-control-line             3.59 / 3.74 (WCAG 1.4.11)
+     held/target edge --st-accent                   5.42 / 5.72, well over 3
+   ------------------------------------------------------------------------ */
 
+.upload-box { border-color: var(--st-control-line); background-color: var(--st-surface); }
+.upload-box:hover { background-color: var(--st-surface-hover); border-color: var(--st-accent); }
+.upload-content { color: var(--st-text-2); }
+.upload-content .upload-icon { color: var(--st-text-3); }
 
+.cover-art-pool { border-color: var(--st-control-line); }
+
+/* Only while something is held, so the drop targets are obvious mid-gesture and
+   invisible otherwise - a page permanently outlined in dashed boxes reads as broken. */
+.cover-art-pool-active { border-color: var(--st-accent); background-color: var(--st-accent-soft); }
+
+.cover-art-chip { border-color: var(--st-line); background-color: var(--st-surface); }
+.cover-art-chip:hover { border-color: var(--st-accent); }
+.cover-art-chip-held { border-color: var(--st-accent); box-shadow: 0 0 0 3px var(--st-accent-soft); }
+.cover-art-chip-name { color: var(--st-text); }
+.cover-art-thumb { background-color: var(--st-surface-hover); }
+
+.cover-art-dropzone { border-color: var(--st-accent); color: var(--st-accent); }
+.cover-art-target { outline-color: var(--st-accent); background-color: var(--st-accent-soft); }
+.cover-art-target .cover-art-dropzone { background-color: var(--st-accent-soft); }
+.cover-art-hint-swatch { border-color: var(--st-accent); color: var(--st-accent); }
+
+.apply-all { background-color: var(--st-accent-soft); border-color: var(--st-accent); }
+.apply-all-label { color: var(--st-accent-hover); }
+.title-source-warn { color: var(--st-warn); }
+.inline-create-link { color: var(--st-accent); }
+.inline-create-link:hover { color: var(--st-accent-hover); }
+.review-outstanding { color: var(--st-warn); }
+
+/* Below 992px each review row is a card, and every cell is titled by its
+   data-label. Declared here because it is colour; the layout is in md_app.css. */
+.review-table td::before { color: var(--st-text-3); }
+.review-table tbody tr { border-color: var(--st-line); background-color: var(--st-surface); }

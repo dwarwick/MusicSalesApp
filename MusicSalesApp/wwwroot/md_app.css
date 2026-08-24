@@ -1,5 +1,52 @@
 /* Medium breakpoint styles (<992px) */
 @media (max-width: 992px) {
+    /* ---- Upload review: six columns do not fit a tablet, let alone a phone.
+       Each row becomes a card and each cell is titled from its data-label, so
+       nothing has to be read against a header row that is off screen. Only the
+       review table: the progress view has four columns and reads fine as one. */
+    .review-table thead { display: none; }
+
+    .review-table,
+    .review-table tbody,
+    .review-table tr,
+    .review-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .review-table tbody tr {
+        border-style: solid;
+        border-width: 1px;
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    /* Syncfusion and Bootstrap both stripe alternate rows, which on a stack of
+       cards reads as two kinds of card rather than one list. */
+    .review-table tbody tr > td { background-color: transparent !important; }
+
+    .review-table td {
+        min-width: 0 !important;
+        padding: 8px 0;
+        border: none;
+    }
+
+    .review-table td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    /* The one cell whose label would just repeat the value above it. */
+    .review-table td[data-label="Song title"]::before { display: none; }
+
+    .apply-all-field { min-width: 100%; }
+
     .mobile-app-install-banner {
         min-height: 60px;
         padding: 8px 16px;

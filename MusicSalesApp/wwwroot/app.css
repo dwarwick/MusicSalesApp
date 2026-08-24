@@ -4632,4 +4632,122 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 .crop-zoom .settings-label { margin-bottom: 0; flex: 0 0 auto; }
 .crop-zoom input[type="range"] { flex: 1 1 auto; min-width: 0; }
 
+/* =========================================================================
+   UPLOAD - structure
+   =========================================================================
+   Moved out of a 178-line inline <style> block in UploadFiles.razor, which
+   had no dark variant for anything and hard-coded twelve colours. Colour is
+   in light.css / dark.css, sizing in the breakpoint sheets, per the routing
+   rule at the top of AGENTS.md.
+   ========================================================================= */
 
+.upload-box {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-style: dashed;
+    border-width: 2px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.upload-box-disabled { pointer-events: none; cursor: not-allowed; }
+.hidden-input { display: none; }
+.upload-content { text-align: center; pointer-events: none; }
+
+.upload-spinner {
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+@keyframes upload-spin { to { transform: rotate(360deg); } }
+.upload-processing-animation { animation: upload-spin 2s linear infinite; }
+
+.cover-art-pool { border-style: dashed; border-width: 2px; border-radius: var(--st-radius-sm); }
+.cover-art-chips { display: flex; flex-wrap: wrap; }
+
+.cover-art-chip {
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 6px;
+    cursor: grab;
+    text-align: center;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cover-art-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cover-art-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.cover-art-thumb-row { cursor: grab; }
+
+/* The landmark the instructions above the table point at. Named there by SHAPE
+   rather than colour, so this can follow the theme. */
+.cover-art-dropzone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-style: dashed;
+    border-width: 2px;
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* Applied to every row while an image is held, including rows that already have
+   art - re-pairing is allowed there too, and the target has to look like one. */
+.cover-art-target { outline-style: dashed; outline-width: 2px; outline-offset: -4px; cursor: copy; }
+.cover-art-target .cover-art-dropzone { font-weight: 600; }
+.cover-art-remove { flex: 0 0 auto; white-space: nowrap; }
+
+.cover-art-hint-swatch {
+    border-style: dashed;
+    border-width: 1px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+/* ---- the review step ------------------------------------------------- */
+
+.apply-all {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: var(--st-radius-sm);
+}
+
+.apply-all-label { align-self: center; font-weight: 700; }
+.apply-all-field .form-label { font-weight: 600; }
+.review-select { width: 100%; }
+
+.title-check { display: flex; flex-wrap: wrap; align-items: center; }
+.title-source-warn { font-weight: 600; }
+.ai-flags { display: flex; flex-direction: column; }
+.inline-create-actions { display: flex; }
+
+/* A link, not a button that looks like one: it opens a one-field row in place
+   rather than doing anything on its own. */
+.inline-create-link {
+    display: inline-block;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.inline-create-link:hover { text-decoration: underline; }
+.review-outstanding { font-weight: 600; }
+
+.upload-icon { display: block; margin-inline: auto; }
+.inline-icon { vertical-align: -0.125em; }

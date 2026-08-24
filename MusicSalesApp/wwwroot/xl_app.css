@@ -863,3 +863,31 @@
 
 .settings-loading { gap: 12px; padding: 80px 20px; font-size: 15px; }
 .settings-spinner { width: 20px; height: 20px; border-width: 2px; }
+
+/* ---- Upload ---------------------------------------------------------- */
+.upload-box { height: 260px; border-radius: 8px; }
+.upload-content .upload-icon { width: 48px; height: 48px; margin-bottom: 8px; }
+.inline-icon { width: 16px; height: 16px; }
+.upload-processing-animation { width: 200px; height: 200px; }
+
+.cover-art-pool { padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.cover-art-chips { gap: 0.75rem; }
+.cover-art-chip { width: 7.5rem; padding: 0.5rem; }
+.cover-art-chip-name { font-size: 0.75rem; }
+.cover-art-thumb-row { width: 3rem; flex: 0 0 3rem; }
+.cover-art-dropzone { gap: 0.5rem; min-height: 3.25rem; padding: 0.5rem; font-size: 0.8125rem; }
+.cover-art-dropzone .inline-icon { width: 16px; height: 16px; opacity: 0.7; }
+.cover-art-remove { font-size: 0.75rem; }
+.cover-art-hint-swatch { padding: 0 0.25rem; }
+
+.apply-all { gap: 12px; padding: 14px 16px; margin-bottom: 16px; }
+.apply-all-label { font-size: 12.5px; }
+.apply-all-field { min-width: 11rem; }
+.apply-all-field .form-label { font-size: 12px; margin-bottom: 4px; }
+.title-check { gap: 10px; margin-top: 6px; }
+.title-check small { font-size: 11.5px; line-height: 1.45; }
+.ai-flags { gap: 6px; }
+.inline-create { margin-top: 8px; }
+.inline-create-actions { gap: 6px; margin-top: 6px; }
+.inline-create-link { margin-top: 6px; font-size: 12.5px; }
+.review-outstanding { font-size: 12.5px; }

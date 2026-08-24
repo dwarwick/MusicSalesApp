@@ -1,5 +1,14 @@
 /* Extra small breakpoint styles (<576px) */
 @media (max-width: 576px) {
+    /* ---- Upload: the drop box gives up two thirds of its height on a phone,
+       where 260px of empty dashes pushes everything else below the fold. */
+    .upload-box { height: 170px; }
+    .upload-content .upload-icon { width: 36px; height: 36px; }
+    .upload-processing-animation { width: 120px; height: 120px; }
+    .cover-art-chip { width: 6rem; }
+    .apply-all { gap: 10px; padding: 12px; }
+    .ai-flags { flex-direction: row; flex-wrap: wrap; gap: 12px; }
+
     .mobile-app-install-banner {
         min-height: 54px;
         padding: 8px 10px;

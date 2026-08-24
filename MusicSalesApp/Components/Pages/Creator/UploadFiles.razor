@@ -13,7 +13,7 @@
 <div class="d-flex flex-row align-items-center mb-2">
     <h3 class="me-2 mb-0">Upload Music Files</h3>
     
-    <SfButton CssClass="cta-primary" IconCss="fas fa-circle-info" OnClick=@(() => NavigationManager.NavigateTo("/uploadhelp"))>How does this work?</SfButton>
+    <SfButton CssClass="cta-primary" OnClick=@(() => NavigationManager.NavigateTo("/uploadhelp"))>How does this work?</SfButton>
 </div>
 
 <SfMessage Severity="MessageSeverity.Info" CssClass="mb-3">
@@ -67,7 +67,8 @@
                    multiple />
 
         <div class="upload-content" style="display: @(_isUploading ? "none" : "block")">
-            <i class="fa-solid fa-cloud-arrow-up"></i>
+            @* Inline SVG with fill="currentColor". A glyph font cannot follow the theme. *@
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13a5 5 0 0 0 .35-9.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
             <div class="mt-2 fw-semibold">Drag & drop files here</div>
             <div class="text-muted small">or click to browse</div>
             <div class="text-muted small mt-2">Audio formats: MP3, WAV, FLAC, OGG, M4A, AAC, WMA</div>
@@ -158,7 +159,11 @@
                     </div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    @* review-table is what the breakpoint sheets key the card treatment off.
+                       Six columns do not fit a phone, so below 992px each row becomes a card and
+                       every cell grows a label from its data-label. Only while reviewing: the
+                       progress view has four columns and reads fine as a table. *@
+                    <table class="table table-striped @(_awaitingTitleConfirmation ? "review-table" : "")">
                         <thead>
                             <tr>
                                 <th>File</th>
@@ -212,7 +217,7 @@
                     @if (_awaitingTitleConfirmation)
                     {
                         <div class="d-flex flex-wrap align-items-center gap-2">
-                            <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                            <SfButton CssClass="cta-primary e-large" OnClick="StartUploadAsync">
                                 @UploadButtonLabel
                             </SfButton>
                             <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
@@ -231,7 +236,7 @@
                         @if (SongsWithoutCoverArtCount > 0)
                         {
                             <span class="d-block mt-1">
-                                <i class="fa-solid fa-circle-info"></i>
+                                <svg class="inline-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg>
                                 @(SongsWithoutCoverArtCount == 1
                                     ? "1 song has no cover art"
                                     : $"{SongsWithoutCoverArtCount} songs have no cover art")
@@ -343,11 +348,14 @@
                                 @* Wording from a creator who could not work out where to drop.
                                    Names the column, names the gesture for both mouse and touch, and
                                    tells them what to look for - the box only appears as a target,
-                                   so "look for the green dashed box" is the reliable landmark. *@
+                                   so "look for the dashed box" is the reliable landmark.
+                                   Named by shape rather than colour: the green had no token behind
+                                   it, and a creator who cannot separate green from grey was left
+                                   without the one instruction that mattered. *@
                                 <small class="text-muted d-block mt-2">
                                     Drag one image onto a song row in the <strong>Cover Art</strong> column,
                                     or tap the image and then tap the song row's Cover Art column.
-                                    Look for the <span class="cover-art-hint-swatch">green dashed box</span>
+                                    Look for the <span class="cover-art-hint-swatch">dashed box</span>
                                     on the song row — that is where you tap or drop.
                                 </small>
                             }
@@ -381,7 +389,7 @@
                             @foreach (var item in _uploadItems)
                             {
                                 <tr class="@(item.TitleError != null ? "table-warning" : "")">
-                                    <td style="min-width: 18rem;">
+                                    <td style="min-width: 18rem;" data-label="Song title">
                                         @if (_awaitingTitleConfirmation)
                                         {
                                             @* Every title arrives pre-filled from its filename, so a
@@ -421,7 +429,7 @@
                                     </td>
                                     @if (_awaitingTitleConfirmation)
                                     {
-                                        <td style="min-width: 12rem;">
+                                        <td style="min-width: 12rem;" data-label="Genre">
                                             @* Genre is REQUIRED for a song to publish, and until now it
                                                could only be set on /creator/songs, after publishing. *@
                                             <select class="form-select review-select @(item.GenreError != null ? "is-invalid" : "")"
@@ -458,7 +466,7 @@
                                                 <button type="button" class="inline-create-link" @onclick="@(() => BeginAddGenre(item))">+ New genre</button>
                                             }
                                         </td>
-                                        <td style="min-width: 13rem;">
+                                        <td style="min-width: 13rem;" data-label="Artist persona">
                                             @* Never required. Most creators have none, so no persona is a
                                                first-class choice and the row says which name gets used. *@
                                             <select class="form-select review-select"
@@ -490,7 +498,7 @@
                                                 <button type="button" class="inline-create-link" @onclick="@(() => BeginAddPersona(item))">+ New persona</button>
                                             }
                                         </td>
-                                        <td style="min-width: 11rem;">
+                                        <td style="min-width: 11rem;" data-label="AI disclosure">
                                             @* A disclosure. It belongs where the file is handed over, not
                                                added afterwards on another page. *@
                                             <div class="ai-flags">
@@ -513,7 +521,7 @@
                                        so a wrong pairing can be corrected in one gesture rather than
                                        cleared and re-made. Once uploading starts it goes back to
                                        being a plain read-only label. *@
-                                    <td style="min-width: 14rem;"
+                                    <td style="min-width: 14rem;" data-label="Cover art"
                                         class="@(_awaitingTitleConfirmation && HeldCoverArt != null ? "cover-art-target" : "")"
                                         @ondragover:preventDefault="@_awaitingTitleConfirmation"
                                         @ondrop="@(() => AssignHeldCoverArt(item))"
@@ -566,7 +574,7 @@
                                                text. A creator looking for "where do I drop this"
                                                needs a target they can see from across the table. *@
                                             <div class="cover-art-dropzone">
-                                                <i class="fa-solid fa-image"></i>
+                                                <svg class="inline-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
                                                 <span>
                                                     @if (HeldCoverArt != null)
                                                     {
@@ -642,7 +650,7 @@
                 @if (_awaitingTitleConfirmation)
                 {
                     <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                        <SfButton CssClass="cta-primary e-large" IconCss="fa-solid fa-cloud-arrow-up" OnClick="StartUploadAsync">
+                        <SfButton CssClass="cta-primary e-large" OnClick="StartUploadAsync">
                             @UploadButtonLabel
                         </SfButton>
                         <SfButton CssClass="e-outline" OnClick="CancelPendingBatchAsync">Cancel</SfButton>
@@ -712,254 +720,6 @@
         </div>
     }
 </div>
-
-<style>
-    .upload-box {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 260px;
-    border: 2px dashed #6c757d;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-}
-
-.upload-box:hover {
-    background-color: rgba(255,255,255,0.05);
-}
-
-.upload-box-disabled {
-    pointer-events: none;
-    cursor: not-allowed;
-}
-
-.hidden-input {
-    display: none;
-}
-
-.upload-content {
-    text-align: center;
-    pointer-events: none;
-}
-
-.upload-content i {
-    font-size: 3rem;
-}
-
-.upload-spinner {
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-@@keyframes upload-spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-.upload-processing-animation {
-    width: 200px;
-    height: 200px;
-    animation: upload-spin 2s linear infinite;
-}
-
-    .dropzone {
-        display: block;
-        width: 100%;
-        height: 220px;
-        border: 2px dashed #bbb;
-        border-radius: 8px;
-        text-align: center;
-        padding: 40px;
-    }
-
-        .dropzone:hover {
-            border-color: #888;
-        }
-
-    .cover-art-pool {
-        border: 2px dashed #bbb;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 1rem;
-    }
-
-    /* Only while something is held, so the drop targets are obvious mid-gesture and invisible
-       otherwise - a page permanently outlined in dashed boxes reads as broken. */
-    .cover-art-pool-active {
-        border-color: #0d6efd;
-        background-color: rgba(13, 110, 253, 0.06);
-    }
-
-    .cover-art-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-    }
-
-    .cover-art-chip {
-        width: 7.5rem;
-        padding: 0.5rem;
-        border: 1px solid #ced4da;
-        border-radius: 6px;
-        cursor: grab;
-        text-align: center;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-
-    .cover-art-chip:hover {
-        border-color: #0d6efd;
-    }
-
-    .cover-art-chip-held {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
-    }
-
-    .cover-art-chip-name {
-        font-size: 0.75rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .cover-art-thumb {
-        width: 100%;
-        aspect-ratio: 1 / 1;
-        object-fit: cover;
-        border-radius: 4px;
-        background-color: rgba(127, 127, 127, 0.2);
-    }
-
-    .cover-art-thumb-row {
-        width: 3rem;
-        flex: 0 0 3rem;
-        cursor: grab;
-    }
-
-    /* Green, and named as green in the instructions above the table. A creator being told to look
-       for a landmark has to be able to find that exact landmark, so the two are edited together. */
-    .cover-art-dropzone {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        min-height: 3.25rem;
-        padding: 0.5rem;
-        border: 2px dashed #198754;
-        border-radius: 6px;
-        color: #198754;
-        font-size: 0.8125rem;
-        text-align: center;
-        cursor: pointer;
-    }
-
-    .cover-art-dropzone i {
-        font-size: 1rem;
-        opacity: 0.7;
-    }
-
-    /* Applied to every row's cell while an image is held, including rows that already have art -
-       re-pairing is allowed there too, and the target has to look like one. */
-    .cover-art-target {
-        outline: 2px dashed #198754;
-        outline-offset: -4px;
-        background-color: rgba(25, 135, 84, 0.08);
-        cursor: copy;
-    }
-
-    .cover-art-target .cover-art-dropzone {
-        border-color: #198754;
-        background-color: rgba(25, 135, 84, 0.12);
-        font-weight: 600;
-    }
-
-    .cover-art-remove {
-        flex: 0 0 auto;
-        white-space: nowrap;
-        font-size: 0.75rem;
-    }
-
-    /* Makes the phrase in the instructions look like the thing it is naming. */
-    .cover-art-hint-swatch {
-        border: 1px dashed #198754;
-        border-radius: 3px;
-        padding: 0 0.25rem;
-        color: #198754;
-        white-space: nowrap;
-    }
-
-    /* ---- the review step, once it collects metadata ------------------------
-       Sizing and layout only. Colour lives in light.css / dark.css by the routing
-       rule; these three take theme tokens so the block does not grow another set
-       of hard-coded hexes beside the ones already here. */
-
-    .apply-all {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: 12px;
-        padding: 14px 16px;
-        margin-bottom: 16px;
-        border-radius: 10px;
-        background-color: var(--st-accent-soft);
-        border: 1px solid var(--st-accent);
-    }
-
-    .apply-all-label {
-        align-self: center;
-        font-size: 12.5px;
-        font-weight: 700;
-        color: var(--st-accent-hover);
-    }
-
-    .apply-all-field { min-width: 11rem; }
-    .apply-all-field .form-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-
-    .review-select { min-width: 100%; }
-
-    .title-check {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 10px;
-        margin-top: 6px;
-    }
-
-    .title-check small { font-size: 11.5px; line-height: 1.45; }
-    .title-source-warn { color: var(--st-warn); font-weight: 600; }
-
-    .ai-flags { display: flex; flex-direction: column; gap: 6px; }
-
-    .inline-create { margin-top: 8px; }
-    .inline-create-actions { display: flex; gap: 6px; margin-top: 6px; }
-
-    /* A link, not a button that looks like one: it opens a one-field row in place
-       rather than doing anything on its own. */
-    .inline-create-link {
-        display: inline-block;
-        margin-top: 6px;
-        padding: 0;
-        border: 0;
-        background: none;
-        font-size: 12.5px;
-        font-weight: 700;
-        color: var(--st-accent);
-        cursor: pointer;
-    }
-
-    .inline-create-link:hover { color: var(--st-accent-hover); text-decoration: underline; }
-
-    .review-outstanding {
-        font-size: 12.5px;
-        font-weight: 600;
-        color: var(--st-warn);
-    }
-</style>
-
 <script suppress-error="BL9992">
     (function () {
         // These two listeners exist to stop the browser navigating away when a creator drops a file
