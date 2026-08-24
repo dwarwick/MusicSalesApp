@@ -476,6 +476,60 @@ public class CreatorServiceTests
     }
 
     [Test]
+    public async Task ActivateCreatorAsync_StampsOnboardedAtAndRearmsTheNotice()
+    {
+        // OnboardedAt is named for this moment and used to be written only by the RE-onboarding
+        // path, so it was null for most active creators. Re-arming matters too: someone who stops
+        // being a creator and comes back is activating again, and should be told so again.
+        var user = new ApplicationUser { UserName = "rearm@test.com", Email = "rearm@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator { UserId = user.Id, ActivationAnnouncedAt = DateTime.UtcNow.AddDays(-30) };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        await _service.ActivateCreatorAsync(creator.Id);
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.IsActive, Is.True);
+            Assert.That(saved.OnboardedAt, Is.Not.Null, "the activation itself is what OnboardedAt records");
+            Assert.That(saved.ActivationAnnouncedAt, Is.Null, "a fresh activation owes a fresh notice");
+        });
+    }
+
+    [Test]
+    public async Task StopBeingCreatorAsync_RearmsTheDeactivationNotice()
+    {
+        var user = new ApplicationUser { UserName = "stop@test.com", Email = "stop@test.com" };
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var creator = new Creator
+        {
+            UserId = user.Id,
+            IsActive = true,
+            DeactivationAnnouncedAt = DateTime.UtcNow.AddDays(-30),
+        };
+        _context.Creators.Add(creator);
+        await _context.SaveChangesAsync();
+
+        await _service.StopBeingCreatorAsync(user.Id);
+
+        await using var verify = await _contextFactory.CreateDbContextAsync();
+        var saved = await verify.Creators.SingleAsync(c => c.Id == creator.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.IsActive, Is.False);
+            Assert.That(saved.DeactivationAnnouncedAt, Is.Null);
+        });
+    }
+    [Test]
     public async Task GetCreatorSongCountAsync_CountsOnlyThisCreatorsActiveSongs()
     {
         // The settings page shows this number in three places - the checklist, the catalogue

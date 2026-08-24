@@ -343,6 +343,35 @@ public class CreatorService : ICreatorService
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public async Task<bool> TryClaimActivationAnnouncementAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        // One conditional UPDATE, not a read then a write. Two tabs opening the page at the same
+        // moment cannot both win it - which matters, because the winner spends that true on a
+        // Google Ads conversion and a permanent history row.
+        var rows = await context.Creators
+            .Where(c => c.Id == creatorId && c.ActivationAnnouncedAt == null)
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(c => c.ActivationAnnouncedAt, DateTime.UtcNow));
+
+        return rows > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryClaimDeactivationAnnouncementAsync(int creatorId)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        var rows = await context.Creators
+            .Where(c => c.Id == creatorId && c.DeactivationAnnouncedAt == null)
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(c => c.DeactivationAnnouncedAt, DateTime.UtcNow));
+
+        return rows > 0;
+    }
+
     public async Task<Creator> ActivateCreatorAsync(int creatorId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
@@ -355,6 +384,14 @@ public class CreatorService : ICreatorService
 
         creator.IsActive = true;
         creator.OnboardingStatus = CreatorOnboardingStatus.Completed;
+
+        // The field is named for exactly this moment and, until now, only the RE-onboarding
+        // path ever wrote it - so it was null for most active creators and set only for people
+        // who had signed up twice.
+        creator.OnboardedAt = DateTime.UtcNow;
+
+        // Arms the one-time celebration. Null means "owed"; the page claims it on arrival.
+        creator.ActivationAnnouncedAt = null;
         creator.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
@@ -450,6 +487,7 @@ public class CreatorService : ICreatorService
         creator.OnboardingStatus = CreatorOnboardingStatus.Suspended;
         creator.CreatorAgreementAccepted = false;
         creator.CreatorAgreementAcceptedAtUtc = null;
+        creator.DeactivationAnnouncedAt = null;
         creator.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 

@@ -111,7 +111,9 @@ public class CreatorSettingsTests : BUnitTestBase
         MockCreatorService.Verify(x => x.StartOnboardingAsync(It.IsAny<CreatorOnboardingInput>()), Times.Once);
         var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
         Assert.That(navigationManager.Uri, Does.Contain(AppPageRoutes.RefreshSignIn));
-        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorActivated}=true"));
+        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain(AppPageRoutes.CreatorSettings));
+        Assert.That(navigationManager.Uri, Does.Not.Contain("creator_activated"),
+            "what happened is recorded on the creator record, not carried in a URL anyone can retype");
     }
 
     [Test]
@@ -429,7 +431,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_ActivationReturn_TracksCreatorSignupConversion()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
 
@@ -453,7 +455,7 @@ public class CreatorSettingsTests : BUnitTestBase
             taxFormStatus: TaxFormStatus.Completed,
             payPalEmail: "artist@example.com",
             payPalAccountAffirmed: true));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
@@ -469,7 +471,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public async Task CreatorSettings_ActivationReturn_DoesNotTrackConversionTwice()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForAssertion(() => Assert.That(GetGoogleAdsTrackingInvocations(), Has.Count.EqualTo(1)), TimeSpan.FromSeconds(5));
@@ -484,7 +486,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_ActivationReturn_DoesNotTrackConversion_WhenHostIsNotAllowed()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed), "davidtest.dev");
-        NavigateToCreatorActivationReturn();
+        ArmActivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
@@ -507,7 +509,7 @@ public class CreatorSettingsTests : BUnitTestBase
     public void CreatorSettings_DeactivationReturn_ShowsStopCreatorSuccess()
     {
         SetupCreatorSettingsPage(CreateCreator(isActive: false));
-        NavigateToCreatorDeactivationReturn();
+        ArmDeactivationAnnouncement();
 
         var cut = TestContext.Render<CreatorSettings>();
         cut.WaitForState(() => cut.Markup.Contains("You are no longer a creator"), TimeSpan.FromSeconds(5));
@@ -533,7 +535,8 @@ public class CreatorSettingsTests : BUnitTestBase
         MockCreatorService.Verify(x => x.StopBeingCreatorAsync(1), Times.Once);
         var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
         Assert.That(navigationManager.Uri, Does.Contain(AppPageRoutes.RefreshSignIn));
-        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorDeactivated}=true"));
+        Assert.That(Uri.UnescapeDataString(navigationManager.Uri), Does.Contain(AppPageRoutes.CreatorSettings));
+        Assert.That(navigationManager.Uri, Does.Not.Contain("creator_deactivated"));
     }
 
     [Test]
@@ -667,6 +670,61 @@ public class CreatorSettingsTests : BUnitTestBase
 
         Assert.That(cut.Markup, Does.Contain("remove <strong>1 song</strong> from StreamTunes"));
     }
+    [TestCase("creator_activated")]
+    [TestCase("creator_deactivated")]
+    public void CreatorSettings_StatusNoticeCannotBeTriggeredByUrl(string retiredParameter)
+    {
+        // These parameters used to drive the celebration, and with it a Google Ads conversion, a
+        // funnel event and a permanent user-history row - so anyone who read one off the address
+        // bar could replay all three. The page now asks the database, which answers once.
+        SetupCreatorSettingsPage(CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed));
+
+        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
+        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{retiredParameter}=true");
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Where you stand"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Creator account activated"));
+            Assert.That(cut.Markup, Does.Not.Contain("You are no longer a creator"));
+            Assert.That(GetGoogleAdsTrackingInvocations(), Is.Empty);
+        });
+    }
+
+    [Test]
+    public void CreatorSettings_ActivationNotice_IsClaimedOncePerLoad()
+    {
+        // The claim is what makes the notice one-shot, so the page has to actually spend it
+        // rather than reading a flag and leaving it armed for the next reload.
+        var creator = CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed);
+        SetupCreatorSettingsPage(creator);
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
+
+        MockCreatorService.Verify(x => x.TryClaimActivationAnnouncementAsync(creator.Id), Times.Once);
+    }
+
+    [Test]
+    public void CreatorSettings_InactiveCreator_NeverClaimsTheActivationNotice()
+    {
+        // Deactivated creators keep their record, so the activation claim is still sitting there
+        // to be won. Asking for it here would congratulate someone who has just stopped.
+        SetupCreatorSettingsPage(CreateCreator(isActive: false));
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Become a creator"), TimeSpan.FromSeconds(5));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Creator account activated"));
+            MockCreatorService.Verify(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()), Times.Never);
+        });
+    }
     private void SetupCreatorSettingsPage(Creator creator, params string[] enabledHosts)
     {
         // Default to a creator who has uploaded. A zero count is a real state, but it is a
@@ -674,6 +732,13 @@ public class CreatorSettingsTests : BUnitTestBase
         // on screen in every scenario.
         MockCreatorService.Setup(x => x.GetCreatorSongCountAsync(It.IsAny<int>()))
             .ReturnsAsync(4);
+
+        // Nothing owed, which is every page load except the one straight after a status
+        // change. Tests that want the notice call ArmActivationAnnouncement.
+        MockCreatorService.Setup(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
+        MockCreatorService.Setup(x => x.TryClaimDeactivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(false);
 
         if (enabledHosts.Length == 0)
         {
@@ -758,17 +823,19 @@ public class CreatorSettingsTests : BUnitTestBase
             .Returns(httpContext);
     }
 
-    private void NavigateToCreatorActivationReturn()
-    {
-        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
-        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorActivated}=true");
-    }
+    /// <summary>
+    /// The creator record says the activation notice is still owed, and this page load claims
+    /// it. This used to be a URL parameter, which is why it could be replayed.
+    /// </summary>
+    private void ArmActivationAnnouncement() =>
+        MockCreatorService
+            .Setup(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
 
-    private void NavigateToCreatorDeactivationReturn()
-    {
-        var navigationManager = TestContext.Services.GetRequiredService<NavigationManager>();
-        navigationManager.NavigateTo($"{AppPageRoutes.CreatorSettings}?{CreatorSettingsQueryKeys.CreatorDeactivated}=true");
-    }
+    private void ArmDeactivationAnnouncement() =>
+        MockCreatorService
+            .Setup(x => x.TryClaimDeactivationAnnouncementAsync(It.IsAny<int>()))
+            .ReturnsAsync(true);
 
     private static IElement FindButtonContaining(IRenderedComponent<CreatorSettings> cut, string text)
     {

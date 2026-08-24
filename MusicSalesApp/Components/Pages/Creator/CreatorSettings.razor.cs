@@ -149,12 +149,6 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
     [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.TrackingId)]
     public string CreatorTrackingId { get; set; }
 
-    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorActivated)]
-    public bool CreatorActivated { get; set; }
-
-    [SupplyParameterFromQuery(Name = CreatorSettingsQueryKeys.CreatorDeactivated)]
-    public bool CreatorDeactivated { get; set; }
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_hasLoadedData)
@@ -177,14 +171,14 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                         await DetectAndPersistUserTimeZoneAsync();
                         await LoadCreatorStatus();
 
-                        if (CreatorActivated && _isActiveCreator)
-                        {
-                            await ShowCreatorActivatedDialog();
-                        }
-                        else if (CreatorDeactivated && !_isActiveCreator)
-                        {
-                            _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
-                        }
+                        // Whether this arrival is the end of the activation flow is a question
+                        // for the database, not the address bar. Activation finishes with a
+                        // forced reload through /refresh-signin - the Creator role has just
+                        // been granted and the auth cookie has to be reissued - so nothing in
+                        // memory survives to say what happened. It used to be carried by
+                        // ?creator_activated=true, which let anyone replay the celebration,
+                        // its analytics event and its user-history row by typing a URL.
+                        await AnnounceCreatorStatusChangeAsync();
 
                         await TrackCreatorSettingsViewedAsync();
 
@@ -276,7 +270,9 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
                 _creatorStreamPayRateDisplay = creator.StreamPayRate * 1000;
                 _editCreatorDisplayName = _creatorDisplayName;
                 _editCreatorBio = _creatorBio;
-                _showActivationSuccess = CreatorActivated && creator.IsActive;
+                // Set by AnnounceCreatorStatusChangeAsync when it wins the claim, and by
+                // CompleteCreatorOnboarding. Reloading the page does not bring it back.
+                _showActivationSuccess &= creator.IsActive;
 
                 await LoadCatalogueSummaryAsync(creator.Id);
             }
@@ -493,7 +489,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             {
                 await TrackCreatorSignupStartedAsync(FunnelAnalyticsLabels.CreatorSignupActive);
                 await LoadCreatorStatus();
-                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorActivated);
+                RefreshSignInAndReturnToCreatorSettings();
                 return;
             }
             else
@@ -558,6 +554,38 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         {
             _completingOnboarding = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Shows the activation or deactivation notice, once per status change.
+    ///
+    /// <para>
+    /// The claim is a single conditional UPDATE, so a reload cannot replay it and two tabs
+    /// cannot both win it. Nothing here is gated on a query parameter: the only inputs are the
+    /// creator record and the claim.
+    /// </para>
+    /// </summary>
+    private async Task AnnounceCreatorStatusChangeAsync()
+    {
+        if (!_creatorId.HasValue)
+        {
+            return;
+        }
+
+        if (_isActiveCreator)
+        {
+            if (await CreatorService.TryClaimActivationAnnouncementAsync(_creatorId.Value))
+            {
+                await ShowCreatorActivatedDialog();
+            }
+
+            return;
+        }
+
+        if (await CreatorService.TryClaimDeactivationAnnouncementAsync(_creatorId.Value))
+        {
+            _successMessage = "You are no longer a creator. All your music has been removed from the platform.";
         }
     }
 
@@ -668,7 +696,7 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
             if (success)
             {
                 await _stopSellingDialog.HideAsync();
-                RefreshSignInAndReturnToCreatorSettings(CreatorSettingsQueryKeys.CreatorDeactivated);
+                RefreshSignInAndReturnToCreatorSettings();
                 return;
             }
             else
@@ -690,10 +718,19 @@ public partial class CreatorSettingsModel : BlazorBase, IDisposable
         }
     }
 
-    private void RefreshSignInAndReturnToCreatorSettings(string returnQueryKey)
+    /// <summary>
+    /// Reissues the auth cookie and comes back here.
+    ///
+    /// <para>
+    /// The forced reload is not optional: the Creator role has just been granted or taken away,
+    /// and the cookie in the browser still says otherwise. The return URL deliberately carries
+    /// no state - what happened is recorded on the creator record, which is the only thing that
+    /// survives a reload anyway.
+    /// </para>
+    /// </summary>
+    private void RefreshSignInAndReturnToCreatorSettings()
     {
-        var returnUrl = $"{AppPageRoutes.CreatorSettings}?{returnQueryKey}=true";
-        var refreshUrl = $"{AppPageRoutes.RefreshSignIn}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(returnUrl)}";
+        var refreshUrl = $"{AppPageRoutes.RefreshSignIn}?{ExternalAuthFormFields.ReturnUrl}={Uri.EscapeDataString(AppPageRoutes.CreatorSettings)}";
         NavigationManager.NavigateTo(refreshUrl, forceLoad: true);
     }
 

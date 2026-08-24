@@ -113,6 +113,26 @@ public interface ICreatorService
     Task<Creator> ActivateCreatorAsync(int creatorId);
 
     /// <summary>
+    /// Claims the right to show the one-time "you are a creator" celebration, returning true to
+    /// exactly one caller per activation.
+    ///
+    /// <para>
+    /// The celebration is not free: it fires a Google Ads conversion, a funnel analytics event and
+    /// a permanent user-history row. It used to be triggered by <c>?creator_activated=true</c>,
+    /// which meant a creator could replay all three by reloading a URL. The claim is a single
+    /// conditional UPDATE, so concurrent tabs cannot both win it.
+    /// </para>
+    /// </summary>
+    Task<bool> TryClaimActivationAnnouncementAsync(int creatorId);
+
+    /// <summary>
+    /// The deactivation counterpart of <see cref="TryClaimActivationAnnouncementAsync"/>. Only a
+    /// message, but it goes the same way so that neither notice depends on a URL surviving a
+    /// forced reload.
+    /// </summary>
+    Task<bool> TryClaimDeactivationAnnouncementAsync(int creatorId);
+
+    /// <summary>
     /// Deactivates a creator account (admin function).
     /// </summary>
     Task<Creator> DeactivateCreatorAsync(int creatorId);
