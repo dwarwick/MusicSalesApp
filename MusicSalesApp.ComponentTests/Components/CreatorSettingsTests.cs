@@ -725,6 +725,45 @@ public class CreatorSettingsTests : BUnitTestBase
             MockCreatorService.Verify(x => x.TryClaimActivationAnnouncementAsync(It.IsAny<int>()), Times.Never);
         });
     }
+    [Test]
+    public void CreatorSettings_RealActivation_StillFiresFunnelEventAndConversionAndHistory()
+    {
+        // Removing the query parameter must not have taken the measurement with it. This is the
+        // arrival straight after a real activation - the creator record says a notice is owed -
+        // and all three effects have to happen exactly as they did when a URL triggered them.
+        var creator = CreateCreator(isActive: true, taxFormStatus: TaxFormStatus.Completed);
+        SetupCreatorSettingsPage(creator);
+        ArmActivationAnnouncement();
+
+        var cut = TestContext.Render<CreatorSettings>();
+        cut.WaitForState(() => cut.Markup.Contains("Creator account activated"), TimeSpan.FromSeconds(5));
+
+        cut.WaitForAssertion(() =>
+        {
+            var conversions = GetGoogleAdsTrackingInvocations();
+            Assert.That(conversions, Has.Count.EqualTo(1), "the Google Ads conversion still fires");
+            Assert.That(conversions.Single().Arguments[0]?.ToString(),
+                Is.EqualTo("AW-18188763957/zvw_CJ6in74cELWGiuFD"));
+
+            var funnelEvents = TestContext.JSInterop.Invocations
+                .Where(i => i.Identifier == GoogleAdsTrackingConfigKeys.TrackFunnelEventFunctionName)
+                .Where(i => string.Equals(i.Arguments.FirstOrDefault()?.ToString(),
+                    FunnelAnalyticsEvents.CreatorActivated, StringComparison.Ordinal))
+                .ToList();
+            Assert.That(funnelEvents, Has.Count.EqualTo(1), "the funnel analytics event still fires");
+        }, TimeSpan.FromSeconds(5));
+
+        MockAdminNotificationService.Verify(
+            x => x.RecordUserHistoryAsync(
+                It.IsAny<int>(),
+                It.IsAny<string>(),
+                UserHistoryEventTypes.CreatorActivated,
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()),
+            Times.Once,
+            "the audit row is still written - once, which is the whole point");
+    }
     private void SetupCreatorSettingsPage(Creator creator, params string[] enabledHosts)
     {
         // Default to a creator who has uploaded. A zero count is a real state, but it is a
