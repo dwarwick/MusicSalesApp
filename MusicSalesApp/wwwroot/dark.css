@@ -1717,15 +1717,15 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
     color: var(--st-accent);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-violet,
-.settings-page .e-btn.settings-btn.settings-btn-violet:hover {
+.settings-page .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled),
+.settings-page .e-btn.settings-btn.settings-btn-violet:not(:disabled):not(.e-disabled):hover {
     background-color: var(--st-genre-fill);
     border-color: var(--st-genre-fill);
     color: var(--st-on-genre);
 }
 
-.settings-page .e-btn.settings-btn.settings-btn-danger,
-.settings-page .e-btn.settings-btn.settings-btn-danger:hover {
+.settings-page .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled),
+.settings-page .e-btn.settings-btn.settings-btn-danger:not(:disabled):not(.e-disabled):hover {
     background-color: var(--st-danger);
     border-color: var(--st-danger);
     color: var(--st-on-danger);
@@ -1768,3 +1768,19 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
 
 .settings-page .e-checkbox-wrapper .e-label,
 .settings-page .e-css.e-checkbox-wrapper .e-label { color: var(--st-text-2); }
+
+/* A disabled control has to read as disabled. The fill rules above are deliberately
+   scoped :not(:disabled) so they cannot paint one as live - Subscribe is gated on the
+   terms checkbox, and a violet button that does nothing is worse than a grey one. */
+.settings-page .e-btn.settings-btn:disabled,
+.settings-page .e-btn.settings-btn.e-disabled {
+    background-color: var(--st-surface-hover);
+    border-color: var(--st-control-line);
+    color: var(--st-text-3);
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+.settings-inline-status { color: var(--st-accent-hover); }
+.settings-inline-status-bad { color: var(--st-danger); }
+

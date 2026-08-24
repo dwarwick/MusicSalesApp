@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -653,6 +654,84 @@ public class ManageAccountTests : BUnitTestBase
         return (Task)method!.Invoke(instance, null)!;
     }
 
+    [TestCase(true, "Saved. We will email you when new music is added.")]
+    [TestCase(false, "Saved. We will not email you when new music is added.")]
+    public async Task ManageAccount_SaveEmailPreferences_ConfirmsInsideTheCardAndSaysWhichWay(
+        bool receiveEmails, string expected)
+    {
+        // The page-level banner renders above the FIRST section and this button sits in the
+        // third, so a reader who saves from here sees nothing move and reads the button as
+        // dead - which is what was reported. The confirmation has to appear where the click
+        // happened, and it has to say WHICH way it saved: "Saved" alone leaves someone who
+        // just switched something OFF unable to tell whether it took the new value or the old.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        MockUserManager.Setup(x => x.UpdateAsync(It.IsAny<ApplicationUser>()))
+            .ReturnsAsync(IdentityResult.Success);
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_receiveNewSongEmails", receiveEmails);
+        await cut.Find("#email-preferences .settings-actions button").ClickAsync(new MouseEventArgs());
+
+        var status = cut.Find("#email-preferences").QuerySelector(".settings-inline-status");
+        Assert.That(status, Is.Not.Null, "the confirmation belongs beside the button, not three sections above it");
+        Assert.That(status!.TextContent.Trim(), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ManageAccount_SaveEmailPreferences_IsNotGatedOnTheCheckbox()
+    {
+        // Turning a notification OFF is a save like any other. The subscription card gates its
+        // button on the terms checkbox because agreement is a precondition there; copying that
+        // here would make unsubscribing impossible.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_receiveNewSongEmails", false);
+        cut.Render();
+
+        var button = cut.Find("#email-preferences .settings-actions button");
+        Assert.Multiple(() =>
+        {
+            Assert.That(button.HasAttribute("disabled"), Is.False,
+                "unchecking the box must not disable the save");
+            Assert.That(button.ClassList, Does.Not.Contain("e-disabled"),
+                "a button that looks disabled reads as dead even when it is clickable");
+        });
+    }
+
+    [Test]
+    public async Task ManageAccount_ChangePassword_ReportsFailureBesideTheForm()
+    {
+        // Same defect as the email preferences card: this form is the fifth section, and its
+        // only report was the banner at the top of the page.
+        SetupAccountWithSubscriptionStatus(new { HasSubscription = false, Status = SubscriptionStatuses.Expired });
+        SetupRendererInfo();
+
+        var cut = TestContext.Render<ManageAccount>();
+        cut.WaitForState(() => cut.Markup.Contains("Close My Account"), TimeSpan.FromSeconds(5));
+
+        SetField(cut.Instance, "_currentPassword", "Current1!");
+        SetField(cut.Instance, "_newPassword", "NewPassword1!");
+        SetField(cut.Instance, "_confirmPassword", "Different1!");
+        await cut.InvokeAsync(() => InvokeNonPublicTask(cut.Instance, "ChangePassword"));
+        cut.Render();
+
+        var status = cut.Find("#password").QuerySelector(".settings-inline-status");
+        Assert.That(status, Is.Not.Null, "the form has to say why nothing happened");
+        Assert.Multiple(() =>
+        {
+            Assert.That(status!.TextContent.Trim(), Is.EqualTo("New password and confirmation do not match."));
+            Assert.That(status.ClassList, Does.Contain("settings-inline-status-bad"),
+                "a failure must not be styled as a success");
+        });
+    }
     private ApplicationUser SetupAccountWithSubscriptionStatus(object status)
     {
         const int userId = 1;

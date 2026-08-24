@@ -4655,6 +4655,7 @@ main:has(> .content > .auth-page) > .content > .auth-page { margin: 0; }
 .terms-list li { position: relative; }
 
 .settings-actions { display: flex; flex-wrap: wrap; align-items: center; }
+.settings-inline-status { font-weight: 600; }
 
 .settings-page .e-btn.settings-btn {
     border-radius: var(--st-radius-pill);

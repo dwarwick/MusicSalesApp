@@ -953,6 +953,7 @@
 .terms-agreement { margin-top: 18px; padding: 14px; border-radius: var(--st-radius-sm); background-color: var(--st-accent-soft); }
 
 .settings-actions { gap: 10px; margin-top: 18px; }
+.settings-inline-status { font-size: 13px; line-height: 1.45; }
 .settings-page .e-btn.settings-btn { height: 40px; padding: 0 20px; font-size: 14px; }
 .settings-page .e-btn.settings-btn.settings-btn-small { height: 32px; padding: 0 14px; font-size: 13px; }
 

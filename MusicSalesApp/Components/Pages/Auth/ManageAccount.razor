@@ -246,8 +246,18 @@
                     <div class="settings-check">
                         <SfCheckBox @bind-Checked="_receiveNewSongEmails" TChecked="bool" Label="Receive email notifications when new music is added" />
                     </div>
+                    @* Never gated on the checkbox. Switching a notification OFF is a save like
+                       any other - the terms checkbox on the subscription card gates its button
+                       because agreement is a precondition, which is not the case here. *@
                     <div class="settings-actions">
-                        <SfButton Content="Save Preferences" OnClick="SaveEmailPreferences" CssClass="e-btn settings-btn settings-btn-violet" />
+                        <SfButton Content="@(_savingEmailPreferences ? "Saving..." : "Save Preferences")"
+                                  Disabled="@_savingEmailPreferences"
+                                  OnClick="SaveEmailPreferences"
+                                  CssClass="e-btn settings-btn settings-btn-violet" />
+                        @if (!string.IsNullOrEmpty(_emailPreferencesStatus))
+                        {
+                            <span class="settings-inline-status @(_emailPreferencesFailed ? "settings-inline-status-bad" : "")" role="status">@_emailPreferencesStatus</span>
+                        }
                     </div>
                 </section>
 
@@ -328,6 +338,10 @@
 
                     <div class="settings-actions">
                         <SfButton Content="Change Password" OnClick="ChangePassword" CssClass="e-btn settings-btn settings-btn-violet" />
+                        @if (!string.IsNullOrEmpty(_passwordStatus))
+                        {
+                            <span class="settings-inline-status @(_passwordFailed ? "settings-inline-status-bad" : "")" role="status">@_passwordStatus</span>
+                        }
                     </div>
                 </section>
 
