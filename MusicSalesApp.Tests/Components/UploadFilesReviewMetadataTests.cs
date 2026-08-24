@@ -249,6 +249,114 @@ public class UploadFilesReviewMetadataTests
     }
 
     // ------------------------------------------------------------------
+    // The same disclosure, in bulk.
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void BulkAllOriginalAnswersEverySong()
+    {
+        var page = WithRows(3);
+
+        page.ApplyAllOriginal(true);
+
+        Assert.That(Rows(page).All(r => r.AllOriginal && r.AiDeclared), Is.True);
+    }
+
+    [Test]
+    public void BulkAiAnswersEverySong()
+    {
+        // A batch is usually one release, so a whole EP sharing an AI answer is normal rather
+        // than exceptional.
+        var page = WithRows(3);
+
+        page.ApplyAllAiVocals(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Rows(page).All(r => r.IsAiVocals), Is.True);
+            Assert.That(Rows(page).All(r => r.AiDeclared), Is.True);
+            Assert.That(Rows(page).Any(r => r.IsAiGenerated), Is.False, "only the answer given");
+        });
+    }
+
+    [Test]
+    public void BulkKeepsTheTwoGroupsExclusive()
+    {
+        // The same rule a row follows. Without it the bulk control could put a combination on
+        // every song that the row control refuses to let anyone pick.
+        var page = WithRows(2);
+
+        page.ApplyAllAiMusic(true);
+        page.ApplyAllOriginal(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Rows(page).All(r => r.AllOriginal), Is.True);
+            Assert.That(Rows(page).Any(r => r.IsAiGenerated), Is.False);
+        });
+
+        page.ApplyAllAiLyrics(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Rows(page).Any(r => r.AllOriginal), Is.False);
+            Assert.That(Rows(page).All(r => r.IsAiLyrics), Is.True);
+        });
+    }
+
+    [Test]
+    public void BulkOverwritesRowsThatWereAlreadyAnswered()
+    {
+        // Deliberate, and the same as genre and persona: a control that behaves differently
+        // depending on state you cannot see is worse than one that plainly overwrites.
+        var page = WithRows(2);
+        var rows = Rows(page);
+        page.SetAiMusic(rows[0], true);
+
+        page.ApplyAllOriginal(true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rows[0].IsAiGenerated, Is.False);
+            Assert.That(rows[0].AllOriginal, Is.True);
+        });
+    }
+
+    [Test]
+    public void UntickingTheLastBulkAnswerLeavesEverySongUndeclared()
+    {
+        // Not silently original, which is what the whole change exists to prevent.
+        var page = WithRows(2);
+
+        page.ApplyAllAiVocals(true);
+        page.ApplyAllAiVocals(false);
+
+        Assert.That(Rows(page).Any(r => r.AiDeclared), Is.False);
+    }
+
+    private static UploadFilesModel WithRows(int count)
+    {
+        var page = new UploadFilesModel();
+        var rows = Rows(page);
+        for (var i = 0; i < count; i++)
+        {
+            rows.Add(new UploadFilesModel.UploadPairItem { SongTitle = $"Song {i}" });
+        }
+
+        return page;
+    }
+
+    private static List<UploadFilesModel.UploadPairItem> Rows(UploadFilesModel page)
+    {
+        var field = typeof(UploadFilesModel).GetField(
+            "_uploadItems",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, "Expected _uploadItems to exist.");
+
+        return (List<UploadFilesModel.UploadPairItem>)field!.GetValue(page)!;
+    }
+
+    // ------------------------------------------------------------------
     // Dropping one song without cancelling the batch.
     // ------------------------------------------------------------------
 

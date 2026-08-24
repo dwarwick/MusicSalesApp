@@ -275,13 +275,30 @@
                                 </select>
                             </div>
 
-                            <div class="apply-all-field">
-                                <label class="form-label" for="applyAllOriginal">AI disclosure</label>
-                                @* Only the all-original side is offered in bulk. "Every song here uses
-                                   AI vocals" is a real answer but a rare one, and a bulk control that
-                                   sets a disclosure on songs nobody looked at is the wrong thing to
-                                   make easy. *@
-                                <SfButton ID="applyAllOriginal" CssClass="e-small e-outline" Content="All original" OnClick="ApplyAllOriginalToAll" />
+                            <div class="apply-all-field apply-all-field-wide">
+                                <label class="form-label">AI disclosure</label>
+                                @* The same two-group choice a row has, not a shortcut for one side of
+                                   it. A batch is usually one release, so "this whole EP has AI vocals"
+                                   is as normal an answer as "all of it is original". *@
+                                <div class="ai-declare">
+                                    <SfCheckBox TChecked="bool" Label="All original"
+                                                Checked="@_applyAllOriginal"
+                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllOriginal(a.Checked))" />
+
+                                    <span class="ai-declare-or">or say which parts are AI</span>
+
+                                    <div class="ai-flags">
+                                        <SfCheckBox TChecked="bool" Label="AI music"
+                                                    Checked="@_applyAllAiMusic"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiMusic(a.Checked))" />
+                                        <SfCheckBox TChecked="bool" Label="AI vocals"
+                                                    Checked="@_applyAllAiVocals"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiVocals(a.Checked))" />
+                                        <SfCheckBox TChecked="bool" Label="AI lyrics"
+                                                    Checked="@_applyAllAiLyrics"
+                                                    ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => ApplyAllAiLyrics(a.Checked))" />
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="apply-all-field">

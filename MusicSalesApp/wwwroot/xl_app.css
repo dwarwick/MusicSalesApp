@@ -896,3 +896,5 @@
 
 .ai-declare { padding: 10px 12px; }
 .ai-declare-or { margin: 7px 0 6px; font-size: 11px; font-style: italic; }
+
+.apply-all-field-wide { min-width: 14rem; }

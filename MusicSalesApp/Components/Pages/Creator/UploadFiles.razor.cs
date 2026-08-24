@@ -64,6 +64,14 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     protected string _applyAllGenre = string.Empty;
     protected int? _applyAllPersonaId;
 
+    // The AI disclosure in bulk is the same two-group choice as a row, not a shortcut for one
+    // side of it: a batch is usually one release, so "this whole EP has AI vocals" is as normal
+    // an answer as "all of it is original".
+    protected bool _applyAllOriginal;
+    protected bool _applyAllAiMusic;
+    protected bool _applyAllAiVocals;
+    protected bool _applyAllAiLyrics;
+
     // Inline creation. Neither may navigate: leaving /upload-files drops the live FileList and
     // with it the whole batch, which the creator has already waited through a decode for.
     protected bool _showAddGenre;
@@ -1672,11 +1680,72 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         item.AiError = null;
     }
 
-    protected void ApplyAllOriginalToAll()
+    /// <summary>
+    /// The bulk half of the disclosure. Holds the same exclusivity as a row - ticking either
+    /// side clears the other - and then writes the whole answer onto every song.
+    /// </summary>
+    internal void ApplyAllOriginal(bool value)
+    {
+        _applyAllOriginal = value;
+
+        if (value)
+        {
+            _applyAllAiMusic = false;
+            _applyAllAiVocals = false;
+            _applyAllAiLyrics = false;
+        }
+
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiMusic(bool value)
+    {
+        _applyAllAiMusic = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiVocals(bool value)
+    {
+        _applyAllAiVocals = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    internal void ApplyAllAiLyrics(bool value)
+    {
+        _applyAllAiLyrics = value;
+        ClearApplyAllOriginalIf(value);
+        PushAiAnswerToEveryRow();
+    }
+
+    private void ClearApplyAllOriginalIf(bool value)
+    {
+        if (value)
+        {
+            _applyAllOriginal = false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the bulk answer over every row, including rows already answered - the same rule
+    /// the genre and persona controls follow, and for the same reason: a control that behaves
+    /// differently depending on state you cannot see is worse than one that plainly overwrites.
+    ///
+    /// <para>
+    /// Unticking the last bulk answer leaves every row undeclared rather than silently original,
+    /// which matches what unticking the last answer on a row does.
+    /// </para>
+    /// </summary>
+    private void PushAiAnswerToEveryRow()
     {
         foreach (var item in _uploadItems)
         {
-            SetAllOriginal(item, true);
+            item.AllOriginal = _applyAllOriginal;
+            item.IsAiGenerated = _applyAllAiMusic;
+            item.IsAiVocals = _applyAllAiVocals;
+            item.IsAiLyrics = _applyAllAiLyrics;
+            item.AiError = null;
         }
     }
 
