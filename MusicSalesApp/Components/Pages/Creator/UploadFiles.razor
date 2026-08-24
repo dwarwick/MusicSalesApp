@@ -276,6 +276,15 @@
                             </div>
 
                             <div class="apply-all-field">
+                                <label class="form-label" for="applyAllOriginal">AI disclosure</label>
+                                @* Only the all-original side is offered in bulk. "Every song here uses
+                                   AI vocals" is a real answer but a rare one, and a bulk control that
+                                   sets a disclosure on songs nobody looked at is the wrong thing to
+                                   make easy. *@
+                                <SfButton ID="applyAllOriginal" CssClass="e-small e-outline" Content="All original" OnClick="ApplyAllOriginalToAll" />
+                            </div>
+
+                            <div class="apply-all-field">
                                 <label class="form-label" for="applyAllPersona">Artist persona</label>
                                 <select id="applyAllPersona" class="form-select review-select"
                                         @onchange="@(e => { _applyAllPersonaId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : int.Parse(e.Value.ToString()); ApplyPersonaToAll(); })">
@@ -498,14 +507,34 @@
                                                 <button type="button" class="inline-create-link" @onclick="@(() => BeginAddPersona(item))">+ New persona</button>
                                             }
                                         </td>
-                                        <td style="min-width: 11rem;" data-label="AI disclosure">
-                                            @* A disclosure. It belongs where the file is handed over, not
-                                               added afterwards on another page. *@
-                                            <div class="ai-flags">
-                                                <SfCheckBox TChecked="bool" Label="AI music" @bind-Checked="item.IsAiGenerated" />
-                                                <SfCheckBox TChecked="bool" Label="AI vocals" @bind-Checked="item.IsAiVocals" />
-                                                <SfCheckBox TChecked="bool" Label="AI lyrics" @bind-Checked="item.IsAiLyrics" />
+                                        <td style="min-width: 12rem;" data-label="AI disclosure">
+                                            @* Two groups that exclude each other, and one of them has to
+                                               be answered. As three optional boxes, all-unticked meant
+                                               both "none of this is AI" and "nobody answered" - and only
+                                               one of those is a disclosure. *@
+                                            <div class="ai-declare @(item.AiError != null ? "ai-declare-invalid" : "")">
+                                                <SfCheckBox TChecked="bool" Label="All original"
+                                                            Checked="@item.AllOriginal"
+                                                            ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAllOriginal(item, a.Checked))" />
+
+                                                <span class="ai-declare-or">or say which parts are AI</span>
+
+                                                <div class="ai-flags">
+                                                    <SfCheckBox TChecked="bool" Label="AI music"
+                                                                Checked="@item.IsAiGenerated"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiMusic(item, a.Checked))" />
+                                                    <SfCheckBox TChecked="bool" Label="AI vocals"
+                                                                Checked="@item.IsAiVocals"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiVocals(item, a.Checked))" />
+                                                    <SfCheckBox TChecked="bool" Label="AI lyrics"
+                                                                Checked="@item.IsAiLyrics"
+                                                                ValueChange="@((Syncfusion.Blazor.Buttons.ChangeEventArgs<bool> a) => SetAiLyrics(item, a.Checked))" />
+                                                </div>
                                             </div>
+                                            @if (item.AiError != null)
+                                            {
+                                                <small class="text-danger d-block mt-1">@item.AiError</small>
+                                            }
                                         </td>
                                     }
                                     else

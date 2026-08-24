@@ -4753,3 +4753,8 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 .inline-icon { vertical-align: -0.125em; }
 
 .row-remove { display: block; }
+
+/* The disclosure is one control, not three loose boxes, so it gets an edge that
+   shows which answers belong together and can be marked invalid as a whole. */
+.ai-declare { border-style: solid; border-width: 1px; border-radius: var(--st-radius-sm); }
+.ai-declare-or { display: block; }

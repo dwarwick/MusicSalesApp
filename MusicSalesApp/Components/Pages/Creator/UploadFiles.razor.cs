@@ -374,7 +374,10 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
 
     protected int MissingGenreCount => _uploadItems.Count(item => string.IsNullOrWhiteSpace(item.Genre));
 
-    protected bool ReviewIsComplete => UnconfirmedTitleCount == 0 && MissingGenreCount == 0;
+    protected int UndeclaredAiCount => _uploadItems.Count(item => !item.AiDeclared);
+
+    protected bool ReviewIsComplete =>
+        UnconfirmedTitleCount == 0 && MissingGenreCount == 0 && UndeclaredAiCount == 0;
 
     /// <summary>
     /// What is still outstanding, in one sentence, or empty when nothing is.
@@ -400,6 +403,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
             else if (MissingGenreCount > 1)
             {
                 parts.Add($"{MissingGenreCount} songs need a genre");
+            }
+
+            if (UndeclaredAiCount == 1)
+            {
+                parts.Add("1 song needs an AI answer");
+            }
+            else if (UndeclaredAiCount > 1)
+            {
+                parts.Add($"{UndeclaredAiCount} songs need an AI answer");
             }
 
             return parts.Count == 0 ? string.Empty : string.Join(", and ", parts) + ".";
@@ -1620,6 +1632,54 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The AI disclosure is two groups that exclude each other: one or more of the three AI
+    /// answers, or "all original". Ticking either side clears the other.
+    ///
+    /// <para>
+    /// It is a required choice rather than three optional boxes because three unticked boxes said
+    /// two different things at once - "none of this is AI" and "nobody answered" - and only one of
+    /// those is a disclosure.
+    /// </para>
+    /// </summary>
+    internal void SetAllOriginal(UploadPairItem item, bool allOriginal)
+    {
+        item.AllOriginal = allOriginal;
+
+        if (allOriginal)
+        {
+            item.IsAiGenerated = false;
+            item.IsAiVocals = false;
+            item.IsAiLyrics = false;
+        }
+
+        item.AiError = null;
+    }
+
+    internal void SetAiMusic(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiGenerated = value, value);
+    internal void SetAiVocals(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiVocals = value, value);
+    internal void SetAiLyrics(UploadPairItem item, bool value) => SetAiFlag(item, () => item.IsAiLyrics = value, value);
+
+    private static void SetAiFlag(UploadPairItem item, Action assign, bool value)
+    {
+        assign();
+
+        if (value)
+        {
+            item.AllOriginal = false;
+        }
+
+        item.AiError = null;
+    }
+
+    protected void ApplyAllOriginalToAll()
+    {
+        foreach (var item in _uploadItems)
+        {
+            SetAllOriginal(item, true);
+        }
+    }
+
     protected void SetRowGenre(UploadPairItem item, string genre)
     {
         item.Genre = genre ?? string.Empty;
@@ -1906,12 +1966,22 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
                 : null;
         }
 
+        // A disclosure nobody made is not a disclosure. Leaving it optional made silence mean
+        // "no AI", which is the one reading a creator never actually chose.
+        foreach (var pending in _pendingUploads)
+        {
+            pending.Item.AiError = pending.Item.AiDeclared
+                ? null
+                : "Say whether any of this is AI.";
+        }
+
         var badTitles = _pendingUploads.Count(pending => pending.Item.TitleError != null);
         var unchecked_ = _pendingUploads.Count(pending => pending.Item.TitleError == null
             && !pending.Item.TitleConfirmed);
         var missingGenres = _pendingUploads.Count(pending => pending.Item.GenreError != null);
+        var missingAi = _pendingUploads.Count(pending => pending.Item.AiError != null);
 
-        if (badTitles == 0 && unchecked_ == 0 && missingGenres == 0)
+        if (badTitles == 0 && unchecked_ == 0 && missingGenres == 0 && missingAi == 0)
             return false;
 
         var problems = new List<string>();
@@ -1940,6 +2010,15 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         else if (missingGenres > 1)
         {
             problems.Add($"{missingGenres} songs need a genre");
+        }
+
+        if (missingAi == 1)
+        {
+            problems.Add("one song needs an AI answer");
+        }
+        else if (missingAi > 1)
+        {
+            problems.Add($"{missingAi} songs need an AI answer");
         }
 
         _validationErrorMessage =
@@ -3978,6 +4057,23 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
         public bool IsAiGenerated { get; set; }
         public bool IsAiVocals { get; set; }
         public bool IsAiLyrics { get; set; }
+
+        /// <summary>
+        /// The creator has said none of it is AI.
+        ///
+        /// <para>
+        /// Not persisted, and it does not need to be - what reaches the song is the three flags
+        /// above, all false. It exists so the review step can tell "declared original" apart
+        /// from "has not answered yet", which three unticked boxes cannot.
+        /// </para>
+        /// </summary>
+        public bool AllOriginal { get; set; }
+
+        /// <summary>Whether the disclosure has been answered at all, either way.</summary>
+        public bool AiDeclared => AllOriginal || IsAiGenerated || IsAiVocals || IsAiLyrics;
+
+        /// <summary>Why this row cannot upload as-is, or null.</summary>
+        public string AiError { get; set; }
 
         /// <summary>Everything the creator set here, in the shape the job carries it.</summary>
         public SongPublishMetadata ToPublishMetadata() => new()

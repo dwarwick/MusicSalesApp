@@ -1742,3 +1742,7 @@ html { scrollbar-color: var(--st-scrollbar-thumb) var(--st-page); }
    data-label. Declared here because it is colour; the layout is in md_app.css. */
 .review-table td::before { color: var(--st-text-3); }
 .review-table tbody tr { border-color: var(--st-line); background-color: var(--st-surface); }
+
+.ai-declare { border-color: var(--st-line); }
+.ai-declare-invalid { border-color: var(--st-danger); }
+.ai-declare-or { color: var(--st-text-3); }

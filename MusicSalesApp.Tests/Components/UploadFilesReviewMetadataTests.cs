@@ -122,6 +122,133 @@ public class UploadFilesReviewMetadataTests
     }
 
     // ------------------------------------------------------------------
+    // The AI disclosure is a required choice between two groups.
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void ANewRowHasNotDeclaredAnything()
+    {
+        // The state that used to be impossible to see. Three unticked boxes read as "no AI", so
+        // a creator who never looked at the column published the same disclosure as one who did.
+        var row = new UploadFilesModel.UploadPairItem();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.AiDeclared, Is.False);
+            Assert.That(row.AllOriginal, Is.False);
+            Assert.That(row.IsAiGenerated, Is.False);
+        });
+    }
+
+    [Test]
+    public void SayingAllOriginalClearsEveryAiAnswer()
+    {
+        var page = new UploadFilesModel();
+        var row = new UploadFilesModel.UploadPairItem
+        {
+            IsAiGenerated = true,
+            IsAiVocals = true,
+            IsAiLyrics = true,
+        };
+
+        page.SetAllOriginal(row, true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.AllOriginal, Is.True);
+            Assert.That(row.IsAiGenerated, Is.False);
+            Assert.That(row.IsAiVocals, Is.False);
+            Assert.That(row.IsAiLyrics, Is.False);
+            Assert.That(row.AiDeclared, Is.True);
+        });
+    }
+
+    [Test]
+    public void NamingAnyAiPartClearsAllOriginal()
+    {
+        // The two cannot both be true: "none of this is AI, and the vocals are AI" is not an
+        // answer, and letting it be selectable would put it in the database.
+        var page = new UploadFilesModel();
+        var row = new UploadFilesModel.UploadPairItem { AllOriginal = true };
+
+        page.SetAiVocals(row, true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.AllOriginal, Is.False);
+            Assert.That(row.IsAiVocals, Is.True);
+            Assert.That(row.AiDeclared, Is.True);
+        });
+    }
+
+    [Test]
+    public void UntickingTheOnlyAiAnswerLeavesTheRowUndeclaredAgain()
+    {
+        // Not silently back to "all original". Changing your mind means answering again, which is
+        // the whole point of the choice being required.
+        var page = new UploadFilesModel();
+        var row = new UploadFilesModel.UploadPairItem();
+
+        page.SetAiMusic(row, true);
+        page.SetAiMusic(row, false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.AiDeclared, Is.False);
+            Assert.That(row.AllOriginal, Is.False);
+        });
+    }
+
+    [TestCase(true, false, false, false)]
+    [TestCase(false, true, false, false)]
+    [TestCase(false, false, true, false)]
+    [TestCase(false, false, false, true)]
+    public void AnyOneAnswerCountsAsDeclared(bool music, bool vocals, bool lyrics, bool allOriginal)
+    {
+        var row = new UploadFilesModel.UploadPairItem
+        {
+            IsAiGenerated = music,
+            IsAiVocals = vocals,
+            IsAiLyrics = lyrics,
+            AllOriginal = allOriginal,
+        };
+
+        Assert.That(row.AiDeclared, Is.True);
+    }
+
+    [Test]
+    public void AllOriginalSendsNoAiFlagsToTheSong()
+    {
+        // What reaches the song is the three flags. "All original" is how the review step tells a
+        // declaration apart from silence, and it has no column of its own because it does not
+        // need one.
+        var page = new UploadFilesModel();
+        var row = new UploadFilesModel.UploadPairItem { SongTitle = "Long Way Down", Genre = "Folk" };
+        page.SetAllOriginal(row, true);
+
+        var metadata = row.ToPublishMetadata();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(metadata.IsAiGenerated, Is.False);
+            Assert.That(metadata.IsAiVocals, Is.False);
+            Assert.That(metadata.IsAiLyrics, Is.False);
+        });
+    }
+
+    [Test]
+    public void AnUndeclaredRowBlocksTheUpload()
+    {
+        var gate = Slice(ReadCodeBehind(), "private async Task<bool> PendingBatchNeedsAttentionAsync");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(gate, Does.Contain("AiDeclared"));
+            Assert.That(gate, Does.Contain("AiError"));
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Dropping one song without cancelling the batch.
     // ------------------------------------------------------------------
 
