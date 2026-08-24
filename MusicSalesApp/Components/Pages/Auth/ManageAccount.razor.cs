@@ -178,6 +178,7 @@ public partial class ManageAccountModel : BlazorBase
             {
                 _loading = false;
                 await InvokeAsync(StateHasChanged);
+                await ScrollToRequestedSectionAsync();
             }
         }
     }
@@ -458,6 +459,35 @@ public partial class ManageAccountModel : BlazorBase
     /// lands on the home page with the fragment attached instead of scrolling this one.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Scrolls to the section named in the URL fragment, once there is something to scroll to.
+    ///
+    /// <para>
+    /// The browser handles a fragment as the document loads, and at that moment this page is
+    /// still a spinner: every section renders only after the subscription status comes back.
+    /// So /manage-account#subscription lands at the top and stays there unless the scroll is
+    /// repeated once the content exists. Failure is deliberately silent - arriving at the top
+    /// of the right page is a poor outcome, not a broken one.
+    /// </para>
+    /// </summary>
+    private async Task ScrollToRequestedSectionAsync()
+    {
+        var fragment = new Uri(NavigationManager.Uri).Fragment.TrimStart('#');
+        if (string.IsNullOrWhiteSpace(fragment))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("dashboardHelper.scrollToSection", fragment);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not scroll to section {Fragment} on manage account", fragment);
+        }
+    }
+
     protected static string SectionLink(string sectionId) => $"{AppPageRoutes.ManageAccount}#{sectionId}";
 
     /// <summary>

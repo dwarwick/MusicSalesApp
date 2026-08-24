@@ -167,13 +167,13 @@ public class HomeTests : BUnitTestBase
         Assert.That(cut.Markup, Does.Contain("Log In or Register to Get Started"));
         Assert.That(cut.Markup, Does.Contain("Log In"));
         Assert.That(cut.Markup, Does.Contain("Register"));
-        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2Fmanage-account\""));
-        Assert.That(cut.Markup, Does.Contain("href=\"/register?returnUrl=%2Fmanage-account\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/login?returnUrl=%2Fmanage-account%23subscription\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/register?returnUrl=%2Fmanage-account%23subscription\""));
         Assert.That(cut.Markup, Does.Not.Contain("%2FCreatorSettings"));
     }
 
     [Test]
-    public void Home_VerifiedNonSubscriberCta_LinksToManageAccount()
+    public void Home_VerifiedNonSubscriberCta_LinksToTheSubscriptionSection()
     {
         const int userId = 1;
         SetupAuthorizedUser(userId, "test@user.com");
@@ -193,7 +193,7 @@ public class HomeTests : BUnitTestBase
         var cut = TestContext.Render<Home>();
         cut.WaitForState(() => cut.Markup.Contains("Subscribe with PayPal"), TimeSpan.FromSeconds(5));
 
-        Assert.That(cut.Markup, Does.Contain("href=\"/manage-account\""));
+        Assert.That(cut.Markup, Does.Contain("href=\"/manage-account#subscription\""));
         Assert.That(cut.Markup, Does.Not.Contain("href=\"/CreatorSettings\""));
     }
 

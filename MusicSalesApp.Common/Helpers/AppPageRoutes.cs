@@ -32,6 +32,15 @@ public static class AppPageRoutes
     public const string NewCreatorSignupQuestions = "/new-creator-signup-questions";
     public const string Login = "/login";
     public const string ManageAccount = "/manage-account";
+
+    /// <summary>
+    /// The subscription section of Manage Account. The id half is the anchor rendered on
+    /// that page, so both ends of the link come from here rather than from two literals
+    /// that can drift apart silently - a wrong fragment does not error, it just does
+    /// nothing, which is the worst way for this to break.
+    /// </summary>
+    public const string ManageAccountSubscriptionSection = "subscription";
+    public const string ManageAccountSubscription = ManageAccount + "#" + ManageAccountSubscriptionSection;
     public const string MusicLibrary = "/music-library";
     public const string Register = "/register";
     public const string RefreshSignIn = "/account/refresh-signin";

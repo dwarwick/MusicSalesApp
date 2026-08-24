@@ -58,7 +58,7 @@
             }
             else if (_audienceLoaded && ShouldShowSubscriptionOffer && _isEmailVerified)
             {
-                <a href="@AppPageRoutes.ManageAccount"
+                <a href="@AppPageRoutes.ManageAccountSubscription"
                    class="e-control e-btn cta-primary"
                    data-analytics-event="@FunnelAnalyticsEvents.SubscriberSubscribeClicked"
                    data-analytics-category="subscriber"
@@ -162,7 +162,7 @@
                 }
                 else if (_isEmailVerified)
                 {
-                    <a href="@AppPageRoutes.ManageAccount"
+                    <a href="@AppPageRoutes.ManageAccountSubscription"
                        class="e-control e-btn cta-button"
                        data-analytics-event="@FunnelAnalyticsEvents.SubscriberSubscribeClicked"
                        data-analytics-category="subscriber"
