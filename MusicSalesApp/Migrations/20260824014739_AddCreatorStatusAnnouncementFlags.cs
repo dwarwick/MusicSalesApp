@@ -27,10 +27,16 @@ namespace MusicSalesApp.Migrations
             // creator who activated before this migration would be congratulated again on
             // their next visit - and that celebration fires a Google Ads conversion, a funnel
             // event and a user-history row. They have all already seen it, so it is not owed.
+            //
+            // Wrapped in EXEC deliberately. SQL Server compiles a whole batch before running
+            // any of it, so a plain UPDATE naming columns the statements above have not
+            // created yet fails at parse time with "Invalid column name" - which is exactly
+            // how this broke a Web Deploy publish. Dynamic SQL is compiled when it runs, by
+            // which point the columns exist.
             migrationBuilder.Sql(
-                @"UPDATE [Creators]
-                     SET [ActivationAnnouncedAt] = SYSUTCDATETIME(),
-                         [DeactivationAnnouncedAt] = SYSUTCDATETIME()");
+                @"EXEC(N'UPDATE [Creators]
+                          SET [ActivationAnnouncedAt] = SYSUTCDATETIME(),
+                              [DeactivationAnnouncedAt] = SYSUTCDATETIME()')");
         }
 
         /// <inheritdoc />
