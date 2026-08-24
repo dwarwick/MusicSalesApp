@@ -4751,3 +4751,5 @@ a.e-btn.settings-btn { display: inline-flex; align-items: center; justify-conten
 
 .upload-icon { display: block; margin-inline: auto; }
 .inline-icon { vertical-align: -0.125em; }
+
+.row-remove { display: block; }

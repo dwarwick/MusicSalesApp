@@ -891,3 +891,5 @@
 .inline-create-actions { gap: 6px; margin-top: 6px; }
 .inline-create-link { margin-top: 6px; font-size: 12.5px; }
 .review-outstanding { font-size: 12.5px; }
+
+.row-remove { margin-top: 8px; }

@@ -497,7 +497,9 @@ public class UploadFilesCoverArtRepairTests
         Assert.Multiple(() =>
         {
             Assert.That(markup, Does.Not.Contain("Content=\"\""), "An SfButton with no content has nothing to click.");
-            Assert.That(markup, Does.Contain("Content=\"Remove\""));
+            // "Remove art", not "Remove": a second Remove appeared on the row for dropping the
+            // song itself, and a creator pressed the wrong one and lost their artwork.
+            Assert.That(markup, Does.Contain("Content=\"Remove art\""));
             Assert.That(
                 markup,
                 Does.Contain("Tap or Drop Cover Art Here"),

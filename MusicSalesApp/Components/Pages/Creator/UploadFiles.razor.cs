@@ -2101,6 +2101,65 @@ public class UploadFilesModel : BlazorBase, IAsyncDisposable
     }
 
     /// <summary>Discards a reviewed-but-not-yet-uploaded batch.</summary>
+    /// <summary>
+    /// Drops one song from the batch, leaving the rest to upload.
+    ///
+    /// <para>
+    /// The case this exists for is a duplicate title. Before it, a creator who dropped in three
+    /// songs and found one already in their catalogue had two options - rename a song they did not
+    /// want to rename, or cancel all three and start again with a different selection. Neither is
+    /// what they wanted, which was to upload the other two.
+    /// </para>
+    ///
+    /// <para>
+    /// Its artwork goes back to the pool rather than being discarded: the image may well belong to
+    /// one of the songs that is staying, and this is exactly the moment a creator discovers that.
+    /// The audio temp file is deleted here rather than left to the batch sweep, because the batch
+    /// may now run for several more minutes and nothing else will come back for it.
+    /// </para>
+    /// </summary>
+    protected async Task RemoveFromBatchAsync(UploadPairItem item)
+    {
+        if (item is null || !_awaitingTitleConfirmation)
+        {
+            return;
+        }
+
+        ClearCoverArt(item);
+
+        var pending = _pendingUploads.FirstOrDefault(p => ReferenceEquals(p.Item, item));
+        if (pending != null)
+        {
+            _pendingUploads.Remove(pending);
+
+            if (!string.IsNullOrEmpty(pending.AudioTempPath))
+            {
+                TempFileHelper.TryDelete(pending.AudioTempPath, Logger);
+                _pendingTempFiles.Remove(pending.AudioTempPath);
+            }
+        }
+
+        _uploadItems.Remove(item);
+
+        // Removing the last one is a cancel by another route, and has to tear down the same way -
+        // otherwise the page sits on an empty review step with an upload button that does nothing.
+        if (_uploadItems.Count == 0)
+        {
+            await CancelPendingBatchAsync();
+            return;
+        }
+
+        // The summary was counting a row that no longer exists. Re-running the check rather than
+        // decrementing keeps one description of what is outstanding instead of two.
+        ClearValidationError();
+        if (_uploadItems.Any(row => row.TitleError != null || row.GenreError != null))
+        {
+            await PendingBatchNeedsAttentionAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     protected async Task CancelPendingBatchAsync()
     {
         if (!_awaitingTitleConfirmation)

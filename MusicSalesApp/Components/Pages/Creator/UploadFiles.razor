@@ -558,10 +558,14 @@
                                                        SfButton rendered as nothing visible - there is
                                                        no icon-only precedent anywhere in this app -
                                                        and a creator who could not find the drop target
-                                                       was never going to find an unlabelled x either. *@
+                                                       was never going to find an unlabelled x either.
+
+                                                       It says what it removes. When it just said
+                                                       "Remove", a creator trying to drop one song from
+                                                       the batch pressed it and lost the artwork. *@
                                                     <span @onclick:stopPropagation="true">
                                                         <SfButton CssClass="e-small e-outline cover-art-remove"
-                                                                  Content="Remove"
+                                                                  Content="Remove art"
                                                                   aria-label="@($"Remove cover art from {item.SongTitle}")"
                                                                   OnClick="@(() => ClearCoverArt(item))" />
                                                     </span>
@@ -599,6 +603,18 @@
                                         @if (_awaitingTitleConfirmation)
                                         {
                                             <span class="badge bg-secondary">Not uploaded</span>
+
+                                            @* The way out for one song rather than the whole batch.
+                                               A duplicate title is the case that needs it: without
+                                               this, finding one song already in your catalogue means
+                                               renaming a song you did not want to rename, or
+                                               cancelling the two that were fine. *@
+                                            <div class="row-remove">
+                                                <SfButton CssClass="e-small e-outline"
+                                                          Content="Don't upload this"
+                                                          aria-label="@($"Remove {item.SongTitle} from this batch")"
+                                                          OnClick="@(() => RemoveFromBatchAsync(item))" />
+                                            </div>
                                         }
                                         else if (item.Status == UploadStatus.Uploading || item.Status == UploadStatus.Processing)
                                         {
