@@ -74,10 +74,16 @@ export function initAudioPlayer(audioElement, dotNetRef, isRestricted = false, m
         // Track continuous playback time for stream counting
         if (!streamTracker.isSeeking && !streamTracker.hasRecordedStream && streamTracker.songMetadataId > 0) {
             const timeDelta = audioElement.currentTime - streamTracker.lastTime;
-            // Only count if time moved forward naturally (not seeking)
-            if (timeDelta > 0 && timeDelta < MAX_TIME_DELTA_SECONDS) {
-                streamTracker.playedTime += timeDelta;
-                
+            // Count forward movement, clamped rather than discarded. timeupdate normally fires about
+            // every 250ms, but the browser may fire it whenever it likes - a gap stretches past a
+            // second on buffering, a GC pause, or a busy main thread. Dropping those gaps entirely
+            // (the old `timeDelta < MAX` test) lost that playback for good, so the counter ran behind
+            // real time and the threshold arrived several seconds late. Clamping keeps the original
+            // intent - a stray forward jump contributes at most one second, and 'seeked' still resets
+            // the counter outright - without leaking ordinary playback.
+            if (timeDelta > 0) {
+                streamTracker.playedTime += Math.min(timeDelta, MAX_TIME_DELTA_SECONDS);
+
                 // Check if we've reached the threshold
                 if (streamTracker.playedTime >= STREAM_THRESHOLD_SECONDS) {
                     streamTracker.hasRecordedStream = true;
